@@ -8,4 +8,9 @@
 #include <postgres.h>
 #include <optimizer/planner.h>
 
+#include "chunk.h"
+
+void ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel,
+							 RelOptInfo *output_rel, void *extra);
+
 #endif /* TIMESCALEDB_PLAN_PARTIALIZE_H */

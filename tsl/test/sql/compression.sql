@@ -222,6 +222,10 @@ ALTER TABLE plan_inval SET (timescaledb.compress,timescaledb.compress_orderby='t
 -- create 2 chunks
 INSERT INTO plan_inval SELECT * FROM (VALUES ('2000-01-01'::timestamptz,1), ('2000-01-07'::timestamptz,1)) v(time,device_id);
 SET max_parallel_workers_per_gather to 0;
+
+-- Disable hash aggregation to get a deterministic test output
+SET enable_hashagg = OFF;
+
 PREPARE prep_plan AS SELECT count(*) FROM plan_inval;
 EXECUTE prep_plan;
 EXECUTE prep_plan;
@@ -234,6 +238,8 @@ SELECT compress_chunk(:'CHUNK_NAME');
 
 EXECUTE prep_plan;
 EXPLAIN (COSTS OFF) EXECUTE prep_plan;
+
+SET enable_hashagg = ON;
 
 CREATE TABLE test_collation (
       time      TIMESTAMPTZ       NOT NULL,

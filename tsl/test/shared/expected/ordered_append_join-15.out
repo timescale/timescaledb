@@ -250,6 +250,8 @@ QUERY PLAN
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
+-- With PG 14 on i368, this query uses a nested loop join. Disable the nested loop join to get the same query plan in all tests
+SET enable_nestloop TO off;
 :PREFIX
 SELECT o1.time,
   o2.time
@@ -287,6 +289,7 @@ QUERY PLAN
                      Heap Fetches: 5038
 (25 rows)
 
+RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -327,6 +330,8 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
+SET enable_nestloop = FALSE;
+SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
   o2.*
@@ -337,10 +342,22 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY time;
 QUERY PLAN
- Sort (actual rows=1 loops=1)
-   Sort Key: o1_1."time"
-   Sort Method: quicksort 
-   ->  Nested Loop (actual rows=1 loops=1)
+ Merge Join (actual rows=1 loops=1)
+   Merge Cond: (o1."time" = ($0))
+   ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=13674 loops=1)
+         Order: o1."time"
+         ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=3598 loops=1)
+               Index Cond: (device_id = 1)
+               Heap Fetches: 3598
+         ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=5038 loops=1)
+               Index Cond: (device_id = 1)
+               Heap Fetches: 5038
+         ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=5038 loops=1)
+               Index Cond: (device_id = 1)
+               Heap Fetches: 5038
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: ($0)
+         Sort Method: quicksort 
          ->  Result (actual rows=1 loops=1)
                InitPlan 1 (returns $0)
                  ->  Limit (actual rows=1 loops=1)
@@ -355,19 +372,11 @@ QUERY PLAN
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
                                    Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 0
-         ->  Append (actual rows=1 loops=1)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=0 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" = ($0)))
-                     Heap Fetches: 0
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=0 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" = ($0)))
-                     Heap Fetches: 0
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=1 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" = ($0)))
-                     Heap Fetches: 1
-(28 rows)
+(30 rows)
 
 RESET enable_hashjoin;
+RESET enable_nestloop;
+RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
@@ -1207,6 +1216,8 @@ QUERY PLAN
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
+-- With PG 14 on i368, this query uses a nested loop join. Disable the nested loop join to get the same query plan in all tests
+SET enable_nestloop TO off;
 :PREFIX
 SELECT o1.time,
   o2.time
@@ -1244,6 +1255,7 @@ QUERY PLAN
                      Heap Fetches: 5038
 (25 rows)
 
+RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -1318,6 +1330,8 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
+SET enable_nestloop = FALSE;
+SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
   o2.*
@@ -1328,10 +1342,19 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
 ORDER BY time;
 QUERY PLAN
- Sort (actual rows=1 loops=1)
-   Sort Key: o1_1."time"
-   Sort Method: quicksort 
-   ->  Nested Loop (actual rows=1 loops=1)
+ Merge Join (actual rows=1 loops=1)
+   Merge Cond: (o1."time" = ($0))
+   ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=13674 loops=1)
+         Order: o1."time"
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_1 (actual rows=3598 loops=1)
+               Filter: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_2 (actual rows=5038 loops=1)
+               Filter: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_3 (actual rows=5038 loops=1)
+               Filter: (device_id = 1)
+   ->  Sort (actual rows=1 loops=1)
+         Sort Key: ($0)
+         Sort Method: quicksort 
          ->  Result (actual rows=1 loops=1)
                InitPlan 1 (returns $0)
                  ->  Limit (actual rows=1 loops=1)
@@ -1370,19 +1393,11 @@ QUERY PLAN
                                    ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
                                          Index Cond: ("time" IS NOT NULL)
                                          Heap Fetches: 0
-         ->  Append (actual rows=1 loops=1)
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=0 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" = ($0)))
-                     Heap Fetches: 0
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=0 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" = ($0)))
-                     Heap Fetches: 0
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=1 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" = ($0)))
-                     Heap Fetches: 1
-(52 rows)
+(51 rows)
 
 RESET enable_hashjoin;
+RESET enable_nestloop;
+RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
@@ -2093,6 +2108,8 @@ QUERY PLAN
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
+-- With PG 14 on i368, this query uses a nested loop join. Disable the nested loop join to get the same query plan in all tests
+SET enable_nestloop TO off;
 :PREFIX
 SELECT o1.time,
   o2.time
@@ -2142,6 +2159,7 @@ QUERY PLAN
                            Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
 (37 rows)
 
+RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -2190,6 +2208,8 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
+SET enable_nestloop = FALSE;
+SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
   o2.*
@@ -2216,17 +2236,22 @@ QUERY PLAN
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (max(_hyper_X_X_chunk."time"))
          Sort Method: quicksort 
-         ->  Aggregate (actual rows=1 loops=1)
-               ->  Append (actual rows=68370 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=20 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
-(24 rows)
+         ->  Finalize Aggregate (actual rows=1 loops=1)
+               ->  Append (actual rows=3 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=20 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
+(27 rows)
 
 RESET enable_hashjoin;
+RESET enable_nestloop;
+RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
@@ -3151,6 +3176,8 @@ QUERY PLAN
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
+-- With PG 14 on i368, this query uses a nested loop join. Disable the nested loop join to get the same query plan in all tests
+SET enable_nestloop TO off;
 :PREFIX
 SELECT o1.time,
   o2.time
@@ -3200,6 +3227,7 @@ QUERY PLAN
                            Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
 (37 rows)
 
+RESET enable_nestloop;
 -- test JOIN
 -- last chunk of o2 should not be executed
 :PREFIX
@@ -3280,6 +3308,8 @@ QUERY PLAN
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
+SET enable_nestloop = FALSE;
+SET enable_hashagg = FALSE;
 :PREFIX
 SELECT o1.time,
   o2.*
@@ -3306,29 +3336,40 @@ QUERY PLAN
    ->  Sort (actual rows=1 loops=1)
          Sort Key: (max(_hyper_X_X_chunk."time"))
          Sort Method: quicksort 
-         ->  Aggregate (actual rows=1 loops=1)
-               ->  Append (actual rows=68370 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(36 rows)
+         ->  Finalize Aggregate (actual rows=1 loops=1)
+               ->  Append (actual rows=9 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                     ->  Partial Aggregate (actual rows=1 loops=1)
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+(45 rows)
 
 RESET enable_hashjoin;
+RESET enable_nestloop;
+RESET enable_hashagg;
 SET enable_seqscan TO false;
 -- test JOIN on time column
 -- should use 2 ChunkAppend
@@ -3814,6 +3855,8 @@ QUERY PLAN
 (40 rows)
 
 RESET enable_seqscan;
+-- Disable plain/sorted aggregation to get a deterministic test output
+SET timescaledb.enable_chunkwise_aggregation = OFF;
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''

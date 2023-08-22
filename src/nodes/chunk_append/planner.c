@@ -402,6 +402,7 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				return NULL;
 			break;
 		case T_MergeAppend:
+		case T_Agg:
 			return NULL;
 			break;
 		default:

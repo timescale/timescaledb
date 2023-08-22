@@ -447,6 +447,8 @@ SELECT count(*)
 FROM :TEST_TABLE;
 
 -- test aggregate with GROUP BY
+-- Disable hash aggregation to get a deterministic test output
+SET enable_hashagg = OFF;
 :PREFIX
 SELECT count(*)
 FROM :TEST_TABLE
@@ -459,6 +461,8 @@ SELECT sum(count(*)) OVER ()
 FROM :TEST_TABLE
 GROUP BY device_id
 ORDER BY device_id;
+
+SET enable_hashagg = ON;
 
 -- test CTE
 :PREFIX WITH q AS (

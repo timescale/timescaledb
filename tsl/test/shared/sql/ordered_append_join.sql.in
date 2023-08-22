@@ -28,6 +28,8 @@ set max_parallel_workers_per_gather to 0;
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
 
+-- Disable plain/sorted aggregation to get a deterministic test output
+SET timescaledb.enable_chunkwise_aggregation = OFF;
 
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result

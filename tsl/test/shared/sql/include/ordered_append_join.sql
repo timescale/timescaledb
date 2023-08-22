@@ -115,6 +115,10 @@ FROM generate_series('2000-01-01'::timestamptz, '2000-01-03', '1d') AS g (time)
 
 -- test JOIN
 -- no exclusion on joined table because quals are not propagated yet
+
+-- With PG 14 on i368, this query uses a nested loop join. Disable the nested loop join to get the same query plan in all tests
+SET enable_nestloop TO off;
+
 :PREFIX
 SELECT o1.time,
   o2.time
@@ -124,6 +128,8 @@ WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
 ORDER BY o1.time;
+
+RESET enable_nestloop;
 
 -- test JOIN
 -- last chunk of o2 should not be executed
@@ -142,6 +148,8 @@ LIMIT 10;
 -- test join against max query
 -- not ChunkAppend so no chunk exclusion
 SET enable_hashjoin = FALSE;
+SET enable_nestloop = FALSE;
+SET enable_hashagg = FALSE;
 
 :PREFIX
 SELECT o1.time,
@@ -154,6 +162,8 @@ WHERE o1.device_id = 1
 ORDER BY time;
 
 RESET enable_hashjoin;
+RESET enable_nestloop;
+RESET enable_hashagg;
 
 SET enable_seqscan TO false;
 
