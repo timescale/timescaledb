@@ -814,7 +814,7 @@ get_default_chunk_sizing_fn_oid()
 {
 	Oid chunkfnargtypes[] = { INT4OID, INT8OID, INT8OID };
 	List *funcname =
-		list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(DEFAULT_CHUNK_SIZING_FN_NAME));
+		list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(DEFAULT_CHUNK_SIZING_FN_NAME));
 	int nargs = sizeof(chunkfnargtypes) / sizeof(chunkfnargtypes[0]);
 	Oid chunkfnoid = LookupFuncName(funcname, nargs, chunkfnargtypes, false);
 	return chunkfnoid;

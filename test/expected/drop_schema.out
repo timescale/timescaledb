@@ -32,8 +32,8 @@ INSERT INTO hypertable_schema.test2 VALUES ('2001-01-01 01:01:01', 23.3, 1);
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
  id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
 ----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
-  1 | hypertable_schema | test1      | chunk_schema1          | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
-  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  1 | hypertable_schema | test1      | chunk_schema1          | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;
@@ -55,8 +55,8 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM _timescaledb_catalog.hypertable ORDER BY id;
  id |    schema_name    | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
 ----+-------------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
-  1 | hypertable_schema | test1      | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
-  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  1 | hypertable_schema | test1      | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  2 | hypertable_schema | test2      | chunk_schema2          | _hyper_2                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (2 rows)
 
 SELECT * FROM _timescaledb_catalog.chunk;

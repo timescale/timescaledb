@@ -417,7 +417,7 @@ mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo)
 	 * : chunk_for_tuple( htid, table.*).
 	 */
 	chunkfnoid =
-		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNKIDFROMRELID)),
+		LookupFuncName(list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CHUNKIDFROMRELID)),
 					   sizeof(argtype) / sizeof(argtype[0]),
 					   argtype,
 					   false);

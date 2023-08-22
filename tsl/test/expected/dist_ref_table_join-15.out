@@ -338,8 +338,8 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id);
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id);
 DEBUG:  try to push down a join on a reference table
-                                                                                                QUERY PLAN                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=4 loops=1)
@@ -348,13 +348,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 :PREFIX
@@ -362,8 +362,8 @@ SELECT * FROM metric LEFT JOIN metric_name ON metric.id = metric_name.id;
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name ON metric.id = metric_name.id;
 DEBUG:  try to push down a join on a reference table
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric.ts, metric.id, metric.value, metric_name.id, metric_name.name
    ->  Append (actual rows=4 loops=1)
@@ -372,13 +372,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.ts, metric_2.id, metric_2.value, metric_name.id, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 -- Tests without filter (DHT reftable)
@@ -387,8 +387,8 @@ SELECT * FROM metric LEFT JOIN metric_name_dht USING (id);
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name_dht USING (id);
 DEBUG:  try to push down a join on a reference table
-                                                                                                     QUERY PLAN                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                      QUERY PLAN                                                                                                      
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name_dht.name
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -399,13 +399,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name_dht r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+                     Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name_dht r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.id, metric_2.ts, metric_2.value, metric_name_dht.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name_dht r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+                     Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name_dht r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (17 rows)
 
 -- Tests with filter pushdown
@@ -414,8 +414,8 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE value > 10;
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE value > 10;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                    QUERY PLAN                                                                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                     QUERY PLAN                                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=4 loops=1)
@@ -424,13 +424,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) AND ((r8.value > 10::double precision))
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) AND ((r8.value > 10::double precision))
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) AND ((r9.value > 10::double precision))
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) AND ((r9.value > 10::double precision))
 (15 rows)
 
 PREPARE prepared_join_pushdown_value (int) AS
@@ -442,8 +442,8 @@ EXECUTE prepared_join_pushdown_value(10);
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 EXECUTE prepared_join_pushdown_value(10);
 DEBUG:  try to push down a join on a reference table
-                                                                                                                    QUERY PLAN                                                                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                     QUERY PLAN                                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=4 loops=1)
@@ -452,13 +452,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) AND ((r8.value > 10::double precision))
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) AND ((r8.value > 10::double precision))
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) AND ((r9.value > 10::double precision))
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) AND ((r9.value > 10::double precision))
 (15 rows)
 
 :PREFIX
@@ -466,14 +466,14 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE ts > '2022-02-02 02:
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE ts > '2022-02-02 02:02:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                         QUERY PLAN                                                                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                         QUERY PLAN                                                                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) (actual rows=0 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    Data node: db_dist_ref_table_join_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 LEFT JOIN public.metric_name r2 ON (((r5.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1]) AND ((r5.ts > '2022-02-01 15:02:02-08'::timestamp with time zone))
+   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 LEFT JOIN public.metric_name r2 ON (((r5.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1]) AND ((r5.ts > '2022-02-01 15:02:02-08'::timestamp with time zone))
 (6 rows)
 
 :PREFIX
@@ -481,14 +481,14 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE ts BETWEEN '2022-02-
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                           QUERY PLAN                                                                                                                                                            
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                            QUERY PLAN                                                                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    Data node: db_dist_ref_table_join_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 LEFT JOIN public.metric_name r2 ON (((r5.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1]) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone))
+   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 LEFT JOIN public.metric_name r2 ON (((r5.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1]) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone))
 (6 rows)
 
 :PREFIX
@@ -496,14 +496,14 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                            QUERY PLAN                                                                                                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                            QUERY PLAN                                                                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    Data node: db_dist_ref_table_join_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1])
+   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1])
 (6 rows)
 
 :PREFIX
@@ -511,8 +511,8 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                 QUERY PLAN                                                                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=4 loops=1)
@@ -521,13 +521,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 :PREFIX
@@ -535,8 +535,8 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu2';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu2';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                QUERY PLAN                                                                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=1 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=1 loops=1)
@@ -545,13 +545,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name = 'cpu2'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name = 'cpu2'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name = 'cpu2'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name = 'cpu2'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 :PREFIX
@@ -559,8 +559,8 @@ SELECT * FROM metric LEFT JOIN metric_name_dht USING (id) WHERE name LIKE 'cpu%'
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name_dht USING (id) WHERE name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                      QUERY PLAN                                                                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                      QUERY PLAN                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name_dht.name
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -571,13 +571,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name_dht r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+                     Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name_dht r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.id, metric_2.ts, metric_2.value, metric_name_dht.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name_dht r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+                     Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name_dht r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (17 rows)
 
 -- Tests with an expression that evaluates to false
@@ -586,8 +586,8 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu1' AND
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu1' AND name LIKE 'cpu2';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                 QUERY PLAN                                                                                                                                 
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                 QUERY PLAN                                                                                                                                  
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=0 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=0 loops=1)
@@ -596,13 +596,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu1'::text)) AND ((r2.name ~~ 'cpu2'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu1'::text)) AND ((r2.name ~~ 'cpu2'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=0 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu1'::text)) AND ((r2.name ~~ 'cpu2'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu1'::text)) AND ((r2.name ~~ 'cpu2'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 -- Tests with aliases
@@ -611,8 +611,8 @@ SELECT * FROM metric m1 LEFT JOIN metric_name m2 USING (id);
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN metric_name m2 USING (id);
 DEBUG:  try to push down a join on a reference table
-                                                                                                QUERY PLAN                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m1.id, m1.ts, m1.value, m2.name
    ->  Append (actual rows=4 loops=1)
@@ -621,13 +621,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m1_2.id, m1_2.ts, m1_2.value, m2.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 :PREFIX
@@ -635,8 +635,8 @@ SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id;
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id;
 DEBUG:  try to push down a join on a reference table
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    ->  Append (actual rows=4 loops=1)
@@ -645,13 +645,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m1_2.ts, m1_2.id, m1_2.value, m2.id, m2.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 :PREFIX
@@ -659,8 +659,8 @@ SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id WHERE m1.value
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id WHERE m1.value > 10;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                        QUERY PLAN                                                                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                        QUERY PLAN                                                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    ->  Append (actual rows=4 loops=1)
@@ -669,13 +669,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) AND ((r8.value > 10::double precision))
+               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) AND ((r8.value > 10::double precision))
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m1_2.ts, m1_2.id, m1_2.value, m2.id, m2.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) AND ((r9.value > 10::double precision))
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) AND ((r9.value > 10::double precision))
 (15 rows)
 
 :PREFIX
@@ -683,8 +683,8 @@ SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id WHERE m1.value
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN metric_name m2 ON m1.id = m2.id WHERE m1.value > 10 AND m2.name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                        QUERY PLAN                                                                                                                                         
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                         QUERY PLAN                                                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    ->  Append (actual rows=4 loops=1)
@@ -693,13 +693,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r8.value > 10::double precision)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r8.value > 10::double precision)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m1_2.ts, m1_2.id, m1_2.value, m2.id, m2.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r9.value > 10::double precision)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r9.value > 10::double precision)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 -- Tests with projections
@@ -708,8 +708,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                        QUERY PLAN                                                                                                                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                        QUERY PLAN                                                                                                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
@@ -717,7 +717,7 @@ DEBUG:  try to push down a join on a reference table
          Data node: db_dist_ref_table_join_1
          Fetcher Type: COPY
          Chunks: _dist_hyper_1_1_chunk
-         Remote SQL: SELECT r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1])
+         Remote SQL: SELECT r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1])
 (8 rows)
 
 :PREFIX
@@ -725,14 +725,14 @@ SELECT m1.ts, m1.value FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT m1.ts, m1.value FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                    QUERY PLAN                                                                                                                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                    QUERY PLAN                                                                                                                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
    Output: m1.ts, m1.value
    Data node: db_dist_ref_table_join_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT r5.ts, r5.value FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1])
+   Remote SQL: SELECT r5.ts, r5.value FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1])
 (6 rows)
 
 :PREFIX
@@ -740,8 +740,8 @@ SELECT m1.id, m1.id FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE nam
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT m1.id, m1.id FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                  QUERY PLAN                                                                                                                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                  QUERY PLAN                                                                                                                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=1 loops=1)
    Output: m1.id, m1.id
    ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
@@ -749,7 +749,7 @@ DEBUG:  try to push down a join on a reference table
          Data node: db_dist_ref_table_join_1
          Fetcher Type: COPY
          Chunks: _dist_hyper_1_1_chunk
-         Remote SQL: SELECT r5.id FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1])
+         Remote SQL: SELECT r5.id FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1])
 (8 rows)
 
 :PREFIX
@@ -757,14 +757,14 @@ SELECT m1.id, m2.id FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE nam
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT m1.id, m2.id FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                  QUERY PLAN                                                                                                                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                   QUERY PLAN                                                                                                                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
    Output: m1.id, m2.id
    Data node: db_dist_ref_table_join_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT r5.id, r2.id FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1])
+   Remote SQL: SELECT r5.id, r2.id FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1])
 (6 rows)
 
 :PREFIX
@@ -772,14 +772,14 @@ SELECT m1.*, m2.* FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT m1.*, m2.* FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                               QUERY PLAN                                                                                                                                                                                
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    Data node: db_dist_ref_table_join_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT r5.ts, r5.id, r5.value, r2.id, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1])
+   Remote SQL: SELECT r5.ts, r5.id, r5.value, r2.id, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1])
 (6 rows)
 
 :PREFIX
@@ -787,14 +787,14 @@ SELECT * FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                            QUERY PLAN                                                                                                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                            QUERY PLAN                                                                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
    Output: m1.id, m1.ts, m1.value, m2.name
    Data node: db_dist_ref_table_join_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_1_1_chunk
-   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1])
+   Remote SQL: SELECT r5.id, r5.ts, r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1])
 (6 rows)
 
 -- Ordering
@@ -803,8 +803,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name;
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name;
 DEBUG:  try to push down a join on a reference table
-                                                                                                            QUERY PLAN                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                             QUERY PLAN                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -816,13 +816,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
 (18 rows)
 
 :PREFIX
@@ -830,8 +830,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name AS
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name ASC;
 DEBUG:  try to push down a join on a reference table
-                                                                                                            QUERY PLAN                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                             QUERY PLAN                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -843,13 +843,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
 (18 rows)
 
 :PREFIX
@@ -857,8 +857,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DE
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DESC;
 DEBUG:  try to push down a join on a reference table
-                                                                                                             QUERY PLAN                                                                                                              
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                              QUERY PLAN                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -870,13 +870,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
 (18 rows)
 
 :PREFIX
@@ -884,8 +884,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name AS
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name ASC NULLS first;
 DEBUG:  try to push down a join on a reference table
-                                                                                                             QUERY PLAN                                                                                                             
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                             QUERY PLAN                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -897,13 +897,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS FIRST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS FIRST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS FIRST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS FIRST
 (18 rows)
 
 :PREFIX
@@ -911,8 +911,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name AS
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name ASC NULLS last;
 DEBUG:  try to push down a join on a reference table
-                                                                                                            QUERY PLAN                                                                                                             
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                             QUERY PLAN                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -924,13 +924,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
 (18 rows)
 
 :PREFIX
@@ -938,8 +938,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DE
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DESC NULLS first;
 DEBUG:  try to push down a join on a reference table
-                                                                                                             QUERY PLAN                                                                                                              
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                              QUERY PLAN                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -951,13 +951,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
 (18 rows)
 
 :PREFIX
@@ -965,8 +965,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DE
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name DESC NULLS last;
 DEBUG:  try to push down a join on a reference table
-                                                                                                             QUERY PLAN                                                                                                             
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                             QUERY PLAN                                                                                                              
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -978,13 +978,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS LAST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS LAST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS LAST
 (18 rows)
 
 :PREFIX
@@ -992,8 +992,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name, v
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY name, value DESC;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                          QUERY PLAN                                                                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                          QUERY PLAN                                                                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1005,13 +1005,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST, r8.value DESC NULLS FIRST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST, r8.value DESC NULLS FIRST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST, r9.value DESC NULLS FIRST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST, r9.value DESC NULLS FIRST
 (18 rows)
 
 :PREFIX
@@ -1019,8 +1019,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, name DESC;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                          QUERY PLAN                                                                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                          QUERY PLAN                                                                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1032,13 +1032,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name DESC NULLS FIRST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name DESC NULLS FIRST
 (18 rows)
 
 :PREFIX
@@ -1046,8 +1046,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value A
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value ASC, name DESC;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                          QUERY PLAN                                                                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                          QUERY PLAN                                                                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1059,13 +1059,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name DESC NULLS FIRST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name DESC NULLS FIRST
 (18 rows)
 
 :PREFIX
@@ -1073,8 +1073,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value A
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value ASC NULLS last, name DESC NULLS first;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                          QUERY PLAN                                                                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                          QUERY PLAN                                                                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1086,13 +1086,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name DESC NULLS FIRST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name DESC NULLS FIRST
+                     Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name DESC NULLS FIRST
 (18 rows)
 
 -- Ordering with explicit table qualification
@@ -1101,8 +1101,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, name, metric_name.id;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                       QUERY PLAN                                                                                                                                        
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                        QUERY PLAN                                                                                                                                        
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value, metric_name.id
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1114,13 +1114,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r2.name, r2.id FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST
+                     Remote SQL: SELECT r8.value, r2.name, r2.id FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_name.name, metric_name.id
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r2.name, r2.id FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST
+                     Remote SQL: SELECT r9.value, r2.name, r2.id FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST
 (18 rows)
 
 :PREFIX
@@ -1128,8 +1128,8 @@ SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric LEFT JOIN metric_name USING (id) ORDER BY value, name, metric_name.id, metric.id;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                      QUERY PLAN                                                                                                                                                      
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                      QUERY PLAN                                                                                                                                                       
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric_name.name, metric.value, metric_name.id, metric.id
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1141,13 +1141,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r8.id, r2.name, r2.id FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST, r8.id ASC NULLS LAST
+                     Remote SQL: SELECT r8.value, r8.id, r2.name, r2.id FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST, r8.id ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_2.value, metric_2.id, metric_name.name, metric_name.id
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r9.id, r2.name, r2.id FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST, r9.id ASC NULLS LAST
+                     Remote SQL: SELECT r9.value, r9.id, r2.name, r2.id FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name ASC NULLS LAST, r2.id ASC NULLS LAST, r9.id ASC NULLS LAST
 (18 rows)
 
 -- Ordering with explicit table qualification and aliases
@@ -1156,8 +1156,8 @@ SELECT name, value FROM metric m1 LEFT JOIN metric_name m2 USING (id) ORDER BY v
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value FROM metric m1 LEFT JOIN metric_name m2 USING (id) ORDER BY value, name, m1.id, m2.id;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                      QUERY PLAN                                                                                                                                                      
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                      QUERY PLAN                                                                                                                                                       
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: m2.name, m1.value, m1.id, m2.id
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1169,13 +1169,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r8.value, r8.id, r2.name, r2.id FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name ASC NULLS LAST, r8.id ASC NULLS LAST, r2.id ASC NULLS LAST
+                     Remote SQL: SELECT r8.value, r8.id, r2.name, r2.id FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r8.value ASC NULLS LAST, r2.name ASC NULLS LAST, r8.id ASC NULLS LAST, r2.id ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: m1_2.value, m1_2.id, m2.name, m2.id
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r9.value, r9.id, r2.name, r2.id FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name ASC NULLS LAST, r9.id ASC NULLS LAST, r2.id ASC NULLS LAST
+                     Remote SQL: SELECT r9.value, r9.id, r2.name, r2.id FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r9.value ASC NULLS LAST, r2.name ASC NULLS LAST, r9.id ASC NULLS LAST, r2.id ASC NULLS LAST
 (18 rows)
 
 -- Grouping
@@ -1184,8 +1184,8 @@ SELECT name FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' GROUP BY name;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                        QUERY PLAN                                                                                                                        
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                        QUERY PLAN                                                                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Group (actual rows=2 loops=1)
    Output: metric_name.name
    Group Key: metric_name.name
@@ -1198,13 +1198,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_name.name
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
+                     Remote SQL: SELECT r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
 (19 rows)
 
 :PREFIX
@@ -1212,8 +1212,8 @@ SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id)
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' GROUP BY name;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                QUERY PLAN                                                                                                                                
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                QUERY PLAN                                                                                                                                 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=2 loops=1)
    Output: metric_name.name, max(metric.value), min(metric.value)
    Group Key: metric_name.name
@@ -1228,13 +1228,13 @@ DEBUG:  try to push down a join on a reference table
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
+                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                            Output: metric_2.value, metric_name.name
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
+                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
 (21 rows)
 
 :PREFIX
@@ -1242,8 +1242,8 @@ SELECT name, max(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name 
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, max(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' AND ts BETWEEN '2022-02-02 02:02:02+03' AND '2022-02-02 02:12:02+03' GROUP BY name;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                           
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                           QUERY PLAN                                                                                                                                                                                            
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=1 loops=1)
    Output: metric_name.name, max(metric.value)
    Group Key: metric_name.name
@@ -1254,7 +1254,7 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk
-               Remote SQL: SELECT r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r5, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
+               Remote SQL: SELECT r5.value, r2.name FROM (public.metric r5 INNER JOIN public.metric_name r2 ON (((r5.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r5.ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((r5.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r5, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
 (11 rows)
 
 -- Grouping and sorting
@@ -1263,8 +1263,8 @@ SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id)
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' and ts BETWEEN '2000-02-02 02:02:02+03' and '2022-02-02 02:12:02+03' GROUP BY name ORDER BY name DESC;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                                                     QUERY PLAN                                                                                                                                                                                                     
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                                     QUERY PLAN                                                                                                                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=2 loops=1)
    Output: metric_name.name, max(metric.value), min(metric.value)
    Group Key: metric_name.name
@@ -1279,13 +1279,13 @@ DEBUG:  try to push down a join on a reference table
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r8.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r8.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
+                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r8.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r8.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
                      ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                            Output: metric_2.value, metric_name.name
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r9.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r9.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
+                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r9.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r9.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
 (21 rows)
 
 -- Having
@@ -1294,8 +1294,8 @@ SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id)
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, max(value), min(value) FROM metric LEFT JOIN metric_name USING (id) WHERE name LIKE 'cpu%' and ts BETWEEN '2000-02-02 02:02:02+03' and '2022-02-02 02:12:02+03' GROUP BY name having min(value) > 0 ORDER BY name DESC;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                                                                                     QUERY PLAN                                                                                                                                                                                                     
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                                                     QUERY PLAN                                                                                                                                                                                                      
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=2 loops=1)
    Output: metric_name.name, max(metric.value), min(metric.value)
    Group Key: metric_name.name
@@ -1311,13 +1311,13 @@ DEBUG:  try to push down a join on a reference table
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r8.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r8.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
+                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r8.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r8.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name DESC NULLS FIRST
                      ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                            Output: metric_2.value, metric_name.name
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r9.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r9.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
+                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)) AND ((r9.ts >= '2000-02-01 15:02:02-08'::timestamp with time zone)) AND ((r9.ts <= '2022-02-01 15:12:02-08'::timestamp with time zone)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name DESC NULLS FIRST
 (22 rows)
 
 -- Rank
@@ -1325,8 +1325,8 @@ DEBUG:  try to push down a join on a reference table
 SELECT name, value, RANK () OVER (ORDER by value) from metric join metric_name_local USING (id);
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT name, value, RANK () OVER (ORDER by value) from metric join metric_name_local USING (id);
-                                                                                   QUERY PLAN                                                                                   
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                   QUERY PLAN                                                                                    
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  WindowAgg (actual rows=4 loops=1)
    Output: metric_name_local.name, metric.value, rank() OVER (?)
    ->  Nested Loop (actual rows=4 loops=1)
@@ -1341,13 +1341,13 @@ SELECT name, value, RANK () OVER (ORDER by value) from metric join metric_name_l
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3]) ORDER BY value ASC NULLS LAST
+                           Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3]) ORDER BY value ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metric metric_2 (actual rows=1 loops=1)
                            Output: metric_2.value, metric_2.id
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1]) ORDER BY value ASC NULLS LAST
+                           Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1]) ORDER BY value ASC NULLS LAST
          ->  Index Scan using metric_name_local_pkey on public.metric_name_local (actual rows=1 loops=4)
                Output: metric_name_local.id, metric_name_local.name
                Index Cond: (metric_name_local.id = metric.id)
@@ -1369,8 +1369,8 @@ DEBUG:  try to push down a join on a reference table
 SELECT * FROM metric_name LEFT JOIN metric USING (id) WHERE name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric_name LEFT JOIN metric USING (id) WHERE name LIKE 'cpu%';
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join (actual rows=4 loops=1)
    Output: metric_name.id, metric_name.name, metric.ts, metric.value
    Join Filter: (metric_name.id = metric.id)
@@ -1388,13 +1388,13 @@ SELECT * FROM metric_name LEFT JOIN metric USING (id) WHERE name LIKE 'cpu%';
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                      ->  Custom Scan (DataNodeScan) on public.metric metric_2 (actual rows=1 loops=1)
                            Output: metric_2.ts, metric_2.value, metric_2.id
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
 (24 rows)
 
 -- Right join reference table on the left, hypertable on the right (can be converted into a left join by PostgreSQL, pushdown)
@@ -1403,8 +1403,8 @@ SELECT * FROM metric_name RIGHT JOIN metric USING (id) WHERE name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric_name RIGHT JOIN metric USING (id) WHERE name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                    QUERY PLAN                                                                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                    QUERY PLAN                                                                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=4 loops=1)
    Output: metric.id, metric_name.name, metric.ts, metric.value
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1415,13 +1415,13 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT r1.name, r8.id, r8.ts, r8.value FROM (public.metric r8 INNER JOIN public.metric_name r1 ON (((r1.id = r8.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+                     Remote SQL: SELECT r1.name, r8.id, r8.ts, r8.value FROM (public.metric r8 INNER JOIN public.metric_name r1 ON (((r1.id = r8.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Output: metric_name.name, metric_2.id, metric_2.ts, metric_2.value
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT r1.name, r9.id, r9.ts, r9.value FROM (public.metric r9 INNER JOIN public.metric_name r1 ON (((r1.id = r9.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+                     Remote SQL: SELECT r1.name, r9.id, r9.ts, r9.value FROM (public.metric r9 INNER JOIN public.metric_name r1 ON (((r1.id = r9.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (17 rows)
 
 -- Right join hypertable on the left, reference table on the right (no pushdown)
@@ -1429,8 +1429,8 @@ DEBUG:  try to push down a join on a reference table
 SELECT * FROM metric RIGHT JOIN metric_name USING (id) WHERE name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric RIGHT JOIN metric_name USING (id) WHERE name LIKE 'cpu%';
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join (actual rows=4 loops=1)
    Output: metric_name.id, metric.ts, metric.value, metric_name.name
    Join Filter: (metric.id = metric_name.id)
@@ -1448,13 +1448,13 @@ SELECT * FROM metric RIGHT JOIN metric_name USING (id) WHERE name LIKE 'cpu%';
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                      ->  Custom Scan (DataNodeScan) on public.metric metric_2 (actual rows=1 loops=1)
                            Output: metric_2.ts, metric_2.value, metric_2.id
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
 (24 rows)
 
 -- Inner join and reference table left, hypertable on the right (pushdown)
@@ -1463,8 +1463,8 @@ SELECT * FROM metric_name INNER JOIN metric USING (id) WHERE name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric_name INNER JOIN metric USING (id) WHERE name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                 QUERY PLAN                                                                                                                 
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric_name.id, metric_name.name, metric.ts, metric.value
    ->  Append (actual rows=4 loops=1)
@@ -1473,13 +1473,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r1.id, r1.name, r8.ts, r8.value FROM (public.metric r8 INNER JOIN public.metric_name r1 ON (((r1.id = r8.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r1.id, r1.name, r8.ts, r8.value FROM (public.metric r8 INNER JOIN public.metric_name r1 ON (((r1.id = r8.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_name.id, metric_name.name, metric_2.ts, metric_2.value
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r1.id, r1.name, r9.ts, r9.value FROM (public.metric r9 INNER JOIN public.metric_name r1 ON (((r1.id = r9.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r1.id, r1.name, r9.ts, r9.value FROM (public.metric r9 INNER JOIN public.metric_name r1 ON (((r1.id = r9.id)) AND ((r1.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 -- Implicit join on two tables, hypertable left, reference table right (pushdown)
@@ -1488,8 +1488,8 @@ SELECT * FROM metric m1, metric_name m2 WHERE m1.id=m2.id AND name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1, metric_name m2 WHERE m1.id=m2.id AND name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                    QUERY PLAN                                                                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                     QUERY PLAN                                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    ->  Append (actual rows=4 loops=1)
@@ -1498,13 +1498,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r7.ts, r7.id, r7.value, r2.id, r2.name FROM (public.metric r7 INNER JOIN public.metric_name r2 ON (((r7.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r7, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r7.ts, r7.id, r7.value, r2.id, r2.name FROM (public.metric r7 INNER JOIN public.metric_name r2 ON (((r7.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r7, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m1_2.ts, m1_2.id, m1_2.value, m2.id, m2.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1])
+               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1])
 (15 rows)
 
 -- Implicit join on two tables, reference table left, hypertable right (pushdown)
@@ -1513,8 +1513,8 @@ SELECT * FROM metric m2, metric_name m1 WHERE m1.id=m2.id AND name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m2, metric_name m1 WHERE m1.id=m2.id AND name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                                    QUERY PLAN                                                                                                                     
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                     QUERY PLAN                                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m2.ts, m2.id, m2.value, m1.id, m1.name
    ->  Append (actual rows=4 loops=1)
@@ -1523,13 +1523,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r7.ts, r7.id, r7.value, r2.id, r2.name FROM (public.metric r7 INNER JOIN public.metric_name r2 ON (((r7.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r7, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r7.ts, r7.id, r7.value, r2.id, r2.name FROM (public.metric r7 INNER JOIN public.metric_name r2 ON (((r7.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r7, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m2_2.ts, m2_2.id, m2_2.value, m1.id, m1.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1])
+               Remote SQL: SELECT r8.ts, r8.id, r8.value, r2.id, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1])
 (15 rows)
 
 -- Implicit join on three tables (no pushdown)
@@ -1537,8 +1537,8 @@ DEBUG:  try to push down a join on a reference table
 SELECT * FROM metric m1, metric_name m2, metric_name m3 WHERE m1.id=m2.id AND m2.id = m3.id AND m3.name LIKE 'cpu%';
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1, metric_name m2, metric_name m3 WHERE m1.id=m2.id AND m2.id = m3.id AND m3.name LIKE 'cpu%';
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name, m3.id, m3.name
    Inner Unique: true
@@ -1557,13 +1557,13 @@ SELECT * FROM metric m1, metric_name m2, metric_name m3 WHERE m1.id=m2.id AND m2
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                      ->  Custom Scan (DataNodeScan) on public.metric m1_2 (actual rows=1 loops=1)
                            Output: m1_2.ts, m1_2.id, m1_2.value
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
          ->  Materialize (actual rows=1 loops=4)
                Output: m2.id, m2.name
                ->  Seq Scan on public.metric_name m2 (actual rows=2 loops=1)
@@ -1581,8 +1581,8 @@ SELECT * FROM metric LEFT JOIN (SELECT * FROM metric_name) AS sub ON metric.id=s
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN (SELECT * FROM metric_name) AS sub ON metric.id=sub.id;
 DEBUG:  try to push down a join on a reference table
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric.ts, metric.id, metric.value, metric_name.id, metric_name.name
    ->  Append (actual rows=4 loops=1)
@@ -1591,13 +1591,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id = r4.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id = r4.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.ts, metric_2.id, metric_2.value, metric_name.id, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id = r4.id)))) WHERE _timescaledb_internal.chunks_in(r10, ARRAY[1])
+               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id = r4.id)))) WHERE _timescaledb_functions.chunks_in(r10, ARRAY[1])
 (15 rows)
 
 -- Left join on a DHT and a subselect with filter on a reference table (subselect can be removed, pushdown)
@@ -1605,31 +1605,6 @@ DEBUG:  try to push down a join on a reference table
 SELECT * FROM metric LEFT JOIN (SELECT * FROM metric_name WHERE name LIKE 'cpu%') AS sub ON metric.id=sub.id;
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric LEFT JOIN (SELECT * FROM metric_name WHERE name LIKE 'cpu%') AS sub ON metric.id=sub.id;
-DEBUG:  try to push down a join on a reference table
-                                                                                                                    QUERY PLAN                                                                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (AsyncAppend) (actual rows=4 loops=1)
-   Output: metric.ts, metric.id, metric.value, metric_name.id, metric_name.name
-   ->  Append (actual rows=4 loops=1)
-         ->  Custom Scan (DataNodeScan) (actual rows=3 loops=1)
-               Output: metric_1.ts, metric_1.id, metric_1.value, metric_name.id, metric_name.name
-               Data node: db_dist_ref_table_join_1
-               Fetcher Type: COPY
-               Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id = r4.id)) AND ((r4.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1, 2, 3])
-         ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
-               Output: metric_2.ts, metric_2.id, metric_2.value, metric_name.id, metric_name.name
-               Data node: db_dist_ref_table_join_2
-               Fetcher Type: COPY
-               Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id = r4.id)) AND ((r4.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r10, ARRAY[1])
-(15 rows)
-
--- Left join on a subselect on a DHT and a reference table (subselect can be removed, pushdown)
-:PREFIX
-SELECT * FROM (SELECT * FROM metric) as sub LEFT JOIN metric_name ON sub.id=metric_name.id WHERE name LIKE 'cpu%';
-LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
-SELECT * FROM (SELECT * FROM metric) as sub LEFT JOIN metric_name ON sub.id=metric_name.id WHERE name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
                                                                                                                     QUERY PLAN                                                                                                                     
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1641,13 +1616,38 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id = r4.id)) AND ((r4.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.ts, metric_2.id, metric_2.value, metric_name.id, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r10.ts, r10.id, r10.value, r2.id, r2.name FROM (public.metric r10 INNER JOIN public.metric_name r2 ON (((r10.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r10, ARRAY[1])
+               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id = r4.id)) AND ((r4.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r10, ARRAY[1])
+(15 rows)
+
+-- Left join on a subselect on a DHT and a reference table (subselect can be removed, pushdown)
+:PREFIX
+SELECT * FROM (SELECT * FROM metric) as sub LEFT JOIN metric_name ON sub.id=metric_name.id WHERE name LIKE 'cpu%';
+LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
+SELECT * FROM (SELECT * FROM metric) as sub LEFT JOIN metric_name ON sub.id=metric_name.id WHERE name LIKE 'cpu%';
+DEBUG:  try to push down a join on a reference table
+                                                                                                                     QUERY PLAN                                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (AsyncAppend) (actual rows=4 loops=1)
+   Output: metric.ts, metric.id, metric.value, metric_name.id, metric_name.name
+   ->  Append (actual rows=4 loops=1)
+         ->  Custom Scan (DataNodeScan) (actual rows=3 loops=1)
+               Output: metric_1.ts, metric_1.id, metric_1.value, metric_name.id, metric_name.name
+               Data node: db_dist_ref_table_join_1
+               Fetcher Type: COPY
+               Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r2.id, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1, 2, 3])
+         ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
+               Output: metric_2.ts, metric_2.id, metric_2.value, metric_name.id, metric_name.name
+               Data node: db_dist_ref_table_join_2
+               Fetcher Type: COPY
+               Chunks: _dist_hyper_1_4_chunk
+               Remote SQL: SELECT r10.ts, r10.id, r10.value, r2.id, r2.name FROM (public.metric r10 INNER JOIN public.metric_name r2 ON (((r10.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r10, ARRAY[1])
 (15 rows)
 
 -- Left join and hypertable on left and right (no pushdown)
@@ -1655,8 +1655,8 @@ DEBUG:  try to push down a join on a reference table
 SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) WHERE m1.id = 2;
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) WHERE m1.id = 2;
-                                                                          QUERY PLAN                                                                           
----------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                           QUERY PLAN                                                                           
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join (actual rows=1 loops=1)
    Output: m1.id, m1.ts, m1.value, m2.ts, m2.value
    Join Filter: (m1.id = m2.id)
@@ -1665,7 +1665,7 @@ SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) WHERE m1.id = 2;
          Data node: db_dist_ref_table_join_2
          Fetcher Type: Cursor
          Chunks: _dist_hyper_1_4_chunk
-         Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1]) AND ((id = 2))
+         Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1]) AND ((id = 2))
    ->  Custom Scan (AsyncAppend) (actual rows=1 loops=1)
          Output: m2.ts, m2.value, m2.id
          ->  Append (actual rows=1 loops=1)
@@ -1674,13 +1674,13 @@ SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) WHERE m1.id = 2;
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3]) AND ((id = 2))
+                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3]) AND ((id = 2))
                ->  Custom Scan (DataNodeScan) on public.metric m2_2 (actual rows=1 loops=1)
                      Output: m2_2.ts, m2_2.value, m2_2.id
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1]) AND ((id = 2))
+                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1]) AND ((id = 2))
 (24 rows)
 
 -- Left join and reference table on left and right
@@ -1710,8 +1710,8 @@ SELECT count(*) FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE m2.name
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT count(*) FROM metric m1 LEFT JOIN metric_name m2 USING (id) WHERE m2.name LIKE 'cpu%';
 DEBUG:  try to push down a join on a reference table
-                                                                                                      QUERY PLAN                                                                                                       
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                       QUERY PLAN                                                                                                       
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
    Output: count(*)
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1720,12 +1720,12 @@ DEBUG:  try to push down a join on a reference table
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT NULL FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+                     Remote SQL: SELECT NULL FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
                ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT NULL FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+                     Remote SQL: SELECT NULL FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (14 rows)
 
 -- Lateral joins that can be converted into regular joins
@@ -1734,8 +1734,8 @@ SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1.id = m2.id) t ON TRUE;
 DEBUG:  try to push down a join on a reference table
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    ->  Append (actual rows=4 loops=1)
@@ -1744,13 +1744,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id = r4.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id = r4.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m1_2.ts, m1_2.id, m1_2.value, m2.id, m2.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id = r4.id)))) WHERE _timescaledb_internal.chunks_in(r10, ARRAY[1])
+               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id = r4.id)))) WHERE _timescaledb_functions.chunks_in(r10, ARRAY[1])
 (15 rows)
 
 :PREFIX
@@ -1758,8 +1758,8 @@ SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1.id > m2.id) t ON TRUE;
 DEBUG:  try to push down a join on a reference table
-                                                                                                    QUERY PLAN                                                                                                    
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                    QUERY PLAN                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    ->  Append (actual rows=4 loops=1)
@@ -1768,13 +1768,13 @@ DEBUG:  try to push down a join on a reference table
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id > r4.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r9.ts, r9.id, r9.value, r4.id, r4.name FROM (public.metric r9 LEFT JOIN public.metric_name r4 ON (((r9.id > r4.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: m1_2.ts, m1_2.id, m1_2.value, m2.id, m2.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id > r4.id)))) WHERE _timescaledb_internal.chunks_in(r10, ARRAY[1])
+               Remote SQL: SELECT r10.ts, r10.id, r10.value, r4.id, r4.name FROM (public.metric r10 LEFT JOIN public.metric_name r4 ON (((r10.id > r4.id)))) WHERE _timescaledb_functions.chunks_in(r10, ARRAY[1])
 (15 rows)
 
 -- Lateral join that can not be converted and pushed down
@@ -1782,8 +1782,8 @@ DEBUG:  try to push down a join on a reference table
 SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1.id > m2.id ORDER BY m2.name LIMIT 1) t ON TRUE;
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1.id > m2.id ORDER BY m2.name LIMIT 1) t ON TRUE;
-                                                                   QUERY PLAN                                                                   
-------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop Left Join (actual rows=4 loops=1)
    Output: m1.ts, m1.id, m1.value, m2.id, m2.name
    ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1794,13 +1794,13 @@ SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1
                      Data node: db_dist_ref_table_join_1
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                ->  Custom Scan (DataNodeScan) on public.metric m1_2 (actual rows=1 loops=1)
                      Output: m1_2.ts, m1_2.id, m1_2.value
                      Data node: db_dist_ref_table_join_2
                      Fetcher Type: COPY
                      Chunks: _dist_hyper_1_4_chunk
-                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                     Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
    ->  Limit (actual rows=0 loops=4)
          Output: m2.id, m2.name
          ->  Sort (actual rows=0 loops=4)
@@ -1818,8 +1818,8 @@ SELECT * FROM metric m1 LEFT JOIN LATERAL (SELECT * FROM metric_name m2 WHERE m1
 SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) LEFT JOIN metric_name mn USING(id);
 LOG:  statement: EXPLAIN (analyze, verbose, costs off, timing off, summary off)
 SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) LEFT JOIN metric_name mn USING(id);
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
  Hash Left Join (actual rows=10 loops=1)
    Output: m1.id, m1.ts, m1.value, m2.ts, m2.value, mn.name
    Inner Unique: true
@@ -1836,13 +1836,13 @@ SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) LEFT JOIN metric_name mn 
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: Cursor
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                      ->  Custom Scan (DataNodeScan) on public.metric m1_2 (actual rows=1 loops=1)
                            Output: m1_2.id, m1_2.ts, m1_2.value
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: Cursor
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                           Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
          ->  Materialize (actual rows=4 loops=4)
                Output: m2.ts, m2.value, m2.id
                ->  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
@@ -1853,13 +1853,13 @@ SELECT * FROM metric m1 LEFT JOIN metric m2 USING (id) LEFT JOIN metric_name mn 
                                  Data node: db_dist_ref_table_join_1
                                  Fetcher Type: Cursor
                                  Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                                 Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                                 Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                            ->  Custom Scan (DataNodeScan) on public.metric m2_2 (actual rows=1 loops=1)
                                  Output: m2_2.ts, m2_2.value, m2_2.id
                                  Data node: db_dist_ref_table_join_2
                                  Fetcher Type: Cursor
                                  Chunks: _dist_hyper_1_4_chunk
-                                 Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                                 Remote SQL: SELECT ts, id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
    ->  Hash (actual rows=2 loops=1)
          Output: mn.name, mn.id
          Buckets: 1024  Batches: 1 
@@ -1884,8 +1884,8 @@ FROM metric JOIN metric_name ON texteq('cpu' || textin(int4out(metric.id)), name
 GROUP BY name
 ORDER BY name;
 DEBUG:  try to push down a join on a reference table
-                                                                                                                                    QUERY PLAN                                                                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                     QUERY PLAN                                                                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=2 loops=1)
    Output: metric_name.name, max(metric.value), count(*)
    Group Key: metric_name.name
@@ -1900,13 +1900,13 @@ DEBUG:  try to push down a join on a reference table
                            Data node: db_dist_ref_table_join_1
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON ((texteq(('cpu'::text || textin(int4out(r8.id))), r2.name)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
+                           Remote SQL: SELECT r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON ((texteq(('cpu'::text || textin(int4out(r8.id))), r2.name)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3]) ORDER BY r2.name ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                            Output: metric_2.value, metric_name.name
                            Data node: db_dist_ref_table_join_2
                            Fetcher Type: COPY
                            Chunks: _dist_hyper_1_4_chunk
-                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON ((texteq(('cpu'::text || textin(int4out(r9.id))), r2.name)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
+                           Remote SQL: SELECT r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON ((texteq(('cpu'::text || textin(int4out(r9.id))), r2.name)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1]) ORDER BY r2.name ASC NULLS LAST
 (21 rows)
 
 -- Non-shippable equality class join
@@ -1922,8 +1922,8 @@ GROUP BY name
 ORDER BY name;
 DEBUG:  try to push down a join on a reference table
 DEBUG:  join pushdown on reference table is not supported for the used query
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=2 loops=1)
    Output: metric_name.name, max(metric.value), count(*)
    Group Key: metric_name.name
@@ -1944,13 +1944,13 @@ DEBUG:  join pushdown on reference table is not supported for the used query
                                        Data node: db_dist_ref_table_join_1
                                        Fetcher Type: COPY
                                        Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                                       Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                                       Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                                  ->  Custom Scan (DataNodeScan) on public.metric metric_2 (actual rows=1 loops=1)
                                        Output: metric_2.value, metric_2.id
                                        Data node: db_dist_ref_table_join_2
                                        Fetcher Type: COPY
                                        Chunks: _dist_hyper_1_4_chunk
-                                       Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                                       Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
          ->  Sort (actual rows=4 loops=1)
                Output: metric_name.name
                Sort Key: metric_name.name
@@ -1972,8 +1972,8 @@ GROUP BY name
 ORDER BY name;
 DEBUG:  try to push down a join on a reference table
 DEBUG:  join pushdown on reference table is not supported for the used query
-                                                                       QUERY PLAN                                                                       
---------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                       QUERY PLAN                                                                        
+---------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=2 loops=1)
    Output: metric_name.name, max(metric.value), count(*)
    Group Key: metric_name.name
@@ -1993,13 +1993,13 @@ DEBUG:  join pushdown on reference table is not supported for the used query
                                  Data node: db_dist_ref_table_join_1
                                  Fetcher Type: COPY
                                  Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-                                 Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1, 2, 3])
+                                 Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1, 2, 3])
                            ->  Custom Scan (DataNodeScan) on public.metric metric_2 (actual rows=1 loops=1)
                                  Output: metric_2.value, metric_2.id
                                  Data node: db_dist_ref_table_join_2
                                  Fetcher Type: COPY
                                  Chunks: _dist_hyper_1_4_chunk
-                                 Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_internal.chunks_in(public.metric.*, ARRAY[1])
+                                 Remote SQL: SELECT id, value FROM public.metric WHERE _timescaledb_functions.chunks_in(public.metric.*, ARRAY[1])
                ->  Materialize (actual rows=2 loops=4)
                      Output: metric_name.name
                      ->  Seq Scan on public.metric_name (actual rows=2 loops=1)
@@ -2091,8 +2091,8 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id);
 
 :PREFIX
 SELECT * FROM metric LEFT JOIN metric_name USING (id);
-                                                                                                QUERY PLAN                                                                                                 
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=4 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=4 loops=1)
@@ -2101,13 +2101,13 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id);
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 LEFT JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=1 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 LEFT JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 -- Inner join
@@ -2118,8 +2118,8 @@ SELECT * FROM metric JOIN metric_name USING (id);
 
 :PREFIX
 SELECT * FROM metric JOIN metric_name USING (id);
-                                                                                                 QUERY PLAN                                                                                                 
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                 QUERY PLAN                                                                                                  
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=0 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=0 loops=1)
@@ -2128,20 +2128,20 @@ SELECT * FROM metric JOIN metric_name USING (id);
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=0 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 -- Filter on the NULL column
 :PREFIX
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name IS NOT NULL;
-                                                                                                               QUERY PLAN                                                                                                               
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                               QUERY PLAN                                                                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=0 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=0 loops=1)
@@ -2150,19 +2150,19 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name IS NOT NULL;
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name IS NOT NULL)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name IS NOT NULL)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=0 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name IS NOT NULL)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name IS NOT NULL)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 :PREFIX
 SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu1';
-                                                                                                                QUERY PLAN                                                                                                                 
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                 QUERY PLAN                                                                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=0 loops=1)
    Output: metric.id, metric.ts, metric.value, metric_name.name
    ->  Append (actual rows=0 loops=1)
@@ -2171,13 +2171,13 @@ SELECT * FROM metric LEFT JOIN metric_name USING (id) WHERE name = 'cpu1';
                Data node: db_dist_ref_table_join_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk
-               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name = 'cpu1'::text)))) WHERE _timescaledb_internal.chunks_in(r8, ARRAY[1, 2, 3])
+               Remote SQL: SELECT r8.id, r8.ts, r8.value, r2.name FROM (public.metric r8 INNER JOIN public.metric_name r2 ON (((r8.id = r2.id)) AND ((r2.name = 'cpu1'::text)))) WHERE _timescaledb_functions.chunks_in(r8, ARRAY[1, 2, 3])
          ->  Custom Scan (DataNodeScan) (actual rows=0 loops=1)
                Output: metric_2.id, metric_2.ts, metric_2.value, metric_name.name
                Data node: db_dist_ref_table_join_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_1_4_chunk
-               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name = 'cpu1'::text)))) WHERE _timescaledb_internal.chunks_in(r9, ARRAY[1])
+               Remote SQL: SELECT r9.id, r9.ts, r9.value, r2.name FROM (public.metric r9 INNER JOIN public.metric_name r2 ON (((r9.id = r2.id)) AND ((r2.name = 'cpu1'::text)))) WHERE _timescaledb_functions.chunks_in(r9, ARRAY[1])
 (15 rows)
 
 -------

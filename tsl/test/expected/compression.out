@@ -1745,7 +1745,7 @@ SELECT set_chunk_time_interval('f_sensor_data', INTERVAL '1 year');
 (1 row)
 
 -- Create one chunk manually to ensure, all data is inserted into one chunk
-SELECT * FROM _timescaledb_internal.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
+SELECT * FROM _timescaledb_functions.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
  chunk_id | hypertable_id |      schema_name      |     table_name     | relkind |                    slices                    | created 
 ----------+---------------+-----------------------+--------------------+---------+----------------------------------------------+---------
        71 |            37 | _timescaledb_internal | _hyper_37_71_chunk | r       | {"time": [181900977000000, 515024000000000]} | t

@@ -81,7 +81,7 @@ table_name               | compressed
 associated_schema_name   | _timescaledb_internal
 associated_table_prefix  | _dist_hyper_1
 num_dimensions           | 2
-chunk_sizing_func_schema | _timescaledb_internal
+chunk_sizing_func_schema | _timescaledb_functions
 chunk_sizing_func_name   | calculate_chunk_interval
 chunk_target_size        | 0
 compression_state        | 1

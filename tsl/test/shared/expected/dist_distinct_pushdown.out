@@ -43,7 +43,7 @@ QUERY PLAN
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
          Chunks: _dist_hyper_X_X_chunk
-         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
 (7 rows)
 
 -- A case where we have a filter on the DISTINCT ON column.
@@ -63,7 +63,7 @@ QUERY PLAN
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
          Chunks: _dist_hyper_X_X_chunk
-         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
 (7 rows)
 
 -- A somewhat dumb case where the DISTINCT ON column is deduced to be constant
@@ -86,7 +86,7 @@ QUERY PLAN
                Output: distinct_on_distributed.ts, distinct_on_distributed.id
                Data node: data_node_1
                Chunks: _dist_hyper_X_X_chunk
-               Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = 0))
+               Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = 0))
 (10 rows)
 
 -- All above but with disabled local sort, to try to force more interesting plans where the sort
@@ -107,7 +107,7 @@ QUERY PLAN
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
          Chunks: _dist_hyper_X_X_chunk
-         Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST LIMIT 1
+         Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST LIMIT 1
 (7 rows)
 
 select distinct on (id) ts, id from distinct_on_distributed order by id, ts desc;
@@ -128,7 +128,7 @@ QUERY PLAN
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
          Chunks: _dist_hyper_X_X_chunk
-         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
 (7 rows)
 
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0', '1') order by id, ts desc;
@@ -147,7 +147,7 @@ QUERY PLAN
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
          Chunks: _dist_hyper_X_X_chunk
-         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
+         Remote SQL: SELECT DISTINCT ON (id) ts, id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = ANY ('{0,1}'::integer[]))) ORDER BY id ASC NULLS LAST, ts DESC NULLS FIRST
 (7 rows)
 
 select distinct on (id) ts, id from distinct_on_distributed where id in ('0') order by id, ts desc;
@@ -165,7 +165,7 @@ QUERY PLAN
          Output: distinct_on_distributed.ts, distinct_on_distributed.id
          Data node: data_node_1
          Chunks: _dist_hyper_X_X_chunk
-         Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = 0)) ORDER BY ts DESC NULLS FIRST
+         Remote SQL: SELECT ts, id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) AND ((id = 0)) ORDER BY ts DESC NULLS FIRST
 (7 rows)
 
 reset enable_sort;

@@ -82,7 +82,7 @@ init_chunk_exclusion_func()
 {
 	if (!OidIsValid(chunk_exclusion_func))
 	{
-		List *l = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(CHUNK_EXCL_FUNC_NAME));
+		List *l = list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CHUNK_EXCL_FUNC_NAME));
 		chunk_exclusion_func =
 			LookupFuncName(l, lengthof(ts_chunks_arg_types), ts_chunks_arg_types, false);
 	}

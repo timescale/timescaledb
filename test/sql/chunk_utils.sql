@@ -413,7 +413,7 @@ SELECT hypertable_id FROM create_hypertable('chunk_id_from_relid_test', 'time', 
 
 INSERT INTO chunk_id_from_relid_test VALUES (0, 1.1, 0), (0, 1.3, 11), (12, 2.0, 0), (12, 0.1, 11);
 
-SELECT _timescaledb_internal.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
+SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
 
 DROP TABLE chunk_id_from_relid_test;
 
@@ -425,11 +425,11 @@ SELECT hypertable_id FROM  create_hypertable('chunk_id_from_relid_test',
 
 INSERT INTO chunk_id_from_relid_test VALUES (0, 1.1, 2), (0, 1.3, 11), (12, 2.0, 2), (12, 0.1, 11);
 
-SELECT _timescaledb_internal.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
+SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
 
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.chunk_id_from_relid('pg_type'::regclass);
-SELECT _timescaledb_internal.chunk_id_from_relid('chunk_id_from_relid_test'::regclass);
+SELECT _timescaledb_functions.chunk_id_from_relid('pg_type'::regclass);
+SELECT _timescaledb_functions.chunk_id_from_relid('chunk_id_from_relid_test'::regclass);
 
 -- test drop/show_chunks on custom partition types
 CREATE FUNCTION extract_time(a jsonb)
@@ -620,7 +620,7 @@ WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
 
-SELECT  _timescaledb_internal.drop_chunk(:'CHNAME');
+SELECT  _timescaledb_functions.drop_chunk(:'CHNAME');
 SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME"
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'

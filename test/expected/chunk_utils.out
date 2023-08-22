@@ -1068,7 +1068,7 @@ CREATE TABLE chunk_id_from_relid_test(time bigint, temp float8, device_id int);
 SELECT hypertable_id FROM create_hypertable('chunk_id_from_relid_test', 'time', chunk_time_interval => 10) \gset
 NOTICE:  adding not-null constraint to column "time"
 INSERT INTO chunk_id_from_relid_test VALUES (0, 1.1, 0), (0, 1.3, 11), (12, 2.0, 0), (12, 0.1, 11);
-SELECT _timescaledb_internal.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
+SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
  chunk_id_from_relid 
 ---------------------
                   24
@@ -1085,7 +1085,7 @@ SELECT hypertable_id FROM  create_hypertable('chunk_id_from_relid_test',
     number_partitions => 3) \gset
 NOTICE:  adding not-null constraint to column "time"
 INSERT INTO chunk_id_from_relid_test VALUES (0, 1.1, 2), (0, 1.3, 11), (12, 2.0, 2), (12, 0.1, 11);
-SELECT _timescaledb_internal.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
+SELECT _timescaledb_functions.chunk_id_from_relid(tableoid) FROM chunk_id_from_relid_test;
  chunk_id_from_relid 
 ---------------------
                   26
@@ -1095,9 +1095,9 @@ SELECT _timescaledb_internal.chunk_id_from_relid(tableoid) FROM chunk_id_from_re
 (4 rows)
 
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.chunk_id_from_relid('pg_type'::regclass);
+SELECT _timescaledb_functions.chunk_id_from_relid('pg_type'::regclass);
 ERROR:  chunk not found
-SELECT _timescaledb_internal.chunk_id_from_relid('chunk_id_from_relid_test'::regclass);
+SELECT _timescaledb_functions.chunk_id_from_relid('chunk_id_from_relid_test'::regclass);
 ERROR:  chunk not found
 -- test drop/show_chunks on custom partition types
 CREATE FUNCTION extract_time(a jsonb)
@@ -1451,7 +1451,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
-SELECT  _timescaledb_internal.drop_chunk(:'CHNAME');
+SELECT  _timescaledb_functions.drop_chunk(:'CHNAME');
  drop_chunk 
 ------------
  t

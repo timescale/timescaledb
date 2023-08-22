@@ -32,7 +32,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4, int8range(4, 10));
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
  chunk_id | hypertable_id |      schema_name      |    table_name    | relkind |                                            slices                                            
@@ -42,7 +42,7 @@ ORDER BY chunk_id;
 
 -- Creating a chunk with the constraints of an existing chunk should
 -- return the existing chunk
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
  chunk_id | hypertable_id |      schema_name      |    table_name    | relkind |                                            slices                                            | created 
 ----------+---------------+-----------------------+------------------+---------+----------------------------------------------------------------------------------------------+---------
         1 |             1 | _timescaledb_internal | _hyper_1_1_chunk | r       | {"time": [1514419200000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]} | f
@@ -51,36 +51,36 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [15144192
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Modified time constraint should fail with collision
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 ERROR:  chunk creation failed due to collision
 -- Missing dimension
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Extra dimension
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad dimension name
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  dimension "dev" does not exist in hypertable
 -- Same dimension twice
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad bounds format
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  constraint for dimension "time" is not numeric
 -- Bad slices format
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  unexpected number of dimensional bounds for dimension "time"
 -- Bad slices json
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}');
 ERROR:  invalid input syntax for type json
-LINE 1: ...ROM _timescaledb_internal.create_chunk('chunkapi',' {"time: ...
+LINE 1: ...OM _timescaledb_functions.create_chunk('chunkapi',' {"time: ...
                                                              ^
 DETAIL:  Token "device" is invalid.
 CONTEXT:  JSON data, line 1:  {"time: [1515024000000000] "device...
@@ -89,45 +89,45 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Test create_chunk_table for errors
 \set ON_ERROR_STOP 0
 -- Test create_chunk_table for NULL input
-SELECT * FROM _timescaledb_internal.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table(NULL,' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  hypertable cannot be NULL
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi', NULL, '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  slices cannot be NULL
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', NULL,'_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', NULL,'_hyper_1_1_chunk');
 ERROR:  chunk schema name cannot be NULL
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal',NULL);
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal',NULL);
 ERROR:  chunk table name cannot be NULL
 -- Modified time constraint should fail with collision
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  chunk table creation failed due to dimension slice collision
 -- Missing dimension
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Extra dimension
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "device": [-9223372036854775808, 1073741823], "time2": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad dimension name
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000],  "dev": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  dimension "dev" does not exist in hypertable
 -- Same dimension twice
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1514419600000000, 1515024000000000], "time": [1514419600000000, 1515024000000000]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  invalid number of hypercube dimensions
 -- Bad bounds format
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": ["1514419200000000", 1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  constraint for dimension "time" is not numeric
 -- Bad slices format
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time": [1515024000000000], "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid hypercube for hypertable "chunkapi"
 DETAIL:  unexpected number of dimensional bounds for dimension "time"
 -- Bad slices json
-SELECT * FROM _timescaledb_internal.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
+SELECT * FROM _timescaledb_functions.create_chunk_table('chunkapi',' {"time: [1515024000000000] "device": [-9223372036854775808, 1073741823]}', '_timescaledb_internal','_hyper_1_1_chunk');
 ERROR:  invalid input syntax for type json
-LINE 1: ...imescaledb_internal.create_chunk_table('chunkapi',' {"time: ...
+LINE 1: ...mescaledb_functions.create_chunk_table('chunkapi',' {"time: ...
                                                              ^
 DETAIL:  Token "device" is invalid.
 CONTEXT:  JSON data, line 1:  {"time: [1515024000000000] "device...
@@ -138,7 +138,7 @@ CONTEXT:  JSON data, line 1:  {"time: [1515024000000000] "device...
 SET ROLE :ROLE_SUPERUSER;
 GRANT INSERT ON chunkapi TO :ROLE_DEFAULT_PERM_USER_2;
 SET ROLE :ROLE_DEFAULT_PERM_USER_2;
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]}', 'ChunkSchema', 'My_chunk_Table_name');
  chunk_id | hypertable_id | schema_name |     table_name      | relkind |                                            slices                                            | created 
 ----------+---------------+-------------+---------------------+---------+----------------------------------------------------------------------------------------------+---------
         2 |             1 | ChunkSchema | My_chunk_Table_name | r       | {"time": [1515024000000000, 1519024000000000], "device": [-9223372036854775808, 1073741823]} | t
@@ -146,7 +146,7 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi',' {"time": [15150240
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set VERBOSITY terse
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
  chunk_id | hypertable_id |      schema_name      |     table_name      | relkind |                                            slices                                            
@@ -180,7 +180,7 @@ SELECT setseed(1);
 -- Test getting relation stats for chunks.  First get stats
 -- chunk-by-chunk. Note that the table isn't ANALYZED, so no stats
 -- present yet.
-SELECT (_timescaledb_internal.get_chunk_relstats(show_chunks)).*
+SELECT (_timescaledb_functions.get_chunk_relstats(show_chunks)).*
 FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
@@ -189,7 +189,7 @@ ORDER BY chunk_id;
         2 |             1 |         0 |          0 |              0
 (2 rows)
 
-SELECT (_timescaledb_internal.get_chunk_colstats(show_chunks)).*
+SELECT (_timescaledb_functions.get_chunk_colstats(show_chunks)).*
 FROM show_chunks('chunkapi')
 ORDER BY chunk_id;
  chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
@@ -197,21 +197,21 @@ ORDER BY chunk_id;
 (0 rows)
 
 -- Get the same stats but by giving the hypertable as input
-SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+SELECT * FROM _timescaledb_functions.get_chunk_relstats('chunkapi');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
 ----------+---------------+-----------+------------+----------------
         1 |             1 |         0 |          0 |              0
         2 |             1 |         0 |          0 |              0
 (2 rows)
 
-SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
+SELECT * FROM _timescaledb_functions.get_chunk_colstats('chunkapi');
  chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
 ----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
 
 -- reltuples is -1 on PG14 when no VACUUM/ANALYZE has run yet
 SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('chunkapi'))
 ORDER BY relname;
        relname       | reltuples | relpages | relallvisible 
@@ -222,7 +222,7 @@ ORDER BY relname;
 
 SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
 FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('chunkapi'))
 ORDER BY tablename, attname;
  tablename | attname | inherited | null_frac | avg_width | n_distinct 
@@ -231,14 +231,14 @@ ORDER BY tablename, attname;
 
 -- Show stats after analyze
 ANALYZE chunkapi;
-SELECT * FROM _timescaledb_internal.get_chunk_relstats('chunkapi');
+SELECT * FROM _timescaledb_functions.get_chunk_relstats('chunkapi');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
 ----------+---------------+-----------+------------+----------------
         1 |             1 |         1 |          1 |              0
         2 |             1 |         0 |          0 |              0
 (2 rows)
 
-SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
+SELECT * FROM _timescaledb_functions.get_chunk_colstats('chunkapi');
  chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                   slotopstrings                    | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
 ----------+---------------+---------+----------+-------+-------------+-------------+----------------------------------------------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
         1 |             1 |       1 |        0 |     8 |          -1 | {0,0,0,0,0} | {}                                                 | {0,0,0,0,0}    |              |              |              |              |              | {}                  |             |             |             |             | 
@@ -248,7 +248,7 @@ SELECT * FROM _timescaledb_internal.get_chunk_colstats('chunkapi');
 (4 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('chunkapi'))
 ORDER BY relname;
        relname       | reltuples | relpages | relallvisible 
@@ -259,7 +259,7 @@ ORDER BY relname;
 
 SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
 FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
 FROM show_chunks('chunkapi'))
 ORDER BY tablename, attname;
     tablename     | attname | inherited | null_frac | avg_width | n_distinct 
@@ -303,20 +303,20 @@ INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4, 'green'),
 -- Make sure we get deterministic behavior across all nodes
 CALL distributed_exec($$ SELECT setseed(1); $$);
 -- No stats on the local table
-SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+SELECT * FROM _timescaledb_functions.get_chunk_relstats('disttable');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
 ----------+---------------+-----------+------------+----------------
         3 |             2 |         0 |          0 |              0
         4 |             2 |         0 |          0 |              0
 (2 rows)
 
-SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
  chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
 ----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY relname;
         relname        | reltuples | relpages | relallvisible 
@@ -326,7 +326,7 @@ ORDER BY relname;
 (2 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
  schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogram_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
@@ -337,7 +337,7 @@ ORDER BY 1,2,3;
 CALL distributed_exec('ANALYZE disttable', ARRAY[:'DATA_NODE_1']);
 -- Stats should now be refreshed after running get_chunk_{col,rel}stats
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY relname;
         relname        | reltuples | relpages | relallvisible 
@@ -347,21 +347,21 @@ ORDER BY relname;
 (2 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
  schemaname | tablename | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs | histogram_bounds | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
 ------------+-----------+---------+-----------+-----------+-----------+------------+------------------+-------------------+------------------+-------------+-------------------+------------------------+----------------------
 (0 rows)
 
-SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+SELECT * FROM _timescaledb_functions.get_chunk_relstats('disttable');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
 ----------+---------------+-----------+------------+----------------
         3 |             2 |         1 |          2 |              0
         4 |             2 |         0 |          0 |              0
 (2 rows)
 
-SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
  chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slotcollations  | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
 ----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+-----------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
         3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} | {0,0,0,0,0}     |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
@@ -371,7 +371,7 @@ SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
 (4 rows)
 
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY relname;
         relname        | reltuples | relpages | relallvisible 
@@ -381,7 +381,7 @@ ORDER BY relname;
 (2 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
       schemaname       |       tablename       | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs |                        histogram_bounds                         | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
@@ -394,7 +394,7 @@ ORDER BY 1,2,3;
 
 -- Test that user without table permissions can't get column stats
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
  chunk_id | hypertable_id | att_num | nullfrac | width | distinctval | slotkind | slotopstrings | slotcollations | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers | slotvaluetypetrings | slot1values | slot2values | slot3values | slot4values | slot5values 
 ----------+---------------+---------+----------+-------+-------------+----------+---------------+----------------+--------------+--------------+--------------+--------------+--------------+---------------------+-------------+-------------+-------------+-------------+-------------
 (0 rows)
@@ -403,14 +403,14 @@ SET ROLE :ROLE_1;
 -- Run ANALYZE again, but on both nodes.
 ANALYZE disttable;
 -- Now expect stats from all data node chunks
-SELECT * FROM _timescaledb_internal.get_chunk_relstats('disttable');
+SELECT * FROM _timescaledb_functions.get_chunk_relstats('disttable');
  chunk_id | hypertable_id | num_pages | num_tuples | num_allvisible 
 ----------+---------------+-----------+------------+----------------
         3 |             2 |         1 |          2 |              0
         4 |             2 |         1 |          1 |              0
 (2 rows)
 
-SELECT * FROM _timescaledb_internal.get_chunk_colstats('disttable');
+SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
  chunk_id | hypertable_id | att_num | nullfrac | width | distinctval |  slotkind   |                                                      slotopstrings                                                      | slotcollations  | slot1numbers | slot2numbers | slot3numbers | slot4numbers | slot5numbers |   slotvaluetypetrings    |                           slot1values                           | slot2values | slot3values | slot4values | slot5values 
 ----------+---------------+---------+----------+-------+-------------+-------------+-------------------------------------------------------------------------------------------------------------------------+-----------------+--------------+--------------+--------------+--------------+--------------+--------------------------+-----------------------------------------------------------------+-------------+-------------+-------------+-------------
         3 |             2 |       1 |        0 |     8 |          -1 | {2,3,0,0,0} | {<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog,<,pg_catalog,timestamptz,pg_catalog,timestamptz,pg_catalog} | {0,0,0,0,0}     |              | {1}          |              |              |              | {timestamptz,pg_catalog} | {"Mon Jan 01 05:00:00 2018 PST","Mon Jan 01 06:00:00 2018 PST"} |             |             |             | 
@@ -438,7 +438,7 @@ INSERT INTO disttable VALUES ('2019-01-01 05:00:00-8', 1, 23.4, 'green');
 ANALYZE disttable;
 ANALYZE disttable;
 SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY relname;
         relname        | reltuples | relpages | relallvisible 
@@ -449,7 +449,7 @@ ORDER BY relname;
 (3 rows)
 
 SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
  FROM show_chunks('disttable'))
 ORDER BY 1,2,3;
       schemaname       |       tablename       | attname | inherited | null_frac | avg_width | n_distinct | most_common_vals | most_common_freqs |                        histogram_bounds                         | correlation | most_common_elems | most_common_elem_freqs | elem_count_histogram 
@@ -578,7 +578,7 @@ FROM timescaledb_information.chunks c
 ORDER BY chunk_name DESC
 LIMIT 1 \gset
 SELECT slices AS "SLICES"
-FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
+FROM _timescaledb_functions.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
 SELECT relname
 FROM pg_catalog.pg_inherits, pg_class
 WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent = oid;
@@ -604,7 +604,7 @@ SELECT * FROM _timescaledb_catalog.dimension_slice ORDER BY id;
 (2 rows)
 
 SELECT count(*) FROM
-   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
      1
@@ -626,7 +626,7 @@ WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent =
 
 -- Test that creat_chunk fails since chunk table already exists
 \set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 ERROR:  relation "_hyper_1_1_chunk" already exists
 \set ON_ERROR_STOP 1
 -- Test create_chunk_table on a hypertable where the chunk didn't exist before
@@ -641,7 +641,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT count(*) FROM
-   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
      1
@@ -658,7 +658,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2, '3d');
 (1 row)
 
 SELECT count(*) FROM
-   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
      1
@@ -674,7 +674,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
 (1 row)
 
 SELECT count(*) FROM
-   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
      1
@@ -692,7 +692,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 3);
 
 INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+SELECT _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
 ERROR:  chunk table creation failed due to dimension slice collision
 \set ON_ERROR_STOP 1
 -- Test create_chunk_table when a chunk exists in different space partition and thus doesn't collide
@@ -705,7 +705,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 (1 row)
 
 INSERT INTO chunkapi VALUES ('2018-01-01 05:00:00-8', 2, 23.4);
-SELECT _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+SELECT _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  create_chunk_table 
 --------------------
  t
@@ -722,7 +722,7 @@ SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 (1 row)
 
 INSERT INTO chunkapi VALUES ('2018-02-01 05:00:00-8', 1, 23.4);
-SELECT _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+SELECT _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  create_chunk_table 
 --------------------
  t
@@ -760,7 +760,7 @@ SELECT attach_tablespace('tablespace2', 'chunkapi');
 (1 row)
 
 SELECT count(*) FROM
-   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
      1
@@ -790,7 +790,7 @@ FROM timescaledb_information.chunks c
 ORDER BY chunk_name DESC
 LIMIT 1 \gset
 SELECT slices AS "SLICES"
-FROM _timescaledb_internal.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
+FROM _timescaledb_functions.show_chunk(:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME') \gset
 -- Save the constraints info in a table for later comparison
 CREATE TABLE original_chunk_constraints AS
 SELECT "Constraint", "Type", "Columns", "Index"::text, "Expr", "Deferrable", "Deferred", "Validated"
@@ -819,7 +819,7 @@ SELECT attach_tablespace('tablespace2', 'chunkapi');
 (1 row)
 
 SELECT count(*) FROM
-   _timescaledb_internal.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
+   _timescaledb_functions.create_chunk_table('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME');
  count 
 -------
      1
@@ -832,7 +832,7 @@ SELECT tablespace FROM pg_tables WHERE tablename = :'CHUNK_NAME';
 (1 row)
 
 -- Now create the complete chunk from the chunk table
-SELECT _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME',
+SELECT _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME',
 	   format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
                                               create_chunk                                               
 ---------------------------------------------------------------------------------------------------------
@@ -897,7 +897,7 @@ WHERE inhrelid = (:'CHUNK_SCHEMA'||'.'||:'CHUNK_NAME')::regclass AND inhparent =
 SELECT
 	:'CHUNK_SCHEMA' AS expected_schema,
 	:'CHUNK_NAME' AS expected_table_name,
-	(_timescaledb_internal.show_chunk(ch)).*
+	(_timescaledb_functions.show_chunk(ch)).*
 FROM show_chunks('chunkapi') ch;
     expected_schema    | expected_table_name | chunk_id | hypertable_id |      schema_name      |     table_name     | relkind |                     slices                     
 -----------------------+---------------------+----------+---------------+-----------------------+--------------------+---------+------------------------------------------------
@@ -930,7 +930,7 @@ INSERT INTO newchunk VALUES ('2018-01-01 05:00:00-8', 1, 23.4);
 -- constraints, but not foreign key, unique, or primary key
 -- constraints. We should probably add checks to enforce the latter
 -- too or auto-create all constraints.
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk');
 ERROR:  child table is missing constraint "chunkapi_temp_check"
 \set ON_ERROR_STOP 1
 -- Add the missing CHECK constraint. Note that the name must be the
@@ -938,7 +938,7 @@ ERROR:  child table is missing constraint "chunkapi_temp_check"
 ALTER TABLE newchunk ADD CONSTRAINT chunkapi_temp_check CHECK (temp > 0);
 CREATE TABLE newchunk2 as select * from newchunk;
 ALTER TABLE newchunk2 ADD CONSTRAINT chunkapi_temp_check CHECK (temp > 0);
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk');
  chunk_id | hypertable_id |      schema_name      |     table_name     | relkind |                     slices                     | created 
 ----------+---------------+-----------------------+--------------------+---------+------------------------------------------------+---------
        13 |            11 | _timescaledb_internal | _hyper_10_10_chunk | r       | {"time": [1514419200000000, 1515024000000000]} | t
@@ -946,14 +946,14 @@ SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_
 
 -- adding an existing table to an exiting range must fail
 \set ON_ERROR_STOP 0
-SELECT * FROM _timescaledb_internal.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk2');
+SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK_SCHEMA', :'CHUNK_NAME', 'newchunk2');
 ERROR:  chunk creation failed due to collision
 \set ON_ERROR_STOP 1
 -- Show the chunk and that names are what we'd expect
 SELECT
 	:'CHUNK_SCHEMA' AS expected_schema,
 	:'CHUNK_NAME' AS expected_table_name,
-	(_timescaledb_internal.show_chunk(ch)).*
+	(_timescaledb_functions.show_chunk(ch)).*
 FROM show_chunks('chunkapi') ch;
     expected_schema    | expected_table_name | chunk_id | hypertable_id |      schema_name      |     table_name     | relkind |                     slices                     
 -----------------------+---------------------+----------+---------------+-----------------------+--------------------+---------+------------------------------------------------

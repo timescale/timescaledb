@@ -74,15 +74,15 @@ select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_r
 ERROR:  [<hidden node name>]: debug point: requested to error out after 16384 rows, 16384 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
-                                                                                                                            QUERY PLAN                                                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=22799 loops=1)
    Output: 1
    ->  Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=22799 loops=1)
          Data node: db_dist_remote_error_1
          Fetcher Type: COPY
          Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk
-         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_functions.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (7 rows)
 
 -- We don't test fatal errors here, because PG versions before 14 are unable to
@@ -107,15 +107,15 @@ select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_r
 ERROR:  [<hidden node name>]: debug point: requested to error out after 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
-                                                                                                                            QUERY PLAN                                                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=22799 loops=1)
    Output: 1
    ->  Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=22799 loops=1)
          Data node: db_dist_remote_error_1
          Fetcher Type: Cursor
          Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk
-         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_functions.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (7 rows)
 
 -- Now test the same with the prepared statement fetcher.
@@ -137,15 +137,15 @@ select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_r
 ERROR:  [<hidden node name>]: debug point: requested to error out after 10000 rows, 10000 rows seen
 explain (analyze, verbose, costs off, timing off, summary off)
 select 1 from metrics_dist_remote_error where ts_debug_shippable_error_after_n_rows(10000000, device_id)::int != 0;
-                                                                                                                            QUERY PLAN                                                                                                                            
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                            QUERY PLAN                                                                                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Result (actual rows=22799 loops=1)
    Output: 1
    ->  Custom Scan (DataNodeScan) on public.metrics_dist_remote_error (actual rows=22799 loops=1)
          Data node: db_dist_remote_error_1
          Fetcher Type: Prepared statement
          Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk
-         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_internal.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
+         Remote SQL: SELECT NULL FROM public.metrics_dist_remote_error WHERE _timescaledb_functions.chunks_in(public.metrics_dist_remote_error.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9]) AND ((public.ts_debug_shippable_error_after_n_rows(10000000, device_id) <> 0))
 (7 rows)
 
 reset timescaledb.remote_data_fetcher;
@@ -316,8 +316,8 @@ set timescaledb.enable_connection_binary_data = true;
 set timescaledb.remote_data_fetcher = 'prepared';
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from metrics_dist_ss;
-                                                                                    QUERY PLAN                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=22800 loops=1)
    Output: metrics_dist_ss."time", metrics_dist_ss.device_id, metrics_dist_ss.v0, metrics_dist_ss.v1, metrics_dist_ss.v2, metrics_dist_ss.v3
    ->  Append (actual rows=22800 loops=1)
@@ -326,26 +326,26 @@ select * from metrics_dist_ss;
                Data node: db_dist_remote_error_1
                Fetcher Type: Prepared statement
                Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
                Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
                Data node: db_dist_remote_error_2
                Fetcher Type: Prepared statement
                Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
                Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
                Data node: db_dist_remote_error_3
                Fetcher Type: Prepared statement
                Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
 (21 rows)
 
 set timescaledb.remote_data_fetcher = 'copy';
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from metrics_dist_ss;
-                                                                                    QUERY PLAN                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=22800 loops=1)
    Output: metrics_dist_ss."time", metrics_dist_ss.device_id, metrics_dist_ss.v0, metrics_dist_ss.v1, metrics_dist_ss.v2, metrics_dist_ss.v3
    ->  Append (actual rows=22800 loops=1)
@@ -354,26 +354,26 @@ select * from metrics_dist_ss;
                Data node: db_dist_remote_error_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
                Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
                Data node: db_dist_remote_error_2
                Fetcher Type: COPY
                Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
                Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
                Data node: db_dist_remote_error_3
                Fetcher Type: COPY
                Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
 (21 rows)
 
 set timescaledb.remote_data_fetcher = 'cursor';
 explain (analyze, verbose, costs off, timing off, summary off)
 select * from metrics_dist_ss;
-                                                                                    QUERY PLAN                                                                                     
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                     QUERY PLAN                                                                                     
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (AsyncAppend) (actual rows=22800 loops=1)
    Output: metrics_dist_ss."time", metrics_dist_ss.device_id, metrics_dist_ss.v0, metrics_dist_ss.v1, metrics_dist_ss.v2, metrics_dist_ss.v3
    ->  Append (actual rows=22800 loops=1)
@@ -382,19 +382,19 @@ select * from metrics_dist_ss;
                Data node: db_dist_remote_error_1
                Fetcher Type: Cursor
                Chunks: _dist_hyper_5_123_chunk, _dist_hyper_5_126_chunk, _dist_hyper_5_129_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[57, 58, 59])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_2 (actual rows=13680 loops=1)
                Output: metrics_dist_ss_2."time", metrics_dist_ss_2.device_id, metrics_dist_ss_2.v0, metrics_dist_ss_2.v1, metrics_dist_ss_2.v2, metrics_dist_ss_2.v3
                Data node: db_dist_remote_error_2
                Fetcher Type: Cursor
                Chunks: _dist_hyper_5_124_chunk, _dist_hyper_5_127_chunk, _dist_hyper_5_130_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[49, 50, 51])
          ->  Custom Scan (DataNodeScan) on public.metrics_dist_ss metrics_dist_ss_3 (actual rows=4560 loops=1)
                Output: metrics_dist_ss_3."time", metrics_dist_ss_3.device_id, metrics_dist_ss_3.v0, metrics_dist_ss_3.v1, metrics_dist_ss_3.v2, metrics_dist_ss_3.v3
                Data node: db_dist_remote_error_3
                Fetcher Type: Cursor
                Chunks: _dist_hyper_5_125_chunk, _dist_hyper_5_128_chunk, _dist_hyper_5_131_chunk
-               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_internal.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
+               Remote SQL: SELECT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist_ss WHERE _timescaledb_functions.chunks_in(public.metrics_dist_ss.*, ARRAY[38, 39, 40])
 (21 rows)
 
 -- Incorrect int output, to cover the error handling in tuplefactory.

@@ -14,7 +14,7 @@ debug_waitpoint_release
                        
 (1 row)
 
-step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step s1_freeze: SELECT _timescaledb_functions.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
 step ins_s2_commit: COMMIT;
 step s1_freeze: <... completed>
 freeze_chunk
@@ -53,7 +53,7 @@ debug_waitpoint_release
                        
 (1 row)
 
-step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step s1_freeze: SELECT _timescaledb_functions.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
 step upd_s2_commit: COMMIT;
 step s1_freeze: <... completed>
 freeze_chunk
@@ -91,7 +91,7 @@ debug_waitpoint_release
                        
 (1 row)
 
-step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step s1_freeze: SELECT _timescaledb_functions.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
 step del_s2_commit: COMMIT;
 step s1_freeze: <... completed>
 freeze_chunk
@@ -134,7 +134,7 @@ debug_waitpoint_release
                        
 (1 row)
 
-step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q;
+step s1_freeze: SELECT _timescaledb_functions.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q;
 freeze_chunk
 ------------
 t           
@@ -165,7 +165,7 @@ lock_chunktable
 (1 row)
 
 step comp_s2_compress: BEGIN; SELECT CASE WHEN compress_chunk(ch) IS NOT NULL THEN 'Success' ELSE 'Failed' END  as COL FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
-step s1_freeze: SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
+step s1_freeze: SELECT _timescaledb_functions.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; <waiting ...>
 step UnlockChunk: ROLLBACK;
 step comp_s2_compress: <... completed>
 col    

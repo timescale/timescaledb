@@ -399,7 +399,7 @@ chunk_create(PG_FUNCTION_ARGS)
 #define CREATE_CHUNK_FUNCTION_NAME "create_chunk"
 #define CREATE_CHUNK_NUM_ARGS 5
 #define CHUNK_CREATE_STMT                                                                          \
-	"SELECT * FROM " INTERNAL_SCHEMA_NAME "." CREATE_CHUNK_FUNCTION_NAME "($1, $2, $3, $4, $5)"
+	"SELECT * FROM " FUNCTIONS_SCHEMA_NAME "." CREATE_CHUNK_FUNCTION_NAME "($1, $2, $3, $4, $5)"
 
 #define ESTIMATE_JSON_STR_SIZE(num_dims) (60 * (num_dims))
 
@@ -415,7 +415,7 @@ static void
 get_create_chunk_result_type(TupleDesc *tupdesc)
 {
 	Oid funcoid = ts_get_function_oid(CREATE_CHUNK_FUNCTION_NAME,
-									  INTERNAL_SCHEMA_NAME,
+									  FUNCTIONS_SCHEMA_NAME,
 									  CREATE_CHUNK_NUM_ARGS,
 									  create_chunk_argtypes);
 
@@ -1562,8 +1562,8 @@ chunk_api_iterate_colstats_context(FuncCallContext *funcctx)
  * This function reconstructs the fcinfo argument of the
  * chunk_api_get_chunk_stats() function in order to call
  * fetch_remote_chunk_stats() and execute either
- * _timescaledb_internal.get_chunk_relstats() or
- * _timescaledb_internal.get_chunk_colstats() remotely (depending on the
+ * _timescaledb_functions.get_chunk_relstats() or
+ * _timescaledb_functions.get_chunk_colstats() remotely (depending on the
  * passed `col_stats` bool).
  */
 static void
@@ -1586,7 +1586,7 @@ chunk_api_update_distributed_hypertable_chunk_stats(Oid table_id, bool col_stats
 
 	/* Prepare fcinfo context for remote execution of _timescaledb_internal.get_chunk_relstats() */
 	funcoid = ts_get_function_oid(col_stats ? GET_CHUNK_COLSTATS_NAME : GET_CHUNK_RELSTATS_NAME,
-								  INTERNAL_SCHEMA_NAME,
+								  FUNCTIONS_SCHEMA_NAME,
 								  1,
 								  get_chunk_stats_argtypes);
 	fmgr_info_cxt(funcoid, &flinfo, CurrentMemoryContext);
@@ -1779,7 +1779,7 @@ chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const Chunk *chunk
 										const char *node_name)
 {
 	const char *create_cmd =
-		psprintf("SELECT %s.%s($1, $2, $3, $4)", INTERNAL_SCHEMA_NAME, CREATE_CHUNK_TABLE_NAME);
+		psprintf("SELECT %s.%s($1, $2, $3, $4)", FUNCTIONS_SCHEMA_NAME, CREATE_CHUNK_TABLE_NAME);
 	const char *params[4] = { quote_qualified_identifier(NameStr(ht->fd.schema_name),
 														 NameStr(ht->fd.table_name)),
 							  chunk_api_dimension_slices_json(chunk, ht),
