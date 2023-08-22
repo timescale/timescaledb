@@ -65,7 +65,7 @@ ORDER BY chunk_name LIMIT 1
 \gset
 
 -- Freeze
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME');
 
 SELECT * from test1.hyper1 ORDER BY 1;
 
@@ -136,7 +136,7 @@ SELECT * from test1.hyper1 ORDER BY 1;
 SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
 
-SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME');
 
 SELECT tgname, tgtype FROM pg_trigger WHERE tgrelid = :'CHNAME'::regclass ORDER BY tgname, tgtype;
 
@@ -151,8 +151,8 @@ UPDATE test1.hyper1 SET temp = 40;
 DELETE FROM test1.hyper1;
 
 --unfreezing again works
-SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
-SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.drop_chunk( :'CHNAME');
 
 -- TEST freeze_chunk api on a chunk that is compressed
 CREATE TABLE public.table_to_compress (time date NOT NULL, acq_id bigint, value bigint);
@@ -173,7 +173,7 @@ ORDER BY chunk_name LIMIT 1
 \gset
 
 SELECT  compress_chunk( :'CHNAME');
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME');
 
 SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'CHUNK_NAME';
@@ -189,7 +189,7 @@ UPDATE public.table_to_compress SET value = 3;
 DELETE FROM public.table_to_compress WHERE time < '2020-01-02';
 \set ON_ERROR_STOP 1
 --try to refreeze
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME');
 
 --touches non-frozen chunk
 SELECT * from public.table_to_compress ORDER BY 1, 3;
@@ -202,8 +202,8 @@ SELECT * from public.table_to_compress ORDER BY 1, 3;
 SELECT drop_chunks('table_to_compress', older_than=> '1 day'::interval);
 
 --unfreeze and drop it
-SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME');
-SELECT  _timescaledb_internal.drop_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.drop_chunk( :'CHNAME');
 
 --add a new chunk
 INSERT INTO public.table_to_compress VALUES ('2019-01-01', 1234567, 777888);
@@ -215,7 +215,7 @@ WHERE hypertable_name = 'table_to_compress' and hypertable_schema = 'public'
 ORDER BY chunk_name DESC LIMIT 1
 \gset
 
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME');
 \set ON_ERROR_STOP 0
 SELECT  compress_chunk( :'CHNAME');
 \set ON_ERROR_STOP 1
@@ -225,7 +225,7 @@ SELECT  compress_chunk( :'CHNAME');
 -- frozen chunks cannot be dropped.
 
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.drop_chunk(:'CHNAME');
+SELECT _timescaledb_functions.drop_chunk(:'CHNAME');
 \set ON_ERROR_STOP 1
 
 -- Prepare table for CAGG tests
@@ -249,20 +249,20 @@ WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
 
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME1');
+SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME1');
 
 --cannot drop frozen chunk
 \set ON_ERROR_STOP 0
-SELECT  _timescaledb_internal.drop_chunk( :'CHNAME1');
+SELECT  _timescaledb_functions.drop_chunk( :'CHNAME1');
 \set ON_ERROR_STOP 1
 
 -- unfreeze the chunk, then drop the single chunk
-SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME1');
+SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME1');
 
 --drop the single chunk and verify that cagg is unaffected.
 SELECT * FROM test1.hyper1 ORDER BY 1;
 
-SELECT  _timescaledb_internal.drop_chunk( :'CHNAME1');
+SELECT  _timescaledb_functions.drop_chunk( :'CHNAME1');
 
 SELECT * from test1.hyper1 ORDER BY 1;
 SELECT * FROM hyper1_cagg ORDER BY 1;
@@ -281,8 +281,8 @@ SELECT ts_undo_osm_hook();
 --TEST error case (un)freeze a non-chunk
 CREATE TABLE nochunk_tab( a timestamp, b integer);
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.freeze_chunk('nochunk_tab');
-SELECT _timescaledb_internal.unfreeze_chunk('nochunk_tab');
+SELECT _timescaledb_functions.freeze_chunk('nochunk_tab');
+SELECT _timescaledb_functions.unfreeze_chunk('nochunk_tab');
 \set ON_ERROR_STOP 1
 
 ----- TESTS for attach_osm_table_chunk ------------
@@ -325,7 +325,7 @@ INSERT INTO ht_try VALUES ('2022-05-05 01:00', 222, 222);
 
 SELECT * FROM child_fdw_table;
 
-SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table');
+SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table');
 
 -- OSM chunk is not visible in chunks view
 SELECT chunk_name, range_start, range_end
@@ -378,11 +378,11 @@ SELECT ts_undo_osm_hook();
 -- TEST error have to be hypertable owner to attach a chunk to it
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.attach_osm_table_chunk('ht_try', 'child_fdw_table');
+SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table');
 
 -- TEST error try to attach to non hypertable
 CREATE TABLE non_ht (time bigint, temp float);
-SELECT _timescaledb_internal.attach_osm_table_chunk('non_ht', 'child_fdw_table');
+SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table');
 
 \set ON_ERROR_STOP 1
 
@@ -422,8 +422,8 @@ ORDER BY chunk_name LIMIT 1
 \gset
 
 \set ON_ERROR_STOP 0
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME3');
-SELECT  _timescaledb_internal.unfreeze_chunk( :'CHNAME3');
+SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME3');
+SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME3');
 \set ON_ERROR_STOP 1
 
 -- TEST can create OSM chunk if there are constraints on the hypertable
@@ -451,7 +451,7 @@ CREATE FOREIGN TABLE child_hyper_constr
  SERVER s3_server OPTIONS ( schema_name 'public', table_name 'fdw_hyper_constr');
 
 --check constraints are automatically added for the foreign table
-SELECT _timescaledb_internal.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
+SELECT _timescaledb_functions.attach_osm_table_chunk('hyper_constr', 'child_hyper_constr');
 
 SELECT table_name, status, osm_chunk
 FROM _timescaledb_catalog.chunk
@@ -499,7 +499,7 @@ WHERE hypertable_name = 'copy_test' and hypertable_schema = 'test1'
 ORDER BY chunk_name LIMIT 1
 \gset
 
-SELECT _timescaledb_internal.freeze_chunk( :'COPY_CHNAME');
+SELECT _timescaledb_functions.freeze_chunk( :'COPY_CHNAME');
 
 -- Check state
 SELECT table_name, status
@@ -532,7 +532,7 @@ COPY test1.copy_test FROM STDIN DELIMITER ',';
 SELECT COUNT(*) FROM test1.copy_test;
 
 -- Check unfreeze restored chunk
-SELECT _timescaledb_internal.unfreeze_chunk( :'COPY_CHNAME');
+SELECT _timescaledb_functions.unfreeze_chunk( :'COPY_CHNAME');
 
 -- Check state
 SELECT table_name, status

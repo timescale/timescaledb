@@ -73,3 +73,20 @@ ALTER FUNCTION _timescaledb_functions.get_git_commit() SET SCHEMA _timescaledb_i
 ALTER FUNCTION _timescaledb_functions.get_os_info() SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.tsl_loaded() SET SCHEMA _timescaledb_internal;
 
+ALTER FUNCTION _timescaledb_functions.calculate_chunk_interval(int, bigint, bigint) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunk_status(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunks_in(record, integer[]) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunk_id_from_relid(oid) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.show_chunk(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.create_chunk(regclass, jsonb, name, name, regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.set_chunk_default_data_node(regclass, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.get_chunk_relstats(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.get_chunk_colstats(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.create_chunk_table(regclass, jsonb, name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.freeze_chunk(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.unfreeze_chunk(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.drop_chunk(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.attach_osm_table_chunk(regclass, regclass) SET SCHEMA _timescaledb_internal;
+
+UPDATE _timescaledb_catalog.hypertable SET chunk_sizing_func_schema = '_timescaledb_internal' WHERE chunk_sizing_func_schema = '_timescaledb_functions' AND chunk_sizing_func_name = 'calculate_chunk_interval';
+

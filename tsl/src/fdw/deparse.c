@@ -1306,7 +1306,7 @@ append_chunk_exclusion_condition(deparse_expr_cxt *context, bool use_alias)
 	ListCell *lc;
 	bool first = true;
 
-	appendStringInfoString(buf, INTERNAL_SCHEMA_NAME "." CHUNK_EXCL_FUNC_NAME "(");
+	appendStringInfoString(buf, FUNCTIONS_SCHEMA_NAME "." CHUNK_EXCL_FUNC_NAME "(");
 
 	if (use_alias)
 		appendStringInfo(buf, "%s%d, ", REL_ALIAS_PREFIX, scanrel->relid);

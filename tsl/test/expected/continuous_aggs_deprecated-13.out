@@ -1934,9 +1934,9 @@ View definition:
     _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_3_4,
     transactions.amount AS var_3_5,
     _timescaledb_internal.partialize_agg(sum(transactions.fiat_value)) AS agg_4_6,
-    _timescaledb_internal.chunk_id_from_relid(transactions.tableoid) AS chunk_id
+    _timescaledb_functions.chunk_id_from_relid(transactions.tableoid) AS chunk_id
    FROM transactions
-  GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount, (_timescaledb_internal.chunk_id_from_relid(transactions.tableoid));
+  GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount, (_timescaledb_functions.chunk_id_from_relid(transactions.tableoid));
 
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
                           Table "_timescaledb_internal._materialized_hypertable_53"

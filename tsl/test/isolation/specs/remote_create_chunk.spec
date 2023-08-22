@@ -45,7 +45,7 @@ setup	{
 
 # Try to create a chunk
 step "s1_create_chunk_1" {
-	SELECT slices, created FROM _timescaledb_internal.create_chunk('conditions', jsonb_build_object('time', ARRAY[1514764800000000, 1514851200000000], 'device', ARRAY[-9223372036854775808, 1073741823]));
+	SELECT slices, created FROM _timescaledb_functions.create_chunk('conditions', jsonb_build_object('time', ARRAY[1514764800000000, 1514851200000000], 'device', ARRAY[-9223372036854775808, 1073741823]));
 }
 
 # Create a chunk that does not exist
@@ -58,11 +58,11 @@ setup	{
 }
 
 step "s2_create_chunk_1" {
-	SELECT slices, created FROM _timescaledb_internal.create_chunk('conditions', jsonb_build_object('time', ARRAY[1514764800000000, 1514851200000000], 'device', ARRAY[-9223372036854775808, 1073741823]));
+	SELECT slices, created FROM _timescaledb_functions.create_chunk('conditions', jsonb_build_object('time', ARRAY[1514764800000000, 1514851200000000], 'device', ARRAY[-9223372036854775808, 1073741823]));
 }
 
 step "s2_create_chunk_2" {
-	SELECT slices, created FROM _timescaledb_internal.create_chunk('conditions', jsonb_build_object('time', ARRAY[1514764800000000, 1514851200000000], 'device', ARRAY[1073741823, 9223372036854775807]));
+	SELECT slices, created FROM _timescaledb_functions.create_chunk('conditions', jsonb_build_object('time', ARRAY[1514764800000000, 1514851200000000], 'device', ARRAY[1073741823, 9223372036854775807]));
 }
 
 session "s3"

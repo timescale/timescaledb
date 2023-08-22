@@ -41,7 +41,7 @@ QUERY PLAN
    Data node: data_node_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT count(*) FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[..])
+   Remote SQL: SELECT count(*) FROM public.metrics_dist1 WHERE _timescaledb_functions.chunks_in(public.metrics_dist1.*, ARRAY[..])
    Remote EXPLAIN: 
      Finalize Aggregate (actual rows=1 loops=1)
        Output: count(*)
@@ -68,7 +68,7 @@ QUERY PLAN
    Data node: data_node_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT public.ts_debug_shippable_safe_count(*) FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[..])
+   Remote SQL: SELECT public.ts_debug_shippable_safe_count(*) FROM public.metrics_dist1 WHERE _timescaledb_functions.chunks_in(public.metrics_dist1.*, ARRAY[..])
    Remote EXPLAIN: 
      Finalize Aggregate (actual rows=1 loops=1)
        Output: public.ts_debug_shippable_safe_count(*)
@@ -95,7 +95,7 @@ QUERY PLAN
    Data node: data_node_1
    Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-   Remote SQL: SELECT public.ts_debug_shippable_unsafe_count(*) FROM public.metrics_dist1 WHERE _timescaledb_internal.chunks_in(public.metrics_dist1.*, ARRAY[..])
+   Remote SQL: SELECT public.ts_debug_shippable_unsafe_count(*) FROM public.metrics_dist1 WHERE _timescaledb_functions.chunks_in(public.metrics_dist1.*, ARRAY[..])
    Remote EXPLAIN: 
      Aggregate (actual rows=1 loops=1)
        Output: public.ts_debug_shippable_unsafe_count(*)

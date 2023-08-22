@@ -30,7 +30,7 @@ QUERY PLAN
                Data node: data_node_1
                Fetcher Type: COPY
                Chunks: _dist_hyper_X_X_chunk
-               Remote SQL: SELECT NULL FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) LIMIT 1
+               Remote SQL: SELECT NULL FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..]) LIMIT 1
 (9 rows)
 
 set timescaledb.remote_data_fetcher = 'cursor';
@@ -56,7 +56,7 @@ QUERY PLAN
                Data node: data_node_1
                Fetcher Type: Cursor
                Chunks: _dist_hyper_X_X_chunk
-               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
+               Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
          ->  Materialize (actual rows=1 loops=1)
                Output: t2.id
                ->  Custom Scan (DataNodeScan) on public.distinct_on_distributed t2 (actual rows=1 loops=1)
@@ -64,7 +64,7 @@ QUERY PLAN
                      Data node: data_node_1
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_internal.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
+                     Remote SQL: SELECT id FROM public.distinct_on_distributed WHERE _timescaledb_functions.chunks_in(public.distinct_on_distributed.*, ARRAY[..])
 (19 rows)
 
 -- This query can't work with copy or prepared fetcher.
@@ -133,7 +133,7 @@ QUERY PLAN
    Data node: data_node_2
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk
-   Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_internal.chunks_in(public.disttable_with_ct.*, ARRAY[..])
+   Remote SQL: SELECT "time", txn_id, val, info FROM public.disttable_with_ct WHERE _timescaledb_functions.chunks_in(public.disttable_with_ct.*, ARRAY[..])
 (6 rows)
 
 -- COPY fetcher with bytea data
@@ -146,7 +146,7 @@ QUERY PLAN
    Data node: data_node_3
    Fetcher Type: COPY
    Chunks: _dist_hyper_X_X_chunk
-   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
+   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_functions.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
 (6 rows)
 
 select * from disttable_with_bytea;
@@ -166,7 +166,7 @@ QUERY PLAN
    Data node: data_node_3
    Fetcher Type: Cursor
    Chunks: _dist_hyper_X_X_chunk
-   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
+   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_functions.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
 (6 rows)
 
 select * from disttable_with_bytea;
@@ -186,7 +186,7 @@ QUERY PLAN
    Data node: data_node_3
    Fetcher Type: Prepared statement
    Chunks: _dist_hyper_X_X_chunk
-   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_internal.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
+   Remote SQL: SELECT "time", bdata FROM public.disttable_with_bytea WHERE _timescaledb_functions.chunks_in(public.disttable_with_bytea.*, ARRAY[..])
 (6 rows)
 
 select * from disttable_with_bytea;

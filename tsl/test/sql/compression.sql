@@ -788,7 +788,7 @@ SELECT FROM create_hypertable('f_sensor_data','time');
 SELECT set_chunk_time_interval('f_sensor_data', INTERVAL '1 year');
 
 -- Create one chunk manually to ensure, all data is inserted into one chunk
-SELECT * FROM _timescaledb_internal.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
+SELECT * FROM _timescaledb_functions.create_chunk('f_sensor_data',' {"time": [181900977000000, 515024000000000]}');
 
 INSERT INTO f_sensor_data
 SELECT

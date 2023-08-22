@@ -75,7 +75,7 @@ BEGIN
     -- control so we adjust search_path in procedure body
     SET LOCAL search_path TO pg_catalog, pg_temp;
 
-    status := _timescaledb_internal.chunk_status(chunk);
+    status := _timescaledb_functions.chunk_status(chunk);
 
     -- Chunk names are in the internal catalog, but we only care about
     -- the chunk name here.

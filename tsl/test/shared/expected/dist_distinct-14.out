@@ -39,17 +39,17 @@ QUERY PLAN
                            Output: metrics_dist_1.device_id
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2.device_id
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3.device_id
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
 (23 rows)
 
 RESET enable_hashagg;
@@ -73,17 +73,17 @@ QUERY PLAN
                            Output: (metrics_dist_1.device_id * metrics_dist_1.v1)
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY (device_id * v1) ASC NULLS LAST
+                           Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY (device_id * v1) ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: (metrics_dist_2.device_id * metrics_dist_2.v1)
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY (device_id * v1) ASC NULLS LAST
+                           Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY (device_id * v1) ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: (metrics_dist_3.device_id * metrics_dist_3.v1)
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY (device_id * v1) ASC NULLS LAST
+                           Remote SQL: SELECT device_id, v1 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY (device_id * v1) ASC NULLS LAST
 (23 rows)
 
 SET timescaledb.enable_remote_explain = ON;
@@ -106,7 +106,7 @@ QUERY PLAN
                            Output: metrics_dist_1.device_id
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk.device_id
@@ -132,7 +132,7 @@ QUERY PLAN
                            Output: metrics_dist_2.device_id
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk.device_id
@@ -158,7 +158,7 @@ QUERY PLAN
                            Output: metrics_dist_3.device_id
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk.device_id
@@ -201,7 +201,7 @@ QUERY PLAN
                            Output: metrics_dist_1.device_id, NULL::text, 'const1'::text
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk.device_id
@@ -227,7 +227,7 @@ QUERY PLAN
                            Output: metrics_dist_2.device_id, NULL::text, 'const1'::text
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk.device_id
@@ -253,7 +253,7 @@ QUERY PLAN
                            Output: metrics_dist_3.device_id, NULL::text, 'const1'::text
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk.device_id
@@ -296,7 +296,7 @@ QUERY PLAN
                            Output: metrics_dist_1.device_id, metrics_dist_1."time", NULL::text, 'const1'::text
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -315,7 +315,7 @@ QUERY PLAN
                            Output: metrics_dist_2.device_id, metrics_dist_2."time", NULL::text, 'const1'::text
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Sort
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -335,7 +335,7 @@ QUERY PLAN
                            Output: metrics_dist_3.device_id, metrics_dist_3."time", NULL::text, 'const1'::text
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -371,7 +371,7 @@ QUERY PLAN
                            Output: metrics_dist_1.device_id, metrics_dist_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -390,7 +390,7 @@ QUERY PLAN
                            Output: metrics_dist_2.device_id, metrics_dist_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Sort
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -410,7 +410,7 @@ QUERY PLAN
                            Output: metrics_dist_3.device_id, metrics_dist_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -446,7 +446,7 @@ QUERY PLAN
                            Output: metrics_dist_1.device_id, metrics_dist_1."time"
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -465,7 +465,7 @@ QUERY PLAN
                            Output: metrics_dist_2.device_id, metrics_dist_2."time"
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -484,7 +484,7 @@ QUERY PLAN
                            Output: metrics_dist_3.device_id, metrics_dist_3."time"
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device_id, "time") "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                            Remote EXPLAIN: 
                              Unique
                                Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -522,7 +522,7 @@ QUERY PLAN
                                  Output: metrics_dist_1.device_id, metrics_dist_1."time"
                                  Data node: data_node_1
                                  Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                                 Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                                 Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                                  Remote EXPLAIN: 
                                    Unique
                                      Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -541,7 +541,7 @@ QUERY PLAN
                                  Output: metrics_dist_2.device_id, metrics_dist_2."time"
                                  Data node: data_node_2
                                  Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                                 Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                                 Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                                  Remote EXPLAIN: 
                                    Unique
                                      Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -560,7 +560,7 @@ QUERY PLAN
                                  Output: metrics_dist_3.device_id, metrics_dist_3."time"
                                  Data node: data_node_3
                                  Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                                 Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                                 Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                                  Remote EXPLAIN: 
                                    Unique
                                      Output: _dist_hyper_X_X_chunk."time", _dist_hyper_X_X_chunk.device_id
@@ -728,17 +728,17 @@ QUERY PLAN
                      Output: metrics_dist_1.device_id, metrics_dist_1.device_id
                      Data node: data_node_1
                      Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                      Output: metrics_dist_2.device_id, metrics_dist_2.device_id
                      Data node: data_node_2
                      Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
                ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                      Output: metrics_dist_3.device_id, metrics_dist_3.device_id
                      Data node: data_node_3
                      Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
+                     Remote SQL: SELECT DISTINCT device_id FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST
 (21 rows)
 
 SELECT DISTINCT handles whole row correctly
@@ -760,17 +760,17 @@ QUERY PLAN
                            Output: metrics_dist_1."time", metrics_dist_1.device_id, metrics_dist_1.v0, metrics_dist_1.v1, metrics_dist_1.v2, metrics_dist_1.v3
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2."time", metrics_dist_2.device_id, metrics_dist_2.v0, metrics_dist_2.v1, metrics_dist_2.v2, metrics_dist_2.v3
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3."time", metrics_dist_3.device_id, metrics_dist_3.v0, metrics_dist_3.v1, metrics_dist_3.v2, metrics_dist_3.v3
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY "time" ASC NULLS LAST, device_id ASC NULLS LAST, v0 ASC NULLS LAST, v1 ASC NULLS LAST, v2 ASC NULLS LAST, v3 ASC NULLS LAST
 (23 rows)
 
 SELECT DISTINCT ON (expr) handles whole row correctly
@@ -792,17 +792,17 @@ QUERY PLAN
                            Output: metrics_dist_1."time", metrics_dist_1.device_id, metrics_dist_1.v0, metrics_dist_1.v1, metrics_dist_1.v2, metrics_dist_1.v3
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: metrics_dist_2."time", metrics_dist_2.device_id, metrics_dist_2.v0, metrics_dist_2.v1, metrics_dist_2.v2, metrics_dist_2.v3
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: metrics_dist_3."time", metrics_dist_3.device_id, metrics_dist_3.v0, metrics_dist_3.v1, metrics_dist_3.v2, metrics_dist_3.v3
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
+                           Remote SQL: SELECT DISTINCT ON (device_id) "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY device_id ASC NULLS LAST, "time" ASC NULLS LAST
 (23 rows)
 
 SELECT DISTINCT RECORD works correctly
@@ -827,17 +827,17 @@ QUERY PLAN
                                  Output: metrics_dist_1.*
                                  Data node: data_node_1
                                  Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                                 Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..])
+                                 Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..])
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                                  Output: metrics_dist_2.*
                                  Data node: data_node_2
                                  Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                                 Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..])
+                                 Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..])
                            ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                                  Output: metrics_dist_3.*
                                  Data node: data_node_3
                                  Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                                 Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..])
+                                 Remote SQL: SELECT DISTINCT "time", device_id, v0, v1, v2, v3 FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..])
 (25 rows)
 
 RESET enable_hashagg;
@@ -860,17 +860,17 @@ QUERY PLAN
                            Output: time_bucket('@ 1 hour'::interval, metrics_dist_1."time")
                            Data node: data_node_1
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
+                           Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                            Output: time_bucket('@ 1 hour'::interval, metrics_dist_2."time")
                            Data node: data_node_2
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
+                           Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
                      ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                            Output: time_bucket('@ 1 hour'::interval, metrics_dist_3."time")
                            Data node: data_node_3
                            Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                           Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
+                           Remote SQL: SELECT "time" FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..]) ORDER BY public.time_bucket('01:00:00'::interval, "time") ASC NULLS LAST
 (23 rows)
 
 SELECT DISTINCT without any var references is handled correctly
@@ -887,17 +887,17 @@ QUERY PLAN
                      Output: 1, 'constx'::text
                      Data node: data_node_1
                      Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..])
+                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..])
                ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_2
                      Output: 1, 'constx'::text
                      Data node: data_node_2
                      Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..])
+                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..])
                ->  Custom Scan (DataNodeScan) on public.metrics_dist metrics_dist_3
                      Output: 1, 'constx'::text
                      Data node: data_node_3
                      Chunks: _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk, _dist_hyper_X_X_chunk
-                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_internal.chunks_in(public.metrics_dist.*, ARRAY[..])
+                     Remote SQL: SELECT NULL FROM public.metrics_dist WHERE _timescaledb_functions.chunks_in(public.metrics_dist.*, ARRAY[..])
 (20 rows)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

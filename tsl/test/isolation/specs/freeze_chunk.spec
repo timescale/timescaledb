@@ -24,7 +24,7 @@ teardown {
 # before a lock is acquired for freezing the chunk.
 
 session "s1"
-step "s1_freeze"	{ SELECT _timescaledb_internal.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; }
+step "s1_freeze"	{ SELECT _timescaledb_functions.freeze_chunk(ch) FROM (SELECT show_chunks('measurements') ch ) q; }
 step "s1_status" { SELECT ch.status  FROM _timescaledb_catalog.chunk ch 
                    WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable 
                    WHERE table_name = 'measurements'); }

@@ -88,7 +88,7 @@ select add_dimension('test_schema.test_table', 'location', 4);
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
-  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              3 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              3 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
@@ -151,7 +151,7 @@ NOTICE:  adding not-null constraint to column "id"
 select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
-  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              4 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  2 | test_schema | test_table | chunk_schema           | _hyper_2                |              4 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (1 row)
 
 select * from _timescaledb_catalog.dimension;
@@ -543,7 +543,7 @@ NOTICE:  migrating data to chunks
 select * from _timescaledb_catalog.hypertable where table_name = 'test_migrate';
  id | schema_name |  table_name  | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
 ----+-------------+--------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
- 10 | test_schema | test_migrate | _timescaledb_internal  | _hyper_10               |              1 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+ 10 | test_schema | test_migrate | _timescaledb_internal  | _hyper_10               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (1 row)
 
 select * from _timescaledb_catalog.chunk;

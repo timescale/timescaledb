@@ -2708,7 +2708,7 @@ SET constraint_exclusion = 'off';
 (105 rows)
 
 -- explicit chunk exclusion
-:PREFIX SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1,2]) ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(hyper, ARRAY[1,2]) ORDER BY value;
                 QUERY PLAN                
 ------------------------------------------
  Sort
@@ -2718,7 +2718,7 @@ SET constraint_exclusion = 'off';
          ->  Seq Scan on _hyper_1_2_chunk
 (5 rows)
 
-:PREFIX SELECT * FROM (SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[1,2,3])) T ORDER BY value;
+:PREFIX SELECT * FROM (SELECT * FROM hyper h WHERE _timescaledb_functions.chunks_in(h, ARRAY[1,2,3])) T ORDER BY value;
                   QUERY PLAN                  
 ----------------------------------------------
  Sort
@@ -2729,7 +2729,7 @@ SET constraint_exclusion = 'off';
          ->  Seq Scan on _hyper_1_3_chunk h_3
 (6 rows)
 
-:PREFIX SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1,2,3]) AND time < 10 ORDER BY value;
+:PREFIX SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(hyper, ARRAY[1,2,3]) AND time < 10 ORDER BY value;
                 QUERY PLAN                
 ------------------------------------------
  Sort
@@ -2743,7 +2743,7 @@ SET constraint_exclusion = 'off';
                Filter: ("time" < 10)
 (9 rows)
 
-:PREFIX SELECT * FROM hyper_ts WHERE device_id = 'dev1' AND time < to_timestamp(10) AND _timescaledb_internal.chunks_in(hyper_ts, ARRAY[116]) ORDER BY value;
+:PREFIX SELECT * FROM hyper_ts WHERE device_id = 'dev1' AND time < to_timestamp(10) AND _timescaledb_functions.chunks_in(hyper_ts, ARRAY[116]) ORDER BY value;
                                                       QUERY PLAN                                                      
 ----------------------------------------------------------------------------------------------------------------------
  Sort
@@ -2752,7 +2752,7 @@ SET constraint_exclusion = 'off';
          Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
 (4 rows)
 
-:PREFIX SELECT * FROM hyper_ts h JOIN tag on (h.tag_id = tag.id ) WHERE _timescaledb_internal.chunks_in(h, ARRAY[116]) AND time < to_timestamp(10) AND device_id = 'dev1' ORDER BY value;
+:PREFIX SELECT * FROM hyper_ts h JOIN tag on (h.tag_id = tag.id ) WHERE _timescaledb_functions.chunks_in(h, ARRAY[116]) AND time < to_timestamp(10) AND device_id = 'dev1' ORDER BY value;
                                                             QUERY PLAN                                                            
 ----------------------------------------------------------------------------------------------------------------------------------
  Sort
@@ -2766,7 +2766,7 @@ SET constraint_exclusion = 'off';
                      Filter: (("time" < 'Wed Dec 31 16:00:10 1969 PST'::timestamp with time zone) AND (device_id = 'dev1'::text))
 (9 rows)
 
-:PREFIX SELECT * FROM hyper_w_space h1 JOIN hyper_ts h2 ON h1.device_id=h2.device_id WHERE _timescaledb_internal.chunks_in(h1, ARRAY[104,105]) AND _timescaledb_internal.chunks_in(h2, ARRAY[116,117]) ORDER BY h1.value;
+:PREFIX SELECT * FROM hyper_w_space h1 JOIN hyper_ts h2 ON h1.device_id=h2.device_id WHERE _timescaledb_functions.chunks_in(h1, ARRAY[104,105]) AND _timescaledb_functions.chunks_in(h2, ARRAY[116,117]) ORDER BY h1.value;
                          QUERY PLAN                          
 -------------------------------------------------------------
  Sort
@@ -2782,7 +2782,7 @@ SET constraint_exclusion = 'off';
                      ->  Seq Scan on _hyper_2_105_chunk h1_2
 (11 rows)
 
-:PREFIX SELECT * FROM hyper_w_space h1 JOIN hyper_ts h2 ON h1.device_id=h2.device_id AND _timescaledb_internal.chunks_in(h2, ARRAY[116,117]) WHERE _timescaledb_internal.chunks_in(h1, ARRAY[104,105]) ORDER BY h1.value;
+:PREFIX SELECT * FROM hyper_w_space h1 JOIN hyper_ts h2 ON h1.device_id=h2.device_id AND _timescaledb_functions.chunks_in(h2, ARRAY[116,117]) WHERE _timescaledb_functions.chunks_in(h1, ARRAY[104,105]) ORDER BY h1.value;
                          QUERY PLAN                          
 -------------------------------------------------------------
  Sort
@@ -2798,7 +2798,7 @@ SET constraint_exclusion = 'off';
                      ->  Seq Scan on _hyper_2_105_chunk h1_2
 (11 rows)
 
-:PREFIX SELECT * FROM hyper h1, hyper h2 WHERE _timescaledb_internal.chunks_in(h1, ARRAY[1,2]) AND _timescaledb_internal.chunks_in(h2, ARRAY[2,3]);
+:PREFIX SELECT * FROM hyper h1, hyper h2 WHERE _timescaledb_functions.chunks_in(h1, ARRAY[1,2]) AND _timescaledb_functions.chunks_in(h2, ARRAY[2,3]);
                      QUERY PLAN                      
 -----------------------------------------------------
  Nested Loop
@@ -2814,14 +2814,14 @@ SET constraint_exclusion = 'off';
 SET enable_seqscan=false;
 -- Should perform index-only scan. Since we pass whole row into the function it might block planner from using index-only scan.
 -- But since we'll remove the function from the query tree before planner decision it shouldn't affect index-only decision.
-:PREFIX SELECT time FROM hyper WHERE time=0 AND _timescaledb_internal.chunks_in(hyper, ARRAY[1]);
+:PREFIX SELECT time FROM hyper WHERE time=0 AND _timescaledb_functions.chunks_in(hyper, ARRAY[1]);
                                 QUERY PLAN                                 
 ---------------------------------------------------------------------------
  Index Only Scan using _hyper_1_1_chunk_hyper_time_idx on _hyper_1_1_chunk
    Index Cond: ("time" = 0)
 (2 rows)
 
-:PREFIX SELECT first(value, time) FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[1]);
+:PREFIX SELECT first(value, time) FROM hyper h WHERE _timescaledb_functions.chunks_in(h, ARRAY[1]);
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
  Result
@@ -2832,32 +2832,32 @@ SET enable_seqscan=false;
 (5 rows)
 
 \set ON_ERROR_STOP 0
-SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[1,2]) AND _timescaledb_internal.chunks_in(hyper, ARRAY[2,3]);
+SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(hyper, ARRAY[1,2]) AND _timescaledb_functions.chunks_in(hyper, ARRAY[2,3]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:26: ERROR:  illegal invocation of chunks_in function
-SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(2, ARRAY[1]);
-psql:include/plan_expand_hypertable_chunks_in_query.sql:27: ERROR:  function _timescaledb_internal.chunks_in(integer, integer[]) does not exist at character 27
-SELECT * FROM hyper WHERE time < 10 OR _timescaledb_internal.chunks_in(hyper, ARRAY[1,2]);
+SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(2, ARRAY[1]);
+psql:include/plan_expand_hypertable_chunks_in_query.sql:27: ERROR:  function _timescaledb_functions.chunks_in(integer, integer[]) does not exist at character 27
+SELECT * FROM hyper WHERE time < 10 OR _timescaledb_functions.chunks_in(hyper, ARRAY[1,2]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:28: ERROR:  illegal invocation of chunks_in function
-SELECT _timescaledb_internal.chunks_in(hyper, ARRAY[1,2]) FROM hyper;
+SELECT _timescaledb_functions.chunks_in(hyper, ARRAY[1,2]) FROM hyper;
 psql:include/plan_expand_hypertable_chunks_in_query.sql:29: ERROR:  illegal invocation of chunks_in function
 -- non existing chunk id
-SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[123456789]);
+SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(hyper, ARRAY[123456789]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:31: ERROR:  chunk id 123456789 not found
 -- chunk that belongs to another hypertable
-SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(hyper, ARRAY[104]);
+SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(hyper, ARRAY[104]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:33: ERROR:  chunk id 104 does not belong to hypertable "hyper"
 -- passing wrong row ref
-SELECT * FROM hyper WHERE _timescaledb_internal.chunks_in(ROW(1,2), ARRAY[104]);
+SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(ROW(1,2), ARRAY[104]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:35: ERROR:  first parameter for chunks_in function needs to be record
 -- passing func as chunk id
-SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, array_append(ARRAY[1],current_setting('server_version_num')::int));
+SELECT * FROM hyper h WHERE _timescaledb_functions.chunks_in(h, array_append(ARRAY[1],current_setting('server_version_num')::int));
 psql:include/plan_expand_hypertable_chunks_in_query.sql:37: ERROR:  second argument to chunk_in should contain only integer consts
 -- NULL chunk IDs not allowed in chunk array
-SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, ARRAY[NULL::int]);
+SELECT * FROM hyper h WHERE _timescaledb_functions.chunks_in(h, ARRAY[NULL::int]);
 psql:include/plan_expand_hypertable_chunks_in_query.sql:39: ERROR:  chunk id can't be NULL
 \set ON_ERROR_STOP 1
 -- chunks_in is STRICT function and for NULL arguments a null result is returned
-SELECT * FROM hyper h WHERE _timescaledb_internal.chunks_in(h, NULL);
+SELECT * FROM hyper h WHERE _timescaledb_functions.chunks_in(h, NULL);
  value | time 
 -------+------
 (0 rows)

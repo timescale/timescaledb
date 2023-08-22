@@ -83,8 +83,8 @@ where id in (select id from metric_name where name like 'cpu%')
 group by id
 order by id
 ;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                         QUERY PLAN                                                                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_dist.id, max(metric_dist.value), count(*)
    Group Key: metric_dist.id
@@ -101,7 +101,7 @@ order by id
                      Output: metric_dist.id, metric_dist.value
                      Data node: data_node_1
                      Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (17 rows)
 
 -- Check that the GUC to disable these plans works. Our cost model is very
@@ -129,8 +129,8 @@ where id in (select id from metric_name where name like 'cpu%')
 group by id
 order by id
 ;
-                                                                                                                                                         QUERY PLAN                                                                                                                                                          
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                          QUERY PLAN                                                                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_dist.id, max(metric_dist.value), count(*)
    Group Key: metric_dist.id
@@ -145,7 +145,7 @@ order by id
                      Output: metric_dist.id, metric_dist.value
                      Data node: data_node_1
                      Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) ORDER BY id ASC NULLS LAST
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) ORDER BY id ASC NULLS LAST
                ->  Hash
                      Output: metric_name.id
                      ->  Index Scan using metric_name_name on public.metric_name
@@ -245,8 +245,8 @@ where id in (select id from metric_name where name like 'cpu%')
 group by id
 order by id
 ;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                         QUERY PLAN                                                                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate (actual rows=3 loops=1)
    Output: metric_dist.id, max(metric_dist.value), count(*)
    Group Key: metric_dist.id
@@ -265,7 +265,7 @@ order by id
                      Data node: data_node_1
                      Fetcher Type: Prepared statement
                      Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (19 rows)
 
 -- Should reset the prepared cache mode after using the prepared statement fetcher.
@@ -294,8 +294,8 @@ where name like 'cpu%'
 group by name
 order by name
 ;
-                                                                                                                                                     QUERY PLAN                                                                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                      QUERY PLAN                                                                                                                                                      
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
@@ -309,7 +309,7 @@ order by name
                Output: metric_dist.value, metric_dist.id
                Data node: data_node_1
                Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (14 rows)
 
 -- Shipping still might make sense if the local table is outer.
@@ -321,8 +321,8 @@ where name like 'cpu%'
 group by name
 order by name
 ;
-                                                                                                                                                     QUERY PLAN                                                                                                                                                      
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                      QUERY PLAN                                                                                                                                                      
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
@@ -336,7 +336,7 @@ order by name
                Output: metric_dist.value, metric_dist.id
                Data node: data_node_1
                Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (14 rows)
 
 -- Shipping doesn't make sense if the distributed table is outer.
@@ -348,8 +348,8 @@ where ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
-                                                                                                                                            QUERY PLAN                                                                                                                                            
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                            QUERY PLAN                                                                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
@@ -364,7 +364,7 @@ order by name
                      Output: metric_dist.value, metric_dist.id
                      Data node: data_node_1
                      Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
                ->  Hash
                      Output: metric_name.name, metric_name.id
                      ->  Index Scan using metric_name_name on public.metric_name
@@ -382,8 +382,8 @@ where metric_name.name like 'cpu%'
 group by name
 order by name
 ;
-                                                                                                                                            QUERY PLAN                                                                                                                                            
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                            QUERY PLAN                                                                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
@@ -398,7 +398,7 @@ order by name
                      Output: metric_dist.value, metric_dist.id
                      Data node: data_node_1
                      Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
                ->  Hash
                      Output: metric_name.name
                      ->  Index Only Scan using metric_name_name on public.metric_name
@@ -435,8 +435,8 @@ where metric_name.name like 'cpu%'
 group by name
 order by name
 ;
-                                                                                                                                                                       QUERY PLAN                                                                                                                                                                        
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                        QUERY PLAN                                                                                                                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
@@ -450,7 +450,7 @@ order by name
                Output: metric_dist.value, metric_dist.id
                Data node: data_node_1
                Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (texteq(('cpu'::text || textin(int4out(id))), $1::text))
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (texteq(('cpu'::text || textin(int4out(id))), $1::text))
 (14 rows)
 
 -- Non-shippable non-EC join.
@@ -463,8 +463,8 @@ where metric_name.name like 'cpu%'
 group by name
 order by name
 ;
-                                                                                                                                         QUERY PLAN                                                                                                                                         
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                         QUERY PLAN                                                                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
@@ -479,7 +479,7 @@ order by name
                Output: metric_dist.value, metric_dist.id
                Data node: data_node_1
                Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+               Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
 (15 rows)
 
 -- distinct on, order by, limit 1, with subquery
@@ -505,8 +505,8 @@ where id in (select id from metric_name where name like 'cpu%')
 order by id, ts, value
 limit 1
 ;
-                                                                                                                                                             QUERY PLAN                                                                                                                                                              
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                              QUERY PLAN                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: metric_dist.id, metric_dist.ts, metric_dist.value
    ->  Unique
@@ -524,7 +524,7 @@ limit 1
                            Output: metric_dist.id, metric_dist.ts, metric_dist.value
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (18 rows)
 
 -- distinct on, order by, limit 1, with explicit join
@@ -550,8 +550,8 @@ where name like 'cpu%'
 order by name, ts, value
 limit 1
 ;
-                                                                                                                                                             QUERY PLAN                                                                                                                                                              
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                              QUERY PLAN                                                                                                                                                              
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: metric_name.name, metric_dist.ts, metric_dist.value
    ->  Unique
@@ -569,7 +569,7 @@ limit 1
                            Output: metric_dist.ts, metric_dist.value, metric_dist.id
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (18 rows)
 
 -- If there are a lot of rows chosen from the local table, the parameterized
@@ -584,8 +584,8 @@ where ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by name
 order by name
 ;
-                                                                                                                                            QUERY PLAN                                                                                                                                            
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                            QUERY PLAN                                                                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_name.name, max(metric_dist.value), count(*)
    Group Key: metric_name.name
@@ -600,7 +600,7 @@ order by name
                      Output: metric_dist.value, metric_dist.id
                      Data node: data_node_1
                      Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone))
                ->  Hash
                      Output: metric_name.name, metric_name.id
                      ->  Seq Scan on public.metric_name
@@ -619,8 +619,8 @@ where id = any((select array_agg(id) from metric_name where name like 'cpu%')::i
 group by id
 order by id
 ;
-                                                                                                                                                                    QUERY PLAN                                                                                                                                                                    
---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                                    QUERY PLAN                                                                                                                                                                     
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_dist.id, max(metric_dist.value)
    Group Key: metric_dist.id
@@ -635,7 +635,7 @@ order by id
          Output: metric_dist.id, metric_dist.value
          Data node: data_node_1
          Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-         Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND ((id = ANY ($1::integer[]))) ORDER BY id ASC NULLS LAST
+         Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND ((id = ANY ($1::integer[]))) ORDER BY id ASC NULLS LAST
 (15 rows)
 
 -- Multiple joins. Test both EC and non-EC (texteq) join in one query.
@@ -660,8 +660,8 @@ where name like 'cpu%' and texteq(location, 'Yerevan')
     and ts between '2022-02-02 02:02:02+03' and '2022-03-03 02:02:02+03'
 group by id
 ;
-                                                                                                                                                        QUERY PLAN                                                                                                                                                         
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                                                         QUERY PLAN                                                                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  GroupAggregate
    Output: metric_dist.id, max(metric_dist.value)
    Group Key: metric_dist.id
@@ -685,7 +685,7 @@ group by id
                      Output: metric_dist.id, metric_dist.value
                      Data node: data_node_1
                      Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
-                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
+                     Remote SQL: SELECT id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
 (24 rows)
 
 -- Multiple joins on different variables. Use a table instead of a CTE for saner
@@ -718,7 +718,7 @@ order by 1
          Output: metric_dist.id, metric_dist.value, metric_dist.ts
          Data node: data_node_1
          Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
-         Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::timestamp with time zone = ts)) AND (($2::integer = id))
+         Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::timestamp with time zone = ts)) AND (($2::integer = id))
 (15 rows)
 
 -- Two distributed hypertables, each joined to reference and all joined together.
@@ -748,7 +748,7 @@ where m1.id in (select id from metric_name where name = 'cpu1')
                      Data node: data_node_1
                      Fetcher Type: Cursor
                      Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
-                     Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::integer = id))
+                     Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::integer = id))
          ->  Hash (actual rows=50101 loops=1)
                Output: m2.value, m2.ts
                Buckets: 65536 (originally 1024)  Batches: 1 (originally 1) 
@@ -762,7 +762,7 @@ where m1.id in (select id from metric_name where name = 'cpu1')
                            Data node: data_node_1
                            Fetcher Type: Cursor
                            Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
-                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_internal.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::integer = id))
+                           Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) AND (($1::integer = id))
 (30 rows)
 
 -- Should prefer reference table join pushdown to all other kinds of plans,
@@ -788,7 +788,7 @@ order by name
                Output: metric_dist.value, metric_name.name
                Data node: data_node_1
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
-               Remote SQL: SELECT r57.value, r2.name FROM (public.metric_dist r57 INNER JOIN public.metric_name r2 ON (((r57.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r57, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) ORDER BY r2.name ASC NULLS LAST
+               Remote SQL: SELECT r57.value, r2.name FROM (public.metric_dist r57 INNER JOIN public.metric_name r2 ON (((r57.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r57, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) ORDER BY r2.name ASC NULLS LAST
 (10 rows)
 
 set timescaledb.enable_parameterized_data_node_scan to false;
@@ -810,6 +810,6 @@ order by name
                Output: metric_dist.value, metric_name.name
                Data node: data_node_1
                Chunks: _dist_hyper_1_1_chunk, _dist_hyper_1_2_chunk, _dist_hyper_1_3_chunk, _dist_hyper_1_4_chunk, _dist_hyper_1_5_chunk, _dist_hyper_1_6_chunk, _dist_hyper_1_7_chunk, _dist_hyper_1_8_chunk, _dist_hyper_1_9_chunk, _dist_hyper_1_10_chunk, _dist_hyper_1_11_chunk, _dist_hyper_1_12_chunk, _dist_hyper_1_13_chunk, _dist_hyper_1_14_chunk, _dist_hyper_1_15_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_17_chunk, _dist_hyper_1_18_chunk, _dist_hyper_1_19_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_21_chunk, _dist_hyper_1_22_chunk, _dist_hyper_1_23_chunk, _dist_hyper_1_24_chunk, _dist_hyper_1_25_chunk, _dist_hyper_1_26_chunk, _dist_hyper_1_27_chunk, _dist_hyper_1_28_chunk, _dist_hyper_1_29_chunk, _dist_hyper_1_30_chunk, _dist_hyper_1_31_chunk, _dist_hyper_1_32_chunk, _dist_hyper_1_33_chunk, _dist_hyper_1_34_chunk, _dist_hyper_1_35_chunk, _dist_hyper_1_36_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_38_chunk, _dist_hyper_1_39_chunk, _dist_hyper_1_40_chunk, _dist_hyper_1_41_chunk, _dist_hyper_1_42_chunk, _dist_hyper_1_43_chunk, _dist_hyper_1_44_chunk, _dist_hyper_1_45_chunk, _dist_hyper_1_46_chunk, _dist_hyper_1_47_chunk, _dist_hyper_1_48_chunk, _dist_hyper_1_49_chunk, _dist_hyper_1_50_chunk, _dist_hyper_1_51_chunk, _dist_hyper_1_52_chunk, _dist_hyper_1_53_chunk
-               Remote SQL: SELECT r57.value, r2.name FROM (public.metric_dist r57 INNER JOIN public.metric_name r2 ON (((r57.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_internal.chunks_in(r57, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) ORDER BY r2.name ASC NULLS LAST
+               Remote SQL: SELECT r57.value, r2.name FROM (public.metric_dist r57 INNER JOIN public.metric_name r2 ON (((r57.id = r2.id)) AND ((r2.name ~~ 'cpu%'::text)))) WHERE _timescaledb_functions.chunks_in(r57, ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53]) ORDER BY r2.name ASC NULLS LAST
 (10 rows)
 

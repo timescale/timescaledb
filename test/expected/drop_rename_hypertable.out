@@ -148,7 +148,7 @@ SELECT * FROM "newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
-  1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  1 | public      | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (1 row)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -175,7 +175,7 @@ SELECT * FROM "newschema"."newname";
 SELECT * FROM _timescaledb_catalog.hypertable;
  id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor 
 ----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------
-  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_internal    | calculate_chunk_interval |                 0 |                 0 |                          |                   
+  1 | newschema   | newname    | _timescaledb_internal  | _hyper_1                |              2 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 0 |                          |                   
 (1 row)
 
 DROP TABLE "newschema"."newname";

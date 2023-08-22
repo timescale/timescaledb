@@ -503,14 +503,14 @@ WHERE c.id = cdn.chunk_id;
 (4 rows)
 
 -- Setting the same data node should do nothing and return false
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_3');
+SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_3');
  set_chunk_default_data_node 
 -----------------------------
  t
 (1 row)
 
 -- Should update the default data node and return true
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_2');
+SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_2');
  set_chunk_default_data_node 
 -----------------------------
  t
@@ -526,7 +526,7 @@ ORDER BY foreign_table_name;
 (2 rows)
 
 -- Reset the default data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_3');
+SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_3');
  set_chunk_default_data_node 
 -----------------------------
  t
@@ -538,16 +538,16 @@ SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_2');
 ERROR:  data node "data_node_2" still holds data for distributed hypertable "disttable"
 -- non-existing chunk
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('x_chunk', 'data_node_3');
-ERROR:  relation "x_chunk" does not exist at character 65
+SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('x_chunk', 'data_node_3');
+ERROR:  relation "x_chunk" does not exist at character 66
 -- non-existing data node
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_0000');
+SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_0000');
 ERROR:  server "data_node_0000" does not exist
 -- data node exists but does not store the chunk
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_1');
+SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('_timescaledb_internal._dist_hyper_3_3_chunk', 'data_node_1');
 ERROR:  chunk "_dist_hyper_3_3_chunk" does not exist on data node "data_node_1"
 -- NULL try
-SELECT * FROM _timescaledb_internal.set_chunk_default_data_node(NULL, 'data_node_3');
+SELECT * FROM _timescaledb_functions.set_chunk_default_data_node(NULL, 'data_node_3');
 ERROR:  invalid chunk: cannot be NULL
 \set ON_ERROR_STOP 1
 -- Deleting a data node removes the "foreign" chunk table(s) that

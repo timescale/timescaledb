@@ -1,11 +1,11 @@
 -- This file and its contents are licensed under the Apache License 2.0.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
--- test error handling _timescaledb_internal.calculate_chunk_interval
+-- test error handling _timescaledb_functions.calculate_chunk_interval
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.calculate_chunk_interval(0,0,-0);
+SELECT _timescaledb_functions.calculate_chunk_interval(0,0,-0);
 ERROR:  could not find a matching hypertable for dimension 0
-SELECT _timescaledb_internal.calculate_chunk_interval(1,0,-1);
+SELECT _timescaledb_functions.calculate_chunk_interval(1,0,-1);
 ERROR:  chunk_target_size must be positive
 \set ON_ERROR_STOP 1
 -- Valid chunk sizing function for testing
@@ -83,7 +83,7 @@ SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_targe
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |           1048576
+ test_adaptive | _timescaledb_functions   | calculate_chunk_interval |           1048576
 (1 row)
 
 -- Check that adaptive chunking sets a 1 day default chunk time
@@ -97,16 +97,16 @@ SELECT * FROM _timescaledb_catalog.dimension;
 -- Change the target size
 SELECT * FROM set_adaptive_chunking('test_adaptive', '2MB');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |           2097152
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |           2097152
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |           2097152
+ test_adaptive | _timescaledb_functions   | calculate_chunk_interval |           2097152
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -116,79 +116,79 @@ ERROR:  invalid chunk sizing function
 \set ON_ERROR_STOP 1
 -- Setting NULL size disables adaptive chunking
 SELECT * FROM set_adaptive_chunking('test_adaptive', NULL);
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |                 0
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |                 0
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
+ test_adaptive | _timescaledb_functions   | calculate_chunk_interval |                 0
 (1 row)
 
 SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |           1048576
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |           1048576
 (1 row)
 
 -- Setting size to 'off' should also disable
 SELECT * FROM set_adaptive_chunking('test_adaptive', 'off');
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |                 0
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |                 0
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
+ test_adaptive | _timescaledb_functions   | calculate_chunk_interval |                 0
 (1 row)
 
 -- Setting 0 size should also disable
 SELECT * FROM set_adaptive_chunking('test_adaptive', '0MB');
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |                 0
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |                 0
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |                 0
+ test_adaptive | _timescaledb_functions   | calculate_chunk_interval |                 0
 (1 row)
 
 SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |           1048576
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |           1048576
 (1 row)
 
 -- No warning about small target size if > 10MB
 SELECT * FROM set_adaptive_chunking('test_adaptive', '11MB');
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |          11534336
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |          11534336
 (1 row)
 
 -- Setting size to 'estimate' should also estimate size
 SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |        1932735283
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |        1932735283
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |        1932735283
+ test_adaptive | _timescaledb_functions   | calculate_chunk_interval |        1932735283
 (1 row)
 
 -- Use a lower memory setting to test that the calculated chunk_target_size is reduced
@@ -199,16 +199,16 @@ SELECT * FROM test.set_memory_cache_size('512MB');
 (1 row)
 
 SELECT * FROM set_adaptive_chunking('test_adaptive', 'estimate');
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |         483183820
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |         483183820
 (1 row)
 
 SELECT table_name, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size
 FROM _timescaledb_catalog.hypertable;
   table_name   | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size 
 ---------------+--------------------------+--------------------------+-------------------
- test_adaptive | _timescaledb_internal    | calculate_chunk_interval |         483183820
+ test_adaptive | _timescaledb_functions   | calculate_chunk_interval |         483183820
 (1 row)
 
 -- Reset memory settings
@@ -221,9 +221,9 @@ SELECT * FROM test.set_memory_cache_size('2GB');
 -- Set a reasonable test value
 SELECT * FROM set_adaptive_chunking('test_adaptive', '1MB');
 WARNING:  target chunk size for adaptive chunking is less than 10 MB
-               chunk_sizing_func                | chunk_target_size 
-------------------------------------------------+-------------------
- _timescaledb_internal.calculate_chunk_interval |           1048576
+                chunk_sizing_func                | chunk_target_size 
+-------------------------------------------------+-------------------
+ _timescaledb_functions.calculate_chunk_interval |           1048576
 (1 row)
 
 -- Show the interval length before and after adaptation

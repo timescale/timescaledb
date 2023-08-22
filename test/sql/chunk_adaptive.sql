@@ -2,10 +2,10 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- test error handling _timescaledb_internal.calculate_chunk_interval
+-- test error handling _timescaledb_functions.calculate_chunk_interval
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.calculate_chunk_interval(0,0,-0);
-SELECT _timescaledb_internal.calculate_chunk_interval(1,0,-1);
+SELECT _timescaledb_functions.calculate_chunk_interval(0,0,-0);
+SELECT _timescaledb_functions.calculate_chunk_interval(1,0,-1);
 \set ON_ERROR_STOP 1
 
 -- Valid chunk sizing function for testing

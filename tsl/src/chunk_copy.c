@@ -573,7 +573,7 @@ chunk_copy_create_dest_empty_compressed_chunk(ChunkCopy *cc)
 				 "FROM _timescaledb_catalog.hypertable h1 "
 				 "JOIN _timescaledb_catalog.hypertable h2 ON (h1.compressed_hypertable_id = h2.id) "
 				 "WHERE h1.table_name = %s",
-				 INTERNAL_SCHEMA_NAME,
+				 FUNCTIONS_SCHEMA_NAME,
 				 quote_literal_cstr(INTERNAL_SCHEMA_NAME),
 				 quote_literal_cstr(NameStr(cc->fd.compressed_chunk_name)),
 				 quote_literal_cstr(NameStr(ht->fd.table_name)));

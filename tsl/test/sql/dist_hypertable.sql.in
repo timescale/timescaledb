@@ -269,7 +269,7 @@ INSERT INTO disttable VALUES ($1, $2, $3);
 EXECUTE dist_insert ('2017-01-01 06:05', 1, 1.4);
 
 -- Show chunks created
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 
 -- Show that there are assigned node_chunk_id:s in chunk data node mappings
@@ -279,7 +279,7 @@ SELECT * FROM hypertable_partitions;
 -- Show that chunks are created on data nodes and that each data node
 -- has their own unique slice in the space (device) dimension.
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
@@ -358,7 +358,7 @@ ORDER BY device, temp;
 
 -- Make sure that chunks_in function only expects one-dimensional integer arrays
 \set ON_ERROR_STOP 0
-SELECT "time" FROM public.disttable WHERE _timescaledb_internal.chunks_in(public.disttable.*, ARRAY[[2], [1]])
+SELECT "time" FROM public.disttable WHERE _timescaledb_functions.chunks_in(public.disttable.*, ARRAY[[2], [1]])
 ORDER BY "time" DESC NULLS FIRST LIMIT 1;
 \set ON_ERROR_STOP 1
 
@@ -432,7 +432,7 @@ SELECT st."Child" as chunk_relid, test.show_constraints((st)."Child")
 FROM test.show_subtables('disttable') st;
 
 SELECT cc.*
-FROM (SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+FROM (SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
       FROM show_chunks('disttable')) c,
       _timescaledb_catalog.chunk_constraint cc
 WHERE c.chunk_id = cc.chunk_id;
@@ -459,7 +459,7 @@ VALUES ('2017-09-02 06:09', 6, 2, 10.5)
 ON CONFLICT DO NOTHING;
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
 
@@ -566,7 +566,7 @@ INSERT INTO underreplicated VALUES ('2017-01-01 06:01', 1, 1.1),
                                    ('2017-01-02 07:01', 2, 3.5);
 
 SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 
 -- Show chunk data node mappings
@@ -575,7 +575,7 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node ORDER BY 1,2,3;
 -- Show that chunks are created on remote data nodes and that all
 -- data nodes/chunks have the same data due to replication
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 $$);
 
@@ -950,12 +950,12 @@ INSERT INTO disttable_drop_chunks VALUES
        ('2018-07-01 08:01', 29, 1.5);
 
 -- Show chunks on access node
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 
 -- Show chunks on data nodes
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
 
@@ -963,11 +963,11 @@ SELECT * FROM drop_chunks('disttable_drop_chunks', older_than => '2018-01-01'::t
 
 SELECT * FROM disttable_drop_chunks;
 
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
 
@@ -1235,7 +1235,7 @@ INSERT INTO hyper VALUES ('2017-01-01 06:01', 6, 1.1);
 -- Test alter replication factor with data
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
 
@@ -1248,14 +1248,14 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
 INSERT INTO hyper VALUES ('2017-01-02 07:11', 1, 1.7);
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
 
 INSERT INTO hyper VALUES ('2017-02-01 06:01', 1, 5.1);
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
 
@@ -1265,7 +1265,7 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'hyper';
 INSERT INTO hyper VALUES ('2017-03-01 06:01', 1, 15.1);
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
 
@@ -1274,7 +1274,7 @@ SELECT * FROM set_replication_factor('hyper', replication_factor => 2);
 INSERT INTO hyper VALUES ('2017-04-01 06:01', 2, 45.1);
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
-    SELECT (_timescaledb_internal.show_chunk(show_chunks)).*
+    SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
 
@@ -1323,11 +1323,11 @@ SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts
 
 -- Ensure reloptions are not set for distributed hypertable chunks on the AN
 SELECT relname, reloptions FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
 ORDER BY relname;
 
 SELECT relname, reloptions FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
 ORDER BY relname;
 
 -- Ensure parent tables has proper storage options
@@ -1347,13 +1347,13 @@ $$);
 -- Make sure chunks derive parent reloptions
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
-    (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+    (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
 $$);
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
-    (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
+    (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
     ORDER BY relname;
 $$);
 
@@ -1366,13 +1366,13 @@ SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts
 
 -- Ensure chunks are not affected on the AN
 SELECT relname, reloptions FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
 ORDER BY relname;
 
 -- Ensure data node chunks has proper options set
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
-    (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+    (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
 $$);
 
@@ -1383,13 +1383,13 @@ SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts
 
 -- Ensure chunks are not affected on the AN
 SELECT relname, reloptions FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
 ORDER BY relname;
 
 -- Ensure data node chunks has proper options set
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname IN
-    (SELECT (_timescaledb_internal.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
+    (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
 $$);
 
@@ -2083,7 +2083,7 @@ ORDER BY chunk_name LIMIT 1
 \gset
 
 \set ON_ERROR_STOP 0
-SELECT  _timescaledb_internal.freeze_chunk( :'CHNAME');
+SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME');
 \set ON_ERROR_STOP 1
 
 --TEST freeze_chunk api for regular hypertables. Works only for >= PG14
@@ -2091,7 +2091,7 @@ CREATE TABLE freeze_1(time TIMESTAMPTZ NOT NULL, sensor_id INTEGER, value FLOAT)
 SELECT table_name FROM create_hypertable('freeze_1', 'time');
 INSERT INTO freeze_1 VALUES  ('2020-12-09',1,32.2);
 \set ON_ERROR_STOP 0
-SELECT  _timescaledb_internal.freeze_chunk( ch) FROM ( select show_chunks('freeze_1') ch ) q;
+SELECT  _timescaledb_functions.freeze_chunk( ch) FROM ( select show_chunks('freeze_1') ch ) q;
 \set ON_ERROR_STOP 1
 
 DROP TABLE pruned_chunks_1;
