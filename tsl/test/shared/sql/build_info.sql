@@ -7,5 +7,5 @@ SELECT pg_typeof(commit_tag) AS commit_tag_type,
        pg_typeof(commit_hash) AS commit_hash_type,
        length(commit_hash) AS commit_hash_length,
        pg_typeof(commit_time) AS commit_time_type
-  FROM _timescaledb_internal.get_git_commit();
+  FROM _timescaledb_functions.get_git_commit();
 
