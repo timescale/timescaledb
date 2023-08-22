@@ -163,9 +163,9 @@ SELECT *,
        array_agg(d.column_name ORDER BY d.interval_length, d.column_name ASC) as partitioning_columns,
        array_agg(d.column_type ORDER BY d.interval_length, d.column_name ASC) as partitioning_column_types,
        array_agg(d.partitioning_func_schema || '.' || d.partitioning_func ORDER BY d.interval_length, d.column_name ASC) as partitioning_hash_functions,
-       array_agg('[' || _timescaledb_internal.range_value_to_pretty(range_start, column_type) ||
+       array_agg('[' || _timescaledb_functions.range_value_to_pretty(range_start, column_type) ||
                  ',' ||
-                 _timescaledb_internal.range_value_to_pretty(range_end, column_type) || ')' ORDER BY d.interval_length, d.column_name ASC) as ranges
+                 _timescaledb_functions.range_value_to_pretty(range_end, column_type) || ')' ORDER BY d.interval_length, d.column_name ASC) as ranges
        FROM
        _timescaledb_catalog.hypertable h,
        _timescaledb_catalog.chunk c,

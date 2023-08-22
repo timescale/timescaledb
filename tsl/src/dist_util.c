@@ -210,7 +210,7 @@ dist_util_remote_hypertable_info(PG_FUNCTION_ARGS)
 	Ensure(!PG_ARGISNULL(0) && !PG_ARGISNULL(1) && !PG_ARGISNULL(2),
 		   "three non-null arguments required");
 	appendStringInfo(query_str,
-					 "SELECT * from _timescaledb_internal.hypertable_local_size( %s, %s );",
+					 "SELECT * from _timescaledb_functions.hypertable_local_size( %s, %s );",
 					 quote_literal_cstr(NameStr(*schema_name)),
 					 quote_literal_cstr(NameStr(*table_name)));
 	node_name = PG_GETARG_NAME(0)->data;
@@ -227,7 +227,7 @@ dist_util_remote_chunk_info(PG_FUNCTION_ARGS)
 	Name table_name = PG_GETARG_NAME(2);
 	Assert(!PG_ARGISNULL(0) && !PG_ARGISNULL(1) && !PG_ARGISNULL(2));
 	appendStringInfo(query_str,
-					 "SELECT * from _timescaledb_internal.chunks_local_size( %s, %s  );",
+					 "SELECT * from _timescaledb_functions.chunks_local_size( %s, %s  );",
 					 quote_literal_cstr(NameStr(*schema_name)),
 					 quote_literal_cstr(NameStr(*table_name)));
 	node_name = NameStr(*PG_GETARG_NAME(0));
@@ -247,7 +247,7 @@ dist_util_remote_compressed_chunk_info(PG_FUNCTION_ARGS)
 	table_name = PG_GETARG_NAME(2);
 	query_str = makeStringInfo();
 	appendStringInfo(query_str,
-					 "SELECT * from _timescaledb_internal.compressed_chunk_local_stats( %s, %s );",
+					 "SELECT * from _timescaledb_functions.compressed_chunk_local_stats( %s, %s );",
 					 quote_literal_cstr(NameStr(*schema_name)),
 					 quote_literal_cstr(NameStr(*table_name)));
 	node_name = NameStr(*PG_GETARG_NAME(0));
@@ -267,7 +267,7 @@ dist_util_remote_hypertable_index_info(PG_FUNCTION_ARGS)
 	index_name = PG_GETARG_NAME(2);
 	query_str = makeStringInfo();
 	appendStringInfo(query_str,
-					 "SELECT  * from _timescaledb_internal.indexes_local_size( %s, %s );",
+					 "SELECT  * from _timescaledb_functions.indexes_local_size( %s, %s );",
 					 quote_literal_cstr(NameStr(*schema_name)),
 					 quote_literal_cstr(NameStr(*index_name)));
 	node_name = NameStr(*PG_GETARG_NAME(0));

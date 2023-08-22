@@ -260,13 +260,13 @@ FROM show_chunks('disttable') ch;
 ---------------+------------------+-----------------+------------------------
 (0 rows)
 
-SELECT * FROM _timescaledb_internal.relation_size('disttable');
+SELECT * FROM _timescaledb_functions.relation_size('disttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
 (1 row)
 
-SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
+SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON TRUE;
  ch | total_size | heap_size | index_size | toast_size 
 ----+------------+-----------+------------+------------
 (0 rows)
@@ -283,13 +283,13 @@ FROM show_chunks('nondisttable') ch;
 ---------------+------------------+-----------------+------------------------
 (0 rows)
 
-SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
+SELECT * FROM _timescaledb_functions.relation_size('nondisttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
 (1 row)
 
-SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
+SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON TRUE;
  ch | total_size | heap_size | index_size | toast_size 
 ----+------------+-----------+------------+------------
 (0 rows)
@@ -360,7 +360,7 @@ SELECT pg_table_size('disttable'), pg_relation_size('disttable'), pg_indexes_siz
              0 |                0 |            8192 |                   8192
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('disttable');
+SELECT * FROM _timescaledb_functions.relation_size('disttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
@@ -372,7 +372,7 @@ SELECT pg_table_size('nondisttable'), pg_relation_size('nondisttable'), pg_index
              0 |                0 |            8192 |                   8192
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
+SELECT * FROM _timescaledb_functions.relation_size('nondisttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
@@ -465,13 +465,13 @@ FROM show_chunks('disttable') ch;
              0 |                0 |               0 |                      0
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('disttable');
+SELECT * FROM _timescaledb_functions.relation_size('disttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
 (1 row)
 
-SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
+SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON TRUE;
                      ch                      | total_size | heap_size | index_size | toast_size 
 ---------------------------------------------+------------+-----------+------------+------------
  _timescaledb_internal._dist_hyper_2_2_chunk |          0 |         0 |          0 |          0
@@ -490,13 +490,13 @@ FROM show_chunks('nondisttable') ch;
           8192 |             8192 |           16384 |                  24576
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
+SELECT * FROM _timescaledb_functions.relation_size('nondisttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
 (1 row)
 
-SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
+SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON TRUE;
                    ch                   | total_size | heap_size | index_size | toast_size 
 ----------------------------------------+------------+-----------+------------+------------
  _timescaledb_internal._hyper_1_1_chunk |      24576 |      8192 |      16384 |          0
@@ -546,13 +546,13 @@ FROM show_chunks('disttable') ch;
              0 |                0 |               0
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('disttable');
+SELECT * FROM _timescaledb_functions.relation_size('disttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
 (1 row)
 
-SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
+SELECT * FROM show_chunks('disttable') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON TRUE;
                      ch                      | total_size | heap_size | index_size | toast_size 
 ---------------------------------------------+------------+-----------+------------+------------
  _timescaledb_internal._dist_hyper_2_2_chunk |          0 |         0 |          0 |          0
@@ -571,13 +571,13 @@ FROM show_chunks('nondisttable') ch;
              0 |                0 |            8192 |                   8192
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('nondisttable');
+SELECT * FROM _timescaledb_functions.relation_size('nondisttable');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
 (1 row)
 
-SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON TRUE;
+SELECT * FROM show_chunks('nondisttable') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON TRUE;
                    ch                   | total_size | heap_size | index_size | toast_size 
 ----------------------------------------+------------+-----------+------------+------------
  _timescaledb_internal._hyper_1_1_chunk |       8192 |         0 |       8192 |          0

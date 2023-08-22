@@ -51,3 +51,20 @@ ALTER FUNCTION _timescaledb_functions.validate_as_data_node() SET SCHEMA _timesc
 ALTER FUNCTION _timescaledb_functions.show_connection_cache() SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.ping_data_node(name, interval) SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.remote_txn_heal_data_node(oid) SET SCHEMA _timescaledb_internal;
+
+ALTER FUNCTION _timescaledb_functions.relation_size(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.data_node_hypertable_info(name, name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.data_node_chunk_info(name, name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hypertable_local_size(name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hypertable_remote_size(name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunks_local_size(name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunks_remote_size(name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.range_value_to_pretty(bigint, regtype) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.get_approx_row_count(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.data_node_compressed_chunk_stats(name, name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.compressed_chunk_local_stats(name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.compressed_chunk_remote_stats(name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.indexes_local_size(name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.data_node_index_size(name, name, name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.indexes_remote_size(name, name, name) SET SCHEMA _timescaledb_internal;
+

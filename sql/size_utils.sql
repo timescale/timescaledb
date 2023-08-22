@@ -5,7 +5,7 @@
 -- This file contains utility functions to get the relation size
 -- of hypertables, chunks, and indexes on hypertables.
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.relation_size(relation REGCLASS)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.relation_size(relation REGCLASS)
 RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
 AS '@MODULE_PATHNAME@', 'ts_relation_size' LANGUAGE C VOLATILE;
 
@@ -32,9 +32,9 @@ FROM
     JOIN pg_class cl ON cl.relname = c.table_name AND cl.relkind = 'r'
     JOIN pg_namespace n ON n.oid = cl.relnamespace
     AND n.nspname = c.schema_name
-    JOIN LATERAL _timescaledb_internal.relation_size(cl.oid) AS relsize ON TRUE
+    JOIN LATERAL _timescaledb_functions.relation_size(cl.oid) AS relsize ON TRUE
     LEFT JOIN _timescaledb_catalog.chunk comp ON comp.id = c.compressed_chunk_id
-    LEFT JOIN LATERAL _timescaledb_internal.relation_size(
+    LEFT JOIN LATERAL _timescaledb_functions.relation_size(
         CASE WHEN comp.schema_name IS NOT NULL AND comp.table_name IS NOT NULL THEN
             format('%I.%I', comp.schema_name, comp.table_name)::regclass
         ELSE
@@ -44,7 +44,7 @@ FROM
 
 GRANT SELECT ON  _timescaledb_internal.hypertable_chunk_local_size TO PUBLIC;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_hypertable_info(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_hypertable_info(
     node_name              NAME,
     schema_name_in name,
     table_name_in name
@@ -56,7 +56,7 @@ RETURNS TABLE (
     total_bytes     bigint)
 AS '@MODULE_PATHNAME@', 'ts_dist_remote_hypertable_info' LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_chunk_info(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_chunk_info(
     node_name              NAME,
     schema_name_in name,
     table_name_in name
@@ -71,7 +71,7 @@ RETURNS TABLE (
     total_bytes     bigint)
 AS '@MODULE_PATHNAME@', 'ts_dist_remote_chunk_info' LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_local_size(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_local_size(
 	schema_name_in name,
 	table_name_in name)
 RETURNS TABLE (
@@ -98,7 +98,7 @@ $BODY$
             JOIN pg_class c ON relname = ht.table_name AND c.relkind = 'r'
             JOIN pg_namespace n ON n.oid = c.relnamespace
             AND n.nspname = ht.schema_name
-            JOIN LATERAL _timescaledb_internal.relation_size(c.oid) AS relsize ON TRUE
+            JOIN LATERAL _timescaledb_functions.relation_size(c.oid) AS relsize ON TRUE
         WHERE
             schema_name = schema_name_in
             AND table_name = table_name_in
@@ -133,7 +133,7 @@ $BODY$
          SELECT * FROM _chunk_sizes) AS sizes;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_remote_size(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_remote_size(
     schema_name_in name,
     table_name_in name)
 RETURNS TABLE (
@@ -161,7 +161,7 @@ $BODY$
             AND ht.table_name = table_name_in
             AND s.hypertable_id = ht.id
          ) AS srv
-    LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_hypertable_info(
+    LEFT OUTER JOIN LATERAL _timescaledb_functions.data_node_hypertable_info(
         srv.node_name, schema_name_in, table_name_in) entry ON TRUE
     GROUP BY srv.node_name;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
@@ -218,14 +218,14 @@ BEGIN
         CASE WHEN is_distributed THEN
 			RETURN QUERY
 			SELECT *, NULL::name
-			FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name)
+			FROM _timescaledb_functions.hypertable_local_size(schema_name, table_name)
 			UNION
 			SELECT *
-			FROM _timescaledb_internal.hypertable_remote_size(schema_name, table_name);
+			FROM _timescaledb_functions.hypertable_remote_size(schema_name, table_name);
         ELSE
 			RETURN QUERY
 			SELECT *, NULL::name
-			FROM _timescaledb_internal.hypertable_local_size(schema_name, table_name);
+			FROM _timescaledb_functions.hypertable_local_size(schema_name, table_name);
         END CASE;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
@@ -242,7 +242,7 @@ $BODY$
    FROM @extschema@.hypertable_detailed_size(hypertable);
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_local_size(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunks_local_size(
     schema_name_in name,
     table_name_in name)
 RETURNS TABLE (
@@ -271,7 +271,7 @@ $BODY$
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 ---should return same information as chunks_local_size--
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_remote_size(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunks_remote_size(
     schema_name_in name,
     table_name_in name)
 RETURNS TABLE (
@@ -305,7 +305,7 @@ $BODY$
             AND ht.table_name = table_name_in
             AND s.hypertable_id = ht.id
          ) AS srv
-    LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_chunk_info(
+    LEFT OUTER JOIN LATERAL _timescaledb_functions.data_node_chunk_info(
         srv.node_name, schema_name_in, table_name_in) entry ON TRUE
 	WHERE
 	    entry.chunk_name IS NOT NULL;
@@ -365,17 +365,17 @@ BEGIN
         CASE WHEN is_distributed THEN
             RETURN QUERY SELECT ch.chunk_schema, ch.chunk_name, ch.table_bytes, ch.index_bytes,
                         ch.toast_bytes, ch.total_bytes, ch.node_name
-            FROM _timescaledb_internal.chunks_remote_size(schema_name, table_name) ch;
+            FROM _timescaledb_functions.chunks_remote_size(schema_name, table_name) ch;
         ELSE
             RETURN QUERY SELECT chl.chunk_schema, chl.chunk_name, chl.table_bytes, chl.index_bytes,
                         chl.toast_bytes, chl.total_bytes, NULL::NAME
-            FROM _timescaledb_internal.chunks_local_size(schema_name, table_name) chl;
+            FROM _timescaledb_functions.chunks_local_size(schema_name, table_name) chl;
         END CASE;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 ---------- end of detailed size functions ------
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.range_value_to_pretty(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.range_value_to_pretty(
     time_value      BIGINT,
     column_type     REGTYPE
 )
@@ -439,7 +439,7 @@ BEGIN
         SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable INTO local_compressed_hypertable_id
         WHERE table_name = local_table_name AND schema_name = local_schema_name;
         IF local_compressed_hypertable_id IS NOT NULL THEN
-           uncompressed_row_count = _timescaledb_internal.get_approx_row_count(relation);
+           uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
 
            WITH compressed_hypertable AS (SELECT table_name, schema_name FROM _timescaledb_catalog.hypertable ht
            WHERE ht.id = local_compressed_hypertable_id)
@@ -447,10 +447,10 @@ BEGIN
            INNER JOIN compressed_hypertable h ON (c.relname = h.table_name)
            INNER JOIN pg_namespace n ON (n.nspname = h.schema_name);
 
-           compressed_row_count = _timescaledb_internal.get_approx_row_count(compressed_hypertable_oid);
+           compressed_row_count = _timescaledb_functions.get_approx_row_count(compressed_hypertable_oid);
            RETURN (uncompressed_row_count + (compressed_row_count * max_compressed_row_count));
         ELSE
-           uncompressed_row_count = _timescaledb_internal.get_approx_row_count(relation);
+           uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
            RETURN uncompressed_row_count;
         END IF;
     END IF;
@@ -471,26 +471,26 @@ BEGIN
             ON ( c.relnamespace = compressed_ns_oid.oid AND c.relname = compressed_ns_oid.table_name)
             INTO local_compressed_chunk_oid;
 
-            uncompressed_row_count = _timescaledb_internal.get_approx_row_count(relation);
-            compressed_row_count = _timescaledb_internal.get_approx_row_count(local_compressed_chunk_oid);
+            uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
+            compressed_row_count = _timescaledb_functions.get_approx_row_count(local_compressed_chunk_oid);
             RETURN uncompressed_row_count + (compressed_row_count * max_compressed_row_count);
         ELSIF is_compressed_chunk IS NULL AND local_compressed_chunk_id IS NULL THEN
         -- 'input relation is uncompressed chunk #3';
-            uncompressed_row_count = _timescaledb_internal.get_approx_row_count(relation);
+            uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
             RETURN uncompressed_row_count;
         ELSE
         -- 'compressed chunk only #4';
-            compressed_row_count = _timescaledb_internal.get_approx_row_count(relation) * max_compressed_row_count;
+            compressed_row_count = _timescaledb_functions.get_approx_row_count(relation) * max_compressed_row_count;
             RETURN compressed_row_count;
         END IF;
     END IF;
     -- Check for input relation is Plain RELATION
-    uncompressed_row_count = _timescaledb_internal.get_approx_row_count(relation);
+    uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
     RETURN uncompressed_row_count;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.get_approx_row_count(relation REGCLASS)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.get_approx_row_count(relation REGCLASS)
 RETURNS BIGINT
 LANGUAGE SQL VOLATILE STRICT AS
 $BODY$
@@ -537,7 +537,7 @@ FROM
 
 GRANT SELECT ON _timescaledb_internal.compressed_chunk_stats TO PUBLIC;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_compressed_chunk_stats (node_name name, schema_name_in name, table_name_in name)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_compressed_chunk_stats(node_name name, schema_name_in name, table_name_in name)
     RETURNS TABLE (
         chunk_schema name,
         chunk_name name,
@@ -553,7 +553,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_compressed_chunk_stat
     )
 AS '@MODULE_PATHNAME@' , 'ts_dist_remote_compressed_chunk_info' LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_local_stats (schema_name_in name, table_name_in name)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_chunk_local_stats(schema_name_in name, table_name_in name)
     RETURNS TABLE (
         chunk_schema name,
         chunk_name name,
@@ -589,7 +589,7 @@ $BODY$
         AND ch.hypertable_name = table_name_in;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_remote_stats (schema_name_in name, table_name_in name)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_chunk_remote_stats(schema_name_in name, table_name_in name)
     RETURNS TABLE (
         chunk_schema name,
         chunk_name name,
@@ -620,7 +620,7 @@ $BODY$
             ht.schema_name = schema_name_in
             AND ht.table_name = table_name_in
             AND s.hypertable_id = ht.id) AS srv
-    LEFT OUTER JOIN LATERAL _timescaledb_internal.data_node_compressed_chunk_stats (
+    LEFT OUTER JOIN LATERAL _timescaledb_functions.data_node_compressed_chunk_stats(
         srv.node_name, schema_name_in, table_name_in) ch ON TRUE
 	WHERE ch.chunk_name IS NOT NULL;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
@@ -674,14 +674,14 @@ BEGIN
         SELECT
             *
         FROM
-            _timescaledb_internal.compressed_chunk_remote_stats (schema_name, table_name);
+            _timescaledb_functions.compressed_chunk_remote_stats(schema_name, table_name);
     ELSE
         RETURN QUERY
         SELECT
             *,
             NULL::name
         FROM
-            _timescaledb_internal.compressed_chunk_local_stats (schema_name, table_name);
+            _timescaledb_functions.compressed_chunk_local_stats(schema_name, table_name);
     END CASE;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
@@ -728,7 +728,7 @@ $BODY$ SET search_path TO pg_catalog, pg_temp;
 -- index_name      - index on hyper table
 ---note that the query matches against the hypertable's schema name as
 -- the input is on the hypertable index and not the chunk index.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_local_size(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.indexes_local_size(
     schema_name_in             NAME,
     index_name_in              NAME
 )
@@ -765,11 +765,11 @@ $BODY$
 		 AND h.table_name = c.relname;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.data_node_index_size (node_name name, schema_name_in name, index_name_in name)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_index_size(node_name name, schema_name_in name, index_name_in name)
 RETURNS TABLE ( hypertable_id INTEGER, total_bytes BIGINT)
 AS '@MODULE_PATHNAME@' , 'ts_dist_remote_hypertable_index_info' LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_remote_size(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.indexes_remote_size(
     schema_name_in             NAME,
     table_name_in              NAME,
     index_name_in              NAME
@@ -790,7 +790,7 @@ $BODY$
             AND ht.table_name = table_name_in
             AND s.hypertable_id = ht.id
          ) AS srv
-    JOIN LATERAL _timescaledb_internal.data_node_index_size(
+    JOIN LATERAL _timescaledb_functions.data_node_index_size(
         srv.node_name, schema_name_in, index_name_in) entry ON TRUE;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
@@ -830,7 +830,7 @@ BEGIN
    -- get the local size or size of access node indexes
    SELECT il.total_bytes
    INTO index_bytes
-   FROM _timescaledb_internal.indexes_local_size(ht_schema_name, ht_index_name) il;
+   FROM _timescaledb_functions.indexes_local_size(ht_schema_name, ht_index_name) il;
 
    IF index_bytes IS NULL THEN
        index_bytes = 0;
@@ -838,7 +838,7 @@ BEGIN
 
    -- Add size from data nodes
    IF is_distributed THEN
-       index_bytes = index_bytes + _timescaledb_internal.indexes_remote_size(ht_schema_name, ht_name, ht_index_name);
+       index_bytes = index_bytes + _timescaledb_functions.indexes_remote_size(ht_schema_name, ht_name, ht_index_name);
    END IF;
 
    RETURN index_bytes;
