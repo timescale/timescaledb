@@ -213,7 +213,7 @@ SELECT * FROM chunks_detailed_size(0) ORDER BY node_name;
 SELECT * FROM hypertable_compression_stats(0) ORDER BY node_name;
 SELECT * FROM chunk_compression_stats(0) ORDER BY node_name;
 SELECT * FROM hypertable_index_size(0);
-SELECT * FROM _timescaledb_internal.relation_size(0);
+SELECT * FROM _timescaledb_functions.relation_size(0);
 
 SELECT * FROM hypertable_size(1);
 SELECT * FROM hypertable_detailed_size(1) ORDER BY node_name;
@@ -221,7 +221,7 @@ SELECT * FROM chunks_detailed_size(1) ORDER BY node_name;
 SELECT * FROM hypertable_compression_stats(1) ORDER BY node_name;
 SELECT * FROM chunk_compression_stats(1) ORDER BY node_name;
 SELECT * FROM hypertable_index_size(1);
-SELECT * FROM _timescaledb_internal.relation_size(1);
+SELECT * FROM _timescaledb_functions.relation_size(1);
 
 -- Test size functions with NULL input
 SELECT * FROM hypertable_size(NULL);
@@ -230,7 +230,7 @@ SELECT * FROM chunks_detailed_size(NULL) ORDER BY node_name;
 SELECT * FROM hypertable_compression_stats(NULL) ORDER BY node_name;
 SELECT * FROM chunk_compression_stats(NULL) ORDER BY node_name;
 SELECT * FROM hypertable_index_size(NULL);
-SELECT * FROM _timescaledb_internal.relation_size(NULL);
+SELECT * FROM _timescaledb_functions.relation_size(NULL);
 
 -- Test size functions on regular table
 CREATE TABLE hypersize(time timestamptz, device int);
@@ -239,7 +239,7 @@ CREATE INDEX hypersize_time_idx ON hypersize (time);
 \set VERBOSITY default
 \set SHOW_CONTEXT never
 SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_size('hypersize'), pg_total_relation_size('hypersize'), pg_relation_size('hypersize_time_idx');
-SELECT * FROM _timescaledb_internal.relation_size('hypersize');
+SELECT * FROM _timescaledb_functions.relation_size('hypersize');
 SELECT * FROM hypertable_size('hypersize');
 SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
 SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
@@ -252,7 +252,7 @@ SELECT * FROM hypertable_index_size('hypersize_time_idx');
 -- Test size functions on empty hypertable
 SELECT * FROM create_hypertable('hypersize', 'time');
 SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_size('hypersize'), pg_total_relation_size('hypersize'), pg_relation_size('hypersize_time_idx');
-SELECT * FROM _timescaledb_internal.relation_size('hypersize');
+SELECT * FROM _timescaledb_functions.relation_size('hypersize');
 SELECT * FROM hypertable_size('hypersize');
 SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
 SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
@@ -266,7 +266,7 @@ SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_siz
 SELECT pg_relation_size(ch), pg_table_size(ch), pg_indexes_size(ch), pg_total_relation_size(ch)
 FROM show_chunks('hypersize') ch
 ORDER BY ch;
-SELECT * FROM show_chunks('hypersize') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON true;
+SELECT * FROM show_chunks('hypersize') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON true;
 SELECT * FROM hypertable_size('hypersize');
 SELECT * FROM hypertable_detailed_size('hypersize') ORDER BY node_name;
 SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;

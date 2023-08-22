@@ -500,7 +500,7 @@ SELECT * FROM hypertable_index_size(0);
                       
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size(0);
+SELECT * FROM _timescaledb_functions.relation_size(0);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
             |           |            |           
@@ -538,7 +538,7 @@ SELECT * FROM hypertable_index_size(1);
                       
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size(1);
+SELECT * FROM _timescaledb_functions.relation_size(1);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
           0 |         0 |          0 |          0
@@ -577,7 +577,7 @@ SELECT * FROM hypertable_index_size(NULL);
                       
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size(NULL);
+SELECT * FROM _timescaledb_functions.relation_size(NULL);
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
             |           |            |           
@@ -595,7 +595,7 @@ SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_siz
                 0 |             0 |            8192 |                   8192 |             8192
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('hypersize');
+SELECT * FROM _timescaledb_functions.relation_size('hypersize');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
@@ -649,7 +649,7 @@ SELECT pg_relation_size('hypersize'), pg_table_size('hypersize'), pg_indexes_siz
                 0 |             0 |            8192 |                   8192 |             8192
 (1 row)
 
-SELECT * FROM _timescaledb_internal.relation_size('hypersize');
+SELECT * FROM _timescaledb_functions.relation_size('hypersize');
  total_size | heap_size | index_size | toast_size 
 ------------+-----------+------------+------------
        8192 |         0 |       8192 |          0
@@ -704,7 +704,7 @@ ORDER BY ch;
              8192 |          8192 |           16384 |                  24576
 (1 row)
 
-SELECT * FROM show_chunks('hypersize') ch JOIN LATERAL _timescaledb_internal.relation_size(ch) ON true;
+SELECT * FROM show_chunks('hypersize') ch JOIN LATERAL _timescaledb_functions.relation_size(ch) ON true;
                    ch                    | total_size | heap_size | index_size | toast_size 
 -----------------------------------------+------------+-----------+------------+------------
  _timescaledb_internal._hyper_6_11_chunk |      24576 |      8192 |      16384 |          0
