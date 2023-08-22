@@ -8,7 +8,7 @@ SHOW timescaledb.license;
  timescale
 (1 row)
 
-SELECT _timescaledb_internal.tsl_loaded();
+SELECT _timescaledb_functions.tsl_loaded();
  tsl_loaded 
 ------------
  t

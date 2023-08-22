@@ -301,7 +301,7 @@ CREATE OR REPLACE FUNCTION test.make_tablespace_path(prefix TEXT, test_name TEXT
 $BODY$
 DECLARE
     mkdirFlag TEXT := CASE WHEN sysname = 'Windows' THEN '' ELSE '-p ' END
-        FROM _timescaledb_internal.get_os_info();
+        FROM _timescaledb_functions.get_os_info();
     dirPath TEXT := format('%s%s', prefix, test_name);
     createDir TEXT := format('mkdir %s%s', mkdirFlag, dirPath);
 BEGIN

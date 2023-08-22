@@ -68,3 +68,8 @@ ALTER FUNCTION _timescaledb_functions.indexes_local_size(name, name) SET SCHEMA 
 ALTER FUNCTION _timescaledb_functions.data_node_index_size(name, name, name) SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.indexes_remote_size(name, name, name) SET SCHEMA _timescaledb_internal;
 
+ALTER FUNCTION _timescaledb_functions.generate_uuid() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.get_git_commit() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.get_os_info() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.tsl_loaded() SET SCHEMA _timescaledb_internal;
+

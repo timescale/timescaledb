@@ -8,7 +8,7 @@
 \set VERBOSITY default
 
 SHOW timescaledb.license;
-SELECT _timescaledb_internal.tsl_loaded();
+SELECT _timescaledb_functions.tsl_loaded();
 
 -- User shouldn't be able to change the license in the session
 \set ON_ERROR_STOP 0

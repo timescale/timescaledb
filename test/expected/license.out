@@ -9,7 +9,7 @@ SHOW timescaledb.license;
  apache
 (1 row)
 
-SELECT _timescaledb_internal.tsl_loaded();
+SELECT _timescaledb_functions.tsl_loaded();
  tsl_loaded 
 ------------
  f

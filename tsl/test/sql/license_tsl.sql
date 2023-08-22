@@ -5,4 +5,4 @@
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 
 SHOW timescaledb.license;
-SELECT _timescaledb_internal.tsl_loaded();
+SELECT _timescaledb_functions.tsl_loaded();
