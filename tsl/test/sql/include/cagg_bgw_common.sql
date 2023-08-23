@@ -394,5 +394,5 @@ SELECT * from sorted_bgw_log;
 
 -- Count the number of continuous aggregate policies
 SELECT count(*) FROM _timescaledb_config.bgw_job
- WHERE proc_schema = '_timescaledb_internal'
+ WHERE proc_schema = '_timescaledb_functions'
    AND proc_name = 'policy_refresh_continuous_aggregate';

@@ -200,7 +200,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 	/* Make sure that an existing policy doesn't exist on this hypertable */
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   hypertable->fd.id);
 
 	dim = hyperspace_get_open_dimension(hypertable->space, 0);
@@ -255,9 +255,9 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	/* insert a new job into jobs table */
 	namestrcpy(&application_name, "Compression Policy");
 	namestrcpy(&proc_name, POLICY_COMPRESSION_PROC_NAME);
-	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&proc_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&check_name, POLICY_COMPRESSION_CHECK_NAME);
-	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	JsonbParseState *parse_state = NULL;
@@ -422,7 +422,7 @@ policy_compression_remove_internal(Oid user_rel_oid, bool if_exists)
 	}
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_COMPRESSION_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
 
 	ts_cache_release(hcache);

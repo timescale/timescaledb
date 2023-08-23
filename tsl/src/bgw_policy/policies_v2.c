@@ -102,7 +102,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 	char *err_compress_reten_overlap = "compression and retention policies overlap";
 
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
-													 INTERNAL_SCHEMA_NAME,
+													 FUNCTIONS_SCHEMA_NAME,
 													 all_policies.original_HT);
 	if (jobs != NIL)
 	{

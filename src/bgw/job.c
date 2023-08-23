@@ -1054,7 +1054,7 @@ ts_bgw_job_validate_job_owner(Oid owner)
 bool
 ts_is_telemetry_job(BgwJob *job)
 {
-	return namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0 &&
+	return namestrcmp(&job->fd.proc_schema, FUNCTIONS_SCHEMA_NAME) == 0 &&
 		   namestrcmp(&job->fd.proc_name, "policy_telemetry") == 0;
 }
 #endif

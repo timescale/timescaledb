@@ -90,3 +90,19 @@ ALTER FUNCTION _timescaledb_functions.attach_osm_table_chunk(regclass, regclass)
 
 UPDATE _timescaledb_catalog.hypertable SET chunk_sizing_func_schema = '_timescaledb_internal' WHERE chunk_sizing_func_schema = '_timescaledb_functions' AND chunk_sizing_func_name = 'calculate_chunk_interval';
 
+ALTER FUNCTION _timescaledb_functions.policy_compression_check(jsonb) SET SCHEMA _timescaledb_internal;
+ALTER PROCEDURE _timescaledb_functions.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean) SET SCHEMA _timescaledb_internal;
+ALTER PROCEDURE _timescaledb_functions.policy_compression(integer,jsonb) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.policy_job_error_retention_check(jsonb) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.policy_job_error_retention(integer,jsonb) SET SCHEMA _timescaledb_internal;
+ALTER PROCEDURE _timescaledb_functions.policy_recompression(integer,jsonb) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.policy_refresh_continuous_aggregate_check(jsonb) SET SCHEMA _timescaledb_internal;
+ALTER PROCEDURE _timescaledb_functions.policy_refresh_continuous_aggregate(integer,jsonb) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.policy_reorder_check(jsonb) SET SCHEMA _timescaledb_internal;
+ALTER PROCEDURE _timescaledb_functions.policy_reorder(integer,jsonb) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.policy_retention_check(jsonb) SET SCHEMA _timescaledb_internal;
+ALTER PROCEDURE _timescaledb_functions.policy_retention(integer,jsonb) SET SCHEMA _timescaledb_internal;
+
+UPDATE _timescaledb_config.bgw_job SET proc_schema = '_timescaledb_internal' WHERE proc_schema = '_timescaledb_functions';
+UPDATE _timescaledb_config.bgw_job SET check_schema = '_timescaledb_internal' WHERE check_schema = '_timescaledb_functions';
+
