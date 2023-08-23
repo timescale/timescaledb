@@ -9,6 +9,10 @@ name: Add bugs to bugs project
 jobs:
   add-to-project:
     name: Add issue to project
+    # issue_comment is triggered when commenting on both issues and
+    # pull requests. To avoid adding pull requests to the bug board,
+    # filter out pull requests
+    if: ${{ !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/add-to-project@v0.4.0
