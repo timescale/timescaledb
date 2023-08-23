@@ -19,16 +19,14 @@ jobs:
           'extschema.time_bucket(bucket_width interval,ts timestamp,"offset" interval)'
         --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts timestamptz,"offset" interval)'
         --proc-without-search-path 'extschema.time_bucket(bucket_width interval,ts date,"offset" interval)'
-        --proc-without-search-path 'extschema.recompress_chunk(chunk regclass,if_not_compressed boolean = FALSE)'
+        --proc-without-search-path 'extschema.recompress_chunk(chunk regclass,if_not_compressed boolean)'
         --proc-without-search-path '_timescaledb_internal.policy_compression(job_id integer,config jsonb)'
         --proc-without-search-path
           '_timescaledb_internal.policy_compression_execute(job_id integer,htid integer,lag anyelement,maxchunks integer,verbose_log boolean,recompress_enabled boolean)'
         --proc-without-search-path
           '_timescaledb_internal.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
         --proc-without-search-path
-          'extschema.cagg_migrate(_cagg regclass,_override boolean = FALSE,_drop_old boolean = FALSE)'
-        --proc-without-search-path
-          'extschema.cagg_migrate(cagg regclass,override boolean = FALSE,drop_old boolean = FALSE)'
+          'extschema.cagg_migrate(cagg regclass,override boolean,drop_old boolean)'
 
     steps:
 
@@ -42,7 +40,7 @@ jobs:
 
     - name: Install pgspot
       run: |
-        python -m pip install pgspot==0.5.0
+        python -m pip install pgspot==0.6.0
 
     - name: Build timescaledb sqlfiles
       run: |
