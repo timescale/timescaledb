@@ -2,40 +2,40 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_retention(job_id INTEGER, config JSONB)
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_retention(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_retention_proc'
 LANGUAGE C;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_retention_check(config JSONB)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_retention_check(config JSONB)
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_retention_check'
 LANGUAGE C;
 
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_reorder(job_id INTEGER, config JSONB)
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_reorder(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_reorder_proc'
 LANGUAGE C;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_reorder_check(config JSONB)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_reorder_check(config JSONB)
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_reorder_check'
 LANGUAGE C;
 
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_recompression(job_id INTEGER, config JSONB)
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_recompression(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_recompression_proc'
 LANGUAGE C;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_compression_check(config JSONB)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_compression_check(config JSONB)
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_compression_check'
 LANGUAGE C;
 
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.policy_refresh_continuous_aggregate(job_id INTEGER, config JSONB)
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.policy_refresh_continuous_aggregate(job_id INTEGER, config JSONB)
 AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_proc'
 LANGUAGE C;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_refresh_continuous_aggregate_check(config JSONB)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_refresh_continuous_aggregate_check(config JSONB)
 RETURNS void AS '@MODULE_PATHNAME@', 'ts_policy_refresh_cagg_check'
 LANGUAGE C;
 
 CREATE OR REPLACE PROCEDURE
-_timescaledb_internal.policy_compression_execute(
+_timescaledb_functions.policy_compression_execute(
   job_id              INTEGER,
   htid                INTEGER,
   lag                 ANYELEMENT,
@@ -145,7 +145,7 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 CREATE OR REPLACE PROCEDURE
-_timescaledb_internal.policy_compression(job_id INTEGER, config JSONB)
+_timescaledb_functions.policy_compression(job_id INTEGER, config JSONB)
 AS $$
 DECLARE
   dimtype             REGTYPE;
@@ -196,22 +196,22 @@ BEGIN
   -- execute the properly type casts for the lag value
   CASE dimtype
     WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype, 'DATE'::regtype THEN
-      CALL _timescaledb_internal.policy_compression_execute(
+      CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::INTERVAL,
         maxchunks, verbose_log, recompress_enabled
       );
     WHEN 'BIGINT'::regtype THEN
-      CALL _timescaledb_internal.policy_compression_execute(
+      CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::BIGINT,
         maxchunks, verbose_log, recompress_enabled
       );
     WHEN 'INTEGER'::regtype THEN
-      CALL _timescaledb_internal.policy_compression_execute(
+      CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::INTEGER,
         maxchunks, verbose_log, recompress_enabled
       );
     WHEN 'SMALLINT'::regtype THEN
-      CALL _timescaledb_internal.policy_compression_execute(
+      CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::SMALLINT,
         maxchunks, verbose_log, recompress_enabled
       );

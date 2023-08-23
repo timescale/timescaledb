@@ -181,7 +181,7 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 	partitioning_type = ts_dimension_get_partition_type(dim);
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   hypertable->fd.id);
 
 	if (jobs != NIL)
@@ -276,9 +276,9 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 	namestrcpy(&application_name, "Retention Policy");
 	NameData proc_name, proc_schema, check_schema, check_name;
 	namestrcpy(&proc_name, POLICY_RETENTION_PROC_NAME);
-	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&proc_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&check_name, POLICY_RETENTION_CHECK_NAME);
-	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&default_schedule_interval,
@@ -385,7 +385,7 @@ policy_retention_remove_internal(Oid table_oid, bool if_exists)
 	ts_hypertable_permissions_check(table_oid, GetUserId());
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   ht_id);
 	if (jobs == NIL)
 	{

@@ -4,7 +4,7 @@
 
 -- A retention policy is set up for the table _timescaledb_internal.job_errors (Error Log Retention Policy [2])
 -- By default, it will run once a month and and drop rows older than a month.
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_job_error_retention(job_id integer, config JSONB) RETURNS integer
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_job_error_retention(job_id integer, config JSONB) RETURNS integer
 LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -22,7 +22,7 @@ BEGIN
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_job_error_retention_check(config JSONB) RETURNS VOID
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_job_error_retention_check(config JSONB) RETURNS VOID
 LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -63,12 +63,12 @@ VALUES
     INTERVAL '1 hour',
     -1,
     INTERVAL '1h',
-    '_timescaledb_internal',
+    '_timescaledb_functions',
     'policy_job_error_retention',
     pg_catalog.quote_ident(current_role)::regrole,
     true,
     '{"drop_after":"1 month"}',
-    '_timescaledb_internal',
+    '_timescaledb_functions',
     'policy_job_error_retention_check',
     true,
     '2000-01-01 00:00:00+00'::timestamptz

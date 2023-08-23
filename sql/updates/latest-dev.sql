@@ -129,3 +129,27 @@ ALTER FUNCTION _timescaledb_internal.get_chunk_colstats(regclass) SET SCHEMA _ti
 
 UPDATE _timescaledb_catalog.hypertable SET chunk_sizing_func_schema = '_timescaledb_functions' WHERE chunk_sizing_func_schema = '_timescaledb_internal' AND chunk_sizing_func_name = 'calculate_chunk_interval';
 
+DO $$
+DECLARE
+  foid regprocedure;
+  kind text;
+  funcs text[] = '{
+    policy_compression_check,policy_compression_execute,policy_compression,
+    policy_job_error_retention_check,policy_job_error_retention,
+    policy_recompression,
+    policy_refresh_continuous_aggregate_check,policy_refresh_continuous_aggregate,
+    policy_reorder_check,policy_reorder,
+    policy_retention_check,policy_retention
+  }';
+BEGIN
+  FOR foid, kind IN
+    SELECT oid, CASE WHEN prokind = 'f' THEN 'FUNCTION' ELSE 'PROCEDURE' END FROM pg_proc WHERE proname = ANY(funcs) AND pronamespace = '_timescaledb_internal'::regnamespace
+  LOOP
+    EXECUTE format('ALTER %s %s SET SCHEMA _timescaledb_functions', kind, foid);
+  END LOOP;
+END;
+$$;
+
+UPDATE _timescaledb_config.bgw_job SET proc_schema = '_timescaledb_functions' WHERE proc_schema = '_timescaledb_internal';
+UPDATE _timescaledb_config.bgw_job SET check_schema = '_timescaledb_functions' WHERE check_schema = '_timescaledb_internal';
+

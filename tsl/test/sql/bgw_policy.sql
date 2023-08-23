@@ -366,10 +366,10 @@ select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_sche
 
 -- test policy check functions with NULL args
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.policy_compression_check(NULL);
-SELECT _timescaledb_internal.policy_refresh_continuous_aggregate_check(NULL);
-SELECT _timescaledb_internal.policy_reorder_check(NULL);
-SELECT _timescaledb_internal.policy_retention_check(NULL);
+SELECT _timescaledb_functions.policy_compression_check(NULL);
+SELECT _timescaledb_functions.policy_refresh_continuous_aggregate_check(NULL);
+SELECT _timescaledb_functions.policy_reorder_check(NULL);
+SELECT _timescaledb_functions.policy_retention_check(NULL);
 \set ON_ERROR_STOP 1
 
 

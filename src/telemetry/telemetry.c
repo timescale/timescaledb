@@ -110,7 +110,7 @@ bgw_job_type_counts()
 	{
 		BgwJob *job = lfirst(lc);
 
-		if (namestrcmp(&job->fd.proc_schema, INTERNAL_SCHEMA_NAME) == 0)
+		if (namestrcmp(&job->fd.proc_schema, FUNCTIONS_SCHEMA_NAME) == 0)
 		{
 			if (namestrcmp(&job->fd.proc_name, "policy_refresh_continuous_aggregate") == 0)
 			{
@@ -338,7 +338,7 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 								 "("
 								 "	SELECT ("
 								 "		CASE "
-								 "			WHEN proc_schema = \'_timescaledb_internal\'"
+								 "			WHEN proc_schema = \'_timescaledb_functions\'"
 								 " 			AND proc_name ~ "
 								 "\'^policy_(retention|compression|reorder|refresh_continuous_"
 								 "aggregate|telemetry|job_error_retention)$\' "
@@ -437,7 +437,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 	const char *command_string =
 		"SELECT ("
 		"	CASE "
-		"		WHEN j.proc_schema = \'_timescaledb_internal\' AND j.proc_name ~ "
+		"		WHEN j.proc_schema = \'_timescaledb_functions\' AND j.proc_name ~ "
 		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_error_"
 		"retention)$\' "
 		"		THEN j.proc_name::TEXT "

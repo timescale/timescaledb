@@ -146,7 +146,7 @@ policy_refresh_cagg_exists(int32 materialization_id)
 						materialization_id)));
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   materialization_id);
 	if (jobs == NIL)
 		return false;
@@ -172,7 +172,7 @@ policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type, Dat
 						materialization_id)));
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   materialization_id);
 	if (jobs == NIL)
 		return false;
@@ -551,7 +551,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 
 	/* Make sure there is only 1 refresh policy on the cagg */
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
-													 INTERNAL_SCHEMA_NAME,
+													 FUNCTIONS_SCHEMA_NAME,
 													 cagg->data.mat_hypertable_id);
 
 	if (jobs != NIL)
@@ -600,9 +600,9 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Refresh Continuous Aggregate Policy");
 	namestrcpy(&proc_name, POLICY_REFRESH_CAGG_PROC_NAME);
-	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&proc_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&check_name, POLICY_REFRESH_CAGG_CHECK_NAME);
-	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
@@ -721,7 +721,7 @@ policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists)
 	ts_cagg_permissions_check(cagg_oid, GetUserId());
 	mat_htid = cagg->data.mat_hypertable_id;
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REFRESH_CAGG_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   mat_htid);
 	if (jobs == NIL)
 	{

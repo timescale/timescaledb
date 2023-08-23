@@ -76,11 +76,11 @@ SELECT timescaledb_experimental.show_policies('mat_m1');
 
 --Test coverage: new view for policies on CAggs
 SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
- relation_name | relation_schema | schedule_interval |      proc_schema      |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
----------------+-----------------+-------------------+-----------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
- mat_m1        | public          | @ 1 day           | _timescaledb_internal | policy_compression                  | {"hypertable_id": 2, "compress_after": 11}                    | _timescaledb_internal | _materialized_hypertable_2
- mat_m1        | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
- mat_m1        | public          | @ 1 day           | _timescaledb_internal | policy_retention                    | {"drop_after": 20, "hypertable_id": 2}                        | _timescaledb_internal | _materialized_hypertable_2
+ relation_name | relation_schema | schedule_interval |      proc_schema       |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
+---------------+-----------------+-------------------+------------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
+ mat_m1        | public          | @ 1 day           | _timescaledb_functions | policy_compression                  | {"hypertable_id": 2, "compress_after": 11}                    | _timescaledb_internal | _materialized_hypertable_2
+ mat_m1        | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
+ mat_m1        | public          | @ 1 day           | _timescaledb_functions | policy_retention                    | {"drop_after": 20, "hypertable_id": 2}                        | _timescaledb_internal | _materialized_hypertable_2
 (3 rows)
 
 --Test coverage: new view for policies only shows the policies for  CAggs
@@ -91,11 +91,11 @@ SELECT add_retention_policy('int_tab', 20);
 (1 row)
 
 SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
- relation_name | relation_schema | schedule_interval |      proc_schema      |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
----------------+-----------------+-------------------+-----------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
- mat_m1        | public          | @ 1 day           | _timescaledb_internal | policy_compression                  | {"hypertable_id": 2, "compress_after": 11}                    | _timescaledb_internal | _materialized_hypertable_2
- mat_m1        | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
- mat_m1        | public          | @ 1 day           | _timescaledb_internal | policy_retention                    | {"drop_after": 20, "hypertable_id": 2}                        | _timescaledb_internal | _materialized_hypertable_2
+ relation_name | relation_schema | schedule_interval |      proc_schema       |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
+---------------+-----------------+-------------------+------------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
+ mat_m1        | public          | @ 1 day           | _timescaledb_functions | policy_compression                  | {"hypertable_id": 2, "compress_after": 11}                    | _timescaledb_internal | _materialized_hypertable_2
+ mat_m1        | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
+ mat_m1        | public          | @ 1 day           | _timescaledb_functions | policy_retention                    | {"drop_after": 20, "hypertable_id": 2}                        | _timescaledb_internal | _materialized_hypertable_2
 (3 rows)
 
 SELECT remove_retention_policy('int_tab');
@@ -126,10 +126,10 @@ SELECT timescaledb_experimental.show_policies('mat_m2');
 
 -- check for only one refresh policy for each cagg
 SELECT * FROM timescaledb_experimental.policies WHERE proc_name ~ 'refresh' ORDER BY relation_name, proc_name;
- relation_name | relation_schema | schedule_interval |      proc_schema      |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
----------------+-----------------+-------------------+-----------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
- mat_m1        | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
- mat_m2        | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 4} | _timescaledb_internal | _materialized_hypertable_4
+ relation_name | relation_schema | schedule_interval |      proc_schema       |              proc_name              |                            config                             |   hypertable_schema   |      hypertable_name       
+---------------+-----------------+-------------------+------------------------+-------------------------------------+---------------------------------------------------------------+-----------------------+----------------------------
+ mat_m1        | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 2} | _timescaledb_internal | _materialized_hypertable_2
+ mat_m2        | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": 1, "start_offset": 10, "mat_hypertable_id": 4} | _timescaledb_internal | _materialized_hypertable_4
 (2 rows)
 
 SELECT timescaledb_experimental.remove_all_policies('mat_m2');
@@ -578,10 +578,10 @@ SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 
 -- Remove all policies
 SELECT * FROM timescaledb_experimental.policies ORDER BY relation_name, proc_name;
-   relation_name   | relation_schema | schedule_interval |      proc_schema      |              proc_name              |                                     config                                     |   hypertable_schema   |      hypertable_name       
--------------------+-----------------+-------------------+-----------------------+-------------------------------------+--------------------------------------------------------------------------------+-----------------------+----------------------------
- max_mat_view_date | public          | @ 1 hour          | _timescaledb_internal | policy_refresh_continuous_aggregate | {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 6} | _timescaledb_internal | _materialized_hypertable_6
- max_mat_view_date | public          | @ 1 day           | _timescaledb_internal | policy_retention                    | {"drop_after": "@ 25 days", "hypertable_id": 6}                                | _timescaledb_internal | _materialized_hypertable_6
+   relation_name   | relation_schema | schedule_interval |      proc_schema       |              proc_name              |                                     config                                     |   hypertable_schema   |      hypertable_name       
+-------------------+-----------------+-------------------+------------------------+-------------------------------------+--------------------------------------------------------------------------------+-----------------------+----------------------------
+ max_mat_view_date | public          | @ 1 hour          | _timescaledb_functions | policy_refresh_continuous_aggregate | {"end_offset": "@ 1 day", "start_offset": "@ 15 days", "mat_hypertable_id": 6} | _timescaledb_internal | _materialized_hypertable_6
+ max_mat_view_date | public          | @ 1 day           | _timescaledb_functions | policy_retention                    | {"drop_after": "@ 25 days", "hypertable_id": 6}                                | _timescaledb_internal | _materialized_hypertable_6
 (2 rows)
 
 SELECT timescaledb_experimental.remove_all_policies(NULL); -- should fail

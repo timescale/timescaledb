@@ -260,7 +260,7 @@ SELECT add_compression_policy('test_table_int', '1'::integer) as comp_job_id \gs
 SELECT config as comp_job_config
 FROM _timescaledb_config.bgw_job WHERE id = :comp_job_id \gset
 SET default_transaction_read_only TO on;
-CALL _timescaledb_internal.policy_compression(:comp_job_id, :'comp_job_config');
+CALL _timescaledb_functions.policy_compression(:comp_job_id, :'comp_job_config');
 SET default_transaction_read_only TO off;
 --verify chunks are not compressed
 SELECT count(*) , count(*) FILTER ( WHERE is_compressed is true)
@@ -270,9 +270,9 @@ WHERE hypertable_name = 'test_table_int';
 DROP TABLE test_table_int;
 
 SET default_transaction_read_only TO on;
-CALL _timescaledb_internal.policy_refresh_continuous_aggregate(1,'{}');
-CALL _timescaledb_internal.policy_reorder(1,'{}');
-CALL _timescaledb_internal.policy_retention(1,'{}');
+CALL _timescaledb_functions.policy_refresh_continuous_aggregate(1,'{}');
+CALL _timescaledb_functions.policy_reorder(1,'{}');
+CALL _timescaledb_functions.policy_retention(1,'{}');
 
 SELECT add_compression_policy('test_table', '1w');
 SELECT remove_compression_policy('test_table');

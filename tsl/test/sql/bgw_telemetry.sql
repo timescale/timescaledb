@@ -8,7 +8,7 @@
 -- locate the job id for it (should be 1, but who knows, and it is not
 -- important for this test).
 SELECT id AS job_id FROM _timescaledb_config.bgw_job
- WHERE proc_schema = '_timescaledb_internal'
+ WHERE proc_schema = '_timescaledb_functions'
    AND proc_name = 'policy_telemetry' \gset
 
 -- It should be possible to run it twice and running it should change

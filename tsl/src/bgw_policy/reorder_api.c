@@ -197,7 +197,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 
 	/* Make sure that an existing reorder policy doesn't exist on this hypertable */
 	jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
-													 INTERNAL_SCHEMA_NAME,
+													 FUNCTIONS_SCHEMA_NAME,
 													 ht->fd.id);
 
 	/*
@@ -259,9 +259,9 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	/* Next, insert a new job into jobs table */
 	namestrcpy(&application_name, "Reorder Policy");
 	namestrcpy(&proc_name, POLICY_REORDER_PROC_NAME);
-	namestrcpy(&proc_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&proc_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&check_name, POLICY_REORDER_CHECK_NAME);
-	namestrcpy(&check_schema, INTERNAL_SCHEMA_NAME);
+	namestrcpy(&check_schema, FUNCTIONS_SCHEMA_NAME);
 	namestrcpy(&owner, GetUserNameFromId(owner_id, false));
 
 	JsonbParseState *parse_state = NULL;
@@ -311,7 +311,7 @@ policy_reorder_remove(PG_FUNCTION_ARGS)
 	ht = ts_hypertable_cache_get_cache_and_entry(hypertable_oid, CACHE_FLAG_NONE, &hcache);
 
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_REORDER_PROC_NAME,
-														   INTERNAL_SCHEMA_NAME,
+														   FUNCTIONS_SCHEMA_NAME,
 														   ht->fd.id);
 	ts_cache_release(hcache);
 
