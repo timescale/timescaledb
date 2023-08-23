@@ -390,28 +390,6 @@ ts_hypertable_relid_to_id(Oid relid)
 	return result;
 }
 
-TS_FUNCTION_INFO_V1(ts_hypertable_get_time_type);
-Datum
-ts_hypertable_get_time_type(PG_FUNCTION_ARGS)
-{
-	int32 hypertable_id = PG_GETARG_INT32(0);
-	Cache *hcache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(hcache, hypertable_id);
-	const Dimension *time_dimension;
-	Oid time_type;
-	if (ht == NULL)
-		PG_RETURN_NULL();
-	time_dimension = hyperspace_get_open_dimension(ht->space, 0);
-	if (time_dimension == NULL)
-		PG_RETURN_NULL();
-	/* This is deliberately column_type not partitioning_type, as that is how
-	 * the SQL function is defined
-	 */
-	time_type = time_dimension->fd.column_type;
-	ts_cache_release(hcache);
-	PG_RETURN_OID(time_type);
-}
-
 static bool
 hypertable_is_compressed_or_materialization(const Hypertable *ht)
 {
