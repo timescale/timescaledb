@@ -88,3 +88,6 @@ ALTER FUNCTION _timescaledb_internal.generate_uuid() SET SCHEMA _timescaledb_fun
 ALTER FUNCTION _timescaledb_internal.get_git_commit() SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.get_os_info() SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.tsl_loaded() SET SCHEMA _timescaledb_functions;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.get_time_type(integer);
+

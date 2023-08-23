@@ -11,6 +11,3 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.get_partition_hash(val anyeleme
     RETURNS int
     AS '@MODULE_PATHNAME@', 'ts_get_partition_hash' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.get_time_type(hypertable_id INTEGER)
-    RETURNS OID
-    AS '@MODULE_PATHNAME@', 'ts_hypertable_get_time_type' LANGUAGE C STABLE STRICT;
