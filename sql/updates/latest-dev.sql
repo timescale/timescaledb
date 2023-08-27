@@ -34,47 +34,23 @@ LANGUAGE C VOLATILE;
 -- when upgrading from old versions on PG13 this function might not be present
 -- since there is no ALTER FUNCTION IF EXISTS we have to work around it with a DO block
 DO $$
+DECLARE
+  foid regprocedure;
+  funcs text[] = '{
+    drop_dist_ht_invalidation_trigger,
+    subtract_integer_from_now,
+    get_approx_row_count,
+    chunk_status,
+    create_chunk,create_chunk_table,
+    freeze_chunk,unfreeze_chunk,drop_chunk,
+    attach_osm_table_chunk
+  }';
 BEGIN
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'drop_dist_ht_invalidation_trigger' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.drop_dist_ht_invalidation_trigger(integer) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'subtract_integer_from_now' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.subtract_integer_from_now(regclass,bigint) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'get_approx_row_count' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.get_approx_row_count(regclass) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'chunk_status' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.chunk_status(regclass) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'create_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.create_chunk(regclass, jsonb, name, name, regclass) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'create_chunk_table' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.create_chunk_table(regclass, jsonb, name, name) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'freeze_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.freeze_chunk(regclass) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'unfreeze_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.unfreeze_chunk(regclass) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'drop_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.drop_chunk(regclass) SET SCHEMA _timescaledb_functions;
-  END IF;
-  IF (EXISTS (SELECT FROM pg_proc WHERE proname = 'attach_osm_table_chunk' AND pronamespace='_timescaledb_internal'::regnamespace))
-  THEN
-    ALTER FUNCTION _timescaledb_internal.attach_osm_table_chunk(regclass, regclass) SET SCHEMA _timescaledb_functions;
-  END IF;
+  FOR foid IN
+    SELECT oid FROM pg_proc WHERE proname = ANY(funcs) AND pronamespace = '_timescaledb_internal'::regnamespace
+  LOOP
+    EXECUTE format('ALTER FUNCTION %s SET SCHEMA _timescaledb_functions', foid);
+  END LOOP;
 END;
 $$;
 
