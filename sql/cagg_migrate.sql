@@ -6,7 +6,7 @@
 -- aggregate format to the finals form (without partials).
 
 -- Check if exists a plan for migrationg a given cagg
-CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_migrate_plan_exists (
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_migrate_plan_exists (
     _hypertable_id INTEGER
 )
 RETURNS BOOLEAN
@@ -21,7 +21,7 @@ $BODY$
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Execute all pre-validations required to execute the migration
-CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_migrate_pre_validation (
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_migrate_pre_validation (
     _cagg_schema TEXT,
     _cagg_name TEXT,
     _cagg_name_new TEXT
@@ -46,7 +46,7 @@ BEGIN
         RAISE EXCEPTION 'continuous aggregate "%.%" does not require any migration', _cagg_schema, _cagg_name;
     END IF;
 
-    IF _timescaledb_internal.cagg_migrate_plan_exists(_cagg_data.mat_hypertable_id) IS TRUE THEN
+    IF _timescaledb_functions.cagg_migrate_plan_exists(_cagg_data.mat_hypertable_id) IS TRUE THEN
         RAISE EXCEPTION 'plan already exists for continuous aggregate %.%', _cagg_schema, _cagg_name;
     END IF;
 
@@ -64,7 +64,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Create migration plan for given cagg
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_create_plan (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_create_plan (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _cagg_name_new TEXT,
     _override BOOLEAN DEFAULT FALSE,
@@ -84,7 +84,7 @@ DECLARE
     _interval_type TEXT;
     _interval_value TEXT;
 BEGIN
-    IF _timescaledb_internal.cagg_migrate_plan_exists(_cagg_data.mat_hypertable_id) IS TRUE THEN
+    IF _timescaledb_functions.cagg_migrate_plan_exists(_cagg_data.mat_hypertable_id) IS TRUE THEN
         RAISE EXCEPTION 'plan already exists for materialized hypertable %', _cagg_data.mat_hypertable_id;
     END IF;
 
@@ -209,7 +209,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Create new cagg using the new format
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_create_new_cagg (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_create_new_cagg (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -243,7 +243,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Disable policies
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_disable_policies (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_disable_policies (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -264,7 +264,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Enable policies
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_enable_policies (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_enable_policies (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -287,7 +287,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Copy policies
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_copy_policies (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_copy_policies (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -355,7 +355,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Refresh new cagg created by the migration
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_refresh_new_cagg (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -396,7 +396,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Copy data from the OLD cagg to the new Materialization Hypertable
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_copy_data (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_copy_data (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -431,7 +431,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Rename the new cagg using `_old` suffix and rename the `_new` to the original name
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_override_cagg (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_override_cagg (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -461,7 +461,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Remove old cagg if the parameter `drop_old` and `override` is true
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_drop_old_cagg (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_drop_old_cagg (
     _cagg_data _timescaledb_catalog.continuous_agg,
     _plan_step _timescaledb_catalog.continuous_agg_migrate_plan_step
 )
@@ -486,7 +486,7 @@ END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Execute the migration plan, step by step
-CREATE OR REPLACE PROCEDURE _timescaledb_internal.cagg_migrate_execute_plan (
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_execute_plan (
     _cagg_data _timescaledb_catalog.continuous_agg
 )
 LANGUAGE plpgsql AS
@@ -525,7 +525,7 @@ BEGIN
         END IF;
 
         -- execute step migration
-        _call_stmt := pg_catalog.format('CALL _timescaledb_internal.cagg_migrate_execute_%s($1, $2)', pg_catalog.lower(pg_catalog.replace(_plan_step.type, ' ', '_')));
+        _call_stmt := pg_catalog.format('CALL _timescaledb_functions.cagg_migrate_execute_%s($1, $2)', pg_catalog.lower(pg_catalog.replace(_plan_step.type, ' ', '_')));
         EXECUTE _call_stmt USING _cagg_data, _plan_step;
 
         UPDATE _timescaledb_catalog.continuous_agg_migrate_plan_step
@@ -571,10 +571,10 @@ BEGIN
     _cagg_name_new := pg_catalog.format('%s_new', pg_catalog.substr(_cagg_name, 1, 59));
 
     -- pre-validate the migration and get some variables
-    _cagg_data := _timescaledb_internal.cagg_migrate_pre_validation(_cagg_schema, _cagg_name, _cagg_name_new);
+    _cagg_data := _timescaledb_functions.cagg_migrate_pre_validation(_cagg_schema, _cagg_name, _cagg_name_new);
 
     -- create new migration plan
-    CALL _timescaledb_internal.cagg_migrate_create_plan(_cagg_data, _cagg_name_new, override, drop_old);
+    CALL _timescaledb_functions.cagg_migrate_create_plan(_cagg_data, _cagg_name_new, override, drop_old);
     COMMIT;
 
     -- SET LOCAL is only active until end of transaction.
@@ -584,7 +584,7 @@ BEGIN
     SET LOCAL search_path TO pg_catalog, pg_temp;
 
     -- execute the migration plan
-    CALL _timescaledb_internal.cagg_migrate_execute_plan(_cagg_data);
+    CALL _timescaledb_functions.cagg_migrate_execute_plan(_cagg_data);
 
     -- finish the migration plan
     UPDATE _timescaledb_catalog.continuous_agg_migrate_plan

@@ -129,3 +129,23 @@ $$;
 UPDATE _timescaledb_config.bgw_job SET proc_schema = '_timescaledb_functions' WHERE proc_schema = '_timescaledb_internal';
 UPDATE _timescaledb_config.bgw_job SET check_schema = '_timescaledb_functions' WHERE check_schema = '_timescaledb_internal';
 
+-- migrate cagg migration functions into _timescaledb_functions schema
+DO $$
+DECLARE
+  foid regprocedure;
+  kind text;
+  funcs text[] = '{
+    cagg_migrate_plan_exists, cagg_migrate_pre_validation, cagg_migrate_create_plan, cagg_migrate_execute_create_new_cagg,
+    cagg_migrate_execute_disable_policies, cagg_migrate_execute_enable_policies, cagg_migrate_execute_copy_policies,
+    cagg_migrate_execute_refresh_new_cagg, cagg_migrate_execute_copy_data, cagg_migrate_execute_override_cagg,
+    cagg_migrate_execute_drop_old_cagg, cagg_migrate_execute_plan
+  }';
+BEGIN
+  FOR foid, kind IN
+    SELECT oid, CASE WHEN prokind = 'f' THEN 'FUNCTION' ELSE 'PROCEDURE' END FROM pg_proc WHERE proname = ANY(funcs) AND pronamespace = '_timescaledb_internal'::regnamespace
+  LOOP
+    EXECUTE format('ALTER %s %s SET SCHEMA _timescaledb_functions', kind, foid);
+  END LOOP;
+END;
+$$;
+
