@@ -134,14 +134,14 @@ DROP MATERIALIZED VIEW conditions_summary_daily_new;
 
 -- get and set all the cagg data
 SELECT
-    _timescaledb_internal.cagg_migrate_pre_validation(
+    _timescaledb_functions.cagg_migrate_pre_validation(
         'public',
         'conditions_summary_daily',
         'conditions_summary_daily_new'
     ) AS "CAGG_DATA"
 \gset
 
-CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
+CALL _timescaledb_functions.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
 \x on
 SELECT mat_hypertable_id, user_view_definition FROM _timescaledb_catalog.continuous_agg_migrate_plan;
 \x off
@@ -153,7 +153,7 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
-CALL _timescaledb_internal.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
+CALL _timescaledb_functions.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
 CALL cagg_migrate('conditions_summary_daily');
 \set ON_ERROR_STOP 1
 

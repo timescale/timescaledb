@@ -28,7 +28,8 @@ jobs:
         --proc-without-search-path
           '_timescaledb_internal.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
         --proc-without-search-path
-          'extschema.cagg_migrate(cagg regclass,override boolean,drop_old boolean)'
+          '_timescaledb_functions.cagg_migrate_execute_plan(_cagg_data _timescaledb_catalog.continuous_agg)'
+        --proc-without-search-path 'extschema.cagg_migrate(cagg regclass,override boolean,drop_old boolean)'
 
     steps:
 
