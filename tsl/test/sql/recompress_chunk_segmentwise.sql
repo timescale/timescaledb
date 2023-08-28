@@ -56,7 +56,7 @@ insert into mytab_oneseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2
 -- after inserting new row in compressed chunk
 select numrows_pre_compression, numrows_post_compression from _timescaledb_catalog.compression_chunk_size;
 
-select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_1');
+select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_1');
 
 -- check the ctid of the rows in the recompressed chunk to verify that we've written new data
 SELECT ctid, * FROM :compressed_chunk_name_1;
@@ -95,7 +95,7 @@ from compressed_chunk_info_view where hypertable_name = 'mytab_twoseg' \gset
 
 select ctid, * from :compressed_chunk_name_2;
 
-select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_2');
+select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
 
 -- verify that metadata count looks good
 select ctid, * from :compressed_chunk_name_2;
@@ -131,7 +131,7 @@ select ctid, * from :compressed_chunk_name_2;
 -- after compression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
-select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_2');
+select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
 
 select ctid, * from :compressed_chunk_name_2;
 -- after recompression

@@ -651,7 +651,7 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_12_12_chunk');
 (2 rows)
 
 SELECT chunk_index_clone::regclass::text
-FROM _timescaledb_internal.chunk_index_clone('_timescaledb_internal."12_3_reindex_test_pkey"'::regclass);
+FROM _timescaledb_functions.chunk_index_clone('_timescaledb_internal."12_3_reindex_test_pkey"'::regclass);
                         chunk_index_clone                        
 -----------------------------------------------------------------
  _timescaledb_internal._hyper_12_12_chunk_12_3_reindex_test_pkey
@@ -665,7 +665,7 @@ SELECT * FROM test.show_indexes('_timescaledb_internal._hyper_12_12_chunk');
  _timescaledb_internal._hyper_12_12_chunk_reindex_test_time_unique_idx | {time}      |      | t      | f       | f         | 
 (3 rows)
 
-SELECT * FROM _timescaledb_internal.chunk_index_replace('_timescaledb_internal."12_3_reindex_test_pkey"'::regclass, '_timescaledb_internal."_hyper_12_12_chunk_12_3_reindex_test_pkey"'::regclass);
+SELECT * FROM _timescaledb_functions.chunk_index_replace('_timescaledb_internal."12_3_reindex_test_pkey"'::regclass, '_timescaledb_internal."_hyper_12_12_chunk_12_3_reindex_test_pkey"'::regclass);
  chunk_index_replace 
 ---------------------
  

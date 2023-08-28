@@ -865,7 +865,7 @@ chunk_copy_stage_sync(ChunkCopy *cc)
 	pfree(cmd);
 
 	/* Wait until data transfer finishes in its own transaction */
-	cmd = psprintf("CALL _timescaledb_internal.wait_subscription_sync(%s, %s)",
+	cmd = psprintf("CALL _timescaledb_functions.wait_subscription_sync(%s, %s)",
 				   quote_literal_cstr(NameStr(cc->chunk->fd.schema_name)),
 				   quote_literal_cstr(NameStr(cc->chunk->fd.table_name)));
 
@@ -875,7 +875,7 @@ chunk_copy_stage_sync(ChunkCopy *cc)
 	/* Wait until compressed chunk being copied */
 	if (ts_chunk_is_compressed(cc->chunk))
 	{
-		cmd = psprintf("CALL _timescaledb_internal.wait_subscription_sync(%s, %s)",
+		cmd = psprintf("CALL _timescaledb_functions.wait_subscription_sync(%s, %s)",
 					   quote_literal_cstr(INTERNAL_SCHEMA_NAME),
 					   quote_literal_cstr(NameStr(cc->fd.compressed_chunk_name)));
 
@@ -986,7 +986,7 @@ chunk_copy_stage_attach_compressed_chunk(ChunkCopy *cc)
 	cmd = psprintf("SELECT %s.create_compressed_chunk(%s, %s, " INT64_FORMAT ", " INT64_FORMAT
 				   ", " INT64_FORMAT ", " INT64_FORMAT ", " INT64_FORMAT ", " INT64_FORMAT
 				   ", " INT64_FORMAT ", " INT64_FORMAT ")",
-				   INTERNAL_SCHEMA_NAME,
+				   FUNCTIONS_SCHEMA_NAME,
 				   quote_literal_cstr(chunk_name),
 				   quote_literal_cstr(compressed_chunk_name),
 				   cc->fd_ccs.uncompressed_heap_size,

@@ -926,15 +926,15 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); 
 
 -- check call arguments when executed on data node
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, NULL);
-SELECT _timescaledb_internal.drop_stale_chunks('dn1', NULL);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, NULL);
+SELECT _timescaledb_functions.drop_stale_chunks('dn1', NULL);
 \set ON_ERROR_STOP 1
 
 -- direct call to all chunks other then 19, 21
 SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
 
 SET client_min_messages TO DEBUG1;
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19, 21]::integer[]);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[19, 21]::integer[]);
 RESET client_min_messages;
 
 SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
@@ -947,7 +947,7 @@ SELECT * from show_chunks('local_test');
 SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
 
 SET client_min_messages TO DEBUG1;
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19]::integer[]);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[19]::integer[]);
 RESET client_min_messages;
 
 SELECT * from show_chunks('local_test');
@@ -966,8 +966,8 @@ SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); 
 
 -- check call arguments when executed on access node
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.drop_stale_chunks( NULL, NULL);
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[1,2,3]);
+SELECT _timescaledb_functions.drop_stale_chunks( NULL, NULL);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[1,2,3]);
 \set ON_ERROR_STOP 1
 
 -- create stale chunk by dropping them from access node
@@ -978,9 +978,9 @@ SELECT * from show_chunks('dist_test');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
 
 ---- drop stale chunks 36, 37 on data nodes
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_1');
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_2');
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_3');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_1');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_2');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_3');
 
 SELECT * from show_chunks('dist_test');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
@@ -1002,9 +1002,9 @@ SELECT * from show_chunks('dist_test');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
 
 -- drop stale chunk 38
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_1');
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_2');
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_3');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_1');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_2');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_3');
 
 \c :DATA_NODE_1
 SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;

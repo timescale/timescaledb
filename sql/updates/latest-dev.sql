@@ -125,7 +125,12 @@ DECLARE
     hypertable_invalidation_log_delete, invalidation_cagg_log_add_entry, invalidation_hyper_log_add_entry,
     invalidation_process_cagg_log, invalidation_process_hypertable_log, materialization_invalidation_log_delete,
 
-    alter_job_set_hypertable_id
+    alter_job_set_hypertable_id,
+
+    create_compressed_chunk, get_compressed_chunk_index_for_recompression, recompress_chunk_segmentwise,
+    chunk_drop_replica, chunk_index_clone, chunk_index_replace, create_chunk_replica_table, drop_stale_chunks,
+		chunk_constraint_add_table_constraint, hypertable_constraint_add_table_fk_constraint,
+    health, wait_subscription_sync
   }';
 BEGIN
   FOR foid, kind IN
@@ -142,4 +147,7 @@ UPDATE _timescaledb_config.bgw_job SET check_schema = '_timescaledb_functions' W
 ALTER FUNCTION _timescaledb_internal.start_background_workers() SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.stop_background_workers() SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.restart_background_workers() SET SCHEMA _timescaledb_functions;
+
+ALTER FUNCTION _timescaledb_internal.process_ddl_event() SET SCHEMA _timescaledb_functions;
+
 

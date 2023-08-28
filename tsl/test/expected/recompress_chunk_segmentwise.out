@@ -66,7 +66,7 @@ select numrows_pre_compression, numrows_post_compression from _timescaledb_catal
                        2 |                        1
 (1 row)
 
-select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_1');
+select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_1');
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -136,7 +136,7 @@ select ctid, * from :compressed_chunk_name_2;
  (0,2) | BAAAApQ3/0H94//////8bHkAAAAAAgAAAAIAAAAAAAAA7gAFKHAFqwnGAAUocAzSF8U= | 3 |   | 3 |              2 |                    10 | Sun Jan 01 11:56:20.048355 2023 PST | Sun Jan 01 11:57:20.048355 2023 PST
 (2 rows)
 
-select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_2');
+select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_3_3_chunk
@@ -211,7 +211,7 @@ select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
                     8643 |                        9 | _timescaledb_internal._hyper_5_5_chunk |        5
 (1 row)
 
-select _timescaledb_internal.recompress_chunk_segmentwise(:'chunk_to_compress_2');
+select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
       recompress_chunk_segmentwise      
 ----------------------------------------
  _timescaledb_internal._hyper_5_5_chunk

@@ -3,7 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 
 -- create constraint on newly created chunk based on hypertable constraint
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunk_constraint_add_table_constraint(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_constraint_add_table_constraint(
     chunk_constraint_row  _timescaledb_catalog.chunk_constraint
 )
     RETURNS VOID LANGUAGE PLPGSQL AS

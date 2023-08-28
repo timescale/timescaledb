@@ -32,7 +32,7 @@ INSERT INTO "_timescaledb_internal"."custom_compressed_chunk" SELECT * FROM "_ti
 SELECT decompress_chunk('"_timescaledb_internal"."_hyper_1_1_chunk"');
 
 -- attach compressed chunk to parent chunk
-SELECT _timescaledb_internal.create_compressed_chunk(
+SELECT _timescaledb_functions.create_compressed_chunk(
     '"_timescaledb_internal"."_hyper_1_1_chunk"'::TEXT::REGCLASS,
     '"_timescaledb_internal"."custom_compressed_chunk"'::TEXT::REGCLASS,
     8192,

@@ -138,3 +138,17 @@ ALTER FUNCTION _timescaledb_functions.invalidation_process_hypertable_log(intege
 ALTER FUNCTION _timescaledb_functions.invalidation_process_hypertable_log(integer,integer,regtype,integer[],bigint[],bigint[],text[]) SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.materialization_invalidation_log_delete(integer) SET SCHEMA _timescaledb_internal;
 
+ALTER FUNCTION _timescaledb_functions.chunk_constraint_add_table_constraint(_timescaledb_catalog.chunk_constraint) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunk_drop_replica(regclass,name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunk_index_clone(oid) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.chunk_index_replace(oid,oid) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.create_chunk_replica_table(regclass,name) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.create_compressed_chunk(regclass,regclass,bigint,bigint,bigint,bigint,bigint,bigint,bigint,bigint) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.drop_stale_chunks(name,integer[]) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.get_compressed_chunk_index_for_recompression(regclass) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.health() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hypertable_constraint_add_table_fk_constraint(name,name,name,integer) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.process_ddl_event() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(regclass,boolean) SET SCHEMA _timescaledb_internal;
+ALTER PROCEDURE _timescaledb_functions.wait_subscription_sync(name,name,integer,numeric) SET SCHEMA _timescaledb_internal;
+
