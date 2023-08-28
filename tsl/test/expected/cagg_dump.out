@@ -151,7 +151,7 @@ SELECT timescaledb_post_restore();
  t
 (1 row)
 
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t

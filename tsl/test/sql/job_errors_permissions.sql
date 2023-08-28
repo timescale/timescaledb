@@ -48,7 +48,7 @@ $$;
 select add_job('custom_proc2', '2 min', initial_start => now() + interval '5 seconds') as custom_proc2_id \gset
 
 SET ROLE :ROLE_SUPERUSER;
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 SELECT pg_sleep(20);
 
 \d timescaledb_information.job_errors
@@ -78,7 +78,7 @@ SET ROLE :ROLE_SUPERUSER;
 SELECT job_id, proc_schema, proc_name, sqlerrcode, err_message
 FROM timescaledb_information.job_errors WHERE job_id >= 1000;
 
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 
 SELECT delete_job(:custom_proc2_id);
 SELECT delete_job(:custom_proc1_id);

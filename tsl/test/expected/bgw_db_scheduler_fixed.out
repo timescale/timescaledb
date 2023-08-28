@@ -1244,15 +1244,15 @@ SELECT * FROM sorted_bgw_log;
 -- Test updating jobs list
 TRUNCATE bgw_log;
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 ERROR:  must be superuser to stop background workers
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
 ERROR:  must be superuser to restart background workers
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 ERROR:  must be superuser to start background workers
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
@@ -1604,7 +1604,7 @@ SELECT * FROM _timescaledb_internal.bgw_job_stat;
 (1 row)
 
 -- clean up jobs
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t

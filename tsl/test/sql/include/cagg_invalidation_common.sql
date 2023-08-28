@@ -4,7 +4,7 @@
 
 -- Disable background workers since we are testing manual refresh
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SET datestyle TO 'ISO, YMD';
 SET timezone TO 'UTC';

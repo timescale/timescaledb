@@ -53,7 +53,7 @@ select * from _timescaledb_internal.bgw_job_stat;
 select now() as initial_start \gset
 select add_job('job_5', schedule_interval => INTERVAL '15 seconds', initial_start => :'initial_start'::timestamptz) as short_job_fixed \gset
 select add_job('job_5', schedule_interval => INTERVAL '15 seconds', initial_start => :'initial_start'::timestamptz, fixed_schedule => false) as short_job_drifting \gset
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t

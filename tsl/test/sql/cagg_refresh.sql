@@ -4,7 +4,7 @@
 
 -- Disable background workers since we are testing manual refresh
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE TABLE conditions (time timestamptz NOT NULL, device int, temp float);

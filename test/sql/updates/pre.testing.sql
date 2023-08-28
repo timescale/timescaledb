@@ -13,8 +13,13 @@ AS $$
 $$;
 
 CREATE OR REPLACE PROCEDURE _timescaledb_testing.stop_workers()
-LANGUAGE SQL
+LANGUAGE PLPGSQL
 AS $$
-   SELECT _timescaledb_internal.stop_background_workers();
+BEGIN
+   IF EXISTS (SELECT FROM pg_proc WHERE proname='stop_background_workers' AND pronamespace='_timescaledb_internal'::regnamespace)
+   THEN PERFORM _timescaledb_internal.stop_background_workers();
+   ELSE PERFORM _timescaledb_functions.stop_background_workers();
+   END IF;
+END
 $$;
 

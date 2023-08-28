@@ -8,7 +8,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Disable background workers since we are testing manual refresh
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t

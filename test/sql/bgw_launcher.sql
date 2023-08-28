@@ -6,7 +6,7 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 -- start bgw since they are stopped for tests by default
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 
 CREATE DATABASE :TEST_DBNAME_2;
 
@@ -37,7 +37,7 @@ WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 -- We'll do this in a txn so that we can see that the worker locks on our txn before continuing
 BEGIN;
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 
 SELECT (backend_start > :'orig_backend_start'::timestamptz) backend_start_changed,
@@ -54,15 +54,15 @@ WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2';
 
 -- Test stop
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 SELECT wait_worker_counts(1,0,0,0);
 
 -- Make sure it doesn't break if we stop twice in a row
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 SELECT wait_worker_counts(1,0,0,0);
 
 -- test start
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 
 -- make sure start is idempotent
@@ -72,7 +72,7 @@ WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 
 -- Since we're doing idempotency tests, we're also going to exercise our queue and start 20 times
-SELECT _timescaledb_internal.start_background_workers() as start_background_workers, * FROM generate_series(1,20);
+SELECT _timescaledb_functions.start_background_workers() as start_background_workers, * FROM generate_series(1,20);
 -- Here we're waiting to see if something shows up in pg_stat_activity,
 --  so we have to condition our loop in the opposite way. We'll only wait
 --  half a second in total as well so that tests don't take too long.
@@ -100,9 +100,9 @@ $BODY$;
 select wait_equals(:'orig_backend_start', :'TEST_DBNAME_2');
 
 -- Make sure restart starts a worker even if it is stopped
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 SELECT wait_worker_counts(1,0,0,0);
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 
 -- Make sure drop extension statement restarts the worker and on rollback it keeps running
@@ -157,7 +157,7 @@ SELECT timescaledb_pre_restore();
 SELECT wait_worker_counts(1,0,0,0);
 -- Make sure a restart with restoring on first starts the background worker
 BEGIN;
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
 SELECT wait_worker_counts(1,0,1,0);
 COMMIT;
 -- Then the worker dies when it sees that restoring is on after the txn commits

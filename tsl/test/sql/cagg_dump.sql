@@ -129,7 +129,7 @@ RESET client_min_messages;
 SELECT timescaledb_pre_restore();
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
 SELECT timescaledb_post_restore();
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 

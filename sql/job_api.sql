@@ -37,7 +37,7 @@ next_start TIMESTAMPTZ, check_config TEXT, fixed_schedule BOOL, initial_start TI
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.alter_job_set_hypertable_id(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.alter_job_set_hypertable_id(
     job_id INTEGER,
     hypertable REGCLASS )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_job_alter_set_hypertable_id'

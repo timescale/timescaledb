@@ -26,12 +26,17 @@ DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk_constraint;
 DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension_slice;
 DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.restart_background_workers()
+-- Since we want to call the new version of restart_background_workers we
+-- create a function that points to that version. The proper restart_background_workers
+-- may either be in _timescaledb_internal or in _timescaledb_functions
+-- depending on the version we are upgrading from and we can't make
+-- the move in this location as the new schema might not have been set up.
+CREATE FUNCTION _timescaledb_internal._tmp_restart_background_workers()
 RETURNS BOOL
 AS '@LOADER_PATHNAME@', 'ts_bgw_db_workers_restart'
 LANGUAGE C VOLATILE;
-
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_internal._tmp_restart_background_workers();
+DROP FUNCTION _timescaledb_internal._tmp_restart_background_workers();
 
 -- Table for ACL and initprivs of tables.
 CREATE TABLE _timescaledb_internal.saved_privs(

@@ -14,7 +14,7 @@
 #
 setup
 {
-    SELECT _timescaledb_internal.stop_background_workers();
+    SELECT _timescaledb_functions.stop_background_workers();
 
     CREATE TABLE conditions(time int, temp float);
     SELECT create_hypertable('conditions', 'time', chunk_time_interval => 20);

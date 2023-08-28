@@ -114,8 +114,14 @@ DECLARE
     policy_job_error_retention_check,policy_job_error_retention,
     policy_recompression,
     policy_refresh_continuous_aggregate_check,policy_refresh_continuous_aggregate,
-    policy_reorder_check,policy_reorder,
-    policy_retention_check,policy_retention
+    policy_reorder_check,policy_reorder,policy_retention_check,policy_retention,
+
+    cagg_migrate_plan_exists, cagg_migrate_pre_validation, cagg_migrate_create_plan, cagg_migrate_execute_create_new_cagg,
+    cagg_migrate_execute_disable_policies, cagg_migrate_execute_enable_policies, cagg_migrate_execute_copy_policies,
+    cagg_migrate_execute_refresh_new_cagg, cagg_migrate_execute_copy_data, cagg_migrate_execute_override_cagg,
+    cagg_migrate_execute_drop_old_cagg, cagg_migrate_execute_plan,
+
+    alter_job_set_hypertable_id
   }';
 BEGIN
   FOR foid, kind IN
@@ -129,23 +135,7 @@ $$;
 UPDATE _timescaledb_config.bgw_job SET proc_schema = '_timescaledb_functions' WHERE proc_schema = '_timescaledb_internal';
 UPDATE _timescaledb_config.bgw_job SET check_schema = '_timescaledb_functions' WHERE check_schema = '_timescaledb_internal';
 
--- migrate cagg migration functions into _timescaledb_functions schema
-DO $$
-DECLARE
-  foid regprocedure;
-  kind text;
-  funcs text[] = '{
-    cagg_migrate_plan_exists, cagg_migrate_pre_validation, cagg_migrate_create_plan, cagg_migrate_execute_create_new_cagg,
-    cagg_migrate_execute_disable_policies, cagg_migrate_execute_enable_policies, cagg_migrate_execute_copy_policies,
-    cagg_migrate_execute_refresh_new_cagg, cagg_migrate_execute_copy_data, cagg_migrate_execute_override_cagg,
-    cagg_migrate_execute_drop_old_cagg, cagg_migrate_execute_plan
-  }';
-BEGIN
-  FOR foid, kind IN
-    SELECT oid, CASE WHEN prokind = 'f' THEN 'FUNCTION' ELSE 'PROCEDURE' END FROM pg_proc WHERE proname = ANY(funcs) AND pronamespace = '_timescaledb_internal'::regnamespace
-  LOOP
-    EXECUTE format('ALTER %s %s SET SCHEMA _timescaledb_functions', kind, foid);
-  END LOOP;
-END;
-$$;
+ALTER FUNCTION _timescaledb_internal.start_background_workers() SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.stop_background_workers() SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.restart_background_workers() SET SCHEMA _timescaledb_functions;
 

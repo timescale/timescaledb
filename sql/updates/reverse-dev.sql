@@ -119,3 +119,11 @@ ALTER PROCEDURE _timescaledb_functions.cagg_migrate_execute_override_cagg(_times
 ALTER PROCEDURE _timescaledb_functions.cagg_migrate_execute_drop_old_cagg(_timescaledb_catalog.continuous_agg, _timescaledb_catalog.continuous_agg_migrate_plan_step) SET SCHEMA _timescaledb_internal;
 ALTER PROCEDURE _timescaledb_functions.cagg_migrate_execute_plan(_timescaledb_catalog.continuous_agg) SET SCHEMA _timescaledb_internal;
 
+-- pre-update of previous version will have created an additional copy of restart_background_workers
+-- since restart_background_workers was handled differently from other functions in previous versions
+DROP FUNCTION _timescaledb_internal.restart_background_workers();
+ALTER FUNCTION _timescaledb_functions.start_background_workers() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.stop_background_workers() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.restart_background_workers() SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.alter_job_set_hypertable_id(integer,regclass) SET SCHEMA _timescaledb_internal;
+
