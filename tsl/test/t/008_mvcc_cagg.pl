@@ -16,7 +16,7 @@ use Test::More tests => 5;
 # See debug output in 'tsl/test/tmp_check/log/regress_log_008_mvcc_cagg'
 my $debug = 0;
 
-# Should be enabled as soon as _timescaledb_internal.cagg_watermark is declared as parallel safe
+# Should be enabled as soon as _timescaledb_functions.cagg_watermark is declared as parallel safe
 my $check_for_parallel_plan = 0;
 
 my $timescale_node = TimescaleNode->create('insert');

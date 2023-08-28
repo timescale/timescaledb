@@ -118,7 +118,7 @@ RemoveRangeTableEntries(Query *query)
  *                  UNION ALL
  *                  SELECT * from q2 where existing_qual and <coale_qual>
  * where coale_qual is: time < ----> (or >= )
- * COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark( <htid>)),
+ * COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark( <htid>)),
  * '-infinity'::timestamp with time zone)
  * The WHERE clause of the final view is removed.
  */
@@ -1130,7 +1130,7 @@ build_boundary_call(int32 ht_id, Oid type)
 	FuncExpr *boundary;
 
 	Oid boundary_func_oid =
-		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(BOUNDARY_FUNCTION)),
+		LookupFuncName(list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(BOUNDARY_FUNCTION)),
 					   lengthof(argtyp),
 					   argtyp,
 					   false);
@@ -1220,7 +1220,7 @@ makeRangeTblEntry(Query *query, const char *aliasname)
  *                  UNION ALL
  *                  SELECT * from q2 where existing_qual and <coale_qual>
  * where coale_qual is: time < ----> (or >= )
- * COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark( <htid>)),
+ * COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark( <htid>)),
  * '-infinity'::timestamp with time zone)
  * See build_union_quals for COALESCE clauses.
  */

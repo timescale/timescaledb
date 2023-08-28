@@ -283,7 +283,7 @@ remote_invalidation_log_add_entry(const Hypertable *raw_ht,
 	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
 
 	static const Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 								 makeString((caggstatus == HypertableIsMaterialization) ?
 												INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
 												INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME));
@@ -1221,7 +1221,7 @@ remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hy
 	static const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
 		INT4OID, INT4OID, REGTYPEOID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID
 	};
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 								 makeString(INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME));
 
 	/*
@@ -1432,7 +1432,7 @@ remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertab
 		INT4OID,	  INT4OID,		REGTYPEOID,	  INT8OID,		INT8OID,
 		INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID,
 	};
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 								 makeString(INVALIDATION_PROCESS_CAGG_LOG_FUNCNAME));
 
 	/*
@@ -1542,7 +1542,7 @@ remote_invalidation_log_delete(int32 raw_hypertable_id, ContinuousAggHypertableS
 	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
 
 	static const Oid type_id[INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
-	List *const fqn = list_make2(makeString(INTERNAL_SCHEMA_NAME),
+	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 								 makeString((caggstatus == HypertableIsMaterialization) ?
 												MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME :
 												HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME));

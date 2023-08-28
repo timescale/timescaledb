@@ -38,10 +38,10 @@ $BODY$ SET search_path TO pg_catalog, pg_temp;
 CREATE OR REPLACE FUNCTION _timescaledb_functions.time_to_internal(time_val ANYELEMENT)
 RETURNS BIGINT AS '@MODULE_PATHNAME@', 'ts_time_to_internal' LANGUAGE C VOLATILE STRICT;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_watermark(hypertable_id INTEGER)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_watermark(hypertable_id INTEGER)
 RETURNS INT8 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_watermark' LANGUAGE C STABLE STRICT PARALLEL RESTRICTED;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.cagg_watermark_materialized(hypertable_id INTEGER)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_watermark_materialized(hypertable_id INTEGER)
 RETURNS INT8 AS '@MODULE_PATHNAME@', 'ts_continuous_agg_watermark_materialized' LANGUAGE C STABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.subtract_integer_from_now( hypertable_relid REGCLASS, lag INT8 )

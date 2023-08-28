@@ -60,8 +60,8 @@ GROUP BY bucket;
 
 CALL refresh_continuous_aggregate('metrics_hourly', NULL, NULL);
 
-SELECT _timescaledb_internal.invalidation_hyper_log_add_entry(0, 0, 0);
-SELECT _timescaledb_internal.invalidation_cagg_log_add_entry(0, 0, 0);
+SELECT _timescaledb_functions.invalidation_hyper_log_add_entry(0, 0, 0);
+SELECT _timescaledb_functions.invalidation_cagg_log_add_entry(0, 0, 0);
 
 DROP MATERIALIZED VIEW metrics_hourly;
 DROP TABLE metrics;

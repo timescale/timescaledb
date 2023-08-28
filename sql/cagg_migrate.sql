@@ -122,21 +122,21 @@ BEGIN
         _interval_value := _integer_interval::TEXT;
         _interval_type  := _bucket_column_type;
         IF _bucket_column_type = 'bigint' THEN
-            _watermark := COALESCE(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)::bigint, '-9223372036854775808'::bigint)::TEXT;
+            _watermark := COALESCE(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)::bigint, '-9223372036854775808'::bigint)::TEXT;
         ELSIF _bucket_column_type = 'integer' THEN
-            _watermark := COALESCE(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)::integer, '-2147483648'::integer)::TEXT;
+            _watermark := COALESCE(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)::integer, '-2147483648'::integer)::TEXT;
         ELSE
-            _watermark := COALESCE(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)::smallint, '-32768'::smallint)::TEXT;
+            _watermark := COALESCE(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)::smallint, '-32768'::smallint)::TEXT;
         END IF;
     ELSE
         _interval_value := _time_interval::TEXT;
         _interval_type  := 'interval';
-        _watermark      := COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
+        _watermark      := COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
 
         IF _bucket_column_type = 'timestamp with timezone' THEN
-            _watermark := COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
+            _watermark := COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
         ELSE
-            _watermark := COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_internal.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamp)::TEXT;
+            _watermark := COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamp)::TEXT;
         END IF;
     END IF;
 
