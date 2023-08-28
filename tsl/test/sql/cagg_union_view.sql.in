@@ -161,7 +161,7 @@ FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'boundary_view' \gset
 
 -- watermark should be NULL
-SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
+SELECT _timescaledb_functions.cagg_watermark(:boundary_view_id);
 
 -- first UNION child should have no rows because no materialization has happened yet and 2nd child should have 4 rows
 :PREFIX SELECT * FROM boundary_view;
@@ -174,7 +174,7 @@ SELECT * FROM boundary_view ORDER BY time_bucket;
 CALL refresh_continuous_aggregate('boundary_view', NULL, 30);
 
 -- watermark should be 30
-SELECT _timescaledb_internal.cagg_watermark(:boundary_view_id);
+SELECT _timescaledb_functions.cagg_watermark(:boundary_view_id);
 
 -- both sides of the UNION should return 2 rows
 :PREFIX SELECT * FROM boundary_view;
@@ -272,7 +272,7 @@ FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'mat_m1' \gset
 
 -- Show the new watermark
-SELECT _timescaledb_internal.cagg_watermark(:mat_m1_id);
+SELECT _timescaledb_functions.cagg_watermark(:mat_m1_id);
 
 -- Data inserted after refresh and after cagg_watermark should be
 -- reflected in the real-time aggregation
@@ -381,9 +381,9 @@ CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
 -- Watermarks at min for the above caggs:
 SELECT
   user_view_name,
-  _timescaledb_internal.cagg_watermark(mat_hypertable_id),
-  _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id),
-  _timescaledb_internal.cagg_watermark(mat_hypertable_id) = _timescaledb_internal.cagg_watermark_materialized(mat_hypertable_id) AS is_equal
+  _timescaledb_functions.cagg_watermark(mat_hypertable_id),
+  _timescaledb_functions.cagg_watermark_materialized(mat_hypertable_id),
+  _timescaledb_functions.cagg_watermark(mat_hypertable_id) = _timescaledb_functions.cagg_watermark_materialized(mat_hypertable_id) AS is_equal
 FROM _timescaledb_catalog.continuous_agg
 NATURAL JOIN _timescaledb_catalog.continuous_aggs_watermark
 ORDER BY 1, 2, 3;
@@ -404,7 +404,7 @@ CALL refresh_continuous_aggregate('timestamp_agg', NULL, NULL);
 CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
 
 -- Watermarks should reflect the new materializations
-SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+SELECT user_view_name, _timescaledb_functions.cagg_watermark(mat_hypertable_id)
 FROM _timescaledb_catalog.continuous_agg
 ORDER BY 1,2;
 
@@ -428,7 +428,7 @@ CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
 
 -- Watermarks after refresh hould be at the end of the valid range for
 -- the time type
-SELECT user_view_name, _timescaledb_internal.cagg_watermark(mat_hypertable_id)
+SELECT user_view_name, _timescaledb_functions.cagg_watermark(mat_hypertable_id)
 FROM _timescaledb_catalog.continuous_agg
 ORDER BY 1,2;
 
@@ -456,9 +456,9 @@ ORDER BY 1,2;
 -- Test invalid inputs for cagg_watermark
 -------------------------------------
 -- Non-existing materialized hypertable
-SELECT _timescaledb_internal.cagg_watermark(100);
+SELECT _timescaledb_functions.cagg_watermark(100);
 -- NULL hypertable ID. Function is STRICT, so does nothing:
-SELECT _timescaledb_internal.cagg_watermark(NULL);
+SELECT _timescaledb_functions.cagg_watermark(NULL);
 \set ON_ERROR_STOP 1
 
 -- Remove stored watermark, so query and refresh should error
@@ -494,7 +494,7 @@ CALL refresh_continuous_aggregate('timestamptz_agg', NULL, NULL);
 
 -- Fix all continuous aggregates inserting materialized watermark into the metadata table
 INSERT INTO _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark)
-SELECT a.mat_hypertable_id, _timescaledb_internal.cagg_watermark_materialized(a.mat_hypertable_id)
+SELECT a.mat_hypertable_id, _timescaledb_functions.cagg_watermark_materialized(a.mat_hypertable_id)
 FROM _timescaledb_catalog.continuous_agg a
 LEFT JOIN _timescaledb_catalog.continuous_aggs_watermark b ON b.mat_hypertable_id = a.mat_hypertable_id
 WHERE b.mat_hypertable_id IS NULL

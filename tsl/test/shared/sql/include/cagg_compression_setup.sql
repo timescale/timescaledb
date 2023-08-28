@@ -55,7 +55,7 @@ FROM
     metrics_compressed_summary
 WHERE
     bucket > _timescaledb_functions.to_timestamp(
-        _timescaledb_internal.cagg_watermark(
+        _timescaledb_functions.cagg_watermark(
             (SELECT
                 mat_hypertable_id
              FROM
@@ -106,7 +106,7 @@ FROM
     metrics_summary
 WHERE
     bucket > _timescaledb_functions.to_timestamp(
-        _timescaledb_internal.cagg_watermark(
+        _timescaledb_functions.cagg_watermark(
             (SELECT
                 mat_hypertable_id
              FROM

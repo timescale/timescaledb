@@ -116,10 +116,14 @@ DECLARE
     policy_refresh_continuous_aggregate_check,policy_refresh_continuous_aggregate,
     policy_reorder_check,policy_reorder,policy_retention_check,policy_retention,
 
+    cagg_watermark, cagg_watermark_materialized,
     cagg_migrate_plan_exists, cagg_migrate_pre_validation, cagg_migrate_create_plan, cagg_migrate_execute_create_new_cagg,
     cagg_migrate_execute_disable_policies, cagg_migrate_execute_enable_policies, cagg_migrate_execute_copy_policies,
     cagg_migrate_execute_refresh_new_cagg, cagg_migrate_execute_copy_data, cagg_migrate_execute_override_cagg,
     cagg_migrate_execute_drop_old_cagg, cagg_migrate_execute_plan,
+
+    hypertable_invalidation_log_delete, invalidation_cagg_log_add_entry, invalidation_hyper_log_add_entry,
+    invalidation_process_cagg_log, invalidation_process_hypertable_log, materialization_invalidation_log_delete,
 
     alter_job_set_hypertable_id
   }';

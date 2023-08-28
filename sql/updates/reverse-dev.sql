@@ -127,3 +127,14 @@ ALTER FUNCTION _timescaledb_functions.stop_background_workers() SET SCHEMA _time
 ALTER FUNCTION _timescaledb_functions.restart_background_workers() SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.alter_job_set_hypertable_id(integer,regclass) SET SCHEMA _timescaledb_internal;
 
+ALTER FUNCTION _timescaledb_functions.cagg_watermark(integer) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.cagg_watermark_materialized(integer) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.hypertable_invalidation_log_delete(integer) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.invalidation_cagg_log_add_entry(integer,bigint,bigint) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.invalidation_hyper_log_add_entry(integer,bigint,bigint) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.invalidation_process_cagg_log(integer,integer,regtype,bigint,bigint,integer[],bigint[],bigint[]) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.invalidation_process_cagg_log(integer,integer,regtype,bigint,bigint,integer[],bigint[],bigint[],text[]) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.invalidation_process_hypertable_log(integer,integer,regtype,integer[],bigint[],bigint[]) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.invalidation_process_hypertable_log(integer,integer,regtype,integer[],bigint[],bigint[],text[]) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.materialization_invalidation_log_delete(integer) SET SCHEMA _timescaledb_internal;
+

@@ -7,7 +7,7 @@
 -- mat_hypertable_id - The hypertable ID of the CAGG materialized hypertable in the Access Node
 -- start_time - The starting time of the materialization invalidation log entry
 -- end_time - The ending time of the materialization invalidation log entry
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_cagg_log_add_entry(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_cagg_log_add_entry(
     mat_hypertable_id INTEGER,
     start_time BIGINT,
     end_time BIGINT
@@ -18,19 +18,19 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_cagg_log_add_entry
 -- raw_hypertable_id - The hypertable ID of the original distributed hypertable in the Access Node
 -- start_time - The starting time of the materialization invalidation log entry
 -- end_time - The ending time of the materialization invalidation log entry
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_hyper_log_add_entry(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_hyper_log_add_entry(
     raw_hypertable_id INTEGER,
     start_time BIGINT,
     end_time BIGINT
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_hyper_log_add_entry' LANGUAGE C STRICT VOLATILE;
 
 -- raw_hypertable_id - The hypertable ID of the original distributed hypertable in the Access Node
-CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_invalidation_log_delete(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_invalidation_log_delete(
     raw_hypertable_id INTEGER
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_hypertable_invalidation_log_delete' LANGUAGE C STRICT VOLATILE;
 
 -- mat_hypertable_id - The hypertable ID of the CAGG materialized hypertable in the Access Node
-CREATE OR REPLACE FUNCTION _timescaledb_internal.materialization_invalidation_log_delete(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.materialization_invalidation_log_delete(
     mat_hypertable_id INTEGER
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_materialization_invalidation_log_delete' LANGUAGE C STRICT VOLATILE;
 
@@ -54,7 +54,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.drop_dist_ht_invalidation_trig
 -- max_bucket_widths - (Deprecated) This argument is ignored and is present only
 --                     for backward compatibility.
 -- bucket_functions - (Optional) The array of serialized information about bucket functions
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_process_hypertable_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,
@@ -63,7 +63,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable
     max_bucket_widths BIGINT[]
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_invalidation_process_hypertable_log' LANGUAGE C STRICT VOLATILE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable_log(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_process_hypertable_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,
@@ -94,7 +94,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_hypertable
 -- Returns a tuple of:
 -- ret_window_start - The merged refresh window starting time
 -- ret_window_end - The merged refresh window ending time
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_process_cagg_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,
@@ -107,7 +107,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
     OUT ret_window_end BIGINT
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_invalidation_process_cagg_log' LANGUAGE C STRICT VOLATILE;
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.invalidation_process_cagg_log(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_process_cagg_log(
     mat_hypertable_id INTEGER,
     raw_hypertable_id INTEGER,
     dimtype REGTYPE,

@@ -453,7 +453,7 @@ WHERE user_view_name = 'cond_1' \gset
 \if :IS_DISTRIBUTED
 \else
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.invalidation_cagg_log_add_entry(:cond_1_id, 1, 0);
+SELECT _timescaledb_functions.invalidation_cagg_log_add_entry(:cond_1_id, 1, 0);
 \set ON_ERROR_STOP 1
 \endif
 
@@ -589,7 +589,7 @@ ORDER BY 1,2;
 \if :IS_DISTRIBUTED
 \else
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.invalidation_hyper_log_add_entry(:thresh_hyper_id, 1, 0);
+SELECT _timescaledb_functions.invalidation_hyper_log_add_entry(:thresh_hyper_id, 1, 0);
 \set ON_ERROR_STOP 1
 \endif
 
