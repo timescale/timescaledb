@@ -227,9 +227,18 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 	}
 #endif
 	/*
-	 * Since we hijack the ModifyTable node instrumentation on ModifyTable will
+	 * Since we hijack the ModifyTable node, instrumentation on ModifyTable will
 	 * be missing so we set it to instrumentation of HypertableModify node.
 	 */
+	if (mtstate->ps.instrument)
+	{
+		/*
+		 * INSERT .. ON CONFLICT statements record few metrics in the ModifyTable node.
+		 * So, copy them into HypertableModify node before replacing them.
+		 */
+		node->ss.ps.instrument->ntuples2 = mtstate->ps.instrument->ntuples2;
+		node->ss.ps.instrument->nfiltered1 = mtstate->ps.instrument->nfiltered1;
+	}
 	mtstate->ps.instrument = node->ss.ps.instrument;
 #endif
 
