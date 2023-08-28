@@ -10,7 +10,7 @@ BEGIN
     SELECT current_database() INTO db;
     EXECUTE format($$ALTER DATABASE %I SET timescaledb.restoring ='on'$$, db);
     SET SESSION timescaledb.restoring = 'on';
-    PERFORM _timescaledb_internal.stop_background_workers();
+    PERFORM _timescaledb_functions.stop_background_workers();
     --exported uuid may be included in the dump so backup the version
     UPDATE _timescaledb_catalog.metadata SET key='exported_uuid_bak' WHERE key='exported_uuid';
     RETURN true;
@@ -28,7 +28,7 @@ BEGIN
     EXECUTE format($$ALTER DATABASE %I RESET timescaledb.restoring $$, db);
     -- we cannot use reset here because the reset_val might not be off
     SET timescaledb.restoring TO off;
-    PERFORM _timescaledb_internal.restart_background_workers();
+    PERFORM _timescaledb_functions.restart_background_workers();
 
     --try to restore the backed up uuid, if the restore did not set one
     INSERT INTO _timescaledb_catalog.metadata

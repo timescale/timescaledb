@@ -3,7 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 
 
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 
 CREATE SCHEMA IF NOT EXISTS test;
 GRANT USAGE ON SCHEMA test TO PUBLIC;

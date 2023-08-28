@@ -4,7 +4,7 @@
 
 setup
 {
-    SELECT _timescaledb_internal.stop_background_workers();
+    SELECT _timescaledb_functions.stop_background_workers();
 
     CREATE TABLE ts_continuous_test_1(time INTEGER, location INTEGER);
     SELECT create_hypertable('ts_continuous_test_1', 'time', chunk_time_interval => 10);

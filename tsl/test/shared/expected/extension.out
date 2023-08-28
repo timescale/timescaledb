@@ -19,6 +19,7 @@ FROM pg_proc p
     e.oid = d.refobjid
 WHERE proname <> 'get_telemetry_report'
 ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text COLLATE "C";
+ _timescaledb_functions.alter_job_set_hypertable_id(integer,regclass)
  _timescaledb_functions.attach_osm_table_chunk(regclass,regclass)
  _timescaledb_functions.bookend_deserializefunc(bytea,internal)
  _timescaledb_functions.bookend_finalfunc(internal,anyelement,"any")
@@ -95,6 +96,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.range_value_to_pretty(bigint,regtype)
  _timescaledb_functions.relation_size(regclass)
  _timescaledb_functions.remote_txn_heal_data_node(oid)
+ _timescaledb_functions.restart_background_workers()
  _timescaledb_functions.rxid_in(cstring)
  _timescaledb_functions.rxid_out(rxid)
  _timescaledb_functions.set_chunk_default_data_node(regclass,name)
@@ -102,6 +104,8 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.set_peer_dist_id(uuid)
  _timescaledb_functions.show_chunk(regclass)
  _timescaledb_functions.show_connection_cache()
+ _timescaledb_functions.start_background_workers()
+ _timescaledb_functions.stop_background_workers()
  _timescaledb_functions.subtract_integer_from_now(regclass,bigint)
  _timescaledb_functions.time_to_internal(anyelement)
  _timescaledb_functions.to_date(bigint)
@@ -112,7 +116,6 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.tsl_loaded()
  _timescaledb_functions.unfreeze_chunk(regclass)
  _timescaledb_functions.validate_as_data_node()
- _timescaledb_internal.alter_job_set_hypertable_id(integer,regclass)
  _timescaledb_internal.cagg_watermark(integer)
  _timescaledb_internal.cagg_watermark_materialized(integer)
  _timescaledb_internal.chunk_constraint_add_table_constraint(_timescaledb_catalog.chunk_constraint)
@@ -141,9 +144,6 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_internal.partialize_agg(anyelement)
  _timescaledb_internal.process_ddl_event()
  _timescaledb_internal.recompress_chunk_segmentwise(regclass,boolean)
- _timescaledb_internal.restart_background_workers()
- _timescaledb_internal.start_background_workers()
- _timescaledb_internal.stop_background_workers()
  _timescaledb_internal.wait_subscription_sync(name,name,integer,numeric)
  debug_waitpoint_enable(text)
  debug_waitpoint_id(text)

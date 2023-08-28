@@ -71,7 +71,7 @@ select add_job('custom_proc1', '2 min', initial_start => now());
 -- to make sure custom_log is first updated by custom_proc_1
 select add_job('custom_proc2', '2 min', initial_start => now() + interval '5 seconds');
 
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 -- enough time to for job_fail to fail
 select pg_sleep(10);
 select job_id, error_data->'proc_name' as proc_name, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode

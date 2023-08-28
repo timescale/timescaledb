@@ -4,7 +4,7 @@
 \set TEST_DBNAME_2 :TEST_DBNAME _2
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- start bgw since they are stopped for tests by default
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
@@ -107,7 +107,7 @@ WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 -- We'll do this in a txn so that we can see that the worker locks on our txn before continuing
 BEGIN;
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t
@@ -146,7 +146,7 @@ AND datname = :'TEST_DBNAME_2';
 (1 row)
 
 -- Test stop
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
@@ -159,7 +159,7 @@ SELECT wait_worker_counts(1,0,0,0);
 (1 row)
 
 -- Make sure it doesn't break if we stop twice in a row
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
@@ -172,7 +172,7 @@ SELECT wait_worker_counts(1,0,0,0);
 (1 row)
 
 -- test start
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
@@ -190,7 +190,7 @@ FROM pg_stat_activity
 WHERE application_name = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 -- Since we're doing idempotency tests, we're also going to exercise our queue and start 20 times
-SELECT _timescaledb_internal.start_background_workers() as start_background_workers, * FROM generate_series(1,20);
+SELECT _timescaledb_functions.start_background_workers() as start_background_workers, * FROM generate_series(1,20);
  start_background_workers | generate_series 
 --------------------------+-----------------
  t                        |               1
@@ -246,7 +246,7 @@ select wait_equals(:'orig_backend_start', :'TEST_DBNAME_2');
 (1 row)
 
 -- Make sure restart starts a worker even if it is stopped
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t
@@ -258,7 +258,7 @@ SELECT wait_worker_counts(1,0,0,0);
  t
 (1 row)
 
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t
@@ -350,7 +350,7 @@ SELECT wait_worker_counts(1,0,0,0);
 
 -- Make sure a restart with restoring on first starts the background worker
 BEGIN;
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
  restart_background_workers 
 ----------------------------
  t

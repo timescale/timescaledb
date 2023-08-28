@@ -531,13 +531,13 @@ SELECT * FROM sorted_bgw_log;
 TRUNCATE bgw_log;
 
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.stop_background_workers();
-SELECT _timescaledb_internal.restart_background_workers();
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 
 CREATE OR REPLACE FUNCTION ts_test_job_refresh() RETURNS TABLE(
 id INTEGER,
@@ -677,7 +677,7 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
 
 -- clean up jobs
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 select delete_job(:job_id);
 -- test the new API with all its parameters: with timezone, without timezone
 TRUNCATE bgw_log;

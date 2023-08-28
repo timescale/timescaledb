@@ -120,7 +120,7 @@ SELECT timescaledb_post_restore();
 SHOW timescaledb.restoring;
 -- timescaledb_post_restore restarts background worker so we have to stop them
 -- to make sure they dont interfere with this database being used as template below
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 
 --should be same as count above
 SELECT count(*) = :num_dependent_objects as dependent_objects_match

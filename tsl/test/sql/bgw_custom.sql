@@ -206,7 +206,7 @@ SELECT add_job('custom_proc3', '1h', config := '{"type":"procedure"}'::jsonb, in
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- Start Background Workers
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
 
 -- Wait for jobs
 SELECT wait_for_job_to_run(:job_id_1, 1);
@@ -302,17 +302,17 @@ SELECT count(*) FROM conditions_summary_daily;
 
 -- TESTs for alter_job_set_hypertable_id API
 
-SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, NULL);
+SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, NULL);
 SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
 
 -- error case, try to associate with a PG relation
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, 'custom_log');
+SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, 'custom_log');
 \set ON_ERROR_STOP 1
 
 -- TEST associate the cagg with the job
-SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id_5, 'conditions_summary_daily'::regclass);
+SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id_5, 'conditions_summary_daily'::regclass);
 
 SELECT id, proc_name, hypertable_id
 FROM _timescaledb_config.bgw_job WHERE id = :job_id_5;
@@ -328,9 +328,9 @@ DROP TABLE conditions;
 DROP TABLE custom_log;
 
 -- Stop Background Workers
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 
-SELECT _timescaledb_internal.restart_background_workers();
+SELECT _timescaledb_functions.restart_background_workers();
 
 \set ON_ERROR_STOP 0
 -- add test for custom jobs with custom check functions
@@ -683,7 +683,7 @@ SELECT job_id, err_message
   WHERE job_id IN (:job_id_1, :job_id_2, :job_id_3);
 
 -- cleanup
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 CALL wait_for_job_status(:job_id_1, 'Scheduled');
 CALL wait_for_job_status(:job_id_2, 'Scheduled');
 CALL wait_for_job_status(:job_id_3, 'Scheduled');

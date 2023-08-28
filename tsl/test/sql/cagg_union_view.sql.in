@@ -4,7 +4,7 @@
 
 -- disable background workers to make results reproducible
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'

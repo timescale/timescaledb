@@ -7,7 +7,7 @@ setup { SELECT node_name FROM add_data_node('data_node_2', host => 'localhost', 
 setup { SELECT node_name FROM add_data_node('data_node_3', host => 'localhost', database => 'cdrp_3', if_not_exists => true); }
 setup
 {
-    SELECT _timescaledb_internal.stop_background_workers();
+    SELECT _timescaledb_functions.stop_background_workers();
     CREATE TABLE ts_continuous_test(time INTEGER, val INTEGER);
     SELECT create_distributed_hypertable('ts_continuous_test', 'time', chunk_time_interval => 10, replication_factor => 2);
     CREATE OR REPLACE FUNCTION integer_now_test() returns INT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ts_continuous_test $$;

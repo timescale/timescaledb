@@ -42,7 +42,7 @@ $$;
 -- to make sure custom_log is first updated by custom_proc_1
 select add_job('custom_proc2', '2 min', initial_start => now() + interval '5 seconds') as custom_proc2_id \gset
 SET ROLE :ROLE_SUPERUSER;
-SELECT _timescaledb_internal.start_background_workers();
+SELECT _timescaledb_functions.start_background_workers();
  start_background_workers 
 --------------------------
  t
@@ -106,7 +106,7 @@ FROM timescaledb_information.job_errors WHERE job_id >= 1000;
   22222 |             |              |            | job crash detected, see server logs
 (4 rows)
 
-SELECT _timescaledb_internal.stop_background_workers();
+SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
  t

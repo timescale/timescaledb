@@ -17,7 +17,7 @@ setup { SELECT node_name FROM add_data_node('data_node_3', host => 'localhost', 
 #
 setup
 {
-    SELECT _timescaledb_internal.stop_background_workers();
+    SELECT _timescaledb_functions.stop_background_workers();
     CREATE TABLE conditions(time int, temp float);
     SELECT create_distributed_hypertable('conditions', 'time', chunk_time_interval => 20, replication_factor => 2);
     INSERT INTO conditions

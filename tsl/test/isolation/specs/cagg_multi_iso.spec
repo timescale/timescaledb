@@ -4,7 +4,7 @@
 
 setup
 {
-    SELECT _timescaledb_internal.stop_background_workers();
+    SELECT _timescaledb_functions.stop_background_workers();
     CREATE TABLE ts_continuous_test(time INTEGER, val INTEGER);
     SELECT create_hypertable('ts_continuous_test', 'time', chunk_time_interval => 10);
     CREATE OR REPLACE FUNCTION integer_now_test() returns INT LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM ts_continuous_test $$;

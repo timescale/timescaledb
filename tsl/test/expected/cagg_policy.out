@@ -610,7 +610,7 @@ $$
 $$;
  -- inject custom job
 SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial_start => '2000-01-01 00:00:00+00'::timestamptz) AS job_id \gset
-SELECT _timescaledb_internal.alter_job_set_hypertable_id( :job_id, 'max_mat_view_date'::regclass);
+SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id, 'max_mat_view_date'::regclass);
  alter_job_set_hypertable_id 
 -----------------------------
                         1027
