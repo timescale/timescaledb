@@ -675,7 +675,7 @@ ts_chunk_drop_stale_chunks(const char *node_name, ArrayType *chunks_array)
 		LockRelationOid(ts_catalog_get()->tables[CHUNK].id, AccessExclusiveLock);
 
 		/* generate query to execute drop_stale_chunks() on the data node */
-		appendStringInfo(cmd, "SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[");
+		appendStringInfo(cmd, "SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[");
 
 		/* scan for chunks that reference the given data node */
 		ScanIterator it = ts_chunk_data_nodes_scan_iterator_create(CurrentMemoryContext);

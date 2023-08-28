@@ -3026,9 +3026,9 @@ _timescaledb_internal._dist_hyper_34_35_chunk
 \c :DATA_NODE_1
 -- check call arguments when executed on data node
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, NULL);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, NULL);
 ERROR:  chunks argument cannot be NULL
-SELECT _timescaledb_internal.drop_stale_chunks('dn1', NULL);
+SELECT _timescaledb_functions.drop_stale_chunks('dn1', NULL);
 ERROR:  node_name argument cannot be used on the data node
 \set ON_ERROR_STOP 1
 -- direct call to all chunks other then 19, 21
@@ -3043,8 +3043,8 @@ SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
 (5 rows)
 
 SET client_min_messages TO DEBUG1;
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19, 21]::integer[]);
-LOG:  statement: SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19, 21]::integer[]);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[19, 21]::integer[]);
+LOG:  statement: SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[19, 21]::integer[]);
 DEBUG:  dropping chunk _timescaledb_internal._dist_hyper_34_32_chunk
 DEBUG:  dropping chunk _timescaledb_internal._dist_hyper_34_34_chunk
 DEBUG:  dropping chunk _timescaledb_internal._dist_hyper_34_35_chunk
@@ -3094,8 +3094,8 @@ SELECT id, table_name FROM _timescaledb_catalog.chunk ORDER BY id, table_name;
 (7 rows)
 
 SET client_min_messages TO DEBUG1;
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19]::integer[]);
-LOG:  statement: SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[19]::integer[]);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[19]::integer[]);
+LOG:  statement: SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[19]::integer[]);
 DEBUG:  dropping chunk _timescaledb_internal._dist_hyper_34_33_chunk
  drop_stale_chunks 
 -------------------
@@ -3191,9 +3191,9 @@ _timescaledb_internal._dist_hyper_35_40_chunk
 
 -- check call arguments when executed on access node
 \set ON_ERROR_STOP 0
-SELECT _timescaledb_internal.drop_stale_chunks( NULL, NULL);
+SELECT _timescaledb_functions.drop_stale_chunks( NULL, NULL);
 ERROR:  node_name argument cannot be NULL
-SELECT _timescaledb_internal.drop_stale_chunks(NULL, array[1,2,3]);
+SELECT _timescaledb_functions.drop_stale_chunks(NULL, array[1,2,3]);
 ERROR:  node_name argument cannot be NULL
 \set ON_ERROR_STOP 1
 -- create stale chunk by dropping them from access node
@@ -3250,19 +3250,19 @@ _timescaledb_internal._dist_hyper_35_40_chunk
 (1 row)
 
 ---- drop stale chunks 36, 37 on data nodes
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_1');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_1');
  drop_stale_chunks 
 -------------------
  
 (1 row)
 
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_2');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_2');
  drop_stale_chunks 
 -------------------
  
 (1 row)
 
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_3');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_3');
  drop_stale_chunks 
 -------------------
  
@@ -3384,19 +3384,19 @@ _timescaledb_internal._dist_hyper_35_40_chunk
 (1 row)
 
 -- drop stale chunk 38
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_1');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_1');
  drop_stale_chunks 
 -------------------
  
 (1 row)
 
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_2');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_2');
  drop_stale_chunks 
 -------------------
  
 (1 row)
 
-SELECT _timescaledb_internal.drop_stale_chunks(:'DATA_NODE_3');
+SELECT _timescaledb_functions.drop_stale_chunks(:'DATA_NODE_3');
  drop_stale_chunks 
 -------------------
  

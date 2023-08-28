@@ -66,7 +66,7 @@ ORDER BY chunk_schema, chunk_name
 LIMIT 4;
 
 -- drop one chunk replica
-SELECT _timescaledb_internal.chunk_drop_replica(format('%I.%I', chunk_schema, chunk_name)::regclass, replica_nodes[1])
+SELECT _timescaledb_functions.chunk_drop_replica(format('%I.%I', chunk_schema, chunk_name)::regclass, replica_nodes[1])
 FROM timescaledb_experimental.chunk_replication_status
 ORDER BY chunk_schema, chunk_name
 LIMIT 1;

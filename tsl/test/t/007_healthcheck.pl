@@ -18,7 +18,7 @@ $an->add_data_node($dn2);
 
 $an->psql_is(
 	'postgres',
-	'SELECT * FROM _timescaledb_internal.health() ORDER BY 1 NULLS FIRST',
+	'SELECT * FROM _timescaledb_functions.health() ORDER BY 1 NULLS FIRST',
 	q[|t|f|
 dn1|t|f|
 dn2|t|f|], 'Health check shows healthy AN and two healthy DNs');
@@ -30,7 +30,7 @@ $dn1->stop('fast');
 # cannot be contacted. This should be fixed so that the health check
 # instead returns a negative status for the node.
 my ($ret, $stdout, $stderr) = $an->psql('postgres',
-	'SELECT * FROM _timescaledb_internal.health() ORDER BY 1 NULLS FIRST;');
+	'SELECT * FROM _timescaledb_functions.health() ORDER BY 1 NULLS FIRST;');
 
 # psql return error code 3 in case of failure in script
 is($ret, qq(3), "expect error code 3 due to failed data node");

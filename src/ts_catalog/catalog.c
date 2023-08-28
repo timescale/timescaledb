@@ -521,7 +521,7 @@ ts_catalog_get(void)
 	{
 		InternalFunctionDef def = internal_function_definitions[i];
 		FuncCandidateList funclist =
-			FuncnameGetCandidates(list_make2(makeString(INTERNAL_SCHEMA_NAME),
+			FuncnameGetCandidates(list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
 											 makeString(def.name)),
 								  def.args,
 								  NULL,

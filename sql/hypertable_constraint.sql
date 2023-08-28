@@ -3,7 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 
 -- Clone fk constraint from a hypertable
-CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_constraint_add_table_fk_constraint(
+CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_constraint_add_table_fk_constraint(
     user_ht_constraint_name NAME,
     user_ht_schema_name NAME,
     user_ht_table_name NAME,
