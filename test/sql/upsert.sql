@@ -10,6 +10,13 @@ DO UPDATE SET temp = 23.8 RETURNING *;
 INSERT INTO upsert_test VALUES ('2017-01-20T09:00:01', 78.4, 'yellow') ON CONFLICT DO NOTHING;
 SELECT * FROM upsert_test;
 
+-- Test 'Tuples Inserted' and 'Conflicting Tuples' values in EXPLAIN ANALYZE
+EXPLAIN (VERBOSE, ANALYZE, COSTS FALSE, TIMING FALSE, SUMMARY FALSE)
+  INSERT INTO upsert_test VALUES
+    ('2017-01-20T09:00:01', 28.5, 'blue'),
+    ('2017-01-20T09:00:01', 21.9, 'red'),
+    ('2017-01-20T10:00:01', 2.4, 'pink') ON CONFLICT DO NOTHING;
+
 -- Test ON CONFLICT ON CONSTRAINT
 INSERT INTO upsert_test VALUES ('2017-01-20T09:00:01', 12.3, 'yellow') ON CONFLICT ON CONSTRAINT upsert_test_pkey
 DO UPDATE SET temp = 12.3 RETURNING time, temp, color;
