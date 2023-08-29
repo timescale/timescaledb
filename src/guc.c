@@ -63,6 +63,7 @@ static const struct config_enum_entry dist_copy_transfer_formats[] = {
 	{ NULL, 0, false }
 };
 
+bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
 bool ts_guc_enable_constraint_aware_append = true;
@@ -237,7 +238,17 @@ assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 void
 _guc_init(void)
 {
-	/* Main database to connect to. */
+	DefineCustomBoolVariable("timescaledb.enable_deprecation_warnings",
+							 "Enable warnings when using deprecated functionality",
+							 NULL,
+							 &ts_guc_enable_deprecation_warnings,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable("timescaledb.enable_optimizations",
 							 "Enable TimescaleDB query optimizations",
 							 NULL,
