@@ -152,3 +152,8 @@ ALTER FUNCTION _timescaledb_functions.process_ddl_event() SET SCHEMA _timescaled
 ALTER FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(regclass,boolean) SET SCHEMA _timescaledb_internal;
 ALTER PROCEDURE _timescaledb_functions.wait_subscription_sync(name,name,integer,numeric) SET SCHEMA _timescaledb_internal;
 
+ALTER FUNCTION _timescaledb_functions.get_partition_for_key(val anyelement) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.get_partition_hash(val anyelement) SET SCHEMA _timescaledb_internal;
+
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = '_timescaledb_internal' WHERE partitioning_func_schema = '_timescaledb_functions' AND partitioning_func IN ('get_partition_for_key','get_partition_hash');
+

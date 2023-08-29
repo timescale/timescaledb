@@ -851,34 +851,34 @@ LIMIT 10;
 
 -- Should also work to use partitioning function on closed dimensions
 :PREFIX
-SELECT time_func(time), _timescaledb_internal.get_partition_hash(device), avg(temp)
+SELECT time_func(time), _timescaledb_functions.get_partition_hash(device), avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                                           QUERY PLAN                                                                           
-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                           QUERY PLAN                                                                            
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
-   Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_7_chunk.device)), (avg(_hyper_3_7_chunk.temp))
+   Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), (avg(_hyper_3_7_chunk.temp))
    ->  Merge Append
-         Sort Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_7_chunk.device))
+         Sort Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
          ->  GroupAggregate
-               Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_7_chunk.device)), avg(_hyper_3_7_chunk.temp)
-               Group Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_7_chunk.device))
+               Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), avg(_hyper_3_7_chunk.temp)
+               Group Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
                ->  Incremental Sort
-                     Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_7_chunk.device)), _hyper_3_7_chunk.temp
-                     Sort Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_7_chunk.device))
+                     Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), _hyper_3_7_chunk.temp
+                     Sort Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
                      Presorted Key: (time_func(_hyper_3_7_chunk."time"))
                      ->  Index Scan Backward using _hyper_3_7_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_7_chunk
-                           Output: time_func(_hyper_3_7_chunk."time"), _timescaledb_internal.get_partition_hash(_hyper_3_7_chunk.device), _hyper_3_7_chunk.temp
+                           Output: time_func(_hyper_3_7_chunk."time"), _timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device), _hyper_3_7_chunk.temp
          ->  GroupAggregate
-               Output: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_8_chunk.device)), avg(_hyper_3_8_chunk.temp)
-               Group Key: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_8_chunk.device))
+               Output: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device)), avg(_hyper_3_8_chunk.temp)
+               Group Key: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device))
                ->  Incremental Sort
-                     Output: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_8_chunk.device)), _hyper_3_8_chunk.temp
-                     Sort Key: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_internal.get_partition_hash(_hyper_3_8_chunk.device))
+                     Output: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device)), _hyper_3_8_chunk.temp
+                     Sort Key: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device))
                      Presorted Key: (time_func(_hyper_3_8_chunk."time"))
                      ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
-                           Output: time_func(_hyper_3_8_chunk."time"), _timescaledb_internal.get_partition_hash(_hyper_3_8_chunk.device), _hyper_3_8_chunk.temp
+                           Output: time_func(_hyper_3_8_chunk."time"), _timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device), _hyper_3_8_chunk.temp
 (22 rows)
 

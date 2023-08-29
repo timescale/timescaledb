@@ -127,7 +127,7 @@ SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
 -- to get determinstic location IDs so that we always spread these
 -- values the same way across space partitions
 INSERT INTO test_adaptive
-SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
+SELECT time, random() * 35, _timescaledb_functions.get_partition_hash(time) FROM
 generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
@@ -148,7 +148,7 @@ SELECT create_hypertable('test_adaptive_no_index', 'time',
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
 
 INSERT INTO test_adaptive_no_index
-SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
+SELECT time, random() * 35, _timescaledb_functions.get_partition_hash(time) FROM
 generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;
@@ -264,7 +264,7 @@ SELECT create_hypertable('test_adaptive_space', 'time', 'location', 2,
 SELECT id, hypertable_id, interval_length FROM _timescaledb_catalog.dimension;
 
 INSERT INTO test_adaptive_space
-SELECT time, random() * 35, _timescaledb_internal.get_partition_hash(time) FROM
+SELECT time, random() * 35, _timescaledb_functions.get_partition_hash(time) FROM
 generate_series('2017-03-07T18:18:03+00'::timestamptz - interval '175 days',
                 '2017-03-07T18:18:03+00'::timestamptz,
                 '2 minutes') as time;

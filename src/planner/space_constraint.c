@@ -182,7 +182,7 @@ make_partfunc_call(Oid funcid, Oid rettype, List *args, Oid inputcollid)
 /*
  * Transform a constraint like: device_id = 1
  * into
- * ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+ * ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
  */
 static OpExpr *
 transform_space_constraint(PlannerInfo *root, List *rtable, OpExpr *op)
@@ -223,7 +223,7 @@ transform_space_constraint(PlannerInfo *root, List *rtable, OpExpr *op)
 /*
  * Transforms a constraint like: s1 = ANY ('{s1_2,s1_2}'::text[])
  * into
- * ((s1 = ANY ('{s1_2,s1_2}'::text[])) AND (_timescaledb_internal.get_partition_hash(s1) = ANY
+ * ((s1 = ANY ('{s1_2,s1_2}'::text[])) AND (_timescaledb_functions.get_partition_hash(s1) = ANY
  * ('{1583420735,1583420735}'::integer[])))
  */
 static ScalarArrayOpExpr *

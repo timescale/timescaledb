@@ -3,7 +3,7 @@
 -- LICENSE-APACHE for a copy of the license.
 
 CREATE TABLE part_legacy(time timestamptz, temp float, device int);
-SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
+SELECT create_hypertable('part_legacy', 'time', 'device', 2, partitioning_func => '_timescaledb_functions.get_partition_for_key');
 
 -- Show legacy partitioning function is used
 SELECT * FROM _timescaledb_catalog.dimension;
@@ -68,7 +68,7 @@ SELECT create_hypertable('part_add_dim', 'time', 'temp', 2);
 SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => 'bad_func');
 \set ON_ERROR_STOP 1
 
-SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_timescaledb_internal.get_partition_for_key');
+SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_timescaledb_functions.get_partition_for_key');
 SELECT * FROM _timescaledb_catalog.dimension;
 
 -- Test that we support custom SQL-based partitioning functions and
@@ -80,7 +80,7 @@ $BODY$
 DECLARE
     retval INTEGER;
 BEGIN
-    retval = _timescaledb_internal.get_partition_hash(substring(source::text FROM '[A-za-z0-9 ]+'));
+    retval = _timescaledb_functions.get_partition_hash(substring(source::text FROM '[A-za-z0-9 ]+'));
     RAISE NOTICE 'hash value for % is %', source, retval;
     RETURN retval;
 END
@@ -89,9 +89,9 @@ $BODY$;
 CREATE TABLE part_custom_func(time timestamptz, temp float8, device text);
 SELECT create_hypertable('part_custom_func', 'time', 'device', 2, partitioning_func => 'custom_partfunc');
 
-SELECT _timescaledb_internal.get_partition_hash(substring('dev1' FROM '[A-za-z0-9 ]+'));
-SELECT _timescaledb_internal.get_partition_hash('dev1'::text);
-SELECT _timescaledb_internal.get_partition_hash('dev7'::text);
+SELECT _timescaledb_functions.get_partition_hash(substring('dev1' FROM '[A-za-z0-9 ]+'));
+SELECT _timescaledb_functions.get_partition_hash('dev1'::text);
+SELECT _timescaledb_functions.get_partition_hash('dev7'::text);
 
 INSERT INTO part_custom_func VALUES ('2017-03-22T09:18:23', 23.4, 'dev1'),
                                     ('2017-03-22T09:18:23', 23.4, 'dev7');

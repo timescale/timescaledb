@@ -259,7 +259,7 @@ ALTER TABLE dist_chunk_copy SET (timescaledb.compress);
 
 SELECT setseed(0);
 INSERT INTO dist_chunk_copy
-SELECT t, ceil(_timescaledb_internal.get_partition_hash(t)::int % 5), random() * 20
+SELECT t, ceil(_timescaledb_functions.get_partition_hash(t)::int % 5), random() * 20
 FROM generate_series('2020-01-01'::timestamp, '2020-01-25'::timestamp, '1d') t;
 
 -- Compress a few chunks of this dist_chunk_copy hypertable
