@@ -71,6 +71,10 @@ else()
   list(APPEND SOURCE_FILES without_telemetry.sql)
 endif()
 
+# Compatibility layer for timescaledb 2.12 for internal functions that got moved into _timescaledb_functions
+list(APPEND SOURCE_FILES
+  compat.sql)
+
 # These files need to be last in the scripts.
 list(APPEND SOURCE_FILES
   bgw_startup.sql)
