@@ -265,7 +265,7 @@ LIMIT 10;
 
 -- Should also work to use partitioning function on closed dimensions
 :PREFIX
-SELECT time_func(time), _timescaledb_internal.get_partition_hash(device), avg(temp)
+SELECT time_func(time), _timescaledb_functions.get_partition_hash(device), avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2

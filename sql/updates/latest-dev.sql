@@ -150,4 +150,8 @@ ALTER FUNCTION _timescaledb_internal.restart_background_workers() SET SCHEMA _ti
 
 ALTER FUNCTION _timescaledb_internal.process_ddl_event() SET SCHEMA _timescaledb_functions;
 
+ALTER FUNCTION _timescaledb_internal.get_partition_for_key(val anyelement) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.get_partition_hash(val anyelement) SET SCHEMA _timescaledb_functions;
+
+UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = '_timescaledb_functions' WHERE partitioning_func_schema = '_timescaledb_internal' AND partitioning_func IN ('get_partition_for_key','get_partition_hash');
 

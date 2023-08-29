@@ -321,7 +321,7 @@ CREATE OR REPLACE FUNCTION partfunc_not_immutable(source anyelement)
     RETURNS INTEGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 
@@ -330,7 +330,7 @@ CREATE OR REPLACE FUNCTION partfunc_bad_return_type(source anyelement)
     RETURNS BIGINT LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 
@@ -339,7 +339,7 @@ CREATE OR REPLACE FUNCTION partfunc_bad_arg_type(source text)
     RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 
@@ -348,7 +348,7 @@ CREATE OR REPLACE FUNCTION partfunc_bad_multi_arg(source anyelement, extra_arg i
     RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 
@@ -356,7 +356,7 @@ CREATE OR REPLACE FUNCTION partfunc_valid(source anyelement)
     RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 

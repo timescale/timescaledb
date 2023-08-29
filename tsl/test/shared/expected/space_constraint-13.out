@@ -226,13 +226,13 @@ QUERY PLAN
    Delete on _hyper_X_X_chunk metrics_space_2
    Delete on _hyper_X_X_chunk metrics_space_3
    ->  Seq Scan on metrics_space
-         Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+         Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
    ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-         Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+         Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
    ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-         Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+         Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
    ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-         Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+         Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
 (13 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id = 1 AND device_id = 2;
@@ -245,19 +245,19 @@ QUERY PLAN
    ->  Result
          One-Time Filter: (false AND false)
          ->  Seq Scan on metrics_space
-               Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+               Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
    ->  Result
          One-Time Filter: (false AND false)
          ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-               Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+               Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
    ->  Result
          One-Time Filter: (false AND false)
          ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+               Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
    ->  Result
          One-Time Filter: (false AND false)
          ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+               Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
 (21 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id = 1 OR device_id = 2;

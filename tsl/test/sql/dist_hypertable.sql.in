@@ -734,7 +734,7 @@ SELECT * FROM dimented_table_slices;
 SELECT * FROM add_dimension('dimented_table', 'column2', chunk_time_interval => interval '1 week');
 SELECT * FROM dimented_table_slices;
 
-SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_internal.get_partition_for_key');
+SELECT * FROM add_dimension('dimented_table', 'column3', 4, partitioning_func => '_timescaledb_functions.get_partition_for_key');
 SELECT * FROM dimented_table_slices;
 SELECT * FROM dimented_table ORDER BY time;
 
@@ -1004,7 +1004,7 @@ $$);
 -- Test adding a space dimension. Should apply to data nodes as
 -- well. We're setting num_partitions lower than the number of servers
 -- and expect a warning.
-SELECT * FROM add_dimension('disttable', 'device', 1, partitioning_func => '_timescaledb_internal.get_partition_hash');
+SELECT * FROM add_dimension('disttable', 'device', 1, partitioning_func => '_timescaledb_functions.get_partition_hash');
 CREATE INDEX disttable_device_time_idx ON disttable (device, time);
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$

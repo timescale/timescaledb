@@ -95,10 +95,10 @@ select * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
   1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
   3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
-  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
-  5 |             2 | location    | text        | f       |          4 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          4 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
 (5 rows)
 
 --test that we can change the number of partitions and that 1 is allowed
@@ -111,7 +111,7 @@ SELECT set_number_partitions('test_schema.test_table', 1, 'location');
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
-  5 |             2 | location    | text        | f       |          1 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          1 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
 (1 row)
 
 SELECT set_number_partitions('test_schema.test_table', 2, 'location');
@@ -123,7 +123,7 @@ SELECT set_number_partitions('test_schema.test_table', 2, 'location');
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
-  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -158,10 +158,10 @@ select * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func 
 ----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------
   1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
-  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
   3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         | 
-  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
-  5 |             2 | location    | text        | f       |          2 | _timescaledb_internal    | get_partition_hash |                 |                          |                         | 
+  4 |             2 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
+  5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         | 
   6 |             2 | id          | integer     | t       |            |                          |                    |            1000 |                          |                         | 
 (6 rows)
 
@@ -636,35 +636,35 @@ CREATE OR REPLACE FUNCTION partfunc_not_immutable(source anyelement)
     RETURNS INTEGER LANGUAGE PLPGSQL AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 CREATE OR REPLACE FUNCTION partfunc_bad_return_type(source anyelement)
     RETURNS BIGINT LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 CREATE OR REPLACE FUNCTION partfunc_bad_arg_type(source text)
     RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 CREATE OR REPLACE FUNCTION partfunc_bad_multi_arg(source anyelement, extra_arg integer)
     RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 CREATE OR REPLACE FUNCTION partfunc_valid(source anyelement)
     RETURNS INTEGER LANGUAGE PLPGSQL IMMUTABLE AS
 $BODY$
 BEGIN
-    RETURN _timescaledb_internal.get_partition_hash(source);
+    RETURN _timescaledb_functions.get_partition_hash(source);
 END
 $BODY$;
 create table test_schema.test_partfunc(time timestamptz, temp float, device int);

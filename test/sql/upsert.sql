@@ -65,7 +65,7 @@ CREATE TABLE upsert_test_space(time timestamp, device_id_1 char(20), to_drop int
 ALTER TABLE upsert_test_space DROP to_drop;
 ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id char(20);
 ALTER TABLE upsert_test_space ADD CONSTRAINT time_space_constraint UNIQUE (time, device_id);
-SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_internal.get_partition_for_key'::regproc);
+SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_functions.get_partition_for_key'::regproc);
 INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev1', 25.9, 'yellow') RETURNING *;
 INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev2', 25.9, 'yellow');
 INSERT INTO upsert_test_space (time, device_id, temp, color) VALUES ('2017-01-20T09:00:01', 'dev1', 23.5, 'green') ON CONFLICT (time, device_id)

@@ -144,7 +144,7 @@ CREATE TABLE upsert_test_space(time timestamp, device_id_1 char(20), to_drop int
 ALTER TABLE upsert_test_space DROP to_drop;
 ALTER TABLE upsert_test_space DROP device_id_1, ADD device_id char(20);
 ALTER TABLE upsert_test_space ADD CONSTRAINT time_space_constraint UNIQUE (time, device_id);
-SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_internal.get_partition_for_key'::regproc);
+SELECT create_hypertable('upsert_test_space', 'time', 'device_id', 2, partitioning_func=>'_timescaledb_functions.get_partition_for_key'::regproc);
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
        create_hypertable        

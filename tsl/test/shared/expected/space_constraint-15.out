@@ -223,11 +223,11 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_3
          ->  Append
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+                     Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                     Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+                     Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                     Filter: ((device_id = 1) AND (_timescaledb_internal.get_partition_hash(device_id) = 242423622))
+                     Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
 (12 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id = 1 AND device_id = 2;

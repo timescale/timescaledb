@@ -47,8 +47,8 @@ ORDER BY c.id;
 
 \dt "_timescaledb_internal"._hyper*
 
-SELECT  _timescaledb_internal.get_partition_for_key('dev1'::text);
-SELECT  _timescaledb_internal.get_partition_for_key('dev7'::varchar(5));
+SELECT  _timescaledb_functions.get_partition_for_key('dev1'::text);
+SELECT  _timescaledb_functions.get_partition_for_key('dev7'::varchar(5));
 
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(1, 1.0, 'dev1');
 INSERT INTO PUBLIC.drop_chunk_test1 VALUES(2, 2.0, 'dev1');
