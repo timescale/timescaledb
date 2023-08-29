@@ -31,6 +31,29 @@ next_start TIMESTAMPTZ, check_config TEXT, fixed_schedule BOOL, initial_start TI
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
 
+DROP FUNCTION IF EXISTS @extschema@.add_dimension(
+    REGCLASS,
+    NAME,
+    INTEGER,
+    ANYELEMENT,
+    REGPROC,
+    BOOLEAN
+);
+
+CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
+    hypertable              REGCLASS,
+    column_name             NAME,
+    number_partitions       INTEGER = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::BIGINT,
+    partitioning_func       REGPROC = NULL,
+    if_not_exists           BOOLEAN = FALSE,
+    secondary               BOOLEAN = FALSE
+) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
+AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
+
+ALTER TABLE _timescaledb_catalog.dimension ADD COLUMN secondary BOOLEAN;
+UPDATE _timescaledb_catalog.dimension SET secondary = FALSE;
+
 -- when upgrading from old versions on PG13 this function might not be present
 -- since there is no ALTER FUNCTION IF EXISTS we have to work around it with a DO block
 DO $$

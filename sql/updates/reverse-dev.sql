@@ -142,6 +142,29 @@ next_start TIMESTAMPTZ, check_config TEXT)
 AS '@MODULE_PATHNAME@', 'ts_job_alter'
 LANGUAGE C VOLATILE;
 
+DROP FUNCTION IF EXISTS @extschema@.add_dimension(
+    REGCLASS,
+    NAME,
+    INTEGER,
+    ANYELEMENT,
+    REGPROC,
+    BOOLEAN,
+    BOOLEAN
+);
+
+CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
+    hypertable              REGCLASS,
+    column_name             NAME,
+    number_partitions       INTEGER = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::BIGINT,
+    partitioning_func       REGPROC = NULL,
+    if_not_exists           BOOLEAN = FALSE
+) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
+AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
+
+DELETE FROM _timescaledb_catalog.dimension WHERE secondary IS TRUE;
+ALTER TABLE _timescaledb_catalog.dimension DROP COLUMN secondary;
+
 ALTER FUNCTION _timescaledb_functions.insert_blocker() SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger() SET SCHEMA _timescaledb_internal;
 ALTER FUNCTION _timescaledb_functions.drop_dist_ht_invalidation_trigger(integer) SET SCHEMA _timescaledb_internal;
