@@ -31,9 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     needs: config
     container:
-      image: i386/debian:buster-slim
+      image: i386/debian:bookworm-slim
       options: --privileged --ulimit core=-1
       env:
+        PG_SRC_DIR: pgbuild
+        PG_INSTALL_DIR: postgresql
+        MAKE_JOBS: 6
+        CLANG: clang-14
+        CC: clang-14
+        CXX: clang++-14
         DEBIAN_FRONTEND: noninteractive
         IGNORES: "append-* debug_notice transparent_decompression-*
           transparent_decompress_chunk-* pg_dump
@@ -50,32 +56,65 @@ jobs:
 
     steps:
 
+    # /__e/node16/bin/node (used by actions/checkout@v3) needs 64-bit libraries
+    - name: Install 64-bit libraries for GitHub actions
+      run: |
+        apt-get update
+        apt-get install -y lib64atomic1 lib64gcc-s1 lib64stdc++6 libc6-amd64
+
     - name: Install build dependencies
       run: |
         PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
-        apt-get update
-        apt-get install -y gnupg postgresql-common
-        yes | /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
-          libtest-most-perl sudo gdb git wget gawk
-        apt-get install -y postgresql-${PG_MAJOR} postgresql-server-dev-${PG_MAJOR}
-
-    - name: Build pg_isolation_regress
-      run: |
-        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-        wget -q -O postgresql.tar.bz2 \
-          https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
-        mkdir -p ~/postgresql
-        tar --extract --file postgresql.tar.bz2 --directory ~/postgresql --strip-components 1
-        cd ~/postgresql
-        ./configure --prefix=/usr/lib/postgresql/${PG_MAJOR} --enable-debug \
-          --enable-cassert --with-openssl --without-readline --without-zlib
-        make -C src/test/isolation
-        chown -R postgres:postgres ~/postgresql
+          libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
+          locales clang-14 llvm-14 llvm-14-dev llvm-14-tools
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
+
+    # We are going to rebuild Postgres daily, so that it doesn't suddenly break
+    # ages after the original problem.
+    - name: Get date for build caching
+      id: get-date
+      run: |
+        echo "date=$(date +"%d")" >> $GITHUB_OUTPUT
+
+    # we cache the build directory instead of the install directory here
+    # because extension installation will write files to install directory
+    # leading to a tainted cache
+    - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
+      id: cache-postgresql
+      uses: actions/cache@v3
+      with:
+        path: ~/${{ env.PG_SRC_DIR }}
+        key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
+          -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
+
+    - name: Build PostgreSQL ${{ matrix.pg }}
+      if: steps.cache-postgresql.outputs.cache-hit != 'true'
+      run: |
+        wget -q -O postgresql.tar.bz2 \
+          https://ftp.postgresql.org/pub/source/v${{ matrix.pg }}/postgresql-${{ matrix.pg }}.tar.bz2
+        mkdir -p ~/$PG_SRC_DIR
+        tar --extract --file postgresql.tar.bz2 --directory ~/$PG_SRC_DIR --strip-components 1
+        cd ~/$PG_SRC_DIR
+        # When building on i386 with the clang compiler, Postgres requires -msse2 to be used
+        ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
+          --without-readline --without-zlib --without-libxml --enable-cassert \
+          --enable-debug --with-llvm LLVM_CONFIG=llvm-config-14 CFLAGS="-msse2"
+        make -j $MAKE_JOBS
+        make -j $MAKE_JOBS -C src/test/isolation
+        make -j $MAKE_JOBS -C contrib/postgres_fdw
+
+    - name: Install PostgreSQL ${{ matrix.pg }}
+      run: |
+        useradd postgres
+        make -C ~/$PG_SRC_DIR install
+        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        chown -R postgres:postgres $HOME/$PG_INSTALL_DIR
+        sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen
+        locale-gen
 
     - name: Build TimescaleDB
       run: |
@@ -83,7 +122,9 @@ jobs:
         # Git's "safe.directory" setting. Otherwise git would complain about
         # 'detected dubious ownership in repository'
         git config --global --add safe.directory $(pwd)
-        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/postgresql -DREQUIRE_ALL_TESTS=ON
+        ./bootstrap -DCMAKE_BUILD_TYPE="${{ matrix.build_type }}" -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
+          -DPG_PATH=~/$PG_INSTALL_DIR -DREQUIRE_ALL_TESTS=ON
+        make -j $MAKE_JOBS -C build
         make -C build install
         chown -R postgres:postgres .
 
@@ -93,6 +134,7 @@ jobs:
       run: |
         set -o pipefail
         export LANG=C.UTF-8
+        # PostgreSQL cannot be run as root. So, switch to postgres user.
         sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES} \
           ${{ matrix.ignores_version }}" SKIPS="${SKIPS}" | tee installcheck.log
 
