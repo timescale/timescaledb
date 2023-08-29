@@ -67,10 +67,12 @@ step "s1_commit" {
 
 session "s2"
 
-step "s2_read_sensor_data" {
-   SELECT FROM sensor_data;
-   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+step "s2_explain_update" {
+    UPDATE sensor_data SET cpu = cpu + 1 WHERE cpu = 0.1111111;
 }
 
-permutation "s2_read_sensor_data" "s1_begin" "s1_decompress" "s2_read_sensor_data" "s1_commit" "s2_read_sensor_data"
+# UPDATE/DELETE queries don't use TimescaleDB hypertable expansion, and use the
+# Postgres expansion code, which might have different locking behavior. Test it
+# as well.
+permutation "s2_explain_update" "s1_begin" "s1_decompress" "s2_explain_update" "s1_commit" "s2_explain_update"
 

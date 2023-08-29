@@ -18,6 +18,10 @@ list(
   cagg_concurrent_refresh_dist_ht.spec
   deadlock_drop_chunks_compress.spec)
 
+if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
+  list(APPEND TEST_FILES concurrent_decompress_update.spec)
+endif()
+
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
   list(

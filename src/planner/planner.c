@@ -1320,10 +1320,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 
 				if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
 				{
-					Relation uncompressed_chunk = table_open(relation_objectid, NoLock);
-
-					ts_get_private_reloptinfo(rel)->compressed = true;
-
 					/* Planning indexes is expensive, and if this is a fully compressed chunk, we
 					 * know we'll never need to use indexes on the uncompressed version, since
 					 * all the data is in the compressed chunk anyway. Therefore, it is much
@@ -1334,7 +1330,6 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 					 */
 					if (!ts_chunk_is_partial(chunk))
 						rel->indexlist = NIL;
-					table_close(uncompressed_chunk, NoLock);
 				}
 			}
 			break;

@@ -8,7 +8,7 @@ Fri Jan 03 10:30:00 2020 PST|     1|   1
 Sun Jan 03 10:30:00 2021 PST|     2|   2
 (2 rows)
 
-step s1_wp_enable: SELECT debug_waitpoint_enable('expanded_chunks');
+step s1_wp_enable: SELECT debug_waitpoint_enable('hypertable_expansion_before_lock_chunk');
 debug_waitpoint_enable
 ----------------------
                       
@@ -21,7 +21,7 @@ count
     1
 (1 row)
 
-step s1_wp_release: SELECT debug_waitpoint_release('expanded_chunks');
+step s1_wp_release: SELECT debug_waitpoint_release('hypertable_expansion_before_lock_chunk');
 debug_waitpoint_release
 -----------------------
                        

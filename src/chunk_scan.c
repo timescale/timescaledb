@@ -43,123 +43,98 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 {
 	MemoryContext work_mcxt =
 		AllocSetContextCreate(CurrentMemoryContext, "chunk-scan-work", ALLOCSET_DEFAULT_SIZES);
-	MemoryContext per_tuple_mcxt =
-		AllocSetContextCreate(work_mcxt, "chunk-scan-per-tuple", ALLOCSET_SMALL_SIZES);
-	MemoryContext orig_mcxt;
 	Chunk **locked_chunks = NULL;
-	Chunk **unlocked_chunks = NULL;
 	int locked_chunk_count = 0;
-	int unlocked_chunk_count = 0;
 	ListCell *lc;
 	int remote_chunk_count = 0;
 
 	Assert(OidIsValid(hs->main_table_relid));
-	orig_mcxt = MemoryContextSwitchTo(work_mcxt);
+	MemoryContext orig_mcxt = MemoryContextSwitchTo(work_mcxt);
 
 	/*
 	 * For each matching chunk, fill in the metadata from the "chunk" table.
 	 * Make sure to filter out "dropped" chunks.
 	 */
 	ScanIterator chunk_it = ts_chunk_scan_iterator_create(orig_mcxt);
-	unlocked_chunks = MemoryContextAlloc(work_mcxt, sizeof(Chunk *) * list_length(chunk_ids));
+	locked_chunks = MemoryContextAlloc(orig_mcxt, sizeof(Chunk *) * list_length(chunk_ids));
 	foreach (lc, chunk_ids)
 	{
 		int chunk_id = lfirst_int(lc);
-		TupleInfo *ti;
 
 		Assert(CurrentMemoryContext == work_mcxt);
 
 		ts_chunk_scan_iterator_set_chunk_id(&chunk_it, chunk_id);
 		ts_scan_iterator_start_or_restart_scan(&chunk_it);
-		ti = ts_scan_iterator_next(&chunk_it);
-
-		if (ti)
+		TupleInfo *ti = ts_scan_iterator_next(&chunk_it);
+		if (ti == NULL)
 		{
-			bool isnull;
-			Datum datum = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
-			bool is_dropped = isnull ? false : DatumGetBool(datum);
-
-			MemoryContextSwitchTo(per_tuple_mcxt);
-			MemoryContextReset(per_tuple_mcxt);
-
-			if (!is_dropped)
-			{
-				Chunk *chunk = MemoryContextAllocZero(orig_mcxt, sizeof(Chunk));
-
-				MemoryContext old_mcxt = MemoryContextSwitchTo(ti->mctx);
-				ts_chunk_formdata_fill(&chunk->fd, ti);
-				MemoryContextSwitchTo(old_mcxt);
-
-				chunk->constraints = NULL;
-				chunk->cube = NULL;
-				chunk->hypertable_relid = hs->main_table_relid;
-
-				unlocked_chunks[unlocked_chunk_count] = chunk;
-				unlocked_chunk_count++;
-			}
-
-			MemoryContextSwitchTo(work_mcxt);
-			/* Only one chunk should match */
-			Assert(ts_scan_iterator_next(&chunk_it) == NULL);
+			continue;
 		}
+		bool isnull;
+		Datum datum = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
+		const bool is_dropped = isnull ? false : DatumGetBool(datum);
+		if (is_dropped)
+		{
+			continue;
+		}
+
+		/* We found a chunk that is not dropped. First, try to lock it. */
+		Name schema_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_schema_name, &isnull));
+		Assert(!isnull);
+		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_chunk_table_name, &isnull));
+		Assert(!isnull);
+
+		Oid chunk_reloid = ts_get_relation_relid(NameStr(*schema_name),
+												 NameStr(*table_name),
+												 /* return_invalid = */ false);
+		Assert(OidIsValid(chunk_reloid));
+
+		/* Only one chunk should match */
+		Assert(ts_scan_iterator_next(&chunk_it) == NULL);
+
+		DEBUG_WAITPOINT("hypertable_expansion_before_lock_chunk");
+		if (!ts_chunk_lock_if_exists(chunk_reloid, AccessShareLock))
+		{
+			continue;
+		}
+
+		/*
+		 * Now after we have locked the chunk, we have to reread its metadata.
+		 * It might have been modified concurrently by decompression, for
+		 * example.
+		 */
+		ts_chunk_scan_iterator_set_chunk_id(&chunk_it, chunk_id);
+		ts_scan_iterator_start_or_restart_scan(&chunk_it);
+		ti = ts_scan_iterator_next(&chunk_it);
+		Assert(ti != NULL);
+		Chunk *chunk = MemoryContextAllocZero(orig_mcxt, sizeof(Chunk));
+
+		ts_chunk_formdata_fill(&chunk->fd, ti);
+
+		chunk->constraints = NULL;
+		chunk->cube = NULL;
+		chunk->hypertable_relid = hs->main_table_relid;
+		chunk->table_id = chunk_reloid;
+
+		locked_chunks[locked_chunk_count] = chunk;
+		locked_chunk_count++;
+
+		/* Only one chunk should match */
+		Assert(ts_scan_iterator_next(&chunk_it) == NULL);
 	}
 
 	ts_scan_iterator_close(&chunk_it);
 
-	Assert(unlocked_chunk_count == 0 || unlocked_chunks != NULL);
-	Assert(unlocked_chunk_count <= list_length(chunk_ids));
+	Assert(locked_chunk_count == 0 || locked_chunks != NULL);
+	Assert(locked_chunk_count <= list_length(chunk_ids));
 	Assert(CurrentMemoryContext == work_mcxt);
 
-	DEBUG_WAITPOINT("expanded_chunks");
-
-	/*
-	 * Batch the lookups to each catalog cache to have more favorable access
-	 * patterns.
-	 * Schema oid isn't likely to change, so cache it.
-	 */
-	char *last_schema_name = NULL;
-	for (int i = 0; i < unlocked_chunk_count; i++)
+	for (int i = 0; i < locked_chunk_count; i++)
 	{
-		Chunk *chunk = unlocked_chunks[i];
-
-		char *current_schema_name = NameStr(chunk->fd.schema_name);
-		if (last_schema_name == NULL || strcmp(last_schema_name, current_schema_name) != 0)
-		{
-			last_schema_name = current_schema_name;
-		}
-
-		chunk->table_id =
-			ts_get_relation_relid(last_schema_name, NameStr(chunk->fd.table_name), false);
-		Assert(OidIsValid(chunk->table_id));
-	}
-
-	for (int i = 0; i < unlocked_chunk_count; i++)
-	{
-		Chunk *chunk = unlocked_chunks[i];
+		Chunk *chunk = locked_chunks[i];
 		chunk->relkind = get_rel_relkind(chunk->table_id);
-	}
-
-	/*
-	 * Lock the chunks.
-	 */
-	for (int i = 0; i < unlocked_chunk_count; i++)
-	{
-		Chunk *chunk = unlocked_chunks[i];
-
-		if (ts_chunk_lock_if_exists(chunk->table_id, AccessShareLock))
-		{
-			/* Lazy initialize the chunks array */
-			if (NULL == locked_chunks)
-				locked_chunks =
-					MemoryContextAlloc(orig_mcxt, sizeof(Chunk *) * unlocked_chunk_count);
-
-			locked_chunks[locked_chunk_count] = chunk;
-
-			if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-				remote_chunk_count++;
-
-			locked_chunk_count++;
-		}
+		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
+			remote_chunk_count++;
 	}
 
 	/*
@@ -178,9 +153,7 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 		while (ts_scan_iterator_next(&constr_it) != NULL)
 		{
 			TupleInfo *constr_ti = ts_scan_iterator_tuple_info(&constr_it);
-			MemoryContextSwitchTo(per_tuple_mcxt);
 			ts_chunk_constraints_add_from_tuple(chunk->constraints, constr_ti);
-			MemoryContextSwitchTo(work_mcxt);
 		}
 	}
 	ts_scan_iterator_close(&constr_it);
@@ -264,9 +237,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 					MemoryContext old_mcxt;
 					HeapTuple tuple;
 
-					MemoryContextSwitchTo(per_tuple_mcxt);
-					MemoryContextReset(per_tuple_mcxt);
-
 					tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 					form = (Form_chunk_data_node) GETSTRUCT(tuple);
 					old_mcxt = MemoryContextSwitchTo(ti->mctx);
@@ -280,8 +250,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 
 					if (should_free)
 						heap_freetuple(tuple);
-
-					MemoryContextSwitchTo(work_mcxt);
 				}
 			}
 		}

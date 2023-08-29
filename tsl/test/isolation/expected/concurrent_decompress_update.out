@@ -1,0 +1,38 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s2_explain_update s1_begin s1_decompress s2_explain_update s1_commit s2_explain_update
+compression_status
+------------------
+Compressed        
+(1 row)
+
+step s2_explain_update: 
+    UPDATE sensor_data SET cpu = cpu + 1 WHERE cpu = 0.1111111;
+
+step s1_begin: 
+  BEGIN;
+
+step s1_decompress: 
+   SELECT count(*) FROM (SELECT decompress_chunk(i, if_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+
+count
+-----
+    1
+(1 row)
+
+compression_status
+------------------
+Uncompressed      
+(1 row)
+
+step s2_explain_update: 
+    UPDATE sensor_data SET cpu = cpu + 1 WHERE cpu = 0.1111111;
+ <waiting ...>
+step s1_commit: 
+  COMMIT;
+
+step s2_explain_update: <... completed>
+step s2_explain_update: 
+    UPDATE sensor_data SET cpu = cpu + 1 WHERE cpu = 0.1111111;
+
