@@ -10,6 +10,19 @@
 #include "cross_module_fn.h"
 #include "compat/compat.h"
 #include "export.h"
+#include "gapfill.h"
+
+bool
+ts_is_gapfill_path(Path *path)
+{
+	if (IsA(path, CustomPath))
+	{
+		CustomPath *cpath = castNode(CustomPath, path);
+		if (strcmp(cpath->methods->CustomName, GAPFILL_PATH_NAME) == 0)
+			return true;
+	}
+	return false;
+}
 
 /*
  * stub function to trigger locf and interpolate in gapfill node
