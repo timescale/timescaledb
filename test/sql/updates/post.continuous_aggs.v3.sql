@@ -4,9 +4,9 @@
 
 \ir post.continuous_aggs.v2.sql
 
-SELECT "time", count(*) from rename_cols GROUP BY 1;
+SELECT "time", count(*) from rename_cols GROUP BY 1 ORDER BY 1;
 
 --verify compression can be enabled
 ALTER MATERIALIZED VIEW rename_cols SET ( timescaledb.compress='true');
 
-SELECT "time", count(*) from rename_cols GROUP BY 1;
+SELECT "time", count(*) from rename_cols GROUP BY 1 ORDER BY 1;
