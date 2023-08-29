@@ -68,6 +68,27 @@ create_group_subpath(PlannerInfo *root, RelOptInfo *rel, List *group, List *path
 	}
 }
 
+ChunkAppendPath *
+ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths)
+{
+	ListCell *lc;
+	double total_cost = 0, rows = 0;
+	ChunkAppendPath *new = palloc(sizeof(ChunkAppendPath));
+	memcpy(new, ca, sizeof(ChunkAppendPath));
+	new->cpath.custom_paths = subpaths;
+
+	foreach (lc, subpaths)
+	{
+		Path *child = lfirst(lc);
+		total_cost += child->total_cost;
+		rows += child->rows;
+	}
+	new->cpath.path.total_cost = total_cost;
+	new->cpath.path.rows = rows;
+
+	return new;
+}
+
 Path *
 ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, Path *subpath,
 							bool parallel_aware, bool ordered, List *nested_oids)

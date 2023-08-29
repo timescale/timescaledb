@@ -23,6 +23,7 @@
 #include "planner.h"
 #include "import/planner.h"
 #include "utils.h"
+#include "gapfill.h"
 #include "guc.h"
 #include "estimate.h"
 
@@ -37,19 +38,6 @@
  * distinct items going in. This is not true for functions like time_bucket and date_trunc. This
  * optimization fixes the statistics and adds the HashAggregate plan if appropriate.
  * */
-
-#define GAPFILL_PATH_NAME "GapFill"
-static bool
-is_gapfill_path(Path *path)
-{
-	if (IsA(path, CustomPath))
-	{
-		CustomPath *cpath = castNode(CustomPath, path);
-		if (strcmp(cpath->methods->CustomName, GAPFILL_PATH_NAME) == 0)
-			return true;
-	}
-	return false;
-}
 
 /* Add a parallel HashAggregate plan.
  * This code is similar to parts of create_grouping_paths */
@@ -163,7 +151,7 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 		return;
 
 	/* Don't add HashAgg path if this is a gapfill query */
-	if (is_gapfill_path(linitial(output_rel->pathlist)))
+	if (ts_is_gapfill_path(linitial(output_rel->pathlist)))
 		return;
 
 	MemSet(&agg_costs, 0, sizeof(AggClauseCosts));

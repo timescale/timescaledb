@@ -56,7 +56,6 @@ static OpExpr *fix_indexqual(IndexOptInfo *index, RestrictInfo *rinfo, AttrNumbe
 static bool build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *index_path,
 							Var *var);
 static List *build_subpath(PlannerInfo *root, List *subpaths, double ndistinct);
-static ChunkAppendPath *copy_chunk_append_path(ChunkAppendPath *ca, List *subpaths);
 static Var *get_distinct_var(PlannerInfo *root, IndexPath *index_path,
 							 SkipScanPath *skip_scan_path);
 static TargetEntry *tlist_member_match_var(Var *var, List *targetlist);
@@ -293,7 +292,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			 * information used for creating the original one and we don't want to
 			 * duplicate all the checks done when creating the original one.
 			 */
-			subpath = (Path *) copy_chunk_append_path(ca, new_paths);
+			subpath = (Path *) ts_chunk_append_path_copy(ca, new_paths);
 		}
 		else
 		{
@@ -316,27 +315,6 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 
 		add_path(output_rel, new_unique);
 	}
-}
-
-static ChunkAppendPath *
-copy_chunk_append_path(ChunkAppendPath *ca, List *subpaths)
-{
-	ListCell *lc;
-	double total_cost = 0, rows = 0;
-	ChunkAppendPath *new = palloc(sizeof(ChunkAppendPath));
-	memcpy(new, ca, sizeof(ChunkAppendPath));
-	new->cpath.custom_paths = subpaths;
-
-	foreach (lc, subpaths)
-	{
-		Path *child = lfirst(lc);
-		total_cost += child->total_cost;
-		rows += child->rows;
-	}
-	new->cpath.path.total_cost = total_cost;
-	new->cpath.path.rows = rows;
-
-	return new;
 }
 
 static SkipScanPath *
