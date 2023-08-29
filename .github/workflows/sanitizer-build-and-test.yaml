@@ -8,6 +8,7 @@ name: Sanitizer test
     branches:
       - main
       - prerelease_test
+      - trigger/sanitizer
   pull_request:
     paths: .github/workflows/sanitizer-build-and-test.yaml
 

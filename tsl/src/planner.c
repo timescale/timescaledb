@@ -125,7 +125,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	if (ts_guc_enable_transparent_decompression && ht &&
 		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
 		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
-		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) && fdw_private != NULL && fdw_private->compressed)
+		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
 		if (fdw_private->cached_chunk_struct == NULL)
 		{

@@ -19,9 +19,9 @@ teardown {
 # acqurired, the chunk should also be ignored.
 
 session "s1"
-step "s1_wp_enable"           { SELECT debug_waitpoint_enable('expanded_chunks'); }
-step "s1_wp_release"      { SELECT debug_waitpoint_release('expanded_chunks'); }
-step "s1_drop_chunks"	{ SELECT count(*) FROM drop_chunks('measurements', TIMESTAMPTZ '2020-03-01'); }
+step "s1_wp_enable" { SELECT debug_waitpoint_enable('hypertable_expansion_before_lock_chunk'); }
+step "s1_wp_release" { SELECT debug_waitpoint_release('hypertable_expansion_before_lock_chunk'); }
+step "s1_drop_chunks" { SELECT count(*) FROM drop_chunks('measurements', TIMESTAMPTZ '2020-03-01'); }
 
 session "s2"
 step "s2_show_num_chunks"  { SELECT count(*) FROM show_chunks('measurements') ORDER BY 1; }
