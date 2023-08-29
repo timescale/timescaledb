@@ -11,6 +11,7 @@
 #include "finalize.h"
 #include "create.h"
 #include "common.h"
+#include <partialize_finalize.h>
 
 typedef struct CAggHavingCxt
 {
@@ -53,11 +54,11 @@ get_partialize_funcexpr(Aggref *agg)
 	FuncExpr *partialize_fnexpr;
 	Oid partfnoid, partargtype;
 	partargtype = ANYELEMENTOID;
-	partfnoid =
-		LookupFuncName(list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(TS_PARTIALFN)),
-					   1,
-					   &partargtype,
-					   false);
+	partfnoid = LookupFuncName(list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
+										  makeString(PARTIALIZE_FUNC_NAME)),
+							   1,
+							   &partargtype,
+							   false);
 	partialize_fnexpr = makeFuncExpr(partfnoid,
 									 BYTEAOID,
 									 list_make1(agg), /*args*/
@@ -194,7 +195,7 @@ get_finalize_function_oid(void)
 	Oid finalfnoid;
 	Oid finalfnargtypes[] = { TEXTOID,	NAMEOID,	  NAMEOID, get_array_type(NAMEOID),
 							  BYTEAOID, ANYELEMENTOID };
-	List *funcname = list_make2(makeString(INTERNAL_SCHEMA_NAME), makeString(FINALFN));
+	List *funcname = list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(FINALFN));
 	int nargs = sizeof(finalfnargtypes) / sizeof(finalfnargtypes[0]);
 	finalfnoid = LookupFuncName(funcname, nargs, finalfnargtypes, false);
 	return finalfnoid;

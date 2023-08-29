@@ -122,6 +122,8 @@ DECLARE
     cagg_migrate_execute_refresh_new_cagg, cagg_migrate_execute_copy_data, cagg_migrate_execute_override_cagg,
     cagg_migrate_execute_drop_old_cagg, cagg_migrate_execute_plan,
 
+    finalize_agg,
+
     hypertable_invalidation_log_delete, invalidation_cagg_log_add_entry, invalidation_hyper_log_add_entry,
     invalidation_process_cagg_log, invalidation_process_hypertable_log, materialization_invalidation_log_delete,
 
@@ -134,7 +136,13 @@ DECLARE
   }';
 BEGIN
   FOR foid, kind IN
-    SELECT oid, CASE WHEN prokind = 'f' THEN 'FUNCTION' ELSE 'PROCEDURE' END FROM pg_proc WHERE proname = ANY(funcs) AND pronamespace = '_timescaledb_internal'::regnamespace
+    SELECT oid,
+    CASE
+      WHEN prokind = 'f' THEN 'FUNCTION'
+      WHEN prokind = 'a' THEN 'AGGREGATE'
+      ELSE 'PROCEDURE'
+    END
+    FROM pg_proc WHERE proname = ANY(funcs) AND pronamespace = '_timescaledb_internal'::regnamespace
   LOOP
     EXECUTE format('ALTER %s %s SET SCHEMA _timescaledb_functions', kind, foid);
   END LOOP;
@@ -154,4 +162,8 @@ ALTER FUNCTION _timescaledb_internal.get_partition_for_key(val anyelement) SET S
 ALTER FUNCTION _timescaledb_internal.get_partition_hash(val anyelement) SET SCHEMA _timescaledb_functions;
 
 UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = '_timescaledb_functions' WHERE partitioning_func_schema = '_timescaledb_internal' AND partitioning_func IN ('get_partition_for_key','get_partition_hash');
+
+ALTER FUNCTION _timescaledb_internal.finalize_agg_ffunc(internal,text,name,name,name[],bytea,anyelement) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.finalize_agg_sfunc(internal,text,name,name,name[],bytea,anyelement) SET SCHEMA _timescaledb_functions;
+ALTER FUNCTION _timescaledb_internal.partialize_agg(anyelement) SET SCHEMA _timescaledb_functions;
 

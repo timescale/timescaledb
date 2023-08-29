@@ -157,3 +157,8 @@ ALTER FUNCTION _timescaledb_functions.get_partition_hash(val anyelement) SET SCH
 
 UPDATE _timescaledb_catalog.dimension SET partitioning_func_schema = '_timescaledb_internal' WHERE partitioning_func_schema = '_timescaledb_functions' AND partitioning_func IN ('get_partition_for_key','get_partition_hash');
 
+ALTER FUNCTION _timescaledb_functions.finalize_agg_ffunc(internal,text,name,name,name[],bytea,anyelement) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.finalize_agg_sfunc(internal,text,name,name,name[],bytea,anyelement) SET SCHEMA _timescaledb_internal;
+ALTER FUNCTION _timescaledb_functions.partialize_agg(anyelement) SET SCHEMA _timescaledb_internal;
+ALTER AGGREGATE _timescaledb_functions.finalize_agg(text,name,name,name[][],bytea,anyelement) SET SCHEMA _timescaledb_internal;
+
