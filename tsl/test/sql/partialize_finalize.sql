@@ -20,15 +20,15 @@ insert into foo values( 3 , 16 , 20);
 
 create or replace view v1(a , partial)
 as
- SELECT a, _timescaledb_internal.partialize_agg( count(b)) from foo group by a;
+ SELECT a, _timescaledb_functions.partialize_agg( count(b)) from foo group by a;
 
 create table t1 as select * from v1;
 
-select a, _timescaledb_internal.finalize_agg( 'count("any")', null, null, null, partial, cast('1' as int8) ) from t1
+select a, _timescaledb_functions.finalize_agg( 'count("any")', null, null, null, partial, cast('1' as int8) ) from t1
 group by a order by a ;
 
 insert into t1 select * from t1;
-select a, _timescaledb_internal.finalize_agg( 'count("any")', null, null, null, partial, cast('1' as int8) ) from t1
+select a, _timescaledb_functions.finalize_agg( 'count("any")', null, null, null, partial, cast('1' as int8) ) from t1
 group by a order by a ;
 
 --TEST2 sum numeric and min on float--
@@ -50,11 +50,11 @@ insert into foo values( 3 , 40 , 0);
 
 create or replace view v1(a , partialb, partialminc)
 as
- SELECT a,  _timescaledb_internal.partialize_agg( sum(b)) , _timescaledb_internal.partialize_agg( min(c)) from foo group by a;
+ SELECT a,  _timescaledb_functions.partialize_agg( sum(b)) , _timescaledb_functions.partialize_agg( min(c)) from foo group by a;
 
 create table t1 as select * from v1;
 
-select a, _timescaledb_internal.finalize_agg( 'sum(numeric)', null, null, null, partialb, cast('1' as numeric) ) sumb, _timescaledb_internal.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
+select a, _timescaledb_functions.finalize_agg( 'sum(numeric)', null, null, null, partialb, cast('1' as numeric) ) sumb, _timescaledb_functions.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
 
 insert into foo values( 3, 0, -1);
 insert into foo values( 5, 40, 10);
@@ -62,7 +62,7 @@ insert into foo values( 5, 40, 0);
 --note that rows for 3 get added all over again + new row
 --sum aggfnoid 2114, min aggfnoid is 2136 oid  numeric is 1700
 insert into t1 select * from v1 where ( a = 3 ) or a = 5;
-select a, _timescaledb_internal.finalize_agg( 'sum(numeric)', null, null, null, partialb, cast('1' as numeric) ) sumb, _timescaledb_internal.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
+select a, _timescaledb_functions.finalize_agg( 'sum(numeric)', null, null, null, partialb, cast('1' as numeric) ) sumb, _timescaledb_functions.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
 
 SET enable_partitionwise_aggregate = off;
 
@@ -88,7 +88,7 @@ insert into foo values(12, NULL, NULL);
 
 create or replace view v1(a , b, partialb, partialminc)
 as
- SELECT a, b, _timescaledb_internal.partialize_agg( sum(b+c)) , _timescaledb_internal.partialize_agg( min(c)) from foo group by a, b ;
+ SELECT a, b, _timescaledb_functions.partialize_agg( sum(b+c)) , _timescaledb_functions.partialize_agg( min(c)) from foo group by a, b ;
 
 create table t1 as select * from v1;
 
@@ -100,10 +100,10 @@ insert into t1 select * from v1 where ( a = 3 and b = 0 ) or a = 5 or (a = 12 an
 
 --results should match query: select a, sum(b+c), min(c) from foo group by a order by a;
 --sum aggfnoid 2111 for float8, min aggfnoid is 2136 oid  numeric is 1700
-select a, _timescaledb_internal.finalize_agg( 'sum(double precision)', null, null, null, partialb, null::float8 ) sumcd, _timescaledb_internal.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
+select a, _timescaledb_functions.finalize_agg( 'sum(double precision)', null, null, null, partialb, null::float8 ) sumcd, _timescaledb_functions.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
 
 insert into t1 select * from v1;
-select a, _timescaledb_internal.finalize_agg( 'sum(double precision)', null, null, null, partialb, null::float8 ) sumcd, _timescaledb_internal.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
+select a, _timescaledb_functions.finalize_agg( 'sum(double precision)', null, null, null, partialb, null::float8 ) sumcd, _timescaledb_functions.finalize_agg( 'min(double precision)', null, null, null, partialminc, cast('1' as float8) ) minc from t1 group by a order by a ;
 
 -- TEST4 with collation (text), NULLS and timestamp --
 drop table t1;
@@ -131,11 +131,11 @@ insert into foo values(12, NULL, NULL, NULL, NULL);
 
 create or replace view v1(a , b, partialb, partialc, partiald, partiale, partialf)
 as
- SELECT a, b, _timescaledb_internal.partialize_agg(sum(b))
- , _timescaledb_internal.partialize_agg(min(c))
- , _timescaledb_internal.partialize_agg(max(d))
- , _timescaledb_internal.partialize_agg(stddev(b))
- , _timescaledb_internal.partialize_agg(stddev(e)) from foo group by a, b ;
+ SELECT a, b, _timescaledb_functions.partialize_agg(sum(b))
+ , _timescaledb_functions.partialize_agg(min(c))
+ , _timescaledb_functions.partialize_agg(max(d))
+ , _timescaledb_functions.partialize_agg(stddev(b))
+ , _timescaledb_functions.partialize_agg(stddev(e)) from foo group by a, b ;
 
 create table t1 as select * from v1;
 
@@ -147,11 +147,11 @@ insert into t1 select * from v1 where  (a = 12 and b = 10) ;
 --results should match above query
 CREATE OR REPLACE VIEW vfinal(a , sumb, minc, maxd, stddevb, stddeve)
 AS
-select a, _timescaledb_internal.finalize_agg( 'sum(numeric)', null, null, null, partialb, null::numeric ) sumb
-, _timescaledb_internal.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialc, null::text ) minc
-, _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd
-, _timescaledb_internal.finalize_agg( 'stddev(numeric)', null, null, null, partiale, null::numeric ) stddevb
-, _timescaledb_internal.finalize_agg( 'stddev(int8)', null, null, null, partialf, null::numeric ) stddeve
+select a, _timescaledb_functions.finalize_agg( 'sum(numeric)', null, null, null, partialb, null::numeric ) sumb
+, _timescaledb_functions.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialc, null::text ) minc
+, _timescaledb_functions.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd
+, _timescaledb_functions.finalize_agg( 'stddev(numeric)', null, null, null, partiale, null::numeric ) stddevb
+, _timescaledb_functions.finalize_agg( 'stddev(int8)', null, null, null, partialf, null::numeric ) stddeve
 from t1 group by a order by a ;
 
 SELECT * FROM vfinal;
@@ -168,7 +168,7 @@ CREATE TABLE vfinal_dump_res AS SELECT * FROM vfinal;
 (SELECT * FROM vfinal_res) EXCEPT (SELECT * FROM vfinal_dump_res);
 
 --with having clause --
-select a, b ,  _timescaledb_internal.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialc, null::text ) minc, _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd from t1  where b is not null group by a, b having _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) is not null order by a, b;
+select a, b ,  _timescaledb_functions.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialc, null::text ) minc, _timescaledb_functions.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd from t1  where b is not null group by a, b having _timescaledb_functions.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) is not null order by a, b;
 
 --TEST5 test with TOAST data
 
@@ -187,7 +187,7 @@ INSERT INTO foo VALUES(1,  '2005-10-19 10:23:54', repeat('I am a tall big giraff
 INSERT INTO foo values( 1, '2005-01-01 00:00:00+00', NULL);
 INSERT INTO foo values( 2, '2005-01-01 00:00:00+00', NULL);
 
-create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_internal.partialize_agg( max(b) ), _timescaledb_internal.partialize_agg( min(toastval)) from foo group by a;
+create or replace  view v1(a, partialb, partialtv) as select a, _timescaledb_functions.partialize_agg( max(b) ), _timescaledb_functions.partialize_agg( min(toastval)) from foo group by a;
 
 EXPLAIN (VERBOSE, COSTS OFF)
 create table t1 as select * from v1;
@@ -195,37 +195,37 @@ create table t1 as select * from v1;
 create table t1 as select * from v1;
 
 insert into t1 select * from v1;
-select a, _timescaledb_internal.finalize_agg( 'max(timestamp with time zone)', null, null, null, partialb, null::timestamptz ) maxb,
-_timescaledb_internal.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialtv, null::text ) = repeat('I am a tall big giraffe in the zoo.  ', 1100) mintv_equal
+select a, _timescaledb_functions.finalize_agg( 'max(timestamp with time zone)', null, null, null, partialb, null::timestamptz ) maxb,
+_timescaledb_functions.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialtv, null::text ) = repeat('I am a tall big giraffe in the zoo.  ', 1100) mintv_equal
 from t1 group by a order by a;
 
 --non top-level partials
 with cte as (
-   select a, _timescaledb_internal.partialize_agg(min(toastval)) tp from foo group by a
+   select a, _timescaledb_functions.partialize_agg(min(toastval)) tp from foo group by a
 )
 select length(tp) from cte;
 
-select length(_timescaledb_internal.partialize_agg( min(toastval))) from foo group by a;
+select length(_timescaledb_functions.partialize_agg( min(toastval))) from foo group by a;
 
-select length(_timescaledb_internal.partialize_agg(min(a+1))) from foo;
+select length(_timescaledb_functions.partialize_agg(min(a+1))) from foo;
 
 \set ON_ERROR_STOP 0
-select length(_timescaledb_internal.partialize_agg(1+min(a))) from foo;
-select length(_timescaledb_internal.partialize_agg(min(a)+min(a))) from foo;
+select length(_timescaledb_functions.partialize_agg(1+min(a))) from foo;
+select length(_timescaledb_functions.partialize_agg(min(a)+min(a))) from foo;
 --non-trivial HAVING clause not allowed with partialize_agg
-select time_bucket('1 hour', b) as b, _timescaledb_internal.partialize_agg(avg(a))
+select time_bucket('1 hour', b) as b, _timescaledb_functions.partialize_agg(avg(a))
 from foo
 group by 1
 having avg(a) > 3;
 --mixing partialized and non-partialized aggs is not allowed
-select time_bucket('1 hour', b) as b, _timescaledb_internal.partialize_agg(avg(a)), sum(a)
+select time_bucket('1 hour', b) as b, _timescaledb_functions.partialize_agg(avg(a)), sum(a)
 from foo
 group by 1;
 \set ON_ERROR_STOP 1
 
 --partializing works with HAVING when the planner can effectively
 --reduce it. In this case to a simple filter.
-select time_bucket('1 hour', b) as b, toastval, _timescaledb_internal.partialize_agg(avg(a))
+select time_bucket('1 hour', b) as b, toastval, _timescaledb_functions.partialize_agg(avg(a))
 from foo
 group by b, toastval
 having toastval LIKE 'does not exist';
@@ -266,36 +266,36 @@ select aggregate_to_test_ffunc_extra(8, 'name'::text);
 
 \set ON_ERROR_STOP 0
 --errors on wrong input type array
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, null, part, null::text) from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, null, part, null::text) from cte;
 
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['a'::name, 'b'::name, 'c'::name]], part, null::text) from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['a'::name, 'b'::name, 'c'::name]], part, null::text) from cte;
 
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array[]::name[]]::name[], part, null::text) from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array[]::name[]]::name[], part, null::text) from cte;
 
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[]::name[], part, null::text) from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[]::name[], part, null::text) from cte;
 
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['public'::name, 'int'::name], array['public', 'text']], part, null::text) from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['public'::name, 'int'::name], array['public', 'text']], part, null::text) from cte;
 
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['public'::name, 'int4'::name], array['public', 'text']], part, null::text) from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['public'::name, 'int4'::name], array['public', 'text']], part, null::text) from cte;
 
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'text'], array['pg_catalog', 'text']], part, null::text) from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'text'], array['pg_catalog', 'text']], part, null::text) from cte;
 
-select _timescaledb_internal.finalize_agg(NULL::text,NULL::name,NULL::name,NULL::_name,NULL::bytea,a) over () from foo;
+select _timescaledb_functions.finalize_agg(NULL::text,NULL::name,NULL::name,NULL::_name,NULL::bytea,a) over () from foo;
 \set ON_ERROR_STOP 1
 
 --make sure right type in warning and is null returns true
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'text']], part, null::text) is null from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 'name'::text)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'text']], part, null::text) is null from cte;
 
-with cte as (SELECT  _timescaledb_internal.partialize_agg(aggregate_to_test_ffunc_extra(8, 1::bigint)) as part)
-select _timescaledb_internal.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'int8']], part, null::text) is null from cte;
+with cte as (SELECT  _timescaledb_functions.partialize_agg(aggregate_to_test_ffunc_extra(8, 1::bigint)) as part)
+select _timescaledb_functions.finalize_agg( 'aggregate_to_test_ffunc_extra(int, anyelement)', null, null, array[array['pg_catalog'::name, 'int4'::name], array['pg_catalog', 'int8']], part, null::text) is null from cte;
 
 
 -- Issue 4922
@@ -319,20 +319,20 @@ SET parallel_setup_cost = 0;
 -- Materialize partials from execution of parallel query plan
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+    _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_functions.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
 
 CREATE MATERIALIZED VIEW issue4922_partials_parallel AS
   SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+    _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_functions.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
 
 
@@ -341,20 +341,20 @@ SET max_parallel_workers_per_gather = 0;
 
 EXPLAIN (VERBOSE, COSTS OFF)
   SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+    _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_functions.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
 
 CREATE MATERIALIZED VIEW issue4922_partials_non_parallel AS
   SELECT
-    _timescaledb_internal.partialize_agg(sum(value)) AS partial_sum,
-    _timescaledb_internal.partialize_agg(avg(value)) AS partial_avg,
-    _timescaledb_internal.partialize_agg(min(value)) AS partial_min,
-    _timescaledb_internal.partialize_agg(max(value)) AS partial_max,
-    _timescaledb_internal.partialize_agg(count(*)) AS partial_count
+    _timescaledb_functions.partialize_agg(sum(value)) AS partial_sum,
+    _timescaledb_functions.partialize_agg(avg(value)) AS partial_avg,
+    _timescaledb_functions.partialize_agg(min(value)) AS partial_min,
+    _timescaledb_functions.partialize_agg(max(value)) AS partial_max,
+    _timescaledb_functions.partialize_agg(count(*)) AS partial_count
   FROM public.issue4922;
 
 RESET max_parallel_workers_per_gather;
@@ -374,9 +374,9 @@ FROM issue4922;
 
 -- The results should be the EQUAL TO the previous query
 SELECT
-  _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_sum, NULL::bigint) AS sum,
-  _timescaledb_internal.finalize_agg('pg_catalog.avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_avg, NULL::numeric) AS avg,
-  _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
-  _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
-  _timescaledb_internal.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
+  _timescaledb_functions.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_sum, NULL::bigint) AS sum,
+  _timescaledb_functions.finalize_agg('pg_catalog.avg(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_avg, NULL::numeric) AS avg,
+  _timescaledb_functions.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_min, NULL::integer) AS min,
+  _timescaledb_functions.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], partial_max, NULL::integer) AS max,
+  _timescaledb_functions.finalize_agg('pg_catalog.count()'::text, NULL::name, NULL::name, '{}'::name[], partial_count, NULL::bigint) AS count
 FROM issue4922_partials_parallel;

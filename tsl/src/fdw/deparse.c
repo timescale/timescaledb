@@ -2973,7 +2973,7 @@ deparseAggref(Aggref *node, deparse_expr_cxt *context)
 
 	/* Find aggregate name from aggfnoid which is a pg_proc entry */
 	if (partial_agg)
-		appendStringInfoString(buf, INTERNAL_SCHEMA_NAME "." PARTIALIZE_FUNC_NAME "(");
+		appendStringInfoString(buf, FUNCTIONS_SCHEMA_NAME "." PARTIALIZE_FUNC_NAME "(");
 
 	appendFunctionName(node->aggfnoid, context);
 	appendStringInfoChar(buf, '(');

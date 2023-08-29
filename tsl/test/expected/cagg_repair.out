@@ -337,9 +337,9 @@ DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary_old_format has 
  sum    | bigint                   |           |          |         | plain   | 
 View definition:
  SELECT _materialized_hypertable_4.bucket,
-    _timescaledb_internal.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_2_2, NULL::integer) AS min,
-    _timescaledb_internal.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_3_3, NULL::integer) AS max,
-    _timescaledb_internal.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_4_4, NULL::bigint) AS sum
+    _timescaledb_functions.finalize_agg('pg_catalog.min(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_2_2, NULL::integer) AS min,
+    _timescaledb_functions.finalize_agg('pg_catalog.max(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_3_3, NULL::integer) AS max,
+    _timescaledb_functions.finalize_agg('pg_catalog.sum(integer)'::text, NULL::name, NULL::name, '{{pg_catalog,int4}}'::name[], _materialized_hypertable_4.agg_4_4, NULL::bigint) AS sum
    FROM _timescaledb_internal._materialized_hypertable_4
   WHERE _materialized_hypertable_4.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(4)), '-infinity'::timestamp with time zone)
   GROUP BY _materialized_hypertable_4.bucket

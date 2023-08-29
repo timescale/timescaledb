@@ -161,7 +161,7 @@ collation_oid_from_name(char *schema_name, char *collation_name)
  * partial state of numeric aggregates also changing format.
  *
  * If a user that has stored partials (by using Continuous Aggregates or calling
- * _timescaledb_internal.finalize_agg()) upgrades to PG14 then the partial state deserialization
+ * _timescaledb_functions.finalize_agg()) upgrades to PG14 then the partial state deserialization
  * will lead to errors due to the mismatch with the PG14 code.
  *
  * For F_NUMERIC_AVG_DESERIALIZE and F_NUMERIC_DESERIALIZE the length of the serialized aggregate
