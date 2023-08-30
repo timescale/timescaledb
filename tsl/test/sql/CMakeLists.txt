@@ -18,8 +18,6 @@ set(TEST_FILES
     compression_conflicts.sql
     compression_insert.sql
     compression_qualpushdown.sql
-    dist_param.sql
-    dist_views.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
@@ -29,6 +27,10 @@ set(TEST_FILES
     reorder.sql
     skip_scan.sql
     size_utils_tsl.sql)
+
+if(ENABLE_MULTINODE_TESTS)
+  list(APPEND TEST_FILES dist_param.sql dist_views.sql)
+endif()
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
@@ -59,20 +61,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compress_table.sql
     cagg_bgw_drop_chunks.sql
     cagg_bgw.sql
-    cagg_bgw_dist_ht.sql
     cagg_ddl.sql
-    cagg_ddl_dist_ht.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
     cagg_errors_deprecated.sql
     cagg_joins.sql
     cagg_migrate.sql
-    cagg_migrate_dist_ht.sql
     cagg_multi.sql
     cagg_on_cagg.sql
-    cagg_on_cagg_dist_ht.sql
     cagg_on_cagg_joins.sql
-    cagg_on_cagg_joins_dist_ht.sql
     cagg_tableam.sql
     cagg_usage.sql
     cagg_policy_run.sql
@@ -83,29 +80,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     ddl_hook.sql
     debug_notice.sql
     deparse.sql
-    dist_api_calls.sql
-    dist_commands.sql
-    dist_compression.sql
-    dist_copy_available_dns.sql
-    dist_copy_format_long.sql
-    dist_copy_long.sql
-    dist_ddl.sql
-    dist_cagg.sql
-    dist_move_chunk.sql
-    dist_policy.sql
-    dist_util.sql
-    dist_triggers.sql
-    dist_backup.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
     read_only.sql
-    remote_connection_cache.sql
-    remote_connection.sql
-    remote_copy.sql
-    remote_stmt_params.sql
-    remote_txn_id.sql
-    remote_txn_resolve.sql
-    remote_txn.sql
     transparent_decompression_queries.sql
     tsl_tables.sql
     license_tsl.sql
@@ -113,6 +90,38 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     transparent_decompression_join_index.sql
     feature_flags.sql)
+
+  if(ENABLE_MULTINODE_TESTS)
+    list(
+      APPEND
+      TEST_FILES
+      cagg_bgw_dist_ht.sql
+      cagg_migrate_dist_ht.sql
+      cagg_ddl_dist_ht.sql
+      cagg_on_cagg_dist_ht.sql
+      cagg_on_cagg_joins_dist_ht.sql
+      dist_api_calls.sql
+      dist_commands.sql
+      dist_compression.sql
+      dist_copy_available_dns.sql
+      dist_copy_format_long.sql
+      dist_copy_long.sql
+      dist_ddl.sql
+      dist_cagg.sql
+      dist_move_chunk.sql
+      dist_policy.sql
+      dist_util.sql
+      dist_triggers.sql
+      dist_backup.sql
+      remote_connection_cache.sql
+      remote_connection.sql
+      remote_copy.sql
+      remote_stmt_params.sql
+      remote_txn_id.sql
+      remote_txn_resolve.sql
+      remote_txn.sql)
+  endif()
+
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
@@ -172,19 +181,20 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(
-    APPEND
-    TEST_TEMPLATES
-    cagg_query.sql.in
-    dist_hypertable.sql.in
-    dist_grant.sql.in
-    dist_ref_table_join.sql.in
-    dist_remote_error.sql.in
-    dist_partial_agg.sql.in
-    dist_query.sql.in
-    cagg_invalidation_dist_ht.sql.in
-    continuous_aggs.sql.in
-    continuous_aggs_deprecated.sql.in)
+  list(APPEND TEST_TEMPLATES cagg_query.sql.in continuous_aggs.sql.in
+       continuous_aggs_deprecated.sql.in)
+  if(ENABLE_MULTINODE_TESTS)
+    list(
+      APPEND
+      TEST_TEMPLATES
+      cagg_invalidation_dist_ht.sql.in
+      dist_hypertable.sql.in
+      dist_grant.sql.in
+      dist_ref_table_join.sql.in
+      dist_remote_error.sql.in
+      dist_partial_agg.sql.in
+      dist_query.sql.in)
+  endif()
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
   endif()
