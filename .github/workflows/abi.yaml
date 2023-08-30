@@ -95,7 +95,7 @@ jobs:
           apk add cmake gcc make build-base krb5-dev git ${EXTRA_PKGS}
           git config --global --add safe.directory /mnt
           cd /mnt
-          BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
+          BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap -DENABLE_MULTINODE_TESTS=ON
           make -C build_abi install
           mkdir -p build_abi/install_ext build_abi/install_lib
           cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build_abi/install_ext

@@ -37,6 +37,7 @@ from ci_settings import (
 
 # github event type which is either push, pull_request or schedule
 event_type = sys.argv[1]
+pull_request = event_type == "pull_request"
 
 m = {
     "include": [],
@@ -75,6 +76,8 @@ def build_debug_config(overrides):
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
         }
     )
+    if not pull_request:
+        base_config["tsdb_build_args"] += " -DENABLE_MULTINODETESTS=ON"
     base_config.update(overrides)
     return base_config
 
@@ -93,6 +96,8 @@ def build_release_config(overrides):
             "coverage": False,
         }
     )
+    if not pull_request:
+        release_config["tsdb_build_args"] += " -DENABLE_MULTINODETESTS=ON"
     base_config.update(release_config)
     base_config.update(overrides)
     return base_config
@@ -148,6 +153,8 @@ def macos_config(overrides):
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
         }
     )
+    if not pull_request:
+        base_config["tsdb_build_args"] += " -DENABLE_MULTINODETESTS=ON"
     base_config.update(overrides)
     return base_config
 
@@ -159,13 +166,9 @@ ignored_tests = {"partialize_finalize"}
 # common ignored tests for all non-scheduled pg15 tests (e.g. PRs)
 # partialize_finalize is ignored due to #4937
 # dist_move_chunk, dist_param, dist_insert, and remote_txn ignored due to flakiness
-if event_type == "pull_request":
+if pull_request:
     ignored_tests = {
-        "dist_insert",
-        "dist_move_chunk",
-        "dist_param",
         "partialize_finalize",
-        "remote_txn",
         "telemetry",
     }
 
@@ -203,7 +206,7 @@ m["include"].append(
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
-if event_type != "pull_request":
+if not pull_request:
     # add debug test for first supported PG13 version
     pg13_debug_earliest = {
         "pg": PG13_EARLIEST,
@@ -214,7 +217,7 @@ if event_type != "pull_request":
             "dist_gapfill_pushdown-13",
             "transparent_decompress_chunk-13",
         },
-        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
+        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF -DENABLE_MULTINODETESTS=ON",
     }
     m["include"].append(build_debug_config(pg13_debug_earliest))
 
@@ -274,7 +277,7 @@ if event_type != "pull_request":
             }
         )
     )
-else:
+elif len(sys.argv) > 2:
     # Check if we need to check for the flaky tests. Determine which test files
     # have been changed in the PR. The sql files might include other files that
     # change independently, and might be .in templates, so it's easier to look
