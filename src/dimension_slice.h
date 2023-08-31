@@ -101,6 +101,12 @@ extern int ts_dimension_slice_scan_iterator_set_range(ScanIterator *it, int32 di
 													  int64 start_value,
 													  StrategyNumber end_strategy, int64 end_value);
 
+extern bool ts_osm_chunk_range_overlaps(int32 osm_dimension_slice_id, int32 dimension_id,
+										int64 range_start, int64 range_end);
+
+extern int ts_dimension_slice_update_by_id(int32 dimension_slice_id,
+										   FormData_dimension_slice *fd_slice);
+
 #define dimension_slice_insert(slice) ts_dimension_slice_insert_multi(&(slice), 1)
 
 #define dimension_slice_scan(dimension_id, coordinate, tuplock)                                    \

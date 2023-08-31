@@ -119,6 +119,7 @@ enum Anum_hypertable
 	Anum_hypertable_compression_state,
 	Anum_hypertable_compressed_hypertable_id,
 	Anum_hypertable_replication_factor,
+	Anum_hypertable_status,
 	_Anum_hypertable_max,
 };
 
@@ -138,6 +139,7 @@ typedef struct FormData_hypertable
 	int16 compression_state;
 	int32 compressed_hypertable_id;
 	int16 replication_factor;
+	int32 status;
 } FormData_hypertable;
 
 typedef FormData_hypertable *Form_hypertable;
@@ -1483,6 +1485,27 @@ typedef struct FormData_job_error
 } FormData_job_error;
 
 typedef FormData_job_error *Form_job_error;
+
+#define HYPERTABLE_STATUS_DEFAULT 0
+/* flag set when hypertable has an attached OSM chunk */
+#define HYPERTABLE_STATUS_OSM 1
+/*
+ * Currently, the time slice range metadata is updated in
+ * the timescaledb catalog with the min and max of the range managed by OSM.
+ * However, this range has to be contiguous in order to
+ * update our catalog with its min and max value. If it is not contiguous,
+ * then we cannot store the min and max in our catalog because tuple routing
+ * will not work properly with gaps in the range.
+ * When attempting to insert into one of the gaps, which do not in fact contain
+ * tiered data, we error out because this is perceived as an attempt to insert
+ * into tiered chunks, which are immutable.
+ * When the range is noncontiguous, we store [INT64_MAX - 1, INT64_MAX) and set
+ * this flag.
+ * This flag also serves to allow or block the ordered append optimization. When
+ * the range covered by OSM is contiguous, then it is possible to do ordered
+ * append.
+ */
+#define HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS 2
 
 extern void ts_catalog_table_info_init(CatalogTableInfo *tables, int max_table,
 									   const TableInfoDef *table_ary,

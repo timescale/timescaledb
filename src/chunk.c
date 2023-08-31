@@ -4612,6 +4612,13 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
 	chunk_add_inheritance(chunk, parent_ht);
+	/*
+	 * Update hypertable entry with tiering status information.
+	 * Noncontiguous flag is not set since the chunk is empty upon creation,
+	 * with an invalid range assigned, so ordered append should be allowed.
+	 */
+	parent_ht->fd.status = ts_set_flags_32(parent_ht->fd.status, HYPERTABLE_STATUS_OSM);
+	ts_hypertable_update(parent_ht);
 }
 
 void
@@ -4866,4 +4873,20 @@ ts_chunk_get_osm_chunk_id(int hypertable_id)
 	}
 
 	return chunk_id;
+}
+
+/* Upon creation, OSM chunks are assigned an invalid range [INT64_MAX -1, infinity) */
+bool
+ts_osm_chunk_range_is_invalid(int64 range_start, int64 range_end)
+{
+	return ((range_end == PG_INT64_MAX) && (range_start == range_end - 1));
+}
+
+int32
+ts_chunk_get_osm_slice_id(int32 chunk_id, int32 time_dim_id)
+{
+	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+	const DimensionSlice *ds = ts_hypercube_get_slice_by_dimension_id(chunk->cube, time_dim_id);
+	const int slice_id = ds->fd.id;
+	return slice_id;
 }

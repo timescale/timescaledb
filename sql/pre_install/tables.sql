@@ -52,6 +52,7 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   compression_state smallint NOT NULL DEFAULT 0,
   compressed_hypertable_id integer,
   replication_factor smallint NULL,
+  status int NOT NULL DEFAULT 0,
   -- table constraints
   CONSTRAINT hypertable_pkey PRIMARY KEY (id),
   CONSTRAINT hypertable_associated_schema_name_associated_table_prefix_key UNIQUE (associated_schema_name, associated_table_prefix),

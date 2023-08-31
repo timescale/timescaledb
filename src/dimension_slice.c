@@ -11,6 +11,7 @@
 #include <catalog/indexing.h>
 #include <funcapi.h>
 #include <utils/lsyscache.h>
+#include <utils/builtins.h>
 #include <catalog/pg_opfamily.h>
 #include <catalog/pg_type.h>
 
@@ -1147,4 +1148,78 @@ ts_dimension_slice_get_chunkids_to_compress(int32 dimension_id, StrategyNumber s
 	ts_scan_iterator_close(&it);
 
 	return chunk_ids;
+}
+
+/* This function checks for overlap between the range we want to update
+ for the OSM chunk and the chunks currently in timescaledb (not managed by OSM)
+ */
+bool
+ts_osm_chunk_range_overlaps(int32 osm_dimension_slice_id, int32 dimension_id, int64 range_start,
+							int64 range_end)
+{
+	bool res;
+	DimensionVec *vec = dimension_slice_collision_scan(dimension_id, range_start, range_end);
+	/* there is only one dimension slice for the OSM chunk. The OSM chunk may not
+	 * necessarily appear in the list of overlapping ranges because when first tiered,
+	 * it is given a range [max, infinity)
+	 */
+	if (vec->num_slices >= 2 ||
+		(vec->num_slices == 1 && vec->slices[0]->fd.id != osm_dimension_slice_id))
+		res = true;
+	else
+		res = false;
+	pfree(vec);
+	return res;
+}
+
+static ScanTupleResult
+dimension_slice_tuple_update(TupleInfo *ti, void *data)
+{
+	bool should_free;
+	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
+	FormData_dimension_slice *fd = (FormData_dimension_slice *) data;
+
+	Datum values[Natts_dimension_slice] = { 0 };
+	bool isnull[Natts_dimension_slice] = { 0 };
+	bool doReplace[Natts_dimension_slice] = { 0 };
+
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] =
+		Int64GetDatum(fd->range_start);
+	doReplace[AttrNumberGetAttrOffset(Anum_dimension_slice_range_start)] = true;
+
+	values[AttrNumberGetAttrOffset(Anum_dimension_slice_range_end)] = Int64GetDatum(fd->range_end);
+	doReplace[AttrNumberGetAttrOffset(Anum_dimension_slice_range_end)] = true;
+
+	HeapTuple new_tuple =
+		heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, isnull, doReplace);
+
+	ts_catalog_update(ti->scanrel, new_tuple);
+
+	heap_freetuple(new_tuple);
+	if (should_free)
+		heap_freetuple(tuple);
+
+	return SCAN_DONE;
+}
+
+int
+ts_dimension_slice_update_by_id(int32 dimension_slice_id, FormData_dimension_slice *fd_slice)
+{
+	ScanKeyData scankey[1];
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_id_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_slice_id));
+
+	return dimension_slice_scan_limit_internal(DIMENSION_SLICE_ID_IDX,
+											   scankey,
+											   1,
+											   dimension_slice_tuple_update,
+											   fd_slice,
+											   1,
+											   RowExclusiveLock,
+											   NULL,
+											   CurrentMemoryContext);
 }
