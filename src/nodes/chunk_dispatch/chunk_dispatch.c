@@ -23,6 +23,7 @@
 #include "guc.h"
 #include "nodes/hypertable_modify.h"
 #include "ts_catalog/chunk_data_node.h"
+#include "hypercube.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 
@@ -105,6 +106,32 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (chunk && ts_chunk_is_frozen(chunk))
 			elog(ERROR, "cannot INSERT into frozen chunk \"%s\"", get_rel_name(chunk->table_id));
 #endif
+		if (chunk && IS_OSM_CHUNK(chunk))
+		{
+			const Dimension *time_dim =
+				hyperspace_get_open_dimension(dispatch->hypertable->space, 0);
+			Assert(time_dim != NULL);
+
+			Oid outfuncid = InvalidOid;
+			bool isvarlena;
+			getTypeOutputInfo(time_dim->fd.column_type, &outfuncid, &isvarlena);
+			Assert(!isvarlena);
+			Datum start_ts = ts_internal_to_time_value(chunk->cube->slices[0]->fd.range_start,
+													   time_dim->fd.column_type);
+			Datum end_ts = ts_internal_to_time_value(chunk->cube->slices[0]->fd.range_end,
+													 time_dim->fd.column_type);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("Cannot insert into tiered chunk range of %s.%s - attempt to create "
+							"new chunk "
+							"with range  [%s %s] failed",
+							NameStr(dispatch->hypertable->fd.schema_name),
+							NameStr(dispatch->hypertable->fd.table_name),
+							DatumGetCString(OidFunctionCall1(outfuncid, start_ts)),
+							DatumGetCString(OidFunctionCall1(outfuncid, end_ts))),
+					 errhint(
+						 "Hypertable has tiered data with time range that overlaps the insert")));
+		}
 
 		if (!chunk)
 		{

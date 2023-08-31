@@ -911,11 +911,15 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				if (!ordered || path->pathkeys == NIL || list_length(merge->subpaths) == 0)
 					return false;
 
-				/* cannot support ordered append with OSM chunks. OSM chunk
-				 * ranges are not recorded with the catalog
+				/*
+				 * Do not try to do ordered append if the OSM chunk range is noncontiguous
 				 */
 				if (ht && ts_chunk_get_osm_chunk_id(ht->fd.id) != INVALID_CHUNK_ID)
-					return false;
+				{
+					if (ts_flags_are_set_32(ht->fd.status,
+											HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
+						return false;
+				}
 
 				/*
 				 * If we only have 1 child node there is no need for the

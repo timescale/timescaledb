@@ -59,7 +59,8 @@ set(SOURCE_FILES
     policy_internal.sql
     cagg_utils.sql
     cagg_migrate.sql
-    job_error_log_retention.sql)
+    job_error_log_retention.sql
+    osm_api.sql)
 
 if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND SOURCE_FILES debug_utils.sql)

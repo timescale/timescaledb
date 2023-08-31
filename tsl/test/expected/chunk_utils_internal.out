@@ -7,6 +7,7 @@
 -- * freeze_chunk
 -- * drop_chunk
 -- * attach_foreign_table_chunk
+-- * hypertable_osm_range_update
 CREATE OR REPLACE VIEW chunk_view AS
   SELECT
     ht.table_name AS hypertable_name,
@@ -514,10 +515,24 @@ SELECT * FROM child_fdw_table;
  Wed Jan 01 01:00:00 2020 PST |    100 |  1000
 (1 row)
 
+-- error should be thrown as the hypertable does not yet have an associated tiered chunk
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try','2020-01-01 01:00'::timestamptz, '2020-01-01 03:00');
+ERROR:  no OSM chunk found for hypertable public.ht_try
+\set ON_ERROR_STOP 1
 SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table');
  attach_osm_table_chunk 
 ------------------------
  t
+(1 row)
+
+-- must also update the range since the created chunk is assumed to be empty,
+-- and its range actually updated when data is moved to OSM. But in this mock
+-- test case, the attached OSM chunk contains data
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01'::timestamptz, '2020-01-02');
+ hypertable_osm_range_update 
+-----------------------------
+ f
 (1 row)
 
 -- OSM chunk is not visible in chunks view
@@ -533,10 +548,10 @@ SELECT chunk_name, range_start, range_end
 FROM chunk_view
 WHERE hypertable_name = 'ht_try'
 ORDER BY chunk_name;
-    chunk_name     |              range_start              |          range_end           
--------------------+---------------------------------------+------------------------------
- _hyper_5_10_chunk | Wed May 04 17:00:00 2022 PDT          | Thu May 05 17:00:00 2022 PDT
- child_fdw_table   | Sat Jan 09 20:00:54.775806 294247 PST | infinity
+    chunk_name     |         range_start          |          range_end           
+-------------------+------------------------------+------------------------------
+ _hyper_5_10_chunk | Wed May 04 17:00:00 2022 PDT | Thu May 05 17:00:00 2022 PDT
+ child_fdw_table   | Wed Jan 01 00:00:00 2020 PST | Thu Jan 02 00:00:00 2020 PST
 (2 rows)
 
 SELECT * FROM ht_try ORDER BY 1;
@@ -596,6 +611,97 @@ SELECT * from ht_try WHERE timec > '2020-01-01 01:00' ORDER BY 1;
  Thu May 05 01:00:00 2022 PDT |    222 |   222
 (1 row)
 
+-- test ordered append
+BEGIN;
+-- before updating the ranges
+EXPLAIN SELECT * FROM ht_try ORDER BY 1;
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on ht_try  (cost=100.00..202.29 rows=3276 width=24)
+   Order: ht_try.timec
+   ->  Foreign Scan on child_fdw_table  (cost=100.00..166.59 rows=1706 width=24)
+   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk  (cost=0.15..35.70 rows=1570 width=24)
+(4 rows)
+
+-- range before update
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+ chunk_id |   table_name    | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
+----------+-----------------+--------+-----------+--------------------+------------------+------------------
+       11 | child_fdw_table |      0 | t         |                 10 | 1577865600000000 | 1577952000000000
+(1 row)
+
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01 01:00'::timestamptz, '2020-01-02');
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+SELECT id, schema_name, table_name, status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
+ id | schema_name | table_name | status 
+----+-------------+------------+--------
+  5 | public      | ht_try     |      1
+(1 row)
+
+-- verify range was updated
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.table_name = 'child_fdw_table' AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+ chunk_id |   table_name    | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
+----------+-----------------+--------+-----------+--------------------+------------------+------------------
+       11 | child_fdw_table |      0 | t         |                 10 | 1577869200000000 | 1577952000000000
+(1 row)
+
+-- should be ordered append now
+EXPLAIN SELECT * FROM ht_try ORDER BY 1;
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on ht_try  (cost=100.00..202.29 rows=3276 width=24)
+   Order: ht_try.timec
+   ->  Foreign Scan on child_fdw_table  (cost=100.00..166.59 rows=1706 width=24)
+   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk  (cost=0.15..35.70 rows=1570 width=24)
+(4 rows)
+
+SELECT * FROM ht_try ORDER BY 1;
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+ Thu May 05 01:00:00 2022 PDT |    222 |   222
+(2 rows)
+
+-- test invalid range - should not be ordered append
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try');
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+EXPLAIN SELECT * from ht_try ORDER BY 1;
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Merge Append  (cost=100.16..235.06 rows=3276 width=24)
+   Sort Key: _hyper_5_10_chunk.timec
+   ->  Index Scan Backward using _hyper_5_10_chunk_ht_try_timec_idx on _hyper_5_10_chunk  (cost=0.15..35.70 rows=1570 width=24)
+   ->  Foreign Scan on child_fdw_table  (cost=100.00..166.59 rows=1706 width=24)
+(4 rows)
+
+SELECT * from ht_try ORDER BY 1;
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+ Thu May 05 01:00:00 2022 PDT |    222 |   222
+(2 rows)
+
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- test that error is produced when range_start < range_end
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-02 01:00'::timestamptz, '2020-01-02 00:00');
+ERROR:  dimension slice range_end cannot be less than range_start
+-- error when range overlaps
+SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2022-05-05 01:00'::timestamptz, '2022-05-06');
+ERROR:  attempting to set overlapping range for tiered chunk of public.ht_try
+\set ON_ERROR_STOP 1
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
 EXPLAIN (COSTS OFF) SELECT * from ht_try;
@@ -761,6 +867,13 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('hyper_constr', 'child_hype
  t
 (1 row)
 
+-- was attached with data, so must update the range
+SELECT _timescaledb_functions.hypertable_osm_range_update('hyper_constr', 100, 110);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
 SELECT table_name, status, osm_chunk
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
@@ -785,26 +898,6 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
          conname         
 -------------------------
  hyper_constr_temp_check
-(1 row)
-
---TEST policy is not applied on OSM chunk
-CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
-SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
- set_integer_now_func 
-----------------------
- 
-(1 row)
-
-SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
-CALL run_job(:deljob_id);
-CALL run_job(:deljob_id);
-SELECT chunk_name, range_start, range_end
-FROM chunk_view
-WHERE hypertable_name = 'hyper_constr'
-ORDER BY chunk_name;
-     chunk_name     |              range_start              | range_end 
---------------------+---------------------------------------+-----------
- child_hyper_constr | Sat Jan 09 20:00:54.775806 294247 PST | infinity
 (1 row)
 
 ----- TESTS for copy into frozen chunk ------------
@@ -910,6 +1003,26 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 (1 row)
 
 DROP INDEX hyper_constr_mid_idx;
+--TEST policy is applied on OSM chunk
+-- XXX this is to be updated once the hook for dropping chunks is added
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
+SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
+CALL run_job(:deljob_id);
+CALL run_job(:deljob_id);
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
+ chunk_name | range_start | range_end 
+------------+-------------+-----------
+(0 rows)
+
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
 CREATE TABLE osm_int4(time int4 NOT NULL);
@@ -987,6 +1100,259 @@ ORDER BY 2,3;
  osm_tstz   | 22 |           14 | 9223372036854775806 | 9223372036854775807
 (6 rows)
 
+-- test that correct slice is found and updated for table with multiple chunk constraints
+CREATE TABLE test_multicon(time timestamptz not null unique, a int);
+SELECT hypertable_id as htid FROM create_hypertable('test_multicon', 'time', chunk_time_interval => interval '1 day') \gset
+insert into test_multicon values ('2020-01-02 01:00'::timestamptz, 1);
+SELECT * FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.hypertable_id = :htid
+AND c.id = cc.chunk_id;
+ id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk | chunk_id | dimension_slice_id |       constraint_name       | hypertable_constraint_name 
+----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------+----------+--------------------+-----------------------------+----------------------------
+ 23 |            15 | _timescaledb_internal | _hyper_15_23_chunk |                     | f       |      0 | f         |       23 |                    | 23_3_test_multicon_time_key | test_multicon_time_key
+ 23 |            15 | _timescaledb_internal | _hyper_15_23_chunk |                     | f       |      0 | f         |       23 |                 23 | constraint_23               | 
+(2 rows)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER ;
+UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :htid;
+\c :TEST_DBNAME :ROLE_4;
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', '2020-01-02 01:00'::timestamptz, '2020-01-04 01:00');
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+-- view udpated range
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+ chunk_id |     table_name     | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
+----------+--------------------+--------+-----------+--------------------+------------------+------------------
+       23 | _hyper_15_23_chunk |      0 | t         |                 23 | 1577955600000000 | 1578128400000000
+(1 row)
+
+-- check that range was reset to default - infinity
+\set ON_ERROR_STOP 0
+-- both range_start and range_end must be NULL, or non-NULL
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL, '2020-01-04 01:00'::timestamptz);
+ERROR:  range_start and range_end parameters must be both NULL or both non-NULL
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL, NULL);
+ERROR:  could not determine polymorphic type because input has type unknown
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon');
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+\set ON_ERROR_STOP 1
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_multicon', NULL::timestamptz, NULL);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+ chunk_id |     table_name     | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
+----------+--------------------+--------+-----------+--------------------+---------------------+---------------------
+       23 | _hyper_15_23_chunk |      0 | t         |                 23 | 9223372036854775806 | 9223372036854775807
+(1 row)
+
+-- test further with ordered append
+\c postgres_fdw_db :ROLE_4;
+CREATE TABLE test_chunkapp_fdw (time timestamptz NOT NULL, a int);
+INSERT INTO test_chunkapp_fdw (time, a) VALUES ('2020-01-03 02:00'::timestamptz, 3);
+\c :TEST_DBNAME :ROLE_4
+CREATE TABLE test_chunkapp(time timestamptz NOT NULL, a int);
+SELECT hypertable_id as htid FROM create_hypertable('test_chunkapp', 'time', chunk_time_interval => interval '1day') \gset
+INSERT INTO test_chunkapp (time, a) VALUES ('2020-01-01 01:00'::timestamptz, 1), ('2020-01-02 01:00'::timestamptz, 2);
+CREATE FOREIGN TABLE test_chunkapp_fdw_child(time timestamptz NOT NULL, a int) SERVER s3_server OPTIONS (schema_name 'public', table_name 'test_chunkapp_fdw');;
+SELECT _timescaledb_functions.attach_osm_table_chunk('test_chunkapp','test_chunkapp_fdw_child');
+ attach_osm_table_chunk 
+------------------------
+ t
+(1 row)
+
+-- view range before update
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+ chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
+----------+-------------------------+--------+-----------+--------------------+---------------------+---------------------
+       24 | _hyper_16_24_chunk      |      0 | f         |                 24 |    1577836800000000 |    1577923200000000
+       25 | _hyper_16_25_chunk      |      0 | f         |                 25 |    1577923200000000 |    1578009600000000
+       26 | test_chunkapp_fdw_child |      0 | t         |                 26 | 9223372036854775806 | 9223372036854775807
+(3 rows)
+
+-- attempt to update overlapping range, should fail
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020-01-02 01:00'::timestamptz, '2020-01-04 01:00');
+ERROR:  attempting to set overlapping range for tiered chunk of public.test_chunkapp
+\set ON_ERROR_STOP 1
+-- update actual range of OSM chunk, should work
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', '2020-01-03 00:00'::timestamptz, '2020-01-04 00:00');
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+-- view udpated range
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+ chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
+----------+-------------------------+--------+-----------+--------------------+------------------+------------------
+       24 | _hyper_16_24_chunk      |      0 | f         |                 24 | 1577836800000000 | 1577923200000000
+       25 | _hyper_16_25_chunk      |      0 | f         |                 25 | 1577923200000000 | 1578009600000000
+       26 | test_chunkapp_fdw_child |      0 | t         |                 26 | 1578038400000000 | 1578124800000000
+(3 rows)
+
+-- ordered append should be possible as ranges do not overlap
+EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chunkapp  (cost=0.15..270.31 rows=6355 width=12)
+   Order: test_chunkapp."time"
+   ->  Index Scan Backward using _hyper_16_24_chunk_test_chunkapp_time_idx on _hyper_16_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_16_25_chunk_test_chunkapp_time_idx on _hyper_16_25_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
+(5 rows)
+
+SELECT * FROM test_chunkapp ORDER BY 1;
+             time             | a 
+------------------------------+---
+ Wed Jan 01 01:00:00 2020 PST | 1
+ Thu Jan 02 01:00:00 2020 PST | 2
+ Fri Jan 03 02:00:00 2020 PST | 3
+(3 rows)
+
+-- but, insert should not be possible
+SELECT ts_setup_osm_hook();
+ ts_setup_osm_hook 
+-------------------
+ 
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO test_chunkapp VALUES ('2020-01-03 02:00'::timestamptz, 3);
+ERROR:  Cannot insert into tiered chunk range of public.test_chunkapp - attempt to create new chunk with range  [Fri Jan 03 00:00:00 2020 PST Sat Jan 04 00:00:00 2020 PST] failed
+\set ON_ERROR_STOP 1
+SELECT ts_undo_osm_hook();
+ ts_undo_osm_hook 
+------------------
+ 
+(1 row)
+
+-- reset range to infinity
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp',empty:=false);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+-- ordered append not possible because range is invalid and empty was not specified
+EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Merge Append  (cost=100.33..352.47 rows=6355 width=12)
+   Sort Key: _hyper_16_24_chunk."time"
+   ->  Index Scan Backward using _hyper_16_24_chunk_test_chunkapp_time_idx on _hyper_16_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_16_25_chunk_test_chunkapp_time_idx on _hyper_16_25_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
+(5 rows)
+
+SELECT * FROM test_chunkapp ORDER BY 1;
+             time             | a 
+------------------------------+---
+ Wed Jan 01 01:00:00 2020 PST | 1
+ Thu Jan 02 01:00:00 2020 PST | 2
+ Fri Jan 03 02:00:00 2020 PST | 3
+(3 rows)
+
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
+ chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
+----------+-------------------------+--------+-----------+--------------------+---------------------+---------------------
+       24 | _hyper_16_24_chunk      |      0 | f         |                 24 |    1577836800000000 |    1577923200000000
+       25 | _hyper_16_25_chunk      |      0 | f         |                 25 |    1577923200000000 |    1578009600000000
+       26 | test_chunkapp_fdw_child |      0 | t         |                 26 | 9223372036854775806 | 9223372036854775807
+(3 rows)
+
+-- now set empty to true, should ordered append
+\c postgres_fdw_db :ROLE_4;
+DELETE FROM test_chunkapp_fdw;
+\c :TEST_DBNAME :ROLE_4;
+SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', NULL::timestamptz, NULL, empty => true);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
+                                                               QUERY PLAN                                                               
+----------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_chunkapp  (cost=0.15..270.31 rows=6355 width=12)
+   Order: test_chunkapp."time"
+   ->  Index Scan Backward using _hyper_16_24_chunk_test_chunkapp_time_idx on _hyper_16_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_16_25_chunk_test_chunkapp_time_idx on _hyper_16_25_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
+(5 rows)
+
+SELECT * FROM test_chunkapp ORDER BY 1;
+             time             | a 
+------------------------------+---
+ Wed Jan 01 01:00:00 2020 PST | 1
+ Thu Jan 02 01:00:00 2020 PST | 2
+(2 rows)
+
+-- test error is triggered when time dimension not found
+CREATE TABLE test2(time timestamptz not null, a int);
+SELECT create_hypertable('test2', 'time');
+  create_hypertable  
+---------------------
+ (17,public,test2,t)
+(1 row)
+
+INSERT INTO test2 VALUES ('2020-01-01'::timestamptz, 1);
+ALTER TABLE test2 SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('test2'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_17_27_chunk
+(1 row)
+
+-- find internal compression table, call API function on it
+SELECT format('%I.%I', cht.schema_name, cht.table_name) AS "COMPRESSION_TBLNM"
+FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
+WHERE ht.table_name = 'test2' and cht.id = ht.compressed_hypertable_id \gset
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.hypertable_osm_range_update(:'COMPRESSION_TBLNM'::regclass, '2020-01-01'::timestamptz);
+ERROR:  could not find time dimension for hypertable _timescaledb_internal._compressed_hypertable_18
+\set ON_ERROR_STOP 1
+-- test wrong/incompatible data types with hypertable time dimension
+-- update range of int2 with int4
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int2', range_start => 65540::int4, range_end => 100000::int4);
+ERROR:  invalid time argument type "integer"
+-- update range of int8 with int4
+SELECT _timescaledb_functions.hypertable_osm_range_update('osm_int8', 120, 150);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+-- update range of timestamptz with date
+SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', '2020-01-01'::date, '2020-01-03'::date);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+-- udpate range of timestamp with bigint
+SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', 9223372036854771806, 9223372036854775406);
+ERROR:  invalid time argument type "bigint"
+\set ON_ERROR_STOP 1
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;

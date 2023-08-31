@@ -91,6 +91,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.hypertable_constraint_add_table_fk_constraint(name,name,name,integer)
  _timescaledb_functions.hypertable_invalidation_log_delete(integer)
  _timescaledb_functions.hypertable_local_size(name,name)
+ _timescaledb_functions.hypertable_osm_range_update(regclass,anyelement,anyelement,boolean)
  _timescaledb_functions.hypertable_remote_size(name,name)
  _timescaledb_functions.indexes_local_size(name,name)
  _timescaledb_functions.indexes_remote_size(name,name,name)

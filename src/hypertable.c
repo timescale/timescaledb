@@ -36,6 +36,7 @@
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
+#include <parser/parse_coerce.h>
 
 #include "hypertable.h"
 #include "ts_catalog/hypertable_data_node.h"
@@ -172,6 +173,7 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 	else
 		values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] =
 			Int16GetDatum(fd->replication_factor);
+	values[AttrNumberGetAttrOffset(Anum_hypertable_status)] = Int32GetDatum(fd->status);
 
 	return heap_form_tuple(desc, values, nulls);
 }
@@ -197,6 +199,7 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)]);
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_compression_state)]);
+	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_status)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_id)]);
 	memcpy(&fd->schema_name,
@@ -237,6 +240,7 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	else
 		fd->replication_factor =
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)]);
+	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_status)]);
 
 	if (should_free)
 		heap_freetuple(tuple);
@@ -1002,6 +1006,9 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 
 	/* when creating a hypertable, there is never an associated compressed dual */
 	fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
+
+	/* new hypertable does not have OSM chunk */
+	fd.status = HYPERTABLE_STATUS_DEFAULT;
 
 	/* finally, set replication factor */
 	fd.replication_factor = replication_factor;
@@ -3013,4 +3020,141 @@ ts_hypertable_update_dimension_partitions(const Hypertable *ht)
 	}
 
 	return false;
+}
+
+/*
+ * hypertable_osm_range_update
+ * 0 hypertable REGCLASS,
+ * 1 range_start=NULL::bigint,
+ * 2 range_end=NULL,
+ * 3 empty=false
+ * If empty is set to true then the range will be set to invalid range
+ * but the overlap flag will be unset, indicating that no data is managed
+ * by OSM and therefore timescaledb optimizations can be applied.
+ */
+TS_FUNCTION_INFO_V1(ts_hypertable_osm_range_update);
+Datum
+ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
+{
+	Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Hypertable *ht;
+	const Dimension *time_dim;
+	Cache *hcache;
+
+	Oid time_type; /* required for resolving the argument types, should match the hypertable
+					  partitioning column type */
+
+	hcache = ts_hypertable_cache_pin();
+	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);
+	Assert(ht != NULL);
+	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	if (time_dim == NULL)
+		elog(ERROR,
+			 "could not find time dimension for hypertable %s.%s",
+			 quote_identifier(NameStr(ht->fd.schema_name)),
+			 quote_identifier(NameStr(ht->fd.table_name)));
+
+	time_type = ts_dimension_get_partition_type(time_dim);
+
+	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
+	if (osm_chunk_id == INVALID_CHUNK_ID)
+		elog(ERROR,
+			 "no OSM chunk found for hypertable %s.%s",
+			 quote_identifier(NameStr(ht->fd.schema_name)),
+			 quote_identifier(NameStr(ht->fd.table_name)));
+
+	int32 dimension_slice_id = ts_chunk_get_osm_slice_id(osm_chunk_id, time_dim->fd.id);
+
+	/*
+	 * range_start, range_end arguments must be converted to internal representation
+	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
+	 * interpreted as INT64_MAX.
+	 * Passing both start and end NULL values will reset the range to the default range an
+	 * OSM chunk is given upon creation, which is [INT64_MAX - 1, INT64_MAX]
+	 */
+	if ((PG_ARGISNULL(1) && !PG_ARGISNULL(2)) || (!PG_ARGISNULL(1) && PG_ARGISNULL(2)))
+		elog(ERROR, "range_start and range_end parameters must be both NULL or both non-NULL");
+
+	Oid argtypes[2];
+	for (int i = 0; i < 2; i++)
+	{
+		argtypes[i] = get_fn_expr_argtype(fcinfo->flinfo, i + 1);
+		if (!can_coerce_type(1, &argtypes[i], &time_type, COERCION_IMPLICIT) &&
+			!PG_ARGISNULL(i + 1))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time argument type \"%s\"", format_type_be(argtypes[i])),
+					 errhint("Try casting the argument to \"%s\".", format_type_be(time_type))));
+	}
+
+	int64 range_start_internal, range_end_internal;
+	if (PG_ARGISNULL(1))
+		range_start_internal = PG_INT64_MAX - 1;
+	else
+		range_start_internal =
+			ts_time_value_to_internal(PG_GETARG_DATUM(1), get_fn_expr_argtype(fcinfo->flinfo, 1));
+	if (PG_ARGISNULL(2))
+		range_end_internal = PG_INT64_MAX;
+	else
+		range_end_internal =
+			ts_time_value_to_internal(PG_GETARG_DATUM(2), get_fn_expr_argtype(fcinfo->flinfo, 2));
+
+	if (range_start_internal > range_end_internal)
+		ereport(ERROR, errmsg("dimension slice range_end cannot be less than range_start"));
+
+	bool osm_chunk_empty = PG_GETARG_BOOL(3);
+
+	bool overlap = false, range_invalid = false;
+
+	ScanTupLock tuplock = {
+		.lockmode = LockTupleExclusive,
+		.waitpolicy = LockWaitBlock,
+	};
+	DimensionSlice *slice =
+		ts_dimension_slice_scan_by_id_and_lock(dimension_slice_id, &tuplock, CurrentMemoryContext);
+
+	if (!slice)
+		ereport(ERROR, errmsg("could not find slice with id %d", dimension_slice_id));
+	overlap = ts_osm_chunk_range_overlaps(dimension_slice_id,
+										  slice->fd.dimension_id,
+										  range_start_internal,
+										  range_end_internal);
+	/*
+	 * It should not be possible for OSM chunks to overlap with the range
+	 * managed by timescaledb. OSM extension should update the range of the
+	 * OSM chunk to [INT64_MAX -1, infinity) when it detects that it is
+	 * noncontiguous, so we should not end up detecting overlaps anyway.
+	 * But throw an error in case we encounter this situation.
+	 */
+	if (overlap)
+		ereport(ERROR,
+				errmsg("attempting to set overlapping range for tiered chunk of %s.%s",
+					   NameStr(ht->fd.schema_name),
+					   NameStr(ht->fd.table_name)),
+				errhint("Range should be set to invalid for tiered chunk"));
+	range_invalid = ts_osm_chunk_range_is_invalid(range_start_internal, range_end_internal);
+	/* Update the hypertable flags regarding the validity of the OSM range */
+	if (range_invalid)
+	{
+		/* range is set to infinity so the OSM chunk is considered last */
+		range_start_internal = PG_INT64_MAX - 1;
+		range_end_internal = PG_INT64_MAX;
+		if (!osm_chunk_empty)
+			ht->fd.status =
+				ts_set_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+		else
+			ht->fd.status =
+				ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+	}
+	else
+		ht->fd.status = ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
+	ts_hypertable_update(ht);
+	ts_cache_release(hcache);
+
+	slice->fd.range_start = range_start_internal;
+	slice->fd.range_end = range_end_internal;
+	ts_dimension_slice_update_by_id(dimension_slice_id, &slice->fd);
+
+	PG_RETURN_BOOL(overlap);
 }
