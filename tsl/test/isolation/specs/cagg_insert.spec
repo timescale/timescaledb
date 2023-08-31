@@ -123,7 +123,7 @@ step "LockMatInval" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_mat
 step "UnlockMatInval" { ROLLBACK; }
 
 #only one refresh
-permutation "LockInvalThrEx" "Refresh" "Refresh2" "Refresh3" "UnlockInvalThrEx"
+permutation "LockInvalThrEx" "Refresh" "Refresh2" (Refresh) "Refresh3" (Refresh, Refresh2) "UnlockInvalThrEx"
 
 #refresh and insert do not block each other once refresh is out of the
 #first transaction where it moves the invalidation threshold
