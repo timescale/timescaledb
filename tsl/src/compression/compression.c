@@ -2766,6 +2766,9 @@ fill_predicate_context(Chunk *ch, List *predicates, List **filters, List **index
 				else
 					continue;
 
+				/* ignore system-defined attributes */
+				if (var->varattno <= 0)
+					continue;
 				column_name = get_attname(ch->table_id, var->varattno, false);
 				FormData_hypertable_compression *fd =
 					ts_hypertable_compression_get_by_pkey(ch->fd.hypertable_id, column_name);
@@ -2847,6 +2850,9 @@ fill_predicate_context(Chunk *ch, List *predicates, List **filters, List **index
 				if (IsA(ntest->arg, Var))
 				{
 					var = (Var *) ntest->arg;
+					/* ignore system-defined attributes */
+					if (var->varattno <= 0)
+						continue;
 					column_name = get_attname(ch->table_id, var->varattno, false);
 					FormData_hypertable_compression *fd =
 						ts_hypertable_compression_get_by_pkey(ch->fd.hypertable_id, column_name);

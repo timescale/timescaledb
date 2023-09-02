@@ -1301,3 +1301,14 @@ ROLLBACK;
 
 RESET client_min_messages;
 DROP TABLE tab1;
+
+--issue: #6024
+CREATE TABLE t(a integer, b integer);
+SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
+INSERT INTO t values(1, 2);
+ALTER TABLE t SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('t'));
+-- should not crash
+UPDATE t SET b = 2 WHERE tableoid = 0;
+UPDATE t SET b = 2 WHERE tableoid is null;
+DROP TABLE t;
