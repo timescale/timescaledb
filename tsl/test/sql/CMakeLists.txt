@@ -88,6 +88,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     fixed_schedules.sql
     recompress_chunk_segmentwise.sql
+    recompress_chunk_segmentwise-v2.sql
     transparent_decompression_join_index.sql
     feature_flags.sql)
 
@@ -128,6 +129,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES chunk_utils_internal.sql)
   endif()
+  # UPDATE/DELETE on compressed hypertables is supported on PG version >= 14
   list(APPEND TEST_FILES compression.sql compression_update_delete.sql
        compression_permissions.sql)
 endif()
@@ -165,6 +167,12 @@ set(SOLO_TESTS
 # parallel with other tests as mentioned in #4972.
 if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "3")
   list(APPEND SOLO_TESTS dist_move_chunk)
+endif()
+
+# This test when run in parallel conflicts with transparent_decompression test
+# on windows platform only
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
+  list(APPEND SOLO_TESTS recompress_chunk_segmentwise-v2)
 endif()
 
 set(TEST_TEMPLATES

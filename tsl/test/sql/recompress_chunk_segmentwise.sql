@@ -88,20 +88,20 @@ select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
 insert into mytab_twoseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
 
-select * from :chunk_to_compress_2;
+select * from :chunk_to_compress_2 order by 1;
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_2
 from compressed_chunk_info_view where hypertable_name = 'mytab_twoseg' \gset
 
-select ctid, * from :compressed_chunk_name_2;
+select ctid, * from :compressed_chunk_name_2 order by 1;
 
 select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
 
 -- verify that metadata count looks good
-select ctid, * from :compressed_chunk_name_2;
+select ctid, * from :compressed_chunk_name_2 order by 1;
 
 -- verify that initial data is returned as expected
-select * from :chunk_to_compress_2;
+select * from :chunk_to_compress_2 order by 1;
 
 -- should still have 2 compressed rows
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
@@ -127,13 +127,13 @@ insert into mytab2 values ('2023-01-01 00:00:02+00'::timestamptz, 0, NULL, 0); -
 
 select show_chunks('mytab2') as chunk_to_compress_2 \gset
 
-select ctid, * from :compressed_chunk_name_2;
+select ctid, * from :compressed_chunk_name_2 order by 1;
 -- after compression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
 select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
 
-select ctid, * from :compressed_chunk_name_2;
+select ctid, * from :compressed_chunk_name_2 order by 1;
 -- after recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
