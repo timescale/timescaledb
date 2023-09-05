@@ -50,6 +50,7 @@ typedef struct DecompressChunkState
 	List *decompression_map;
 	List *is_segmentby_column;
 	List *bulk_decompression_column;
+	List *custom_scan_tlist;
 	int num_total_columns;
 	int num_compressed_columns;
 
@@ -82,6 +83,10 @@ typedef struct DecompressChunkState
 	TupleTableSlot *last_batch_first_tuple;
 
 	bool enable_bulk_decompression;
+
+	/* Perform calculation of the aggregate directly in the decompress chunk node and emit partials
+	 */
+	bool perform_vectorized_aggregation;
 
 	/*
 	 * Scratch space for bulk decompression which might need a lot of temporary

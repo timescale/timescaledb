@@ -92,6 +92,7 @@ bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
+bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
@@ -586,6 +587,17 @@ _guc_init(void)
 							 "Enable the pushdown of aggregations to the"
 							 " chunk level",
 							 &ts_guc_enable_chunkwise_aggregation,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.vectorized_aggregation",
+							 "Enable vectorized aggregation",
+							 "Enable vectorized aggregation for compressed data",
+							 &ts_guc_enable_vectorized_aggregation,
 							 true,
 							 PGC_USERSET,
 							 0,

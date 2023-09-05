@@ -417,10 +417,17 @@ get_reindex_options(ReindexStmt *stmt)
 #endif
 
 /*
- * define lfifth macro for convenience
+ * define some list macros for convenience
  */
 #define lfifth(l) lfirst(list_nth_cell(l, 4))
 #define lfifth_int(l) lfirst_int(list_nth_cell(l, 4))
+
+#define lsixth(l) lfirst(list_nth_cell(l, 5))
+#define lsixth_int(l) lfirst_int(list_nth_cell(l, 5))
+
+#define list_make6(x1, x2, x3, x4, x5, x6) lappend(list_make5(x1, x2, x3, x4, x5), x6)
+#define list_make6_oid(x1, x2, x3, x4, x5, x6) lappend_oid(list_make5_oid(x1, x2, x3, x4, x5), x6)
+#define list_make6_int(x1, x2, x3, x4, x5, x6) lappend_int(list_make5_int(x1, x2, x3, x4, x5), x6)
 
 /* PG14 adds estinfo parameter to estimate_num_groups for additional context
  * about the estimation
@@ -982,6 +989,10 @@ object_ownercheck(Oid classid, Oid objectid, Oid roleid)
 	}
 	return false;
 }
+#endif
+
+#if PG14_LT
+#define F_SUM_INT4 2108
 #endif
 
 #endif /* TIMESCALEDB_COMPAT_H */

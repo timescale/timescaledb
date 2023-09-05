@@ -698,35 +698,31 @@ SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
 
 :PREFIX
 SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10;
-                                                     QUERY PLAN                                                      
----------------------------------------------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
-   ->  Sort (actual rows=5 loops=1)
-         Sort Key: test1."time"
-         Sort Method: quicksort 
-         ->  Finalize HashAggregate (actual rows=5 loops=1)
-               Group Key: test1."time", test1.x1, test1.x2
-               Batches: 1 
-               ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
-                     Order: test1."time", test1.x1, test1.x2
-                     ->  Merge Append (actual rows=5 loops=1)
+   ->  Finalize GroupAggregate (actual rows=5 loops=1)
+         Group Key: test1."time", test1.x1, test1.x2
+         ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+               Order: test1."time", test1.x1, test1.x2
+               ->  Merge Append (actual rows=5 loops=1)
+                     Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                     ->  Sort (actual rows=4 loops=1)
                            Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-                           ->  Sort (actual rows=4 loops=1)
-                                 Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-                                 Sort Method: quicksort 
-                                 ->  Partial HashAggregate (actual rows=4 loops=1)
-                                       Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-                                       Batches: 1 
-                                       ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
-                                             ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-                                 Sort Method: quicksort 
-                                 ->  Partial HashAggregate (actual rows=1 loops=1)
-                                       Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-                                       Batches: 1 
-                                       ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
-(26 rows)
+                           Sort Method: quicksort 
+                           ->  Partial HashAggregate (actual rows=4 loops=1)
+                                 Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                                 Batches: 1 
+                                 ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                                       ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                           Sort Method: quicksort 
+                           ->  Partial HashAggregate (actual rows=1 loops=1)
+                                 Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                                 Batches: 1 
+                                 ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+(22 rows)
 
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, x4, time LIMIT 10;

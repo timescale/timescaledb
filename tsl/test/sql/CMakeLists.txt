@@ -26,7 +26,8 @@ set(TEST_FILES
     partialize_finalize.sql
     reorder.sql
     skip_scan.sql
-    size_utils_tsl.sql)
+    size_utils_tsl.sql
+    vectorized_aggregation.sql)
 
 if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
   list(APPEND TEST_FILES dist_param.sql)

@@ -207,6 +207,46 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 }
 
 /*
+ * Initialize the bulk decompression memory context
+ */
+void
+init_bulk_decompression_mctx(DecompressChunkState *chunk_state, MemoryContext parent_ctx)
+{
+	Assert(chunk_state != NULL);
+	Assert(parent_ctx != NULL);
+	Assert(chunk_state->bulk_decompression_context == NULL);
+
+	chunk_state->bulk_decompression_context = AllocSetContextCreate(parent_ctx,
+																	"bulk decompression",
+																	/* minContextSize = */ 0,
+																	/* initBlockSize = */ 64 * 1024,
+																	/* maxBlockSize = */ 64 * 1024);
+}
+
+/*
+ * Initialize the batch memory context
+ *
+ * We use custom size for the batch memory context page, calculated to
+ * fit the typical result of bulk decompression (if we use it).
+ * This allows us to save on expensive malloc/free calls, because the
+ * Postgres memory contexts reallocate all pages except the first one
+ * after each reset.
+ */
+void
+init_per_batch_mctx(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
+{
+	Assert(chunk_state != NULL);
+	Assert(batch_state != NULL);
+	Assert(batch_state->per_batch_context == NULL);
+
+	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
+														   "DecompressChunk per_batch",
+														   0,
+														   chunk_state->batch_memory_context_bytes,
+														   chunk_state->batch_memory_context_bytes);
+}
+
+/*
  * Initialize the batch decompression state with the new compressed  tuple.
  */
 void
@@ -221,19 +261,9 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 	 */
 	if (batch_state->per_batch_context == NULL)
 	{
-		/*
-		 * We use custom size for the batch memory context page, calculated to
-		 * fit the typical result of bulk decompression (if we use it).
-		 * This allows us to save on expensive malloc/free calls, because the
-		 * Postgres memory contexts reallocate all pages except the first one
-		 * after earch reset.
-		 */
-		batch_state->per_batch_context =
-			AllocSetContextCreate(CurrentMemoryContext,
-								  "DecompressChunk per_batch",
-								  0,
-								  chunk_state->batch_memory_context_bytes,
-								  chunk_state->batch_memory_context_bytes);
+		/* Init memory context */
+		init_per_batch_mctx(chunk_state, batch_state);
+		Assert(batch_state->per_batch_context != NULL);
 
 		Assert(batch_state->compressed_slot == NULL);
 
@@ -324,15 +354,9 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 					column_description->bulk_decompression_supported)
 				{
 					if (chunk_state->bulk_decompression_context == NULL)
-					{
-						chunk_state->bulk_decompression_context =
-							AllocSetContextCreate(MemoryContextGetParent(
-													  batch_state->per_batch_context),
-												  "bulk decompression",
-												  /* minContextSize = */ 0,
-												  /* initBlockSize = */ 64 * 1024,
-												  /* maxBlockSize = */ 64 * 1024);
-					}
+						init_bulk_decompression_mctx(chunk_state,
+													 MemoryContextGetParent(
+														 batch_state->per_batch_context));
 
 					DecompressAllFunction decompress_all =
 						tsl_get_decompress_all_function(header->compression_algorithm);

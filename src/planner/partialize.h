@@ -5,7 +5,9 @@
  */
 #ifndef TIMESCALEDB_PLAN_PARTIALIZE_H
 #define TIMESCALEDB_PLAN_PARTIALIZE_H
+
 #include <postgres.h>
+#include <nodes/pathnodes.h>
 #include <optimizer/planner.h>
 
 #include "chunk.h"
