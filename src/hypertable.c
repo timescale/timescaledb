@@ -2456,7 +2456,6 @@ integer_now_func_validate(Oid now_func_oid, Oid open_dim_type)
 	tuple = SearchSysCache1(PROCOID, ObjectIdGetDatum(now_func_oid));
 	if (!HeapTupleIsValid(tuple))
 	{
-		ReleaseSysCache(tuple);
 		ereport(ERROR,
 				(errcode(ERRCODE_NO_DATA_FOUND),
 				 errmsg("cache lookup failed for function %u", now_func_oid)));

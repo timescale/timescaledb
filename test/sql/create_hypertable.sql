@@ -419,6 +419,8 @@ select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_I
 select set_integer_now_func('test_table_int', 'dummy_now');
 select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
 select set_integer_now_func('test_table_int', 'dummy_now3', replace_if_exists => TRUE);
+-- test invalid oid as the integer_now_func
+select set_integer_now_func('test_table_int', 1, replace_if_exists => TRUE);
 \set ON_ERROR_STOP
 
 select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', replace_if_exists => TRUE);

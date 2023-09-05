@@ -769,6 +769,9 @@ select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if
 ERROR:  permission denied for schema my_schema at character 47
 select set_integer_now_func('test_table_int', 'dummy_now3', replace_if_exists => TRUE);
 ERROR:  permission denied for function dummy_now3
+-- test invalid oid as the integer_now_func
+select set_integer_now_func('test_table_int', 1, replace_if_exists => TRUE);
+ERROR:  cache lookup failed for function 1
 \set ON_ERROR_STOP
 select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', replace_if_exists => TRUE);
  set_integer_now_func 
