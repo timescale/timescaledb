@@ -508,6 +508,23 @@ SELECT * FROM hyper_constr order by time;
 SELECT conname FROM pg_constraint
 where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
 
+--TEST retention policy is applied on OSM chunk by calling registered callback
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
+
+SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
+SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
+
+--add hooks for osm callbacks that are triggered when drop_chunks is invoked---
+SELECT ts_setup_osm_hook();
+SELECT drop_chunks('hyper_constr', 10::int);
+CALL run_job(:deljob_id);
+CALL run_job(:deljob_id);
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
+SELECT ts_undo_osm_hook();
+
 ----- TESTS for copy into frozen chunk ------------
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test1.copy_test (

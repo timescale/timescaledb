@@ -900,6 +900,47 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
  hyper_constr_temp_check
 (1 row)
 
+--TEST retention policy is applied on OSM chunk by calling registered callback
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
+SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
+--add hooks for osm callbacks that are triggered when drop_chunks is invoked---
+SELECT ts_setup_osm_hook();
+ ts_setup_osm_hook 
+-------------------
+ 
+(1 row)
+
+SELECT drop_chunks('hyper_constr', 10::int);
+NOTICE:  hypertable_drop_chunks_hook (-9223372036854775808 10)
+ drop_chunks 
+-------------
+(0 rows)
+
+CALL run_job(:deljob_id);
+NOTICE:  hypertable_drop_chunks_hook (-9223372036854775808 400)
+CALL run_job(:deljob_id);
+NOTICE:  hypertable_drop_chunks_hook (-9223372036854775808 400)
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
+     chunk_name     |              range_start              | range_end 
+--------------------+---------------------------------------+-----------
+ child_hyper_constr | Sat Jan 09 20:00:54.775806 294247 PST | infinity
+(1 row)
+
+SELECT ts_undo_osm_hook();
+ ts_undo_osm_hook 
+------------------
+ 
+(1 row)
+
 ----- TESTS for copy into frozen chunk ------------
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test1.copy_test (

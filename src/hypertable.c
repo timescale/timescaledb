@@ -685,16 +685,15 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	}
 
 #if PG14_GE
-	OsmCallbacks *callbacks = ts_get_osm_callbacks();
-
+	hypertable_drop_hook_type osm_htdrop_hook = ts_get_osm_hypertable_drop_hook();
 	/* Invoke the OSM callback if set */
-	if (callbacks)
+	if (osm_htdrop_hook)
 	{
 		Name schema_name =
 			DatumGetName(slot_getattr(ti->slot, Anum_hypertable_schema_name, &isnull));
 		Name table_name = DatumGetName(slot_getattr(ti->slot, Anum_hypertable_table_name, &isnull));
 
-		callbacks->hypertable_drop_hook(NameStr(*schema_name), NameStr(*table_name));
+		osm_htdrop_hook(NameStr(*schema_name), NameStr(*table_name));
 	}
 #endif
 
