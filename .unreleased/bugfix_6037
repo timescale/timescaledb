@@ -1,0 +1,3 @@
+Fixes: #6045 Fix segfault in set_integer_now_func
+
+Thanks: @alexanderlaw for reporting this issue in set_integer_now_func
