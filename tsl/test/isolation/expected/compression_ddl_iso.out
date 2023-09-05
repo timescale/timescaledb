@@ -540,12 +540,13 @@ total_chunks|number_compressed_chunks
            3|                       3
 (1 row)
 
-step SA: SELECT * FROM ts_device_table;
+step SA: SELECT * FROM ts_device_table ORDER BY time, location;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   20
    1|     1|     100|  100
+   1|     1|     100|   20
+   1|     1|     200|  100
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -554,7 +555,6 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-   1|     1|     200|  100
   10|     1|     100|   20
   11|     1|     100|   20
   12|     1|     100|   20
@@ -661,12 +661,12 @@ total_chunks|number_compressed_chunks
            3|                       3
 (1 row)
 
-step SA: SELECT * FROM ts_device_table;
+step SA: SELECT * FROM ts_device_table ORDER BY time, location;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   20
    1|     1|     100|  100
+   1|     1|     100|   20
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20

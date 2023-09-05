@@ -143,11 +143,11 @@ static bool row_compressor_new_row_is_in_new_group(RowCompressor *row_compressor
 static void row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row);
 static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 								 bool changed_groups);
-
 static int create_segment_filter_scankey(RowDecompressor *decompressor,
 										 char *segment_filter_col_name, StrategyNumber strategy,
 										 ScanKeyData *scankeys, int num_scankeys,
-										 Bitmapset **null_columns, Datum value, bool isnull);
+										 Bitmapset **null_columns, Datum value, bool is_null_check);
+
 static void run_analyze_on_chunk(Oid chunk_relid);
 
 /********************
@@ -170,7 +170,7 @@ get_compressed_data_header(Datum data)
  * because the data remains, just in compressed form. Also don't
  * restart sequences. Use the transactional branch through ExecuteTruncate.
  */
-static void
+void
 truncate_relation(Oid table_oid)
 {
 	List *fks = heap_truncate_find_FKs(list_make1_oid(table_oid));
@@ -397,7 +397,8 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 						in_column_offsets,
 						out_desc->natts,
 						true /*need_bistate*/,
-						false /*reset_sequence*/);
+						false /*reset_sequence*/,
+						COMPRESS);
 
 	if (matched_index_rel != NULL)
 	{
@@ -834,7 +835,8 @@ void
 row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 					Relation compressed_table, int num_compression_infos,
 					const ColumnCompressionInfo **column_compression_info, int16 *in_column_offsets,
-					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence)
+					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
+					CompressionType compressiontype)
 {
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
 	int col;
@@ -880,7 +882,9 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 		.num_compressed_rows = 0,
 		.sequence_num = SEQUENCE_NUM_GAP,
 		.reset_sequence = reset_sequence,
+		.update_sequence = true,
 		.first_iteration = true,
+		.compression_type = compressiontype,
 	};
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
@@ -1009,7 +1013,6 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 		if (changed_groups)
 			row_compressor_update_group(row_compressor, slot);
 	}
-
 	row_compressor_append_row(row_compressor, slot);
 	MemoryContextSwitchTo(old_ctx);
 	ExecClearTuple(slot);
@@ -1051,19 +1054,19 @@ row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row)
 	 * many segmentby columns.
 	 *
 	 */
-	if (row_compressor->reset_sequence)
-		row_compressor->sequence_num = SEQUENCE_NUM_GAP; /* Start sequence from beginning */
-	else
-		row_compressor->sequence_num =
-			get_sequence_number_for_current_group(row_compressor->compressed_table,
-												  row_compressor->index_oid,
-												  row_compressor
-													  ->uncompressed_col_to_compressed_col,
-												  row_compressor->per_column,
-												  row_compressor->n_input_columns,
-												  AttrOffsetGetAttrNumber(
-													  row_compressor
-														  ->sequence_num_metadata_column_offset));
+	if (row_compressor->update_sequence)
+	{
+		if (row_compressor->reset_sequence)
+			row_compressor->sequence_num = SEQUENCE_NUM_GAP; /* Start sequence from beginning */
+		else
+			row_compressor->sequence_num = get_sequence_number_for_current_group(
+				row_compressor->compressed_table,
+				row_compressor->index_oid,
+				row_compressor->uncompressed_col_to_compressed_col,
+				row_compressor->per_column,
+				row_compressor->n_input_columns,
+				AttrOffsetGetAttrNumber(row_compressor->sequence_num_metadata_column_offset));
+	}
 }
 
 static bool
@@ -1203,7 +1206,11 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	if (row_compressor->sequence_num > PG_INT32_MAX - SEQUENCE_NUM_GAP)
 		elog(ERROR, "sequence id overflow");
 
-	row_compressor->sequence_num += SEQUENCE_NUM_GAP;
+	if (row_compressor->compression_type == RECOMPRESS &&
+		row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION)
+		row_compressor->sequence_num += 1;
+	else
+		row_compressor->sequence_num += SEQUENCE_NUM_GAP;
 
 	compressed_tuple = heap_form_tuple(RelationGetDescr(row_compressor->compressed_table),
 									   row_compressor->compressed_values,
@@ -1848,7 +1855,7 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
  * Build scankeys for decompression of specific batches. key_columns references the
  * columns of the uncompressed chunk.
  */
-static ScanKeyData *
+ScanKeyData *
 build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decompressor,
 			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
 			   int *num_scankeys)

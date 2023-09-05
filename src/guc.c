@@ -86,6 +86,7 @@ bool ts_guc_enable_async_append = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+TSDLLEXPORT bool ts_guc_enable_recompression_optimization = true;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
@@ -375,6 +376,18 @@ _guc_init(void)
 							 "Enable SkipScan",
 							 "Enable SkipScan for DISTINCT queries",
 							 &ts_guc_enable_skip_scan,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_recompression_optimization",
+							 "Enable optimization during recompression",
+							 "Enable skipping of unaffected compressed segments from"
+							 "begin recompressed during recompression",
+							 &ts_guc_enable_recompression_optimization,
 							 true,
 							 PGC_USERSET,
 							 0,
