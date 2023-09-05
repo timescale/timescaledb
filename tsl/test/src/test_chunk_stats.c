@@ -38,6 +38,7 @@ ts_test_chunk_stats_insert(PG_FUNCTION_ARGS)
 
 typedef int (*chunk_insert_check_hook_type)(Oid, int64, int64);
 typedef void (*hypertable_drop_hook_type)(const char *, const char *);
+typedef List *(*hypertable_drop_chunks_hook_type)(Oid, const char *, const char *, int64, int64);
 
 static int
 osm_insert_hook_mock(Oid ht_oid, int64 range_start, int64 range_end)
@@ -53,8 +54,27 @@ osm_ht_drop_hook_mock(const char *schema_name, const char *table_name)
 	elog(NOTICE, "hypertable_drop_hook");
 }
 
-OsmCallbacks fake_osm_callbacks = { .chunk_insert_check_hook = osm_insert_hook_mock,
-									.hypertable_drop_hook = osm_ht_drop_hook_mock };
+static List *
+osm_ht_drop_chunks_hook_mock(Oid osm_chunk_oid, const char *schema_name, const char *table_name,
+							 int64 range_start, int64 range_end)
+{
+	List *ret = NIL;
+	elog(NOTICE, "hypertable_drop_chunks_hook ");
+	for (int i = 0; i < 2; i++)
+	{
+		char *chunk_name;
+		chunk_name = psprintf("%s%d", "_timescaledb_internal.dummy", i);
+		ret = lappend(ret, chunk_name);
+	}
+	return ret;
+}
+
+OsmCallbacks_Versioned fake_osm_callbacks = {
+	.version_num = 1,
+	.chunk_insert_check_hook = osm_insert_hook_mock,
+	.hypertable_drop_hook = osm_ht_drop_hook_mock,
+	.hypertable_drop_chunks_hook = osm_ht_drop_chunks_hook_mock,
+};
 
 /*
  * Dummy function to mock OSM_INSERT hook called at chunk creation for tiered data
@@ -63,7 +83,8 @@ TS_FUNCTION_INFO_V1(ts_setup_osm_hook);
 Datum
 ts_setup_osm_hook(PG_FUNCTION_ARGS)
 {
-	OsmCallbacks **ptr = (OsmCallbacks **) find_rendezvous_variable("osm_callbacks");
+	OsmCallbacks_Versioned **ptr =
+		(OsmCallbacks_Versioned **) find_rendezvous_variable("osm_callbacks_versioned");
 	*ptr = &fake_osm_callbacks;
 
 	PG_RETURN_NULL();
@@ -73,7 +94,8 @@ TS_FUNCTION_INFO_V1(ts_undo_osm_hook);
 Datum
 ts_undo_osm_hook(PG_FUNCTION_ARGS)
 {
-	OsmCallbacks **ptr = (OsmCallbacks **) find_rendezvous_variable("osm_callbacks");
+	OsmCallbacks_Versioned **ptr =
+		(OsmCallbacks_Versioned **) find_rendezvous_variable("osm_callbacks_versioned");
 	*ptr = NULL;
 
 	PG_RETURN_NULL();

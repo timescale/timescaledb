@@ -508,6 +508,27 @@ SELECT * FROM hyper_constr order by time;
 SELECT conname FROM pg_constraint
 where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
 
+--TEST retention policy is applied on OSM chunk by calling registered callback
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
+
+SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
+SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
+
+--add hooks for osm callbacks that are triggered when drop_chunks is invoked---
+SELECT ts_setup_osm_hook();
+BEGIN;
+SELECT drop_chunks('hyper_constr', 10::int);
+SELECT id, table_name FROM _timescaledb_catalog.chunk
+where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name = 'hyper_constr');
+ROLLBACK;
+CALL run_job(:deljob_id);
+CALL run_job(:deljob_id);
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
+SELECT ts_undo_osm_hook();
+
 ----- TESTS for copy into frozen chunk ------------
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test1.copy_test (
@@ -584,20 +605,6 @@ DROP INDEX hyper_constr_mid_idx;
 CREATE INDEX hyper_constr_mid_idx ON hyper_constr(mid, time) WITH (timescaledb.transaction_per_chunk);
 SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
 DROP INDEX hyper_constr_mid_idx;
-
---TEST policy is applied on OSM chunk
--- XXX this is to be updated once the hook for dropping chunks is added
-CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
-
-SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
-SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
-
-CALL run_job(:deljob_id);
-CALL run_job(:deljob_id);
-SELECT chunk_name, range_start, range_end
-FROM chunk_view
-WHERE hypertable_name = 'hyper_constr'
-ORDER BY chunk_name;
 
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
