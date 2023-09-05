@@ -12,9 +12,11 @@
 #include "ts_catalog/catalog.h"
 #include "hypertable.h"
 
+#define SEC_DIM_PREFIX "_$COS_" /* Constraint On Secondary dimension */
 typedef struct ChunkConstraint
 {
 	FormData_chunk_constraint fd;
+	bool secondary;
 } ChunkConstraint;
 
 typedef struct ChunkConstraints
@@ -28,7 +30,7 @@ typedef struct ChunkConstraints
 
 #define chunk_constraints_get(cc, i) &((cc)->constraints[i])
 
-#define is_dimension_constraint(cc) ((cc)->fd.dimension_slice_id > 0)
+#define is_dimension_constraint(cc) ((cc)->fd.dimension_slice_id > 0 && !(cc)->secondary)
 
 typedef struct Chunk Chunk;
 typedef struct DimensionSlice DimensionSlice;
@@ -49,7 +51,8 @@ extern int ts_chunk_constraint_scan_by_dimension_slice_id(int32 dimension_slice_
 extern ChunkConstraint *ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id,
 												 int32 dimension_slice_id,
 												 const char *constraint_name,
-												 const char *hypertable_constraint_name);
+												 const char *hypertable_constraint_name,
+												 bool secondary);
 extern int ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chunk_id,
 														  const Hypercube *cube);
 extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_constraints(ChunkConstraints *ccs,

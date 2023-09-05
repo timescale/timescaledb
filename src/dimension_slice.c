@@ -975,6 +975,59 @@ ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 	return n;
 }
 
+/*
+ * Insert secondary dimension slices into the catalog.
+ *
+ * Create entries with MINVALUE/MAXVALUE as ranges for secondary
+ * dimensions and insert these entries. This allows for all the
+ * chunks to be picked up when queries use secondary columns in
+ * WHERE clauses.
+ *
+ * Also, add these to the chunk's constraint lists so that they
+ * eventually get added into the metadate in this same trasaction
+ *
+ * We will asynchronously convert the entries into proper ranges
+ * later
+ *
+ * Returns the number of slices inserted.
+ */
+int
+ts_secondary_dimension_slices_constraints_insert(const Hypertable *ht, Chunk *chunk)
+{
+	Catalog *catalog;
+	Relation rel;
+	Size i = 0;
+	Hyperspace *hs = ht->secondary_space;
+
+	if (hs == NULL)
+		return i;
+
+	catalog = ts_catalog_get();
+	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		Dimension *dim = &hs->dimensions[i];
+		DimensionSlice *slice;
+
+		slice = ts_dimension_slice_create(dim->fd.id,
+										  DIMENSION_SLICE_MINVALUE,
+										  DIMENSION_SLICE_MAXVALUE);
+
+		dimension_slice_insert_relation(rel, slice);
+		ts_chunk_constraints_add(chunk->constraints,
+									  chunk->fd.id,
+									  slice->fd.id,
+									  NULL,
+									  NULL,
+									  true);
+	}
+
+	table_close(rel, RowExclusiveLock);
+
+	return i;
+}
+
 void
 ts_dimension_slice_insert(DimensionSlice *slice)
 {

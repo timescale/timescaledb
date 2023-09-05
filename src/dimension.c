@@ -1613,12 +1613,18 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 
 	info.ht = ts_hypertable_cache_get_cache_and_entry(info.table_relid, CACHE_FLAG_NONE, &hcache);
 
+	if (info.secondary)
+	{
+		info.interval_type = INT8OID;
+		info.interval_datum = DatumGetInt32(1);
+	}
+
 	if (info.num_slices_is_set && OidIsValid(info.interval_type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot specify both the number of partitions and an interval")));
 
-	if (!info.num_slices_is_set && !OidIsValid(info.interval_type) && !info.secondary)
+	if (!info.num_slices_is_set && !OidIsValid(info.interval_type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot omit both the number of partitions and the interval")));
@@ -1692,7 +1698,8 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 															   chunk->fd.id,
 															   slice->fd.id,
 															   NULL,
-															   NULL);
+															   NULL,
+															   info.secondary);
 				ts_chunk_constraint_insert(cc);
 			}
 		}

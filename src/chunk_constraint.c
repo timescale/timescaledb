@@ -88,9 +88,9 @@ chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
 }
 
 static void
-chunk_constraint_dimension_choose_name(Name dst, int32 dimension_slice_id)
+chunk_constraint_dimension_choose_name(Name dst, const char *prefix, int32 dimension_slice_id)
 {
-	snprintf(NameStr(*dst), NAMEDATALEN, "constraint_%d", dimension_slice_id);
+	snprintf(NameStr(*dst), NAMEDATALEN, "%sconstraint_%d", prefix, dimension_slice_id);
 }
 
 static void
@@ -115,7 +115,8 @@ chunk_constraint_choose_name(Name dst, const char *hypertable_constraint_name, i
 
 ChunkConstraint *
 ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_slice_id,
-						 const char *constraint_name, const char *hypertable_constraint_name)
+						 const char *constraint_name, const char *hypertable_constraint_name,
+						 bool secondary)
 {
 	ChunkConstraint *cc;
 
@@ -123,12 +124,18 @@ ts_chunk_constraints_add(ChunkConstraints *ccs, int32 chunk_id, int32 dimension_
 	cc = &ccs->constraints[ccs->num_constraints++];
 	cc->fd.chunk_id = chunk_id;
 	cc->fd.dimension_slice_id = dimension_slice_id;
+	cc->secondary = secondary;
 
 	if (NULL == constraint_name)
 	{
-		if (is_dimension_constraint(cc))
+		if (is_dimension_constraint(cc) || secondary)
 		{
+			/*
+			 * for secondary dimensions we choose a prefix of "_$COS_" to help
+			 * us identify it on re-reading from the catalog.
+			 */
 			chunk_constraint_dimension_choose_name(&cc->fd.constraint_name,
+												   secondary ? SEC_DIM_PREFIX : "",
 												   cc->fd.dimension_slice_id);
 			namestrcpy(&cc->fd.hypertable_constraint_name, "");
 		}
@@ -163,7 +170,7 @@ chunk_constraint_fill_tuple_values(const ChunkConstraint *cc, Datum values[Natts
 	values[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] =
 		NameGetDatum(&cc->fd.hypertable_constraint_name);
 
-	if (is_dimension_constraint(cc))
+	if (is_dimension_constraint(cc) || cc->secondary)
 		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_hypertable_constraint_name)] = true;
 	else
 		nulls[AttrNumberGetAttrOffset(Anum_chunk_constraint_dimension_slice_id)] = true;
@@ -229,7 +236,7 @@ ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs, const TupleInfo *ti)
 	int32 dimension_slice_id;
 	Name constraint_name;
 	Name hypertable_constraint_name;
-	bool should_free;
+	bool should_free, secondary = false;
 	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
 	MemoryContext oldcxt;
 
@@ -253,12 +260,17 @@ ts_chunk_constraints_add_from_tuple(ChunkConstraints *ccs, const TupleInfo *ti)
 		hypertable_constraint_name = DatumGetName(DirectFunctionCall1(namein, CStringGetDatum("")));
 	}
 
+	/* check if it's a secondary dimension */
+	if (strncmp(SEC_DIM_PREFIX, NameStr(*constraint_name), strlen(SEC_DIM_PREFIX)) == 0)
+		secondary = true;
+
 	constraints = ts_chunk_constraints_add(ccs,
 										   DatumGetInt32(values[AttrNumberGetAttrOffset(
 											   Anum_chunk_constraint_chunk_id)]),
 										   dimension_slice_id,
 										   NameStr(*constraint_name),
-										   NameStr(*hypertable_constraint_name));
+										   NameStr(*hypertable_constraint_name),
+										   secondary);
 
 	MemoryContextSwitchTo(oldcxt);
 
@@ -492,7 +504,7 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 			if (constr != NULL)
 				newconstrs = lappend(newconstrs, constr);
 		}
-		else
+		else if (!cc->secondary)
 		{
 			create_non_dimensional_constraint(cc,
 											  chunk->table_id,
@@ -781,7 +793,7 @@ ts_chunk_constraints_add_dimension_constraints(ChunkConstraints *ccs, int32 chun
 	int i;
 
 	for (i = 0; i < cube->num_slices; i++)
-		ts_chunk_constraints_add(ccs, chunk_id, cube->slices[i]->fd.id, NULL, NULL);
+		ts_chunk_constraints_add(ccs, chunk_id, cube->slices[i]->fd.id, NULL, NULL, false);
 
 	return cube->num_slices;
 }
@@ -802,7 +814,17 @@ chunk_constraint_add(HeapTuple constraint_tuple, void *arg)
 
 	if (chunk_constraint_need_on_chunk(cc->chunk_relkind, constraint))
 	{
-		ts_chunk_constraints_add(cc->ccs, cc->chunk_id, 0, NULL, NameStr(constraint->conname));
+		bool secondary = false;
+
+		/* check if it's a secondary dimension */
+		if (strncmp(SEC_DIM_PREFIX, NameStr(constraint->conname), strlen(SEC_DIM_PREFIX)) == 0)
+			secondary = true;
+		ts_chunk_constraints_add(cc->ccs,
+								 cc->chunk_id,
+								 0,
+								 NULL,
+								 NameStr(constraint->conname),
+								 secondary);
 		return CONSTR_PROCESSED;
 	}
 
@@ -835,7 +857,8 @@ chunk_constraint_add_check(HeapTuple constraint_tuple, void *arg)
 								 cc->chunk_id,
 								 0,
 								 NameStr(constraint->conname),
-								 NameStr(constraint->conname));
+								 NameStr(constraint->conname),
+								 false);
 		return CONSTR_PROCESSED;
 	}
 
@@ -874,7 +897,8 @@ ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk, Oi
 													   chunk->fd.id,
 													   0,
 													   NULL,
-													   NameStr(con->conname));
+													   NameStr(con->conname),
+													   false);
 
 		ts_chunk_constraint_insert(cc);
 		create_non_dimensional_constraint(cc,

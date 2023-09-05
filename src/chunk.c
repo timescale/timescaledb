@@ -960,6 +960,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 					const char *table_name, const char *prefix, int32 chunk_id)
 {
 	const Hyperspace *hs = ht->space;
+	const Hyperspace *ss = ht->secondary_space;
 	Chunk *chunk;
 	const char relkind = hypertable_chunk_relkind(ht);
 
@@ -967,7 +968,8 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 		schema_name = NameStr(ht->fd.associated_schema_name);
 
 	/* Create a new chunk based on the hypercube */
-	chunk = ts_chunk_create_base(chunk_id, hs->num_dimensions, relkind);
+	chunk =
+		ts_chunk_create_base(chunk_id, hs->num_dimensions + (ss ? ss->num_dimensions : 0), relkind);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = cube;
@@ -1209,6 +1211,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  table_name,
 													  prefix,
 													  get_next_chunk_id());
+
+	/* Insert any new secondary dimension slices into metadata */
+	ts_secondary_dimension_slices_constraints_insert(ht, chunk);
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);

@@ -1688,6 +1688,9 @@ ts_hypertable_check_partitioning(const Hypertable *ht, int32 id_of_updated_dimen
 
 	dim = ts_hyperspace_get_dimension_by_id(ht->space, id_of_updated_dimension);
 
+	if (!dim && ht->secondary_space)
+		dim = ts_hyperspace_get_dimension_by_id(ht->secondary_space, id_of_updated_dimension);
+
 	Assert(dim);
 
 	if (hypertable_is_distributed(ht))
