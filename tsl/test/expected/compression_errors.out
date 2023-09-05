@@ -195,6 +195,12 @@ HINT:  The option timescaledb.compress_segmentby must be a set of columns separa
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p');
 ERROR:  invalid ordering column type point
 DETAIL:  Could not identify a less-than operator for the type.
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'b, b');
+ERROR:  duplicate column name "b"
+HINT:  The timescaledb.compress_segmentby option must reference distinct column.
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'b, b');
+ERROR:  duplicate column name "b"
+HINT:  The timescaledb.compress_orderby option must reference distinct column.
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');
 --ddl on ht with compression

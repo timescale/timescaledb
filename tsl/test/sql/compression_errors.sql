@@ -99,6 +99,8 @@ ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'ran
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c LIMIT 1');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'c + b');
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, p');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_segmentby = 'b, b');
+ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'b, b');
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a, b');

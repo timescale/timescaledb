@@ -68,7 +68,7 @@ jobs:
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
         apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
           libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
-          locales clang-14 llvm-14 llvm-14-dev llvm-14-tools
+          locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
