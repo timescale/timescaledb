@@ -905,6 +905,59 @@ where conrelid = 'child_hyper_constr'::regclass ORDER BY 1;
  hyper_constr_temp_check
 (1 row)
 
+--TEST retention policy is applied on OSM chunk by calling registered callback
+CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
+SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
+--add hooks for osm callbacks that are triggered when drop_chunks is invoked---
+SELECT ts_setup_osm_hook();
+ ts_setup_osm_hook 
+-------------------
+ 
+(1 row)
+
+BEGIN;
+SELECT drop_chunks('hyper_constr', 10::int);
+NOTICE:  hypertable_drop_chunks_hook 
+         drop_chunks          
+------------------------------
+ _timescaledb_internal.dummy0
+ _timescaledb_internal.dummy1
+(2 rows)
+
+SELECT id, table_name FROM _timescaledb_catalog.chunk
+where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name = 'hyper_constr');
+ id |     table_name     
+----+--------------------
+ 13 | _hyper_7_13_chunk
+ 14 | child_hyper_constr
+(2 rows)
+
+ROLLBACK;
+CALL run_job(:deljob_id);
+NOTICE:  hypertable_drop_chunks_hook 
+CALL run_job(:deljob_id);
+NOTICE:  hypertable_drop_chunks_hook 
+SELECT chunk_name, range_start, range_end
+FROM chunk_view
+WHERE hypertable_name = 'hyper_constr'
+ORDER BY chunk_name;
+     chunk_name     |            range_start            |             range_end              
+--------------------+-----------------------------------+------------------------------------
+ child_hyper_constr | Wed Dec 31 16:00:00.0001 1969 PST | Wed Dec 31 16:00:00.00011 1969 PST
+(1 row)
+
+SELECT ts_undo_osm_hook();
+ ts_undo_osm_hook 
+------------------
+ 
+(1 row)
+
 ----- TESTS for copy into frozen chunk ------------
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test1.copy_test (
@@ -1008,26 +1061,6 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 (1 row)
 
 DROP INDEX hyper_constr_mid_idx;
---TEST policy is applied on OSM chunk
--- XXX this is to be updated once the hook for dropping chunks is added
-CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
-SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
- set_integer_now_func 
-----------------------
- 
-(1 row)
-
-SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
-CALL run_job(:deljob_id);
-CALL run_job(:deljob_id);
-SELECT chunk_name, range_start, range_end
-FROM chunk_view
-WHERE hypertable_name = 'hyper_constr'
-ORDER BY chunk_name;
- chunk_name | range_start | range_end 
-------------+-------------+-----------
-(0 rows)
-
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
 CREATE TABLE osm_int4(time int4 NOT NULL);

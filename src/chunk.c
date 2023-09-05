@@ -1159,9 +1159,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *prefix)
 {
 #if PG14_GE
-	OsmCallbacks *callbacks = ts_get_osm_callbacks();
+	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
-	if (callbacks)
+	if (osm_chunk_insert_hook)
 	{
 		/* OSM only uses first dimension . doesn't work with multinode tables yet*/
 		Dimension *dim = &ht->space->dimensions[0];
@@ -1171,8 +1171,7 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 		int64 range_end =
 			ts_internal_to_time_int64(cube->slices[0]->fd.range_end, dim->fd.column_type);
 
-		int chunk_exists =
-			callbacks->chunk_insert_check_hook(ht->main_table_relid, range_start, range_end);
+		int chunk_exists = osm_chunk_insert_hook(ht->main_table_relid, range_start, range_end);
 
 		if (chunk_exists)
 		{
@@ -3961,6 +3960,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 
 	DEBUG_WAITPOINT("drop_chunks_chunks_found");
 
+	int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 	if (has_continuous_aggs)
 	{
 		/* Exclusively lock all chunks, and invalidate the continuous
@@ -3990,6 +3990,11 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		 * therefore be able to refresh accordingly.*/
 		for (uint64 i = 0; i < num_chunks; i++)
 		{
+			if (osm_chunk_id == chunks[i].fd.id)
+			{
+				// we do not rebuild continuous aggs if tiered data is dropped */
+				continue;
+			}
 			int64 start = ts_chunk_primary_dimension_start(&chunks[i]);
 			int64 end = ts_chunk_primary_dimension_end(&chunks[i]);
 
@@ -4009,8 +4014,11 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		/* frozen chunks are skipped. Not dropped. */
 		if (!ts_chunk_validate_chunk_status_for_operation(&chunks[i],
 														  CHUNK_DROP,
-														  false /*throw_error */))
+														  false /*throw_error */) ||
+			osm_chunk_id == chunks[i].fd.id)
+		{
 			continue;
+		}
 
 		/* store chunk name for output */
 		schema_name = quote_identifier(chunks[i].fd.schema_name.data);
@@ -4031,6 +4039,33 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			data_nodes = list_append_unique_oid(data_nodes, cdn->foreign_server_oid);
 		}
 	}
+	// if we have tiered chunks cascade drop to tiering layer as well
+#if PG14_GE
+
+	if (osm_chunk_id != INVALID_CHUNK_ID)
+	{
+		hypertable_drop_chunks_hook_type osm_drop_chunks_hook =
+			ts_get_osm_hypertable_drop_chunks_hook();
+		if (osm_drop_chunks_hook)
+		{
+			ListCell *lc;
+			Dimension *dim = &ht->space->dimensions[0];
+			/* convert to PG timestamp from timescaledb internal format */
+			int64 range_start = ts_internal_to_time_int64(newer_than, dim->fd.column_type);
+			int64 range_end = ts_internal_to_time_int64(older_than, dim->fd.column_type);
+			Chunk *osm_chunk = ts_chunk_get_by_id(osm_chunk_id, true);
+			List *osm_dropped_names = osm_drop_chunks_hook(osm_chunk->table_id,
+														   NameStr(ht->fd.schema_name),
+														   NameStr(ht->fd.table_name),
+														   range_start,
+														   range_end);
+			foreach (lc, osm_dropped_names)
+			{
+				dropped_chunk_names = lappend(dropped_chunk_names, lfirst(lc));
+			}
+		}
+	}
+#endif
 
 	/* When dropping chunks for a given CAgg then force set the watermark */
 	if (is_materialization_hypertable)
