@@ -72,3 +72,9 @@ extern void compressed_batch_advance(DecompressChunkState *chunk_state,
 extern void compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
+
+extern void init_bulk_decompression_mctx(DecompressChunkState *chunk_state,
+										 MemoryContext parent_ctx);
+
+extern void init_per_batch_mctx(DecompressChunkState *chunk_state,
+								DecompressBatchState *batch_state);

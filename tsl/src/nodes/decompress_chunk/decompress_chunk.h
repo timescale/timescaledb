@@ -87,6 +87,11 @@ typedef struct DecompressChunkPath
 	 */
 	DecompressChunkColumnCompression *uncompressed_chunk_attno_to_compression_info;
 
+	/*
+	 * Are we able to execute a vectorized aggregation
+	 */
+	bool perform_vectorized_aggregation;
+
 	List *compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;
