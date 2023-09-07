@@ -65,6 +65,8 @@ INSERT INTO repair_test_date VALUES
 ALTER TABLE _timescaledb_catalog.chunk_constraint
       DROP CONSTRAINT chunk_constraint_dimension_slice_id_fkey;
 
+\if :test_repair_dimension
+
 CREATE VIEW slices AS (
       SELECT ch.hypertable_id,
              (
@@ -88,7 +90,6 @@ CREATE VIEW slices AS (
            ON di.hypertable_id = ch.hypertable_id AND attname = di.column_name
    );
 
-\if :test_repair_dimension
 -- Break the first time dimension on each table. These are different
 -- depending on the time type for the table and we need to check all
 -- versions.
