@@ -222,7 +222,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	Relation rel;
 	TupleDesc tupdesc;
 	int i, colno, attno;
-	int16 *segorder_colindex;
+	int16 *segorder_colindex, *colindex;
 	int seg_attnolen = 0;
 	ListCell *lc;
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
@@ -230,6 +230,8 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	seg_attnolen = list_length(segmentby_cols);
 	rel = table_open(srctbl_relid, AccessShareLock);
 	segorder_colindex = palloc0(sizeof(int32) * (rel->rd_att->natts));
+	/* To check duplicates in segmentby/orderby column list. */
+	colindex = palloc0(sizeof(int16) * (rel->rd_att->natts));
 	tupdesc = rel->rd_att;
 	i = 1;
 
@@ -245,11 +247,21 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 					 errhint("The timescaledb.compress_segmentby option must reference a valid "
 							 "column.")));
 		}
+
+		/* check if segmentby columns are distinct. */
+		if (colindex[col_attno - 1] != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("duplicate column name \"%s\"", NameStr(col->colname)),
+					 errhint("The timescaledb.compress_segmentby option must reference distinct "
+							 "column.")));
+		colindex[col_attno - 1] = 1;
 		segorder_colindex[col_attno - 1] = i++;
 	}
 	/* the column indexes are numbered as seg_attnolen + <orderby_index>
 	 */
 	Assert(seg_attnolen == (i - 1));
+	memset(colindex, 0, sizeof(int16) * (rel->rd_att->natts));
 	foreach (lc, orderby_cols)
 	{
 		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
@@ -262,6 +274,14 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 					 errhint("The timescaledb.compress_orderby option must reference a valid "
 							 "column.")));
 
+		/* check if orderby columns are distinct. */
+		if (colindex[col_attno - 1] != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_SYNTAX_ERROR),
+					 errmsg("duplicate column name \"%s\"", NameStr(col->colname)),
+					 errhint("The timescaledb.compress_orderby option must reference distinct "
+							 "column.")));
+
 		/* check if orderby_cols and segmentby_cols are distinct */
 		if (segorder_colindex[col_attno - 1] != 0)
 			ereport(ERROR,
@@ -271,6 +291,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 					 errhint("Use separate columns for the timescaledb.compress_orderby and"
 							 " timescaledb.compress_segmentby options.")));
 
+		colindex[col_attno - 1] = 1;
 		segorder_colindex[col_attno - 1] = i++;
 	}
 
