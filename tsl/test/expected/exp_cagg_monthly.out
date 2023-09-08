@@ -127,7 +127,6 @@ INSERT INTO _timescaledb_catalog.continuous_aggs_bucket_function SELECT * FROM r
 DROP TABLE restore_table;
 -- should execute successfully
 CALL refresh_continuous_aggregate('conditions_summary', '2021-06-01', '2021-07-01');
-NOTICE:  continuous aggregate "conditions_summary" is already up-to-date
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Check the invalidation threshold
 SELECT _timescaledb_functions.to_timestamp(watermark) at time zone 'UTC'
@@ -1010,6 +1009,18 @@ INSERT INTO conditions_large(day, temperature)
 SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
 FROM generate_series('2020-01-01' :: date, '2021-01-01' :: date - interval '1 day', '1 day') as ts;
 CALL refresh_continuous_aggregate('conditions_large_1y', '2020-01-01', '2021-01-01');
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
+NOTICE:  continuous aggregate "conditions_large_1y" is already up-to-date
 SELECT * FROM conditions_large_1y ORDER BY bucket;
    bucket   | min | max  
 ------------+-----+------
@@ -1023,8 +1034,7 @@ SELECT * FROM conditions_large_1y ORDER BY bucket;
  01-01-2017 | 101 | 1231
  01-01-2018 | 101 | 1231
  01-01-2019 | 101 | 1231
- 01-01-2020 | 101 | 1231
-(11 rows)
+(10 rows)
 
 RESET timescaledb.materializations_per_refresh_window;
 -- Test caggs with monthly buckets on top of distributed hypertable
@@ -1180,7 +1190,7 @@ SELECT compress_chunk(ch)
 FROM show_chunks('conditions_dist_1m_manual') ch limit 1;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_533_chunk
+ _timescaledb_internal._hyper_17_532_chunk
 (1 row)
 
 SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;

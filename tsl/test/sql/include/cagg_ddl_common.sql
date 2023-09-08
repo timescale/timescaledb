@@ -866,6 +866,7 @@ INSERT INTO conditionsnm
 SELECT time_val, time_val % 4, 3.14 FROM generate_series(0,100,1) AS time_val;
 
 -- Case 1: DROP
+
 CREATE MATERIALIZED VIEW conditionsnm_4
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE)
 AS

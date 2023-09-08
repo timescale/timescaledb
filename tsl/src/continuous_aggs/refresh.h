@@ -31,4 +31,5 @@ extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const CaggRefreshCallContext callctx,
 											const bool start_isnull, const bool end_isnull);
 
+#define REFRESH_PARTS 4
 #endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_REFRESH_H */

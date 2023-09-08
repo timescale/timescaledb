@@ -74,7 +74,7 @@ static void emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshC
 static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
 												   const CaggRefreshCallContext callctx,
-												   int32 chunk_id);
+												   int32 chunk_id, bool fast_refresh);
 
 static Hypertable *
 cagg_get_hypertable_or_fail(int32 hypertable_id)
@@ -675,7 +675,8 @@ continuous_agg_calculate_merged_refresh_window(const InternalTimeRange *refresh_
 static bool
 process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 									   const InternalTimeRange *refresh_window,
-									   const CaggRefreshCallContext callctx, int32 chunk_id)
+									   const CaggRefreshCallContext callctx, int32 chunk_id,
+									   bool fast_refresh)
 {
 	InvalidationStore *invalidations;
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
@@ -723,6 +724,14 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 													  &merged_refresh_window);
 	}
 
+	/*
+	 * In case of fast refresh, the refresh range is already divided into smaller ranges
+	 * of one chunk at a time. Hence, the refresh_window is a chunk, so merged refresh
+	 * is not needed in this scenario.
+	 */
+	if (fast_refresh)
+		do_merged_refresh = false;
+
 	if (invalidations != NULL || do_merged_refresh)
 	{
 		if (callctx == CAGG_REFRESH_CREATION)
@@ -760,11 +769,19 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 								const CaggRefreshCallContext callctx, const bool start_isnull,
 								const bool end_isnull)
 {
-	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
-	bool is_raw_ht_distributed;
-	int rc;
+	bool is_raw_ht_distributed, isnull, fast_refresh = false;
+	int rc = 0, res = 0, dimension_id = 0, chunks = 0;
+	int64 interval_length = 0, actual_refresh_range = 0, min = 0, max = 0;
+	InternalTimeRange current_chunk = {
+		.type = refresh_window_arg->type,
+	};
+	StringInfo command = makeStringInfo();
+	const CaggsInfo all_caggs_info =
+		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
+
+	actual_refresh_range = refresh_window.end - refresh_window.start;
 
 	/* Connect to SPI manager due to the underlying SPI calls */
 	if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
@@ -812,7 +829,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 														  ts_continuous_agg_bucket_width(cagg));
 		}
 	}
-
 	if (refresh_window.start >= refresh_window.end)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -820,6 +836,77 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 				 errdetail("The refresh window must cover at least one bucket of data."),
 				 errhint("Align the refresh window with the bucket"
 						 " time zone or use at least two buckets.")));
+
+	if (!is_raw_ht_distributed)
+	{
+		/*
+		 * If this is an open range then get the range from the
+		 * dimension slice catalog table
+		 */
+		appendStringInfo(command,
+						 "SELECT id FROM _timescaledb_catalog.dimension WHERE hypertable_id = %d",
+						 ht->fd.id);
+
+		res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+		if (res >= 0)
+		{
+			dimension_id = DatumGetInt32(
+				SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
+
+			command = makeStringInfo();
+			appendStringInfo(command,
+							 "SELECT min(range_start), max(range_end), count(*) FROM "
+							 "_timescaledb_catalog.dimension_slice WHERE dimension_id = %d",
+							 dimension_id);
+
+			res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+			if (res >= 0)
+			{
+				min = DatumGetInt64(
+					SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
+				max = DatumGetInt64(
+					SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull));
+				chunks = DatumGetInt64(
+					SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull));
+
+				if (!start_isnull)
+					min = refresh_window.start;
+				if (!end_isnull)
+					max = refresh_window.end;
+			}
+			else
+				elog(ERROR, "SPI_execute failed: %d", res);
+		}
+		else
+			elog(ERROR, "SPI_execute failed: %d", res);
+
+		if (chunks <= ts_guc_refresh_chunks)
+			current_chunk = refresh_window;
+		else
+		{
+			command = makeStringInfo();
+			appendStringInfo(command,
+							 "SELECT interval_length FROM _timescaledb_catalog.dimension WHERE "
+							 "hypertable_id = %d",
+							 ht->fd.id);
+
+			res = SPI_execute(command->data, true /* read_only */, 0 /*count*/);
+
+			if (res >= 0)
+				interval_length = DatumGetInt64(
+					SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull));
+			else
+				elog(ERROR, "SPI_execute failed: %d", res);
+
+			if (actual_refresh_range > interval_length)
+			{
+				/* Divide the refresh into one chunk at a time */
+				current_chunk.start = start_isnull ? min : refresh_window.start;
+				current_chunk.end = current_chunk.start + interval_length;
+				fast_refresh = true;
+			}
+		}
+	}
 
 	log_refresh_window(callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1,
 					   cagg,
@@ -841,58 +928,113 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * serializes around a lock on the materialized hypertable for the
 	 * continuous aggregate that gets refreshed.
 	 */
-
-	/* Set the new invalidation threshold. Note that this only updates the
-	 * threshold if the new value is greater than the old one. Otherwise, the
-	 * existing threshold is returned. */
-	invalidation_threshold = invalidation_threshold_set_or_get(cagg, &refresh_window);
-
-	/* We must also cap the refresh window at the invalidation threshold. If
-	 * we process invalidations after the threshold, the continuous aggregates
-	 * won't be refreshed when the threshold is moved forward in the
-	 * future. The invalidation threshold should already be aligned on bucket
-	 * boundary. */
-	if (refresh_window.end > invalidation_threshold)
-		refresh_window.end = invalidation_threshold;
-
-	/* Capping the end might have made the window 0, or negative, so
-	 * nothing to refresh in that case */
-	if (refresh_window.start >= refresh_window.end)
+	/*
+	 * To make the REFRESH of continuous aggregates faster, we are performing
+	 * it recursively in smaller ranges instead of whole refresh window in a go.
+	 * The important point to note here is that in each iteration we update the
+	 * invalidation threshold and perform the materialization for a smaller range.
+	 * We can not just update the invalidation threshold for the whole range in one go
+	 * before or after this loop to maintain the consistency in case anything fails
+	 * in the process.
+	 */
+	if (is_raw_ht_distributed || !fast_refresh)
 	{
-		emit_up_to_date_notice(cagg, callctx);
+		current_chunk = refresh_window;
+		max = refresh_window.end;
+	}
+
+	while (current_chunk.end <= max)
+	{
+		/*
+		 * Divide the refresh window into smaller windows with one chunk at a time.
+		 *
+		 * The start offset of the smaller iteration is updated in the end after going through
+		 * atleast once through the refresh process.
+		 */
+
+		log_refresh_window(callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1,
+						   cagg,
+						   &current_chunk,
+						   "refreshing continuous aggregate");
+		/*
+		 * Set the new invalidation threshold. Note that this only updates the
+		 * threshold if the new value is greater than the old one. Otherwise, the
+		 * existing threshold is returned.
+		 */
+		invalidation_threshold = invalidation_threshold_set_or_get(cagg, &current_chunk);
+		/*
+		 * We must also cap the refresh window at the invalidation threshold. If
+		 * we process invalidations after the threshold, the continuous aggregates
+		 * won't be refreshed when the threshold is moved forward in the
+		 * future. The invalidation threshold should already be aligned on bucket
+		 * boundary.
+		 */
+		if (current_chunk.end > invalidation_threshold)
+			current_chunk.end = invalidation_threshold;
+
+		/*
+		 * Capping the end might have made the window 0, or negative, so
+		 * nothing to refresh in that case.
+		 */
+		if (current_chunk.start >= current_chunk.end)
+		{
+			emit_up_to_date_notice(cagg, callctx);
+
+			if ((rc = SPI_finish()) != SPI_OK_FINISH)
+				elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+
+			return;
+		}
+
+		/* Process invalidations in the hypertable invalidation log */
+		if (is_raw_ht_distributed)
+		{
+			remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
+													   cagg->data.raw_hypertable_id,
+													   refresh_window.type,
+													   &all_caggs_info);
+		}
+		else
+		{
+			invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
+												cagg->data.raw_hypertable_id,
+												refresh_window.type,
+												&all_caggs_info);
+		}
+
+		/* Commit and Start a new transaction */
+		SPI_commit_and_chain();
+
+		if (!process_cagg_invalidations_and_refresh(cagg,
+													&current_chunk,
+													callctx,
+													INVALID_CHUNK_ID,
+													fast_refresh))
+			emit_up_to_date_notice(cagg, callctx);
 
 		if ((rc = SPI_finish()) != SPI_OK_FINISH)
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 
-		return;
+		if (fast_refresh)
+		{
+			current_chunk.start = current_chunk.end > max ? max : current_chunk.end;
+			int64 new_end = current_chunk.end + interval_length;
+			current_chunk.end = new_end;
+
+			/* Connect to SPI manager due to the underlying SPI calls */
+			if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
+				elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+
+			/* Lock down search_path */
+			rc = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+			if (rc < 0)
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+		}
+		else
+			return;
 	}
-
-	/* Process invalidations in the hypertable invalidation log */
-	const CaggsInfo all_caggs_info =
-		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	if (is_raw_ht_distributed)
-	{
-		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-												   cagg->data.raw_hypertable_id,
-												   refresh_window.type,
-												   &all_caggs_info);
-	}
-	else
-	{
-		invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-											cagg->data.raw_hypertable_id,
-											refresh_window.type,
-											&all_caggs_info);
-	}
-
-	/* Commit and Start a new transaction */
-	SPI_commit_and_chain();
-
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
-
-	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
-		emit_up_to_date_notice(cagg, callctx);
-
-	if ((rc = SPI_finish()) != SPI_OK_FINISH)
-		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+	if (fast_refresh)
+		if ((rc = SPI_finish()) != SPI_OK_FINISH)
+			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }

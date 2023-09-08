@@ -109,6 +109,7 @@ TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
 TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
 TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
 TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
+TSDLLEXPORT int ts_guc_refresh_chunks = 2;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
 
@@ -504,6 +505,18 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomIntVariable("timescaledb.refresh_chunks",
+							"Specify how many chunks to combine in one refresh window",
+							"Decrease this to make the refresh more granular",
+							&ts_guc_refresh_chunks,
+							10,
+							1,
+							65536,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 	/*
 	 * The default is 'auto', so that the dist COPY could use text transfer
 	 * format for text input. It has a passthrough optimization for this case,

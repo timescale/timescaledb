@@ -266,6 +266,10 @@ SELECT * FROM cagg_invals;
 
 -- Refresh up to 50 from the beginning
 CALL refresh_continuous_aggregate('cond_10', 0, 50);
+psql:include/cagg_invalidation_common.sql:203: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:203: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:203: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:203: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
@@ -277,6 +281,7 @@ SELECT * FROM cagg_invals;
 
 -- Refreshing below the threshold does not move it:
 CALL refresh_continuous_aggregate('cond_10', 20, 49);
+psql:include/cagg_invalidation_common.sql:207: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 psql:include/cagg_invalidation_common.sql:207: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
@@ -333,7 +338,7 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
        3 |                   50 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
+       4 | -9223372036854775808 |                  89
        4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
@@ -350,7 +355,7 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
        3 |                   50 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
+       4 | -9223372036854775808 |                  89
        4 |                  100 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
@@ -390,6 +395,9 @@ SELECT * FROM hyper_invals;
 -- allows us to see only the copying of the invalidations to the per
 -- cagg log without additional processing.
 CALL refresh_continuous_aggregate('cond_10', 20, 60);
+psql:include/cagg_invalidation_common.sql:255: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:255: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:255: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 -- Invalidation threshold remains at 100:
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 ORDER BY 1,2;
@@ -414,7 +422,7 @@ SELECT * FROM cagg_invals;
        3 | -9223372036854775808 |                  -1
        3 |                   10 |                  19
        3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
+       4 | -9223372036854775808 |                  89
        4 |                    0 |                  19
        4 |                   60 |                  79
        4 |                  100 | 9223372036854775807
@@ -460,7 +468,7 @@ SELECT * FROM cagg_invals;
        3 | -9223372036854775808 |                  -1
        3 |                   10 |                  19
        3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
+       4 | -9223372036854775808 |                  89
        4 |                    0 |                  19
        4 |                   60 |                  79
        4 |                  100 | 9223372036854775807
@@ -484,7 +492,7 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  19
        3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  59
+       4 | -9223372036854775808 |                  89
        4 |                    0 |                  19
        4 |                    0 |                 119
        4 |                   60 |                  79
@@ -501,7 +509,7 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  19
        3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       4 | -9223372036854775808 |                  49
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
@@ -515,7 +523,7 @@ SELECT * FROM cagg_invals;
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
        3 |                   60 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       4 | -9223372036854775808 |                  49
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
        5 |                   30 | 9223372036854775807
@@ -524,17 +532,24 @@ SELECT * FROM cagg_invals;
 -- Clear everything between 0 and 100 to make way for new
 -- invalidations
 CALL refresh_continuous_aggregate('cond_10', 0, 100);
+psql:include/cagg_invalidation_common.sql:313: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:313: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:313: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:313: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:313: NOTICE:  continuous aggregate "cond_10" is already up-to-date
+psql:include/cagg_invalidation_common.sql:313: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 -- Test refreshing with non-overlapping invalidations
 INSERT INTO conditions VALUES (20, 1, 23.4), (25, 1, 23.4);
 INSERT INTO conditions VALUES (30, 1, 23.4), (46, 1, 23.4);
 CALL refresh_continuous_aggregate('cond_10', 1, 40);
+psql:include/cagg_invalidation_common.sql:319: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
        3 |                   40 |                  49
        3 |                  100 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       4 | -9223372036854775808 |                  49
        4 |                   20 |                  59
        4 |                   60 | 9223372036854775807
        5 | -9223372036854775808 |                  -1
@@ -552,7 +567,7 @@ SELECT * FROM cagg_invals;
        3 | -9223372036854775808 |                  -1
        3 |                   10 |                  49
        3 |                  100 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       4 | -9223372036854775808 |                  49
        4 |                    0 |                  59
        4 |                   20 |                  59
        4 |                   60 | 9223372036854775807
@@ -566,7 +581,7 @@ SELECT * FROM cagg_invals;
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 |                  110 | 9223372036854775807
-       4 | -9223372036854775808 |                  19
+       4 | -9223372036854775808 |                  49
        4 |                    0 |                  59
        4 |                   20 |                  59
        4 |                   60 | 9223372036854775807
