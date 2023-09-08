@@ -2212,6 +2212,18 @@ AS
 SELECT time_bucket('1day', timec), min(location), sum(temperature), sum(humidity)
 FROM conditions
 GROUP BY time_bucket('1day', timec) WITH NO DATA;
+-- Aggregates with partials are not supported by default
+\set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW conditions_summary_old(timec, minl, sumt, sumh)
+WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
+AS
+SELECT time_bucket('1day', timec), min(location), sum(temperature), sum(humidity)
+FROM conditions
+GROUP BY time_bucket('1day', timec) WITH NO DATA;
+ERROR:  invalid continuous aggregate query
+\set ON_ERROR_STOP 1
+-- Aggregates with partials are supported under a custom boolean flag
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW conditions_summary_old(timec, minl, sumt, sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
 AS

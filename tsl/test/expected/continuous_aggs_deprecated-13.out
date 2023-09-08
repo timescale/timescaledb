@@ -44,6 +44,8 @@ SELECT set_integer_now_func('foo', 'integer_now_foo');
  
 (1 row)
 
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW mat_m1(a, countb)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
 as
@@ -741,6 +743,8 @@ select table_name from create_hypertable( 'conditions', 'timec');
 (1 row)
 
 --no data in hyper table on purpose so that CASCADE is not required because of chunks
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW mat_drop_test(timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
 as

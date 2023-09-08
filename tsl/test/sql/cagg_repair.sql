@@ -110,6 +110,8 @@ CALL _timescaledb_internal.cagg_try_repair('conditions_summary_nojoin', TRUE);
 \d+ conditions_summary_nojoin
 
 -- Tests with old cagg format
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW conditions_summary_old_format
 WITH (timescaledb.continuous, timescaledb.finalized=false) AS
 SELECT

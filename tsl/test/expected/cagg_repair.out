@@ -312,6 +312,8 @@ UNION ALL
   GROUP BY (time_bucket('@ 7 days'::interval, conditions."time"));
 
 -- Tests with old cagg format
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW conditions_summary_old_format
 WITH (timescaledb.continuous, timescaledb.finalized=false) AS
 SELECT
@@ -326,7 +328,7 @@ GROUP BY
 WITH NO DATA;
 -- Should rebuild without forcing
 CALL _timescaledb_internal.cagg_try_repair('conditions_summary_old_format', FALSE);
-DEBUG:  [cagg_rebuild_view_definition] public.conditions_summary_old_format has been rebuilt!
+WARNING:  Continuous Aggregates with partials is not supported anymore.
 \d+ conditions_summary_old_format
                         View "public.conditions_summary_old_format"
  Column |           Type           | Collation | Nullable | Default | Storage | Description 

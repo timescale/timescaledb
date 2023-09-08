@@ -7,6 +7,9 @@
 
 DROP MATERIALIZED VIEW IF EXISTS mat_test;
 
+-- Aggregates with partials are supported under a custom boolean flag
+SET timescaledb.block_old_format_cagg TO OFF;
+
 CREATE MATERIALIZED VIEW mat_test
 WITH (timescaledb.continuous, timescaledb.finalized=false)
 as :QUERY

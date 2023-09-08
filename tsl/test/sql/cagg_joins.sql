@@ -381,6 +381,9 @@ AND conditions.city = devices.location AND
 GROUP BY name, bucket;
 
 --With old format cagg definition
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
+
 CREATE MATERIALIZED VIEW cagg_cagg_old
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,

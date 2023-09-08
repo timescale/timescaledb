@@ -5,6 +5,7 @@
  */
 
 #include "common.h"
+#include "guc.h"
 
 static Const *check_time_bucket_argument(Node *arg, char *position);
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
@@ -419,14 +420,10 @@ cagg_agg_validate(Node *node, void *context)
 static bool
 cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, const bool finalized)
 {
-/*
- * For now deprecate partial aggregates on release builds only.
- * Once migration tests are made compatible with PG15 enable deprecation
- * on debug builds as well.
- */
-#ifndef DEBUG
-#if PG15_GE
-	if (!finalized)
+	/*
+	 * Deprecate partial aggregates to support only finalized aggregates.
+	 */
+	if (!finalized && ts_guc_block_old_format_cagg)
 	{
 		/* continuous aggregates with old format will not be allowed */
 		appendStringInfoString(detail,
@@ -436,8 +433,6 @@ cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail, con
 							   "to true.");
 		return false;
 	}
-#endif
-#endif
 	if (!query->jointree->fromlist)
 	{
 		appendStringInfoString(hint, "FROM clause missing in the query");

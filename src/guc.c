@@ -86,6 +86,7 @@ bool ts_guc_enable_async_append = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+TSDLLEXPORT bool ts_guc_block_old_format_cagg = true;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
@@ -469,6 +470,17 @@ _guc_init(void)
 							 "Enable reading of tiered data by including a foreign table "
 							 "representing the data in the object storage into the query plan",
 							 &ts_guc_enable_osm_reads,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.block_old_format_cagg",
+							 "Block creation of old format continuous aggregate",
+							 "Disable creation of continuous aggregate with partials",
+							 &ts_guc_block_old_format_cagg,
 							 true,
 							 PGC_USERSET,
 							 0,

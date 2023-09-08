@@ -92,6 +92,8 @@ CALL cagg_migrate('conditions_summary_daily_new');
 \set ON_ERROR_STOP 1
 
 -- older continuous aggregate to be migrated
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.finalized=false) AS
 SELECT
@@ -275,6 +277,8 @@ DROP MATERIALIZED VIEW conditions_summary_daily;
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.finalized=false) AS
 SELECT

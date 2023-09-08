@@ -53,6 +53,9 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 INSERT INTO conditions_before
 SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL, NULL, 8, true;
 
+-- Aggregates with partials are supported under a custom boolean flag
+SET timescaledb.block_old_format_cagg TO OFF;
+
 \if :has_refresh_mat_view
     CREATE VIEW rename_cols
     WITH (timescaledb.continuous, timescaledb.materialized_only = false, timescaledb.refresh_lag='14 days') AS

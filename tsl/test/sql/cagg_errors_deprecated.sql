@@ -18,6 +18,9 @@ CREATE TABLE conditions (
     );
 select table_name from create_hypertable( 'conditions', 'timec');
 
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
+
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false, timescaledb.myfill = 1)
 as
 select location , min(temperature)

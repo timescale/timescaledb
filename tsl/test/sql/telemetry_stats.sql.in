@@ -56,6 +56,8 @@ FROM
   hyper
 GROUP BY hour, device;
 
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW contagg_old
 WITH (timescaledb.continuous, timescaledb.finalized=false) AS
 SELECT
@@ -227,6 +229,8 @@ FROM
   disthyper
 GROUP BY hour, device;
 
+-- Continuous aggregates with partials are supported under a custom boolean flag.
+SET timescaledb.block_old_format_cagg TO OFF;
 CREATE MATERIALIZED VIEW distcontagg_old
 WITH (timescaledb.continuous, timescaledb.finalized=false) AS
 SELECT
