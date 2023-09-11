@@ -56,6 +56,10 @@ ts_trigger_create_on_chunk(Oid trigger_oid, const char *chunk_schema_name,
 	Assert(IsA(stmt, CreateTrigStmt));
 	stmt->relation->relname = (char *) chunk_table_name;
 	stmt->relation->schemaname = (char *) chunk_schema_name;
+#if PG14_GE
+	/* Using OR REPLACE option introduced on Postgres 14 */
+	stmt->replace = true;
+#endif
 
 	CreateTrigger(stmt,
 				  def,

@@ -1,4 +1,4 @@
-Parsed test spec with 15 sessions
+Parsed test spec with 17 sessions
 
 starting permutation: LockInvalThrEx Refresh Refresh2 Refresh3 UnlockInvalThrEx
 step LockInvalThrEx: BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold ;
@@ -237,3 +237,26 @@ step Refresh2: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15);
 step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15);
 step I2c: COMMIT;
 step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15);
+
+starting permutation: CreateMatView1_Begin CreateMatView2_Begin CreateMatView1_Commit CreateMatView2_Commit
+step CreateMatView1_Begin: 
+  BEGIN;
+  CREATE MATERIALIZED VIEW cagg1
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+    SELECT time_bucket('5', time), COUNT(location)
+    FROM ts_continuous_test_1
+    GROUP BY 1
+    WITH NO DATA;
+
+step CreateMatView2_Begin: 
+  BEGIN;
+  CREATE MATERIALIZED VIEW cagg2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+    SELECT time_bucket('5', time), COUNT(location)
+    FROM ts_continuous_test_1
+    GROUP BY 1
+    WITH NO DATA;
+ <waiting ...>
+step CreateMatView1_Commit: COMMIT;
+step CreateMatView2_Begin: <... completed>
+step CreateMatView2_Commit: COMMIT;
