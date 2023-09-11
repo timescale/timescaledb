@@ -533,10 +533,10 @@ SELECT chunk_name, range_start, range_end
 FROM chunk_view
 WHERE hypertable_name = 'ht_try'
 ORDER BY chunk_name;
-    chunk_name     |          range_start           |          range_end           
--------------------+--------------------------------+------------------------------
- _hyper_5_10_chunk | Wed May 04 17:00:00 2022 PDT   | Thu May 05 17:00:00 2022 PDT
- child_fdw_table   | Thu Dec 31 16:00:00 294246 PST | infinity
+    chunk_name     |              range_start              |          range_end           
+-------------------+---------------------------------------+------------------------------
+ _hyper_5_10_chunk | Wed May 04 17:00:00 2022 PDT          | Thu May 05 17:00:00 2022 PDT
+ child_fdw_table   | Sat Jan 09 20:00:54.775806 294247 PST | infinity
 (2 rows)
 
 SELECT * FROM ht_try ORDER BY 1;
@@ -802,9 +802,9 @@ SELECT chunk_name, range_start, range_end
 FROM chunk_view
 WHERE hypertable_name = 'hyper_constr'
 ORDER BY chunk_name;
-     chunk_name     |             range_start             | range_end 
---------------------+-------------------------------------+-----------
- child_hyper_constr | Sat Jan 09 20:00:54.7758 294247 PST | infinity
+     chunk_name     |              range_start              | range_end 
+--------------------+---------------------------------------+-----------
+ child_hyper_constr | Sat Jan 09 20:00:54.775806 294247 PST | infinity
 (1 row)
 
 ----- TESTS for copy into frozen chunk ------------
@@ -910,6 +910,83 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 (1 row)
 
 DROP INDEX hyper_constr_mid_idx;
+-- test range of dimension slice for osm chunk for different datatypes
+CREATE TABLE osm_int2(time int2 NOT NULL);
+CREATE TABLE osm_int4(time int4 NOT NULL);
+CREATE TABLE osm_int8(time int8 NOT NULL);
+CREATE TABLE osm_date(time date NOT NULL);
+CREATE TABLE osm_ts(time timestamp NOT NULL);
+CREATE TABLE osm_tstz(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('osm_int2','time',chunk_time_interval:=1000);
+ table_name 
+------------
+ osm_int2
+(1 row)
+
+SELECT table_name FROM create_hypertable('osm_int4','time',chunk_time_interval:=1000);
+ table_name 
+------------
+ osm_int4
+(1 row)
+
+SELECT table_name FROM create_hypertable('osm_int8','time',chunk_time_interval:=1000);
+ table_name 
+------------
+ osm_int8
+(1 row)
+
+SELECT table_name FROM create_hypertable('osm_date','time');
+ table_name 
+------------
+ osm_date
+(1 row)
+
+SELECT table_name FROM create_hypertable('osm_ts','time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+ table_name 
+------------
+ osm_ts
+(1 row)
+
+SELECT table_name FROM create_hypertable('osm_tstz','time');
+ table_name 
+------------
+ osm_tstz
+(1 row)
+
+CREATE FOREIGN TABLE osm_int2_fdw_child(time int2 NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_int4_fdw_child(time int4 NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_int8_fdw_child(time int8 NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_date_fdw_child(time date NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_ts_fdw_child(time timestamp NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_tstz_fdw_child(time timestamptz NOT NULL) SERVER s3_server;
+SELECT dt, _timescaledb_functions.attach_osm_table_chunk('osm_' || dt, 'osm_' || dt || '_fdw_child') FROM unnest('{int2,int4,int8,date,ts,tstz}'::text[]) u(dt);
+  dt  | attach_osm_table_chunk 
+------+------------------------
+ int2 | t
+ int4 | t
+ int8 | t
+ date | t
+ ts   | t
+ tstz | t
+(6 rows)
+
+SELECT ht.table_name, ds.*
+FROM _timescaledb_catalog.dimension_slice ds
+INNER JOIN _timescaledb_catalog.dimension d ON d.id=ds.dimension_id
+INNER JOIN _timescaledb_catalog.hypertable ht on ht.id=d.hypertable_id
+WHERE ht.table_name LIKE 'osm%'
+ORDER BY 2,3;
+ table_name | id | dimension_id |     range_start     |      range_end      
+------------+----+--------------+---------------------+---------------------
+ osm_int2   | 17 |            9 | 9223372036854775806 | 9223372036854775807
+ osm_int4   | 18 |           10 | 9223372036854775806 | 9223372036854775807
+ osm_int8   | 19 |           11 | 9223372036854775806 | 9223372036854775807
+ osm_date   | 20 |           12 | 9223372036854775806 | 9223372036854775807
+ osm_ts     | 21 |           13 | 9223372036854775806 | 9223372036854775807
+ osm_tstz   | 22 |           14 | 9223372036854775806 | 9223372036854775807
+(6 rows)
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;

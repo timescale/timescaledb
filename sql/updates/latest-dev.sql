@@ -167,3 +167,10 @@ ALTER FUNCTION _timescaledb_internal.finalize_agg_ffunc(internal,text,name,name,
 ALTER FUNCTION _timescaledb_internal.finalize_agg_sfunc(internal,text,name,name,name[],bytea,anyelement) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.partialize_agg(anyelement) SET SCHEMA _timescaledb_functions;
 
+-- Fix osm chunk ranges
+UPDATE _timescaledb_catalog.dimension_slice ds
+  SET range_start = 9223372036854775806
+FROM _timescaledb_catalog.chunk_constraint cc
+INNER JOIN _timescaledb_catalog.chunk c ON c.id = cc.chunk_id AND c.osm_chunk
+WHERE cc.dimension_slice_id = ds.id AND ds.range_start <> 9223372036854775806;
+

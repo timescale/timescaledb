@@ -555,6 +555,37 @@ CREATE INDEX hyper_constr_mid_idx ON hyper_constr(mid, time) WITH (timescaledb.t
 SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
 DROP INDEX hyper_constr_mid_idx;
 
+-- test range of dimension slice for osm chunk for different datatypes
+CREATE TABLE osm_int2(time int2 NOT NULL);
+CREATE TABLE osm_int4(time int4 NOT NULL);
+CREATE TABLE osm_int8(time int8 NOT NULL);
+CREATE TABLE osm_date(time date NOT NULL);
+CREATE TABLE osm_ts(time timestamp NOT NULL);
+CREATE TABLE osm_tstz(time timestamptz NOT NULL);
+
+SELECT table_name FROM create_hypertable('osm_int2','time',chunk_time_interval:=1000);
+SELECT table_name FROM create_hypertable('osm_int4','time',chunk_time_interval:=1000);
+SELECT table_name FROM create_hypertable('osm_int8','time',chunk_time_interval:=1000);
+SELECT table_name FROM create_hypertable('osm_date','time');
+SELECT table_name FROM create_hypertable('osm_ts','time');
+SELECT table_name FROM create_hypertable('osm_tstz','time');
+
+CREATE FOREIGN TABLE osm_int2_fdw_child(time int2 NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_int4_fdw_child(time int4 NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_int8_fdw_child(time int8 NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_date_fdw_child(time date NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_ts_fdw_child(time timestamp NOT NULL) SERVER s3_server;
+CREATE FOREIGN TABLE osm_tstz_fdw_child(time timestamptz NOT NULL) SERVER s3_server;
+
+SELECT dt, _timescaledb_functions.attach_osm_table_chunk('osm_' || dt, 'osm_' || dt || '_fdw_child') FROM unnest('{int2,int4,int8,date,ts,tstz}'::text[]) u(dt);
+
+SELECT ht.table_name, ds.*
+FROM _timescaledb_catalog.dimension_slice ds
+INNER JOIN _timescaledb_catalog.dimension d ON d.id=ds.dimension_id
+INNER JOIN _timescaledb_catalog.hypertable ht on ht.id=d.hypertable_id
+WHERE ht.table_name LIKE 'osm%'
+ORDER BY 2,3;
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;
