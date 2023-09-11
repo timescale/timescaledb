@@ -1029,20 +1029,29 @@ deparse_create_trigger(CreateTrigStmt *stmt)
 	bool found_first_arg = false;
 
 	/*
-	CREATE [ CONSTRAINT ] TRIGGER name { BEFORE | AFTER | INSTEAD OF } { event [ OR ... ] }
-		ON table_name
-		[ FROM referenced_table_name ]
-		[ NOT DEFERRABLE | [ DEFERRABLE ] [ INITIALLY IMMEDIATE | INITIALLY DEFERRED ] ]
-		[ REFERENCING { { OLD | NEW } TABLE [ AS ] transition_relation_name } [ ... ] ]
-		[ FOR [ EACH ] { ROW | STATEMENT } ]
-		[ WHEN ( condition ) ]
-		EXECUTE { FUNCTION | PROCEDURE } function_name ( arguments )
-	*/
+	 * CREATE [ OR REPLACE ] [ CONSTRAINT ] TRIGGER name
+	 *    { BEFORE | AFTER | INSTEAD OF } { event [ OR ... ] }
+	 * 	ON table_name
+	 * 	  [ FROM referenced_table_name ]
+	 * 	  [ NOT DEFERRABLE | [ DEFERRABLE ] [ INITIALLY IMMEDIATE | INITIALLY DEFERRED ] ]
+	 * 	  [ REFERENCING { { OLD | NEW } TABLE [ AS ] transition_relation_name } [ ... ] ]
+	 * 	  [ FOR [ EACH ] { ROW | STATEMENT } ]
+	 * 	  [ WHEN ( condition ) ]
+	 * 	EXECUTE { FUNCTION | PROCEDURE } function_name ( arguments )
+	 */
 	if (stmt->isconstraint)
 		elog(ERROR, "deparsing constraint triggers is not supported");
 
 	StringInfo command = makeStringInfo();
+#if PG14_LT
 	appendStringInfo(command, "CREATE TRIGGER %s ", quote_identifier(stmt->trigname));
+#else
+	/* Postgres 14 introduced OR REPLACE option */
+	appendStringInfo(command,
+					 "CREATE %sTRIGGER %s ",
+					 stmt->replace ? "OR REPLACE " : "",
+					 quote_identifier(stmt->trigname));
+#endif
 
 	if (TRIGGER_FOR_BEFORE(stmt->timing))
 		appendStringInfoString(command, "BEFORE");

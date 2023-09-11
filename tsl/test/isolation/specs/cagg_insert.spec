@@ -122,6 +122,31 @@ session "LM"
 step "LockMatInval" { BEGIN; LOCK TABLE _timescaledb_catalog.continuous_aggs_materialization_invalidation_log; }
 step "UnlockMatInval" { ROLLBACK; }
 
+# check for race condition creating triggers on the original hypertable
+session "CM1"
+step "CreateMatView1_Begin" {
+  BEGIN;
+  CREATE MATERIALIZED VIEW cagg1
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+    SELECT time_bucket('5', time), COUNT(location)
+    FROM ts_continuous_test_1
+    GROUP BY 1
+    WITH NO DATA;
+}
+step "CreateMatView1_Commit" { COMMIT; }
+
+session "CM2"
+step "CreateMatView2_Begin" {
+  BEGIN;
+  CREATE MATERIALIZED VIEW cagg2
+    WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
+    SELECT time_bucket('5', time), COUNT(location)
+    FROM ts_continuous_test_1
+    GROUP BY 1
+    WITH NO DATA;
+}
+step "CreateMatView2_Commit" { COMMIT; }
+
 #only one refresh
 permutation "LockInvalThrEx" "Refresh" "Refresh2" (Refresh) "Refresh3" (Refresh, Refresh2) "UnlockInvalThrEx"
 
@@ -161,3 +186,6 @@ permutation "I1" "Refresh" "LockInval" "Sb" "S1" "Refresh" "Sc" "UnlockInval"
 
 permutation "I1" "I21" "Refresh1" "Refresh2" "Refresh3"
 permutation "I1" "I2b" "I21" "Refresh2" "Refresh3" "I2c" "Refresh3"
+
+# check for race condition creating triggers on the original hypertable by concurrent create matviews
+permutation "CreateMatView1_Begin" "CreateMatView2_Begin" "CreateMatView1_Commit" "CreateMatView2_Commit"
