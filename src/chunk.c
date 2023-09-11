@@ -4517,20 +4517,23 @@ ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
 }
 
 #include "hypercube.h"
+/*
+ * Create a hypercube for the OSM chunk
+ * The initial range for the OSM chunk will be from INT64_MAX - 1 to INT64_MAX.
+ * This range was chosen to minimize interference with tuple routing and
+ * occupy a range outside of potential values as there must be no overlap
+ * between the hypercube occupied by the osm chunk and actual chunks.
+ */
 static Hypercube *
-fill_hypercube_for_foreign_table_chunk(Hyperspace *hs)
+fill_hypercube_for_osm_chunk(Hyperspace *hs)
 {
 	Hypercube *cube = ts_hypercube_alloc(hs->num_dimensions);
-	Point *p = ts_point_create(hs->num_dimensions);
 	Assert(hs->num_dimensions == 1); // does not work with partitioned range
 	for (int i = 0; i < hs->num_dimensions; i++)
 	{
 		const Dimension *dim = &hs->dimensions[i];
 		Assert(dim->type == DIMENSION_TYPE_OPEN);
-		Oid dimtype = ts_dimension_get_partition_type(dim);
-		Datum val = ts_time_datum_get_max(dimtype);
-		p->coordinates[p->num_coords++] = ts_time_value_to_internal(val, dimtype);
-		cube->slices[i] = ts_dimension_calculate_default_slice(dim, p->coordinates[i]);
+		cube->slices[i] = ts_dimension_slice_create(dim->fd.id, PG_INT64_MAX - 1, PG_INT64_MAX);
 		cube->num_slices++;
 	}
 	Assert(cube->num_slices == 1);
@@ -4580,7 +4583,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	/* fill in the correct table_name for the chunk*/
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->fd.osm_chunk = true; /* this is an OSM chunk */
-	chunk->cube = fill_hypercube_for_foreign_table_chunk(hs);
+	chunk->cube = fill_hypercube_for_osm_chunk(hs);
 	chunk->hypertable_relid = parent_ht->main_table_relid;
 	chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
 
