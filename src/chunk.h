@@ -179,8 +179,8 @@ extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_reloid(Oid reloid);
 extern TSDLLEXPORT FormData_chunk ts_chunk_get_formdata(int32 chunk_id);
 extern TSDLLEXPORT Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
-extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
-							bool missing_ok);
+extern TSDLLEXPORT bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
+										bool missing_ok);
 extern bool ts_chunk_exists_relid(Oid relid);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
 extern void ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_id);

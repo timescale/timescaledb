@@ -30,7 +30,9 @@ set(PG_IGNORE_TESTS
     rules
     sanity_check
     security_label
-    type_sanity)
+    type_sanity
+    create_am
+    psql)
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})

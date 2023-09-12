@@ -57,7 +57,21 @@ typedef struct DecompressChunkPath
 	bool batch_sorted_merge;
 } DecompressChunkPath;
 
+typedef struct SortInfo
+{
+	List *required_compressed_pathkeys;
+	bool needs_sequence_num;
+	bool can_pushdown_sort; /* sort can be pushed below DecompressChunk */
+	bool reverse;
+} SortInfo;
+
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										Chunk *chunk);
 
 extern bool ts_is_decompress_chunk_path(Path *path);
+FormData_compression_settings *get_column_compressioninfo(List *hypertable_compression_info,
+														  char *column_name);
+extern CompressionInfo *build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk,
+											  RelOptInfo *chunk_rel);
+extern SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
+							   List *pathkeys);

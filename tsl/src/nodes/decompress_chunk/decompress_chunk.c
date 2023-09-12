@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <catalog/pg_operator.h>
 #include <math.h>
@@ -43,14 +42,6 @@ static CustomPathMethods decompress_chunk_path_methods = {
 	.PlanCustomPath = decompress_chunk_plan_create,
 };
 
-typedef struct SortInfo
-{
-	List *required_compressed_pathkeys;
-	bool needs_sequence_num;
-	bool can_pushdown_sort; /* sort can be pushed below DecompressChunk */
-	bool reverse;
-} SortInfo;
-
 typedef enum MergeBatchResult
 {
 	MERGE_NOT_POSSIBLE,
@@ -69,9 +60,6 @@ static DecompressChunkPath *decompress_chunk_path_create(PlannerInfo *root, Comp
 
 static void decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk *chunk,
 											 RelOptInfo *chunk_rel, bool needs_sequence_num);
-
-static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info,
-							   List *pathkeys);
 
 static bool
 is_compressed_column(CompressionInfo *info, Oid type)
@@ -251,7 +239,7 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 	return dst;
 }
 
-static CompressionInfo *
+CompressionInfo *
 build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInfo *chunk_rel)
 {
 	AppendRelInfo *appinfo;
@@ -1984,7 +1972,7 @@ find_const_segmentby(RelOptInfo *chunk_rel, CompressionInfo *info)
  *
  * If query pathkeys is shorter than segmentby + compress_orderby pushdown can still be done
  */
-static SortInfo
+SortInfo
 build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List *pathkeys)
 {
 	int pk_index;
