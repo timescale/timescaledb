@@ -115,14 +115,14 @@ ORDER BY 1, 2;
 -- Now run on hypertable
 
 -- All partition keys not covered by GROUP BY (partial partitionwise)
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
 :PREFIX
 SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
 ORDER BY 1;
 
-SET enable_partitionwise_aggregate = 'on';
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT device, avg(temp)
 FROM hyper
@@ -130,14 +130,14 @@ GROUP BY 1
 ORDER BY 1;
 
 -- All partition keys covered (full partitionwise)
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
 :PREFIX
 SELECT time, device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
-SET enable_partitionwise_aggregate = 'on';
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT time, device, avg(temp)
 FROM hyper
@@ -152,6 +152,8 @@ FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
+-- Partial aggregation pushdown is currently not supported for this query by
+-- the TSDB pushdown code since a projection is used in the path.
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
@@ -160,14 +162,14 @@ GROUP BY 1, 2
 ORDER BY 1, 2;
 
 -- Also test time_bucket
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
 :PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
 
-SET enable_partitionwise_aggregate = 'on';
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
@@ -230,7 +232,7 @@ SELECT x, ceil(random() * 8), random() * 20
 FROM generate_series(0,5000-1) AS x;
 
 -- All partition keys covered (full partitionwise)
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
 :PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
@@ -246,7 +248,7 @@ ORDER BY 1, 2
 LIMIT 10;
 
 -- Grouping on original time column should be pushed-down
-SET enable_partitionwise_aggregate = 'on';
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
@@ -263,7 +265,8 @@ GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
 
--- Should also work to use partitioning function on closed dimensions
+-- Partial aggregation pushdown is currently not supported for this query by
+-- the TSDB pushdown code since a projection is used in the path.
 :PREFIX
 SELECT time_func(time), _timescaledb_functions.get_partition_hash(device), avg(temp)
 FROM hyper_timepart

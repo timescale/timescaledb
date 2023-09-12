@@ -308,44 +308,32 @@ ORDER BY 1, 2;
 
 -- Now run on hypertable
 -- All partition keys not covered by GROUP BY (partial partitionwise)
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
 :PREFIX
 SELECT device, avg(temp)
 FROM hyper
 GROUP BY 1
 ORDER BY 1;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
  Sort
    Output: _hyper_1_1_chunk.device, (avg(_hyper_1_1_chunk.temp))
    Sort Key: _hyper_1_1_chunk.device
-   ->  Finalize HashAggregate
+   ->  HashAggregate
          Output: _hyper_1_1_chunk.device, avg(_hyper_1_1_chunk.temp)
          Group Key: _hyper_1_1_chunk.device
          ->  Append
-               ->  Partial HashAggregate
-                     Output: _hyper_1_1_chunk.device, PARTIAL avg(_hyper_1_1_chunk.temp)
-                     Group Key: _hyper_1_1_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                           Output: _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
-               ->  Partial HashAggregate
-                     Output: _hyper_1_2_chunk.device, PARTIAL avg(_hyper_1_2_chunk.temp)
-                     Group Key: _hyper_1_2_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                           Output: _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
-               ->  Partial HashAggregate
-                     Output: _hyper_1_3_chunk.device, PARTIAL avg(_hyper_1_3_chunk.temp)
-                     Group Key: _hyper_1_3_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
-                           Output: _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
-               ->  Partial HashAggregate
-                     Output: _hyper_1_4_chunk.device, PARTIAL avg(_hyper_1_4_chunk.temp)
-                     Group Key: _hyper_1_4_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
-                           Output: _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(27 rows)
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                     Output: _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                     Output: _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
+               ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+                     Output: _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                     Output: _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
+(15 rows)
 
-SET enable_partitionwise_aggregate = 'on';
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT device, avg(temp)
 FROM hyper
@@ -383,7 +371,32 @@ ORDER BY 1;
 (27 rows)
 
 -- All partition keys covered (full partitionwise)
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
+:PREFIX
+SELECT time, device, avg(temp)
+FROM hyper
+GROUP BY 1, 2
+ORDER BY 1, 2;
+                                             QUERY PLAN                                              
+-----------------------------------------------------------------------------------------------------
+ Sort
+   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (avg(_hyper_1_1_chunk.temp))
+   Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+   ->  HashAggregate
+         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, avg(_hyper_1_1_chunk.temp)
+         Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+         ->  Append
+               ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                     Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
+               ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                     Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
+               ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
+                     Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
+               ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
+                     Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
+(15 rows)
+
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT time, device, avg(temp)
 FROM hyper
@@ -440,43 +453,6 @@ ORDER BY 1, 2;
                                        Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
 (47 rows)
 
-SET enable_partitionwise_aggregate = 'on';
-:PREFIX
-SELECT time, device, avg(temp)
-FROM hyper
-GROUP BY 1, 2
-ORDER BY 1, 2;
-                                                    QUERY PLAN                                                    
-------------------------------------------------------------------------------------------------------------------
- Sort
-   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (avg(_hyper_1_1_chunk.temp))
-   Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
-   ->  Finalize HashAggregate
-         Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, avg(_hyper_1_1_chunk.temp)
-         Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
-         ->  Append
-               ->  Partial HashAggregate
-                     Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, PARTIAL avg(_hyper_1_1_chunk.temp)
-                     Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
-               ->  Partial HashAggregate
-                     Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, PARTIAL avg(_hyper_1_2_chunk.temp)
-                     Group Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                           Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
-               ->  Partial HashAggregate
-                     Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, PARTIAL avg(_hyper_1_3_chunk.temp)
-                     Group Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
-                           Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
-               ->  Partial HashAggregate
-                     Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, PARTIAL avg(_hyper_1_4_chunk.temp)
-                     Group Key: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
-                           Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(27 rows)
-
 -- Partial aggregation since date_trunc(time) is not a partition key
 SET enable_partitionwise_aggregate = 'off';
 :PREFIX
@@ -505,45 +481,37 @@ ORDER BY 1, 2;
                            Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
 (17 rows)
 
+-- Partial aggregation pushdown is currently not supported for this query by
+-- the TSDB pushdown code since a projection is used in the path.
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                  QUERY PLAN                                                                   
------------------------------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: (date_trunc('month'::text, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device, (avg(_hyper_1_1_chunk.temp))
    Sort Key: (date_trunc('month'::text, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device
-   ->  Finalize HashAggregate
+   ->  HashAggregate
          Output: (date_trunc('month'::text, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device, avg(_hyper_1_1_chunk.temp)
-         Group Key: (date_trunc('month'::text, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device
-         ->  Append
-               ->  Partial HashAggregate
-                     Output: (date_trunc('month'::text, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device, PARTIAL avg(_hyper_1_1_chunk.temp)
-                     Group Key: date_trunc('month'::text, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device
+         Group Key: date_trunc('month'::text, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device
+         ->  Result
+               Output: date_trunc('month'::text, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
+               ->  Append
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                           Output: date_trunc('month'::text, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
-               ->  Partial HashAggregate
-                     Output: (date_trunc('month'::text, _hyper_1_2_chunk."time")), _hyper_1_2_chunk.device, PARTIAL avg(_hyper_1_2_chunk.temp)
-                     Group Key: date_trunc('month'::text, _hyper_1_2_chunk."time"), _hyper_1_2_chunk.device
+                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                           Output: date_trunc('month'::text, _hyper_1_2_chunk."time"), _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
-               ->  Partial HashAggregate
-                     Output: (date_trunc('month'::text, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device, PARTIAL avg(_hyper_1_3_chunk.temp)
-                     Group Key: date_trunc('month'::text, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
+                           Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
-                           Output: date_trunc('month'::text, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
-               ->  Partial HashAggregate
-                     Output: (date_trunc('month'::text, _hyper_1_4_chunk."time")), _hyper_1_4_chunk.device, PARTIAL avg(_hyper_1_4_chunk.temp)
-                     Group Key: date_trunc('month'::text, _hyper_1_4_chunk."time"), _hyper_1_4_chunk.device
+                           Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
-                           Output: date_trunc('month'::text, _hyper_1_4_chunk."time"), _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(27 rows)
+                           Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
+(17 rows)
 
 -- Also test time_bucket
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
 :PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
@@ -570,42 +538,32 @@ ORDER BY 1, 2;
                            Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
 (17 rows)
 
-SET enable_partitionwise_aggregate = 'on';
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT time_bucket('1 month', time), device, avg(temp)
 FROM hyper
 GROUP BY 1, 2
 ORDER BY 1, 2;
-                                                                      QUERY PLAN                                                                      
-------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: (time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device, (avg(_hyper_1_1_chunk.temp))
    Sort Key: (time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device
-   ->  Finalize HashAggregate
+   ->  HashAggregate
          Output: (time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device, avg(_hyper_1_1_chunk.temp)
-         Group Key: (time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device
-         ->  Append
-               ->  Partial HashAggregate
-                     Output: (time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time")), _hyper_1_1_chunk.device, PARTIAL avg(_hyper_1_1_chunk.temp)
-                     Group Key: time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device
+         Group Key: time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device
+         ->  Result
+               Output: time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
+               ->  Append
                      ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                           Output: time_bucket('@ 1 mon'::interval, _hyper_1_1_chunk."time"), _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
-               ->  Partial HashAggregate
-                     Output: (time_bucket('@ 1 mon'::interval, _hyper_1_2_chunk."time")), _hyper_1_2_chunk.device, PARTIAL avg(_hyper_1_2_chunk.temp)
-                     Group Key: time_bucket('@ 1 mon'::interval, _hyper_1_2_chunk."time"), _hyper_1_2_chunk.device
+                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                           Output: time_bucket('@ 1 mon'::interval, _hyper_1_2_chunk."time"), _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
-               ->  Partial HashAggregate
-                     Output: (time_bucket('@ 1 mon'::interval, _hyper_1_3_chunk."time")), _hyper_1_3_chunk.device, PARTIAL avg(_hyper_1_3_chunk.temp)
-                     Group Key: time_bucket('@ 1 mon'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device
+                           Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_3_chunk
-                           Output: time_bucket('@ 1 mon'::interval, _hyper_1_3_chunk."time"), _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
-               ->  Partial HashAggregate
-                     Output: (time_bucket('@ 1 mon'::interval, _hyper_1_4_chunk."time")), _hyper_1_4_chunk.device, PARTIAL avg(_hyper_1_4_chunk.temp)
-                     Group Key: time_bucket('@ 1 mon'::interval, _hyper_1_4_chunk."time"), _hyper_1_4_chunk.device
+                           Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
                      ->  Seq Scan on _timescaledb_internal._hyper_1_4_chunk
-                           Output: time_bucket('@ 1 mon'::interval, _hyper_1_4_chunk."time"), _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-(27 rows)
+                           Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
+(17 rows)
 
 -- Test partitionwise joins, mostly to see that we do not break
 -- anything
@@ -783,35 +741,29 @@ INSERT INTO hyper_timepart
 SELECT x, ceil(random() * 8), random() * 20
 FROM generate_series(0,5000-1) AS x;
 -- All partition keys covered (full partitionwise)
-SET enable_partitionwise_aggregate = 'off';
+SET timescaledb.enable_chunkwise_aggregation = 'off';
 :PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                       QUERY PLAN                                                       
-------------------------------------------------------------------------------------------------------------------------
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
  Limit
    Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, (avg(_hyper_3_7_chunk.temp))
    ->  Sort
          Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, (avg(_hyper_3_7_chunk.temp))
          Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device
-         ->  Finalize HashAggregate
+         ->  HashAggregate
                Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, avg(_hyper_3_7_chunk.temp)
                Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device
                ->  Append
-                     ->  Partial HashAggregate
-                           Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, PARTIAL avg(_hyper_3_7_chunk.temp)
-                           Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device
-                           ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk
-                                 Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
-                     ->  Partial HashAggregate
-                           Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, PARTIAL avg(_hyper_3_8_chunk.temp)
-                           Group Key: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device
-                           ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk
-                                 Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
-(19 rows)
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk
+                           Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
+                     ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk
+                           Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
+(13 rows)
 
 :PREFIX
 SELECT time_func(time), device, avg(temp)
@@ -841,32 +793,35 @@ LIMIT 10;
 (17 rows)
 
 -- Grouping on original time column should be pushed-down
-SET enable_partitionwise_aggregate = 'on';
+SET timescaledb.enable_chunkwise_aggregation = 'on';
 :PREFIX
 SELECT time, device, avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                QUERY PLAN                                                 
------------------------------------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, (avg(_hyper_3_7_chunk.temp))
    ->  Sort
          Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, (avg(_hyper_3_7_chunk.temp))
          Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device
-         ->  Append
-               ->  HashAggregate
-                     Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, avg(_hyper_3_7_chunk.temp)
-                     Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk
-                           Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
-               ->  HashAggregate
-                     Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, avg(_hyper_3_8_chunk.temp)
-                     Group Key: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device
-                     ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk
-                           Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
-(16 rows)
+         ->  Finalize HashAggregate
+               Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, avg(_hyper_3_7_chunk.temp)
+               Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device
+               ->  Append
+                     ->  Partial HashAggregate
+                           Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, PARTIAL avg(_hyper_3_7_chunk.temp)
+                           Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk
+                                 Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
+                     ->  Partial HashAggregate
+                           Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, PARTIAL avg(_hyper_3_8_chunk.temp)
+                           Group Key: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device
+                           ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk
+                                 Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
+(19 rows)
 
 -- Applying the time partitioning function should also allow push-down
 -- on open dimensions
@@ -876,62 +831,53 @@ FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                              QUERY PLAN                                                              
---------------------------------------------------------------------------------------------------------------------------------------
+                                                                     QUERY PLAN                                                                      
+-----------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device, (avg(_hyper_3_7_chunk.temp))
-   ->  Merge Append
-         Sort Key: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device
-         ->  GroupAggregate
-               Output: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device, avg(_hyper_3_7_chunk.temp)
-               Group Key: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device
-               ->  Incremental Sort
+   ->  GroupAggregate
+         Output: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device, avg(_hyper_3_7_chunk.temp)
+         Group Key: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device
+         ->  Incremental Sort
+               Output: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
+               Sort Key: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device
+               Presorted Key: (time_func(_hyper_3_7_chunk."time"))
+               ->  Result
                      Output: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
-                     Sort Key: (time_func(_hyper_3_7_chunk."time")), _hyper_3_7_chunk.device
-                     Presorted Key: (time_func(_hyper_3_7_chunk."time"))
-                     ->  Index Scan Backward using _hyper_3_7_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_7_chunk
-                           Output: time_func(_hyper_3_7_chunk."time"), _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp
-         ->  GroupAggregate
-               Output: (time_func(_hyper_3_8_chunk."time")), _hyper_3_8_chunk.device, avg(_hyper_3_8_chunk.temp)
-               Group Key: (time_func(_hyper_3_8_chunk."time")), _hyper_3_8_chunk.device
-               ->  Incremental Sort
-                     Output: (time_func(_hyper_3_8_chunk."time")), _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
-                     Sort Key: (time_func(_hyper_3_8_chunk."time")), _hyper_3_8_chunk.device
-                     Presorted Key: (time_func(_hyper_3_8_chunk."time"))
-                     ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
-                           Output: time_func(_hyper_3_8_chunk."time"), _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
-(22 rows)
+                     ->  Merge Append
+                           Sort Key: (time_func(_hyper_3_7_chunk."time"))
+                           ->  Index Scan Backward using _hyper_3_7_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_7_chunk
+                                 Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp, time_func(_hyper_3_7_chunk."time")
+                           ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
+                                 Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp, time_func(_hyper_3_8_chunk."time")
+(17 rows)
 
--- Should also work to use partitioning function on closed dimensions
+-- Partial aggregation pushdown is currently not supported for this query by
+-- the TSDB pushdown code since a projection is used in the path.
 :PREFIX
 SELECT time_func(time), _timescaledb_functions.get_partition_hash(device), avg(temp)
 FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
-                                                                           QUERY PLAN                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), (avg(_hyper_3_7_chunk.temp))
-   ->  Merge Append
-         Sort Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
-         ->  GroupAggregate
-               Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), avg(_hyper_3_7_chunk.temp)
-               Group Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
-               ->  Incremental Sort
-                     Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), _hyper_3_7_chunk.temp
-                     Sort Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
-                     Presorted Key: (time_func(_hyper_3_7_chunk."time"))
-                     ->  Index Scan Backward using _hyper_3_7_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_7_chunk
-                           Output: time_func(_hyper_3_7_chunk."time"), _timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device), _hyper_3_7_chunk.temp
-         ->  GroupAggregate
-               Output: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device)), avg(_hyper_3_8_chunk.temp)
-               Group Key: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device))
-               ->  Incremental Sort
-                     Output: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device)), _hyper_3_8_chunk.temp
-                     Sort Key: (time_func(_hyper_3_8_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device))
-                     Presorted Key: (time_func(_hyper_3_8_chunk."time"))
-                     ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
-                           Output: time_func(_hyper_3_8_chunk."time"), _timescaledb_functions.get_partition_hash(_hyper_3_8_chunk.device), _hyper_3_8_chunk.temp
-(22 rows)
+   ->  GroupAggregate
+         Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), avg(_hyper_3_7_chunk.temp)
+         Group Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
+         ->  Incremental Sort
+               Output: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device)), _hyper_3_7_chunk.temp
+               Sort Key: (time_func(_hyper_3_7_chunk."time")), (_timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device))
+               Presorted Key: (time_func(_hyper_3_7_chunk."time"))
+               ->  Result
+                     Output: (time_func(_hyper_3_7_chunk."time")), _timescaledb_functions.get_partition_hash(_hyper_3_7_chunk.device), _hyper_3_7_chunk.temp
+                     ->  Merge Append
+                           Sort Key: (time_func(_hyper_3_7_chunk."time"))
+                           ->  Index Scan Backward using _hyper_3_7_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_7_chunk
+                                 Output: _hyper_3_7_chunk."time", _hyper_3_7_chunk.device, _hyper_3_7_chunk.temp, time_func(_hyper_3_7_chunk."time")
+                           ->  Index Scan Backward using _hyper_3_8_chunk_hyper_timepart_expr_idx on _timescaledb_internal._hyper_3_8_chunk
+                                 Output: _hyper_3_8_chunk."time", _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp, time_func(_hyper_3_8_chunk."time")
+(17 rows)
 
