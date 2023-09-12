@@ -1,0 +1,459 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE metrics_compressed( time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
+CREATE INDEX ON metrics_compressed(time);
+CREATE INDEX ON metrics_compressed(device_id,time);
+SELECT create_hypertable('metrics_compressed','time',create_default_indexes:=false);
+        create_hypertable        
+---------------------------------
+ (1,public,metrics_compressed,t)
+(1 row)
+
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id-1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
+ANALYZE metrics_compressed;
+-- compress chunks
+ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
+SELECT compress_chunk(c.schema_name|| '.' || c.table_name)
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht WHERE c.hypertable_id = ht.id and ht.table_name = 'metrics_compressed' and c.compressed_chunk_id IS NULL
+ORDER BY c.table_name DESC;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_1_chunk
+(3 rows)
+
+-- case1: no: of new segment added is > 1000, which calls resize_affectedsegmentscxt()
+-- Number of segments decompressed is 10
+BEGIN;
+-- affects segment with sequence_num = 20,30
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(1,1020,1) gdevice(device_id), generate_series(1,1,1) gv(V);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT count(distinct device_id) FROM _timescaledb_internal.compress_hyper_2_6_chunk;
+ count 
+-------
+     5
+(1 row)
+
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+SELECT count(distinct device_id) FROM _timescaledb_internal.compress_hyper_2_6_chunk;
+ count 
+-------
+  1020
+(1 row)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case2: no: of affected existing segment is > 1000, which calls resize_affectedsegmentscxt()
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(1,1020,1) gdevice(device_id), generate_series(1,1,1) gv(V);
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+BEGIN;
+-- affects segment with sequence_num = 20,30
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(1,1020,1) gdevice(device_id), generate_series(1,1,1) gv(V);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT count(distinct device_id) FROM _timescaledb_internal.compress_hyper_2_6_chunk;
+ count 
+-------
+  1020
+(1 row)
+
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+SELECT count(distinct device_id) FROM _timescaledb_internal.compress_hyper_2_6_chunk;
+ count 
+-------
+  1020
+(1 row)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+ROLLBACK;
+-- case3: gaps between sequence no: are filled up, thus call legacy recompression
+BEGIN;
+-- affects segment with sequence_num = 20,30
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(3,3,1) gdevice(device_id), generate_series(1,100,1) gv(V);
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(3,3,1) gdevice(device_id), generate_series(1,100,1) gv(V);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 3 ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count 
+-----------+-----------------------+----------------
+         3 |                    10 |           1000
+         3 |                    20 |           1000
+         3 |                    21 |             91
+         3 |                    30 |           1000
+         3 |                    31 |             91
+         3 |                    40 |            598
+(6 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  total decompressed segments are: 4
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 3 ORDER BY 1, 2;
+LOG:  statement: SELECT device_id, _ts_meta_sequence_num, _ts_meta_count FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 3 ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count 
+-----------+-----------------------+----------------
+         3 |                    10 |           1000
+         3 |                    20 |           1000
+         3 |                    21 |           1000
+         3 |                    21 |           1000
+         3 |                    22 |           1000
+         3 |                    22 |            691
+         3 |                    23 |           1000
+         3 |                    24 |           1000
+         3 |                    25 |           1000
+         3 |                    26 |           1000
+         3 |                    27 |           1000
+         3 |                    28 |           1000
+         3 |                    29 |           1000
+         3 |                    30 |           1000
+         3 |                    31 |           1000
+         3 |                    31 |           1000
+         3 |                    32 |           1000
+         3 |                    32 |           1000
+         3 |                    32 |            691
+         3 |                    33 |           1000
+         3 |                    33 |           1000
+         3 |                    34 |           1000
+         3 |                    34 |           1000
+         3 |                    35 |           1000
+         3 |                    35 |           1000
+         3 |                    36 |           1000
+         3 |                    36 |           1000
+         3 |                    37 |           1000
+         3 |                    37 |           1000
+         3 |                    38 |            600
+         3 |                    38 |           1000
+         3 |                    39 |           1000
+         3 |                    40 |           1000
+         3 |                    41 |           1000
+         3 |                    42 |           1000
+         3 |                    43 |           1000
+         3 |                    44 |           1000
+         3 |                    45 |           1000
+         3 |                    46 |           1000
+         3 |                    47 |           1000
+         3 |                    48 |           1000
+         3 |                    49 |            198
+(42 rows)
+
+COMMIT;
+LOG:  statement: COMMIT;
+BEGIN;
+LOG:  statement: BEGIN;
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(3,3,1) gdevice(device_id), generate_series(1,100,1) gv(V);
+LOG:  statement: INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(3,3,1) gdevice(device_id), generate_series(1,100,1) gv(V);
+-- should invoke legacy recompression
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  performing full recompression
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 3 ORDER BY 1, 2;
+LOG:  statement: SELECT device_id, _ts_meta_sequence_num, _ts_meta_count FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 3 ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count 
+-----------+-----------------------+----------------
+         3 |                    10 |           1000
+         3 |                    20 |           1000
+         3 |                    30 |           1000
+         3 |                    40 |           1000
+         3 |                    50 |           1000
+         3 |                    60 |           1000
+         3 |                    70 |           1000
+         3 |                    80 |           1000
+         3 |                    90 |           1000
+         3 |                   100 |           1000
+         3 |                   110 |           1000
+         3 |                   120 |           1000
+         3 |                   130 |           1000
+         3 |                   140 |           1000
+         3 |                   150 |           1000
+         3 |                   160 |           1000
+         3 |                   170 |           1000
+         3 |                   180 |           1000
+         3 |                   190 |           1000
+         3 |                   200 |           1000
+         3 |                   210 |           1000
+         3 |                   220 |           1000
+         3 |                   230 |           1000
+         3 |                   240 |           1000
+         3 |                   250 |           1000
+         3 |                   260 |           1000
+         3 |                   270 |           1000
+         3 |                   280 |           1000
+         3 |                   290 |           1000
+         3 |                   300 |           1000
+         3 |                   310 |           1000
+         3 |                   320 |           1000
+         3 |                   330 |           1000
+         3 |                   340 |           1000
+         3 |                   350 |           1000
+         3 |                   360 |           1000
+         3 |                   370 |           1000
+         3 |                   380 |           1000
+         3 |                   390 |           1000
+         3 |                   400 |           1000
+         3 |                   410 |           1000
+         3 |                   420 |           1000
+         3 |                   430 |           1000
+         3 |                   440 |           1000
+         3 |                   450 |           1000
+         3 |                   460 |           1000
+         3 |                   470 |           1000
+         3 |                   480 |           1000
+         3 |                   490 |           1000
+         3 |                   500 |           1000
+         3 |                   510 |           1000
+         3 |                   520 |           1000
+         3 |                   530 |           1000
+         3 |                   540 |           1000
+         3 |                   550 |           1000
+         3 |                   560 |           1000
+         3 |                   570 |           1000
+         3 |                   580 |           1000
+         3 |                   590 |            380
+(59 rows)
+
+COMMIT;
+LOG:  statement: COMMIT;
+BEGIN;
+LOG:  statement: BEGIN;
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(3,3,1) gdevice(device_id), generate_series(1,100,1) gv(V);
+LOG:  statement: INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, V+1.5,  V + 2.5, V + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-04 20:06:00+05:30','22m') gtime(time), generate_series(3,3,1) gdevice(device_id), generate_series(1,100,1) gv(V);
+-- should invoke optimized recompression as there are enough gaps in sequence numbers in compressed chunk
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  total decompressed segments are: 57
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 3 ORDER BY 1, 2;
+LOG:  statement: SELECT device_id, _ts_meta_sequence_num, _ts_meta_count FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 3 ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count 
+-----------+-----------------------+----------------
+         3 |                    10 |           1000
+         3 |                    20 |           1000
+         3 |                    21 |            400
+         3 |                    30 |           1000
+         3 |                    31 |            300
+         3 |                    40 |           1000
+         3 |                    41 |            300
+         3 |                    50 |           1000
+         3 |                    51 |            300
+         3 |                    60 |           1000
+         3 |                    61 |            300
+         3 |                    70 |           1000
+         3 |                    71 |            400
+         3 |                    80 |           1000
+         3 |                    81 |            300
+         3 |                    90 |           1000
+         3 |                    91 |            300
+         3 |                   100 |           1000
+         3 |                   101 |            300
+         3 |                   110 |           1000
+         3 |                   111 |            400
+         3 |                   120 |           1000
+         3 |                   121 |            300
+         3 |                   130 |           1000
+         3 |                   131 |            300
+         3 |                   140 |           1000
+         3 |                   141 |            300
+         3 |                   150 |           1000
+         3 |                   151 |            300
+         3 |                   160 |           1000
+         3 |                   161 |            400
+         3 |                   170 |           1000
+         3 |                   171 |            300
+         3 |                   180 |           1000
+         3 |                   181 |            300
+         3 |                   190 |           1000
+         3 |                   191 |            300
+         3 |                   200 |           1000
+         3 |                   201 |            300
+         3 |                   210 |           1000
+         3 |                   211 |            400
+         3 |                   220 |           1000
+         3 |                   221 |            300
+         3 |                   230 |           1000
+         3 |                   231 |            300
+         3 |                   240 |           1000
+         3 |                   241 |            300
+         3 |                   250 |           1000
+         3 |                   251 |            300
+         3 |                   260 |           1000
+         3 |                   261 |            400
+         3 |                   270 |           1000
+         3 |                   271 |            300
+         3 |                   280 |           1000
+         3 |                   281 |            300
+         3 |                   290 |           1000
+         3 |                   291 |            300
+         3 |                   300 |           1000
+         3 |                   301 |            300
+         3 |                   310 |           1000
+         3 |                   311 |            400
+         3 |                   320 |           1000
+         3 |                   321 |            300
+         3 |                   330 |           1000
+         3 |                   331 |            300
+         3 |                   340 |           1000
+         3 |                   341 |            300
+         3 |                   350 |           1000
+         3 |                   351 |            300
+         3 |                   360 |           1000
+         3 |                   361 |            400
+         3 |                   370 |           1000
+         3 |                   371 |            300
+         3 |                   380 |           1000
+         3 |                   381 |            300
+         3 |                   390 |           1000
+         3 |                   391 |            300
+         3 |                   400 |           1000
+         3 |                   401 |            300
+         3 |                   410 |           1000
+         3 |                   411 |            400
+         3 |                   420 |           1000
+         3 |                   421 |            300
+         3 |                   430 |           1000
+         3 |                   431 |            300
+         3 |                   440 |           1000
+         3 |                   441 |            300
+         3 |                   450 |           1000
+         3 |                   451 |            300
+         3 |                   460 |           1000
+         3 |                   461 |            400
+         3 |                   470 |           1000
+         3 |                   471 |            300
+         3 |                   480 |           1000
+         3 |                   481 |            300
+         3 |                   490 |           1000
+         3 |                   491 |            300
+         3 |                   500 |           1000
+         3 |                   501 |            400
+         3 |                   510 |           1000
+         3 |                   511 |            300
+         3 |                   520 |           1000
+         3 |                   521 |            300
+         3 |                   530 |           1000
+         3 |                   531 |            300
+         3 |                   540 |           1000
+         3 |                   541 |            300
+         3 |                   550 |           1000
+         3 |                   551 |            400
+         3 |                   560 |           1000
+         3 |                   561 |            300
+         3 |                   570 |           1000
+         3 |                   571 |            300
+         3 |                   580 |           1000
+         3 |                   581 |            200
+         3 |                   590 |            380
+(116 rows)
+
+COMMIT;
+LOG:  statement: COMMIT;
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+LOG:  statement: SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      1 | f
+(1 row)
+
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+-- check for heapscan
+DROP INDEX _timescaledb_internal.compress_hyper_2_6_chunk__compressed_hypertable_2_device_id__ts;
+-- INSERT new segments with device_id = 4
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 4, 2, 3, 2.2, 3.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-30 15:30:00+05:30'::timestamp with time zone, 4, 2, 3, 22.2, 33.3);
+-- does not affects any segments, append to existing segments
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 1, 2, 3, 2.2, 3.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-30 15:30:00+05:30'::timestamp with time zone, 1, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 2, 2, 3, 222.2, 333.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 3, 2, 3, 2222.2, 3333.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-31 05:30:00+05:30'::timestamp with time zone, 4, 2, 3, 22222.2, 33333.3);
+INSERT INTO metrics_compressed VALUES ('1999-12-30 15:30:00+05:30'::timestamp with time zone, 4, 2, 3, 22222.2, 33333.3);
+-- affects segment with sequence_num = 30
+INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-02 01:26:00+05:30'::timestamptz,'2000-01-03 10:44:00+05:30','12s') gtime(time), generate_series(4,4,1) gdevice(device_id);
+-- create new segment
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 11, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:56:00+05:30'::timestamp with time zone, 11, 2, 3, 222.2, 333.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-03 15:46:00+05:30'::timestamp with time zone, 11, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 13, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 14, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 15, 2, 3, 22.2, 33.3);
+INSERT INTO metrics_compressed VALUES ('2000-01-01 15:30:00+05:30'::timestamp with time zone, 12, 2, 3, 22.2, 33.3);
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   6 | f       |      9 | f
+(1 row)
+
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_6_chunk WHERE device_id = 4 ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Mon Jan 03 00:02:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sat Jan 01 17:28:00 2000 PST | Mon Jan 03 00:00:00 2000 PST
+         4 |                    40 |            780 | Fri Dec 31 16:00:00 1999 PST | Sat Jan 01 17:26:00 2000 PST
+(4 rows)
+
+set client_min_messages TO LOG;
+CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+SELECT device_id, _ts_meta_sequence_num, _ts_meta_count, _ts_meta_min_1, _ts_meta_max_1 FROM _timescaledb_internal.compress_hyper_2_7_chunk WHERE device_id = 4 ORDER BY 1, 2;
+ device_id | _ts_meta_sequence_num | _ts_meta_count |        _ts_meta_min_1        |        _ts_meta_max_1        
+-----------+-----------------------+----------------+------------------------------+------------------------------
+         4 |                    10 |           1000 | Tue Jan 04 06:36:00 2000 PST | Wed Jan 05 15:54:00 2000 PST
+         4 |                    20 |           1000 | Mon Jan 03 00:02:00 2000 PST | Tue Jan 04 06:34:00 2000 PST
+         4 |                    30 |           1000 | Sun Jan 02 18:30:12 2000 PST | Mon Jan 03 00:00:00 2000 PST
+         4 |                    40 |           1000 | Sun Jan 02 15:30:00 2000 PST | Sun Jan 02 18:30:00 2000 PST
+         4 |                    50 |           1000 | Sun Jan 02 12:29:48 2000 PST | Sun Jan 02 15:29:48 2000 PST
+         4 |                    60 |           1000 | Sun Jan 02 09:29:24 2000 PST | Sun Jan 02 12:29:36 2000 PST
+         4 |                    70 |           1000 | Sun Jan 02 06:29:00 2000 PST | Sun Jan 02 09:29:12 2000 PST
+         4 |                    80 |           1000 | Sun Jan 02 03:28:36 2000 PST | Sun Jan 02 06:28:48 2000 PST
+         4 |                    90 |           1000 | Sun Jan 02 00:28:12 2000 PST | Sun Jan 02 03:28:24 2000 PST
+         4 |                   100 |           1000 | Sat Jan 01 21:28:00 2000 PST | Sun Jan 02 00:28:00 2000 PST
+         4 |                   110 |           1000 | Sat Jan 01 18:27:48 2000 PST | Sat Jan 01 21:28:00 2000 PST
+         4 |                   120 |           1000 | Sat Jan 01 15:27:24 2000 PST | Sat Jan 01 18:27:36 2000 PST
+         4 |                   130 |           1000 | Sat Jan 01 12:27:00 2000 PST | Sat Jan 01 15:27:12 2000 PST
+         4 |                   140 |            775 | Thu Dec 30 02:00:00 1999 PST | Sat Jan 01 12:26:48 2000 PST
+(14 rows)
+
+-- check compression status
+SELECT * FROM _timescaledb_catalog.chunk WHERE table_name = '_hyper_1_1_chunk' ORDER BY id;
+ id | hypertable_id |      schema_name      |    table_name    | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+------------------+---------------------+---------+--------+-----------
+  1 |             1 | _timescaledb_internal | _hyper_1_1_chunk |                   7 | f       |      1 | f
+(1 row)
+
+DROP TABLE metrics_compressed;
