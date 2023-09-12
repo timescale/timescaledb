@@ -1802,24 +1802,11 @@ static Oid hypercore_amoid = InvalidOid;
 bool
 ts_is_hypercore_am(Oid amoid)
 {
-	/* Can't use InvalidOid as an indication of non-cached value since
-	   get_am_oid() will return InvalidOid when the access method does not
-	   exist and we will do the lookup every time this query is called. This
-	   boolean can be removed once we know that there should exist an access
-	   method with the given name. */
-	static bool iscached = false;
-
-	if (!iscached && !OidIsValid(hypercore_amoid))
-	{
-		hypercore_amoid = get_am_oid("hypercore", true);
-		iscached = true;
-	}
-
 	if (!OidIsValid(hypercore_amoid))
-		return false;
+		hypercore_amoid = get_table_am_oid("tscompression", true);
 
-	/* Shouldn't get here for now */
-	Assert(false);
+	if (!OidIsValid(amoid) || !OidIsValid(hypercore_amoid))
+		return false;
 
 	return amoid == hypercore_amoid;
 }

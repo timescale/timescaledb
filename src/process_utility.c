@@ -140,6 +140,10 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_SetTableSpace:
 				case AT_ReAddStatistics:
 				case AT_SetCompression:
+#if PG15_GE
+
+				case AT_SetAccessMethod:
+#endif
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
@@ -4617,6 +4621,14 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	 * execution in TSL.
 	 */
 	result = process_ddl_command_start(&args);
+
+	/*
+	 * We need to run tsl-side ddl_command_start hook before
+	 * standard process utility hook to maintain proper invocation
+	 * order of sql_drop and ddl_command_end triggers.
+	 */
+	if (ts_cm_functions->ddl_command_start)
+		ts_cm_functions->ddl_command_start(&args);
 
 	/*
 	 * We need to run tsl-side ddl_command_start hook before

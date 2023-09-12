@@ -110,7 +110,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     list(APPEND TEST_FILES bgw_scheduler_control.sql)
   endif()
   list(APPEND TEST_FILES merge_compress.sql cagg_query_using_merge.sql
-       cagg_refresh_using_merge.sql)
+       cagg_refresh_using_merge.sql compression_tam.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

@@ -78,6 +78,7 @@ CROSSMODULE_WRAPPER(array_compressor_finish);
 CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
+CROSSMODULE_WRAPPER(compressionam_handler);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -276,6 +277,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
 	.set_rel_pathlist = NULL,
+	.ddl_command_start = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
 
@@ -360,6 +362,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.dictionary_compressor_finish = error_no_default_fn_pg_community,
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
+	.compressionam_handler = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,

@@ -8,12 +8,53 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
 #include <commands/event_trigger.h>
+#include <commands/tablecmds.h>
+#include <nodes/nodes.h>
+#include <nodes/parsenodes.h>
 
+#include "compression/compressionam_handler.h"
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
+
+void
+tsl_ddl_command_start(ProcessUtilityArgs *args)
+{
+	switch (nodeTag(args->parsetree))
+	{
+		case T_AlterTableStmt:
+		{
+			AlterTableStmt *stmt = castNode(AlterTableStmt, args->parsetree);
+			ListCell *lc;
+
+			foreach (lc, stmt->cmds)
+			{
+				AlterTableCmd *cmd = lfirst_node(AlterTableCmd, lc);
+
+				switch (cmd->subtype)
+				{
+#if PG15_GE
+					case AT_SetAccessMethod:
+						if (strcmp(cmd->name, "tscompression") == 0)
+						{
+							Oid relid = AlterTableLookupRelation(stmt, NoLock);
+							compressionam_handler_start_conversion(relid);
+						}
+						break;
+#endif
+					default:
+						break;
+				}
+			}
+
+			break;
+		}
+		default:
+			break;
+	}
+}
 
 /* AlterTableCmds that need tsl side processing invoke this function
  * we only process AddColumn command right now.
