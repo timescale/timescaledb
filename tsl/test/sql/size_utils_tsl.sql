@@ -21,6 +21,7 @@ SELECT * FROM chunks_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
 SELECT * FROM hypertable_size('hypersize_cagg');
 SELECT * FROM hypertable_detailed_size('hypersize_cagg') ORDER BY node_name;
 SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;
+SELECT * FROM approximate_row_count('hypersize_cagg');
 
 -- Test size functions on non-empty countinuous aggregate
 CALL refresh_continuous_aggregate('hypersize_cagg', NULL, NULL);
@@ -30,3 +31,5 @@ SELECT * FROM chunks_detailed_size('hypersize_cagg') ORDER BY node_name;
 SELECT * FROM hypertable_size(:'MAT_HYPERTABLE_NAME');
 SELECT * FROM hypertable_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
 SELECT * FROM chunks_detailed_size(:'MAT_HYPERTABLE_NAME') ORDER BY node_name;
+ANALYZE :MAT_HYPERTABLE_NAME;
+SELECT * FROM approximate_row_count('hypersize_cagg');

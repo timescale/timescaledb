@@ -1,0 +1,1 @@
+Fixes: #6053 Function approximate_row_count returns 0 for caggs

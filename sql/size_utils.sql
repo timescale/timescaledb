@@ -415,6 +415,7 @@ RETURNS BIGINT
 LANGUAGE PLPGSQL VOLATILE STRICT AS
 $BODY$
 DECLARE
+    mat_ht           REGCLASS = NULL;
     local_table_name       NAME = NULL;
     local_schema_name      NAME = NULL;
     is_distributed   BOOL = FALSE;
@@ -428,6 +429,20 @@ DECLARE
     max_compressed_row_count BIGINT = 1000;
     is_compressed_chunk INTEGER;
 BEGIN
+    -- Check if input relation is continuous aggregate view then
+    -- get the corresponding materialized hypertable and schema name
+    SELECT format('%I.%I', ht.schema_name, ht.table_name)::regclass
+    INTO mat_ht
+    FROM pg_class c
+    JOIN pg_namespace n ON (n.OID = c.relnamespace)
+    JOIN _timescaledb_catalog.continuous_agg a ON (a.user_view_schema = n.nspname AND a.user_view_name = c.relname)
+    JOIN _timescaledb_catalog.hypertable ht ON (a.mat_hypertable_id = ht.id)
+    WHERE c.OID = relation;
+
+    IF mat_ht IS NOT NULL THEN
+        relation = mat_ht;
+    END IF;
+
     SELECT relname, nspname FROM pg_class c
     INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
     INTO local_table_name, local_schema_name
