@@ -22,6 +22,7 @@
 #include "compression/algorithms/gorilla.h"
 #include "compression/api.h"
 #include "compression/compression.h"
+#include "compression/compressionam_handler.h"
 #include "compression/create.h"
 #include "compression/segment_meta.h"
 #include "config.h"
@@ -160,7 +161,8 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.decompress_target_segments = decompress_target_segments,
-
+	.compressionam_handler = compressionam_handler,
+	.ddl_command_start = tsl_ddl_command_start,
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,
 	.create_chunk = chunk_create,

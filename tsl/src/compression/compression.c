@@ -663,7 +663,7 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
  * we are trying to roll up chunks while compressing
  */
 Oid
-get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings)
+get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettings *settings)
 {
 	int num_segmentby_columns = ts_array_length(settings->fd.segmentby);
 
@@ -857,7 +857,7 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
 }
 
 static void
-build_column_map(CompressionSettings *settings, Relation uncompressed_table,
+build_column_map(const CompressionSettings *settings, Relation uncompressed_table,
 				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
 {
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
@@ -951,7 +951,7 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
  ** row_compressor **
  ********************/
 void
-row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 					Relation uncompressed_table, Relation compressed_table,
 					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
 					int insert_options)

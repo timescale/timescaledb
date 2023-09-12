@@ -107,7 +107,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES bgw_scheduler_control.sql)
   endif()
-  list(APPEND TEST_FILES merge_compress.sql)
+  list(APPEND TEST_FILES compression_tam.sql merge_compress.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))

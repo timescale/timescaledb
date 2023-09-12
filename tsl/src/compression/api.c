@@ -60,7 +60,7 @@ typedef struct CompressChunkCxt
 static Oid get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk);
 static Oid recompress_chunk_segmentwise_impl(Chunk *chunk);
 
-static void
+void
 compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
 									  int32 compress_chunk_id, const RelationSize *compress_size,
 									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression,
