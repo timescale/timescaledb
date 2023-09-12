@@ -206,6 +206,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  debug_waitpoint_enable(text)
  debug_waitpoint_id(text)
  debug_waitpoint_release(text)
+ ts_compressionam_handler(internal)
  ts_now_mock()
  add_compression_policy(regclass,"any",boolean,interval,timestamp with time zone,text,interval)
  add_continuous_aggregate_policy(regclass,"any","any",interval,boolean,timestamp with time zone,text)
