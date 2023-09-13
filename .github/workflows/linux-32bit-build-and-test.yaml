@@ -162,17 +162,23 @@ jobs:
           for file in /tmp/core*
           do
             gdb /usr/lib/postgresql/${PG_MAJOR}/bin/postgres -c $file <<<"
-              set verbose on
-              set trace-commands on
-              show debug-file-directory
-              printf "'"'"query = '%s'\n\n"'"'", debug_query_string
-              frame function ExceptionalCondition
-              printf "'"'"condition = '%s'\n"'"'", conditionName
-              up 1
-              l
-              info args
-              info locals
-              bt full
+          set verbose on
+          set trace-commands on
+          show debug-file-directory
+          printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+          bt full
+
+          # We try to find ExceptionalCondition frame to print the failed condition
+          # for searching in logs.
+          frame function ExceptionalCondition
+          printf "'"'"condition = '%s'\n"'"'", conditionName
+
+          # Hopefully now we should be around the failed assertion, print where
+          # we are.
+          up 1
+          list
+          info args
+          info locals
             " | tee -a stacktrace.log
           done
           echo "coredumps=true" >>$GITHUB_OUTPUT

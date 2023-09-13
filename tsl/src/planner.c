@@ -151,7 +151,9 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		}
 
 		if (fdw_private->cached_chunk_struct->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+		{
 			ts_decompress_chunk_generate_paths(root, rel, ht, fdw_private->cached_chunk_struct);
+		}
 	}
 }
 

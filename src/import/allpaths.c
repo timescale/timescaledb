@@ -33,7 +33,9 @@
 #include <math.h>
 
 #include "allpaths.h"
+#include "chunk.h"
 #include "compat/compat.h"
+#include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 
@@ -135,9 +137,9 @@ set_plain_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)
 
 /* copied from allpaths.c */
 void
-ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte)
+ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index parent_rt_index,
+						   RangeTblEntry *parent_rte)
 {
-	int parentRTindex = rti;
 	List *live_childrels = NIL;
 	ListCell *l;
 
@@ -148,18 +150,14 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	foreach (l, root->append_rel_list)
 	{
 		AppendRelInfo *appinfo = (AppendRelInfo *) lfirst(l);
-		int childRTindex;
-		RangeTblEntry *childRTE;
-		RelOptInfo *childrel;
 
 		/* append_rel_list contains all append rels; ignore others */
-		if (appinfo->parent_relid != (Index) parentRTindex)
+		if (appinfo->parent_relid != (Index) parent_rt_index)
 			continue;
 
 		/* Re-locate the child RTE and RelOptInfo */
-		childRTindex = appinfo->child_relid;
-		childRTE = root->simple_rte_array[childRTindex];
-		childrel = root->simple_rel_array[childRTindex];
+		const int child_rt_index = appinfo->child_relid;
+		RelOptInfo *child_rel = root->simple_rel_array[child_rt_index];
 
 		/*
 		 * If set_append_rel_size() decided the parent appendrel was
@@ -167,35 +165,71 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		 * need to propagate the unsafety marking down to the child, so that
 		 * we don't generate useless partial paths for it.
 		 */
-		if (!rel->consider_parallel)
-			childrel->consider_parallel = false;
+		if (!parent_rel->consider_parallel)
+			child_rel->consider_parallel = false;
+
+		/*
+		 * We want to disable planning the index scans on uncompressed chunk
+		 * tables of fully compressed chunks. It would be expensive and useless
+		 * because the uncompressed chunk tables are empty in this case.
+		 *
+		 * Note about the 'if' condition: compressed chunk tables expanded from
+		 * normal hypertables always have the type TS_REL_CHUNK_STANDALONE. The
+		 * direct select from a compressed chunk table would also produce this
+		 * type. Another possibility is a direct select from an internal
+		 * compression hypertable, where the compressed chunks would have the
+		 * type TS_REL_CHUNK_CHILD. We have to filter out all these cases here.
+		 *
+		 * For standalone chunks or UPDATE/DELETE, we do the same thing in
+		 * timescaledb_get_relation_info_hook().
+		 */
+		Hypertable *ht;
+		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
+		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		{
+			TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) child_rel->fdw_private;
+
+			/*
+			 * This function is called only in tandem with our own hypertable
+			 * expansion, so the Chunk struct must be initialized already.
+			 */
+			Assert(fdw_private->cached_chunk_struct != NULL);
+
+			if (!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
+				ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
+			{
+				child_rel->indexlist = NIL;
+			}
+		}
 
 		/*
 		 * Compute the child's access paths.
 		 */
-		set_rel_pathlist(root, childrel, childRTindex, childRTE);
+		RangeTblEntry *child_rte = root->simple_rte_array[child_rt_index];
+		set_rel_pathlist(root, child_rel, child_rt_index, child_rte);
 
 		/*
 		 * If child is dummy, ignore it.
 		 */
-		if (IS_DUMMY_REL(childrel))
+		if (IS_DUMMY_REL(child_rel))
 			continue;
 
 			/* Bubble up childrel's partitioned children. */
 #if PG14_LT
-		if (rel->part_scheme)
-			rel->partitioned_child_rels = list_concat(rel->partitioned_child_rels,
-													  list_copy(childrel->partitioned_child_rels));
+		if (parent_rel->part_scheme)
+			parent_rel->partitioned_child_rels =
+				list_concat(parent_rel->partitioned_child_rels,
+							list_copy(child_rel->partitioned_child_rels));
 #endif
 
 		/*
 		 * Child is live, so add it to the live_childrels list for use below.
 		 */
-		live_childrels = lappend(live_childrels, childrel);
+		live_childrels = lappend(live_childrels, child_rel);
 	}
 
 	/* Add paths to the append relation. */
-	add_paths_to_append_rel(root, rel, live_childrels);
+	add_paths_to_append_rel(root, parent_rel, live_childrels);
 }
 
 /* based on the function in allpaths.c, with the irrelevant branches removed */

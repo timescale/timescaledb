@@ -50,6 +50,7 @@
 #include "extension.h"
 #include "func_cache.h"
 #include "guc.h"
+#include "hypertable.h"
 #include "hypertable_cache.h"
 #include "import/allpaths.h"
 #include "license_guc.h"
@@ -738,8 +739,8 @@ get_or_add_baserel_from_cache(Oid chunk_reloid, Oid parent_reloid)
  * This makes use of cache warming that happened during Query preprocessing in
  * the first planner hook.
  */
-static TsRelType
-classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **ht)
+TsRelType
+ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **ht)
 {
 	Assert(ht != NULL);
 	*ht = NULL;
@@ -771,14 +772,27 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **h
 		}
 
 		/*
-		 * This is either a chunk seen as a standalone table, or a non-chunk
-		 * baserel. We need a costly chunk metadata scan to distinguish between
-		 * them, so we cache the result of this lookup to avoid doing it
-		 * repeatedly.
+		 * This is either a chunk seen as a standalone table, a compressed chunk
+		 * table, or a non-chunk baserel. We need a costly chunk metadata scan
+		 * to distinguish between them, so we cache the result of this lookup to
+		 * avoid doing it repeatedly.
 		 */
 		BaserelInfoEntry *entry = get_or_add_baserel_from_cache(rte->relid, InvalidOid);
 		*ht = entry->ht;
-		return *ht ? TS_REL_CHUNK_STANDALONE : TS_REL_OTHER;
+
+		if (*ht)
+		{
+			/*
+			 * Note that this works in a slightly weird way for compressed
+			 * chunks expanded from a normal hypertable, always saying that they
+			 * are standalone. In practice we filter them out by also checking
+			 * that the respective hypertable is not an internal compression
+			 * hypertable.
+			 */
+			return TS_REL_CHUNK_STANDALONE;
+		}
+
+		return TS_REL_OTHER;
 	}
 
 	Assert(rel->reloptkind == RELOPT_OTHER_MEMBER_REL);
@@ -816,7 +830,27 @@ classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **h
 	 */
 	BaserelInfoEntry *entry = get_or_add_baserel_from_cache(rte->relid, parent_rte->relid);
 	*ht = entry->ht;
-	return *ht ? TS_REL_CHUNK_CHILD : TS_REL_OTHER;
+	if (*ht)
+	{
+		if (rte->relkind == RELKIND_FOREIGN_TABLE && !hypertable_is_distributed(*ht))
+		{
+			/*
+			 * OSM chunk or other foreign chunk. We can't even access the
+			 * fdw_private for it, because it's a foreign chunk managed by a
+			 * different extension. Try to ignore it as much as possible.
+			 *
+			 * Note that we also have to disambiguate them from distributed
+			 * hypertable chunks, which are also foreign. We can't use the
+			 * fdwroutine here because it is set later, in
+			 * tsl_set_rel_pathlist().
+			 */
+			return TS_REL_OTHER;
+		}
+
+		return TS_REL_CHUNK_CHILD;
+	}
+
+	return TS_REL_OTHER;
 }
 
 extern void ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel);
@@ -1204,7 +1238,7 @@ timescaledb_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, Rang
 		return;
 	}
 
-	reltype = classify_relation(root, rel, &ht);
+	reltype = ts_classify_relation(root, rel, &ht);
 
 	/* Check for unexpanded hypertable */
 	if (!rte->inh && ts_rte_is_marked_for_expansion(rte))
@@ -1271,20 +1305,20 @@ static void
 timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, bool inhparent,
 								   RelOptInfo *rel)
 {
-	Hypertable *ht;
-
 	if (prev_get_relation_info_hook != NULL)
 		prev_get_relation_info_hook(root, relation_objectid, inhparent, rel);
 
 	if (!valid_hook_call())
 		return;
 
-	switch (classify_relation(root, rel, &ht))
+	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+	Query *query = root->parse;
+	Hypertable *ht;
+	const TsRelType type = ts_classify_relation(root, rel, &ht);
+	switch (type)
 	{
 		case TS_REL_HYPERTABLE:
 		{
-			RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
-			Query *query = root->parse;
 			/* Mark hypertable RTEs we'd like to expand ourselves.
 			 * Hypertables inside inlineable functions don't get marked during the query
 			 * preprocessing step. Therefore we do an extra try here. However, we need to
@@ -1310,30 +1344,38 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 		}
 		case TS_REL_CHUNK_STANDALONE:
 		case TS_REL_CHUNK_CHILD:
-		{
 			ts_create_private_reloptinfo(rel);
 
-			if (ts_guc_enable_transparent_decompression && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+			/*
+			 * We don't want to plan index scans on empty uncompressed tables of
+			 * fully compressed chunks. It takes a lot of time, and these tables
+			 * are empty anyway. Just reset the indexlist in this case. For
+			 * uncompressed or partially compressed chunks, the uncompressed
+			 * tables are not empty, so we plan the index scans as usual.
+			 *
+			 * Normally the index list is reset in ts_set_append_rel_pathlist(),
+			 * based on the Chunk struct cached by our hypertable expansion, but
+			 * in cases when these functions don't run, we have to do it here.
+			 */
+			const bool use_transparent_decompression =
+				ts_guc_enable_transparent_decompression && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht);
+			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE) &&
+											 !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht);
+			const bool is_child_chunk_in_update =
+				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
+			if (use_transparent_decompression && (is_standalone_chunk || is_child_chunk_in_update))
 			{
-				RangeTblEntry *chunk_rte = planner_rt_fetch(rel->relid, root);
-				Chunk *chunk = ts_chunk_get_by_relid(chunk_rte->relid, true);
-
-				if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
+				TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
+				Assert(fdw_private->cached_chunk_struct == NULL);
+				fdw_private->cached_chunk_struct =
+					ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
+				if (!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
+					ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
 				{
-					/* Planning indexes is expensive, and if this is a fully compressed chunk, we
-					 * know we'll never need to use indexes on the uncompressed version, since
-					 * all the data is in the compressed chunk anyway. Therefore, it is much
-					 * faster if we simply trash the indexlist here and never plan any useless
-					 * IndexPaths at all.
-					 * If the chunk is partially compressed, then we should enable indexScan
-					 * on the uncompressed part.
-					 */
-					if (!ts_chunk_is_partial(chunk))
-						rel->indexlist = NIL;
+					rel->indexlist = NIL;
 				}
 			}
 			break;
-		}
 		case TS_REL_HYPERTABLE_CHILD:
 			/* When postgres expands an inheritance tree it also adds the
 			 * parent hypertable as child relation. Since for a hypertable the
@@ -1379,7 +1421,7 @@ involves_hypertable(PlannerInfo *root, RelOptInfo *rel)
 		return join_involves_hypertable(root, rel);
 
 	Hypertable *ht;
-	return classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE;
+	return ts_classify_relation(root, rel, &ht) == TS_REL_HYPERTABLE;
 }
 
 /*
@@ -1508,7 +1550,7 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 		return;
 
 	if (input_rel != NULL)
-		reltype = classify_relation(root, input_rel, &ht);
+		reltype = ts_classify_relation(root, input_rel, &ht);
 
 	if (ts_cm_functions->create_upper_paths_hook != NULL)
 		ts_cm_functions
