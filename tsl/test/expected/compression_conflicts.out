@@ -231,7 +231,7 @@ BEGIN;
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     1
+     2
 (1 row)
 
 ROLLBACK;
@@ -245,7 +245,7 @@ BEGIN;
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     3
+     5
 (1 row)
 
 ROLLBACK;

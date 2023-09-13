@@ -1,0 +1,1 @@
+Fixes: #6061 Fix INSERT query performs on compressed chunk

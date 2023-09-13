@@ -1017,6 +1017,8 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	Oid compressed_chunk_relid = ts_chunk_get_relid(uncompressed_chunk->fd.compressed_chunk_id, true);
+	Chunk *compressed_chunk = ts_chunk_get_by_relid(compressed_chunk_relid, true);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	if (NULL == uncompressed_chunk)
@@ -1031,61 +1033,8 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 		else // don't care what the idx oid is, data node will find it and open it
 			PG_RETURN_OID(uncompressed_chunk_id);
 	}
-	int32 srcht_id = uncompressed_chunk->fd.hypertable_id;
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-
-	List *htcols_list = ts_hypertable_compression_get(srcht_id);
-	ListCell *lc;
-	int htcols_listlen = list_length(htcols_list);
-
-	const ColumnCompressionInfo **colinfo_array;
-	colinfo_array = palloc(sizeof(ColumnCompressionInfo *) * htcols_listlen);
-
-	int i = 0;
-
-	foreach (lc, htcols_list)
-	{
-		FormData_hypertable_compression *fd = (FormData_hypertable_compression *) lfirst(lc);
-		colinfo_array[i++] = fd;
-	}
-
-	const ColumnCompressionInfo **keys;
-	int n_keys;
-	int16 *in_column_offsets = compress_chunk_populate_keys(uncompressed_chunk->table_id,
-															colinfo_array,
-															htcols_listlen,
-															&n_keys,
-															&keys);
-
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
-	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
-	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
-
-	RowCompressor row_compressor;
-	row_compressor_init(&row_compressor,
-						uncompressed_rel_tupdesc,
-						compressed_chunk_rel,
-						htcols_listlen,
-						colinfo_array,
-						in_column_offsets,
-						compressed_rel_tupdesc->natts,
-						true /*need_bistate*/,
-						true /*reset_sequence*/);
-
-	/*
-	 * Keep the ExclusiveLock on the compressed chunk. This lock will be requested
-	 * by recompression later on, both in the case of segmentwise recompression, and
-	 * in the case of decompress-compress. This implicitly locks the index too, so
-	 * it cannot be dropped in another session, which is what we want to prevent by
-	 * locking the compressed chunk here
-	 */
-	table_close(compressed_chunk_rel, NoLock);
-	table_close(uncompressed_chunk_rel, NoLock);
-
-	row_compressor_finish(&row_compressor);
-
-	if (OidIsValid(row_compressor.index_oid))
+	Oid index_oid = get_index_on_compressed_chunk(uncompressed_chunk, compressed_chunk);
+	if (OidIsValid(index_oid))
 	{
 		PG_RETURN_OID(uncompressed_chunk_id);
 	}

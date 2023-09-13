@@ -391,6 +391,8 @@ consumeCompressedData(StringInfo si, int bytes)
 	return result;
 }
 
+/* Fetch index on compressed chunk, which has all segmentby columns */
+Oid get_index_on_compressed_chunk(Chunk *uncompressed_chunk, Chunk *compressed_chunk);
 /*
  * Normal compression uses 1k rows, but the regression tests use up to 1015.
  * We use this limit for sanity checks in case the compressed data is corrupt.

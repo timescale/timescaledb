@@ -804,7 +804,6 @@ step UnlockChunkTuple: ROLLBACK;
 step I1: <... completed>
 step Ic: COMMIT;
 step IN1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -865,7 +864,6 @@ step UnlockChunkTuple: ROLLBACK;
 step I1: <... completed>
 step Ic: COMMIT;
 step IN1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -926,7 +924,6 @@ step UnlockChunkTuple: ROLLBACK;
 step I1: <... completed>
 step Ic: COMMIT;
 step IN1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -987,7 +984,6 @@ step UnlockChunkTuple: ROLLBACK;
 step I1: <... completed>
 step Ic: COMMIT;
 step INu1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -999,13 +995,13 @@ status
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
-(0 rows)
+   1|     1|     100|   99
+(1 row)
 
 step SA: SELECT * FROM ts_device_table;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   20
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -1014,6 +1010,7 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     100|   99
 (10 rows)
 
 
@@ -1053,7 +1050,6 @@ step UnlockChunkTuple: ROLLBACK;
 step I1: <... completed>
 step Ic: COMMIT;
 step INu1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1066,7 +1062,6 @@ step SA: SELECT * FROM ts_device_table;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   20
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -1075,6 +1070,7 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     100|   99
 (10 rows)
 
 
@@ -1114,7 +1110,6 @@ step UnlockChunkTuple: ROLLBACK;
 step I1: <... completed>
 step Ic: COMMIT;
 step INu1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1127,7 +1122,6 @@ step SA: SELECT * FROM ts_device_table;
 time|device|location|value
 ----+------+--------+-----
    0|     1|     100|   20
-   1|     1|     100|   20
    2|     1|     100|   20
    3|     1|     100|   20
    4|     1|     100|   20
@@ -1136,6 +1130,7 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
+   1|     1|     100|   99
 (10 rows)
 
 
@@ -1175,7 +1170,6 @@ step UnlockChunkTuple: ROLLBACK;
 step Iu1: <... completed>
 step Ic: COMMIT;
 step IN1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1242,7 +1236,6 @@ step UnlockChunkTuple: ROLLBACK;
 step Iu1: <... completed>
 step Ic: COMMIT;
 step IN1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1303,7 +1296,6 @@ step UnlockChunkTuple: ROLLBACK;
 step Iu1: <... completed>
 step Ic: COMMIT;
 step IN1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1364,7 +1356,6 @@ step UnlockChunkTuple: ROLLBACK;
 step Iu1: <... completed>
 step Ic: COMMIT;
 step INu1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1376,7 +1367,7 @@ status
 step SU: SELECT * FROM ts_device_table WHERE value IN (98,99);
 time|device|location|value
 ----+------+--------+-----
-   1|     1|     100|   98
+   1|     1|     100|   99
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -1391,7 +1382,7 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-   1|     1|     100|   98
+   1|     1|     100|   99
 (10 rows)
 
 
@@ -1431,7 +1422,6 @@ step UnlockChunkTuple: ROLLBACK;
 step Iu1: <... completed>
 step Ic: COMMIT;
 step INu1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1452,7 +1442,7 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-   1|     1|     100|   98
+   1|     1|     100|   99
 (10 rows)
 
 
@@ -1492,7 +1482,6 @@ step UnlockChunkTuple: ROLLBACK;
 step Iu1: <... completed>
 step Ic: COMMIT;
 step INu1: <... completed>
-ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_device_time_idx"
 step INc: COMMIT;
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
@@ -1513,7 +1502,7 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-   1|     1|     100|   98
+   1|     1|     100|   99
 (10 rows)
 
 
@@ -2132,7 +2121,8 @@ time|device|location|value
    7|     1|     100|   20
    8|     1|     100|   20
    9|     1|     100|   20
-(10 rows)
+   1|     1|     200|  100
+(11 rows)
 
 step SChunkStat: SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table');
