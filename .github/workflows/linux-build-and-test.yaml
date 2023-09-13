@@ -221,18 +221,24 @@ jobs:
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       run: |
-        sudo coredumpctl gdb <<<"
+        sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
           set verbose on
           set trace-commands on
           show debug-file-directory
           printf "'"'"query = '%s'\n\n"'"'", debug_query_string
+          bt full
+
+          # We try to find ExceptionalCondition frame to print the failed condition
+          # for searching in logs.
           frame function ExceptionalCondition
           printf "'"'"condition = '%s'\n"'"'", conditionName
+
+          # Hopefully now we should be around the failed assertion, print where
+          # we are.
           up 1
-          l
+          list
           info args
           info locals
-          bt full
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
         grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
