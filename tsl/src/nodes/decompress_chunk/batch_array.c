@@ -93,6 +93,7 @@ batch_array_free_at(DecompressChunkState *chunk_state, int batch_index)
 	/* Reset batch state */
 	batch_state->total_batch_rows = 0;
 	batch_state->next_batch_row = 0;
+	batch_state->vector_qual_result = NULL;
 
 	if (batch_state->per_batch_context != NULL)
 	{

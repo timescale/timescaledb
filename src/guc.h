@@ -104,6 +104,15 @@ extern char *ts_current_timestamp_mock;
 #define ts_shutdown_bgw false
 #endif
 
+typedef enum DebugRequireVectorQual
+{
+	RVQ_Allow = 0,
+	RVQ_Forbid,
+	RVQ_Only
+} DebugRequireVectorQual;
+
+extern TSDLLEXPORT DebugRequireVectorQual ts_guc_debug_require_vector_qual;
+
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
 void _guc_init(void);

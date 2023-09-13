@@ -17,7 +17,198 @@
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/vector_predicates.h"
 
+/*
+ * Create a single value ArrowArray from Postgres Datum. This is used to run
+ * the usual vectorized predicates on compressed columns with default values.
+ */
+static ArrowArray *
+make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
+{
+	struct ArrowWithBuffers
+	{
+		ArrowArray arrow;
+		uint64 buffers[2];
+		uint64 nulls_buffer;
+		uint64 values_buffer;
+	};
+
+	struct ArrowWithBuffers *with_buffers = palloc0(sizeof(struct ArrowWithBuffers));
+	ArrowArray *arrow = &with_buffers->arrow;
+	arrow->length = 1;
+	arrow->null_count = -1;
+	arrow->n_buffers = 2;
+	arrow->buffers = (const void **) &with_buffers->buffers;
+	arrow->buffers[0] = &with_buffers->nulls_buffer;
+	arrow->buffers[1] = &with_buffers->values_buffer;
+
+	if (isnull)
+	{
+		/*
+		 * The validity bitmap was initialized to invalid on allocation, and
+		 * the Datum might be invalid if the value is null (important on i386
+		 * where it might be pass-by-reference), so don't read it.
+		 */
+		return arrow;
+	}
+
+#define FOR_TYPE(PGTYPE, CTYPE, FROMDATUM)                                                         \
+	case PGTYPE:                                                                                   \
+		*((CTYPE *) &with_buffers->values_buffer) = FROMDATUM(datum);                              \
+		break
+
+	switch (pgtype)
+	{
+		FOR_TYPE(INT8OID, int64, DatumGetInt64);
+		FOR_TYPE(INT4OID, int32, DatumGetInt32);
+		FOR_TYPE(INT2OID, int16, DatumGetInt16);
+		FOR_TYPE(FLOAT8OID, float8, DatumGetFloat8);
+		FOR_TYPE(FLOAT4OID, float4, DatumGetFloat4);
+		FOR_TYPE(TIMESTAMPTZOID, TimestampTz, DatumGetTimestampTz);
+		FOR_TYPE(TIMESTAMPOID, Timestamp, DatumGetTimestamp);
+		FOR_TYPE(DATEOID, DateADT, DatumGetDateADT);
+		default:
+			elog(ERROR, "unexpected column type '%s'", format_type_be(pgtype));
+			pg_unreachable();
+	}
+
+	arrow_set_row_validity(&with_buffers->nulls_buffer, 0, true);
+
+	return arrow;
+}
+
+static void
+apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
+{
+	if (!chunk_state->vectorized_quals)
+	{
+		return;
+	}
+
+	/*
+	 * Allocate the bitmap that will hold the vectorized qual results. We will
+	 * initialize it to all ones and AND the individual quals to it.
+	 */
+	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
+	batch_state->vector_qual_result = palloc(bitmap_bytes);
+	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
+
+	/*
+	 * Compute the quals.
+	 */
+	ListCell *lc;
+	foreach (lc, chunk_state->vectorized_quals)
+	{
+		/* For now we only support "Var ? Const" predicates. */
+		OpExpr *oe = castNode(OpExpr, lfirst(lc));
+		Var *var = castNode(Var, linitial(oe->args));
+		Const *constnode = castNode(Const, lsecond(oe->args));
+
+		/*
+		 * Find the compressed column referred to by the Var.
+		 */
+		DecompressChunkColumnDescription *column_description = NULL;
+		int column_index = 0;
+		for (; column_index < chunk_state->num_total_columns; column_index++)
+		{
+			column_description = &chunk_state->template_columns[column_index];
+			if (column_description->output_attno == var->varattno)
+			{
+				break;
+			}
+		}
+		Ensure(column_index < chunk_state->num_total_columns,
+			   "decompressed column %d not found in batch",
+			   var->varattno);
+		Assert(column_description != NULL);
+		Assert(column_description->typid == var->vartype);
+		Ensure(column_description->type == COMPRESSED_COLUMN,
+			   "only compressed columns are supported in vectorized quals");
+		Assert(column_index < chunk_state->num_compressed_columns);
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[column_index];
+		Ensure(column_values->iterator == NULL,
+			   "only arrow columns are supported in vectorized quals");
+
+		/*
+		 * Prepare to compute the vector predicate. We have to handle the
+		 * default values in a special way because they don't produce the usual
+		 * decompressed ArrowArrays.
+		 */
+		uint64 default_value_predicate_result;
+		uint64 *predicate_result = batch_state->vector_qual_result;
+		const ArrowArray *vector = column_values->arrow;
+		if (column_values->arrow == NULL)
+		{
+			/*
+			 * The compressed column had a default value. We can't fall back to
+			 * the non-vectorized quals now, so build a single-value ArrowArray
+			 * with this default value, check if it passes the predicate, and apply
+			 * it to the entire batch.
+			 */
+			AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
+
+			Ensure(column_values->iterator == NULL,
+				   "ArrowArray expected for column %s",
+				   NameStr(
+					   TupleDescAttr(batch_state->decompressed_scan_slot->tts_tupleDescriptor, attr)
+						   ->attname));
+
+			/*
+			 * We saved the actual default value into the decompressed scan slot
+			 * above, so pull it from there.
+			 */
+			vector = make_single_value_arrow(column_description->typid,
+											 batch_state->decompressed_scan_slot->tts_values[attr],
+											 batch_state->decompressed_scan_slot->tts_isnull[attr]);
+
+			/*
+			 * We start from an all-valid bitmap, because the predicate is
+			 * AND-ed to it.
+			 */
+			default_value_predicate_result = 1;
+			predicate_result = &default_value_predicate_result;
+		}
+
+		/* Find and compute the predicate. */
+		void (*predicate)(const ArrowArray *, Datum, uint64 *restrict) =
+			get_vector_const_predicate(get_opcode(oe->opno));
+		Ensure(predicate != NULL,
+			   "vectorized predicate not found for postgres predicate %d",
+			   get_opcode(oe->opno));
+
+		/*
+		 * The vectorizable predicates should be STRICT, so we shouldn't see null
+		 * constants here.
+		 */
+		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
+
+		predicate(vector, constnode->constvalue, predicate_result);
+
+		/* Process the result. */
+		if (column_values->arrow == NULL)
+		{
+			/* The column had a default value. */
+			Assert(column_values->iterator == NULL);
+
+			if (!(default_value_predicate_result & 1))
+			{
+				/*
+				 * We had a default value for the compressed column, and it
+				 * didn't pass the predicate, so the entire batch didn't pass.
+				 */
+				for (int i = 0; i < bitmap_bytes / 8; i++)
+				{
+					batch_state->vector_qual_result[i] = 0;
+				}
+			}
+		}
+	}
+}
+
+/*
+ * Initialize the batch decompression state with the new compressed  tuple.
+ */
 void
 compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 									  DecompressBatchState *batch_state, TupleTableSlot *subslot)
@@ -238,6 +429,8 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 		}
 	}
 
+	apply_vector_quals(chunk_state, batch_state);
+
 	MemoryContextSwitchTo(old_context);
 }
 
@@ -333,6 +526,24 @@ compressed_batch_make_next_tuple(DecompressChunkState *chunk_state,
 }
 
 static bool
+compressed_batch_vector_qual(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
+{
+	Assert(batch_state->total_batch_rows > 0);
+	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
+
+	const int output_row = batch_state->next_batch_row;
+	const size_t arrow_row =
+		chunk_state->reverse ? batch_state->total_batch_rows - 1 - output_row : output_row;
+
+	if (!batch_state->vector_qual_result)
+	{
+		return true;
+	}
+
+	return arrow_row_is_valid(batch_state->vector_qual_result, arrow_row);
+}
+
+static bool
 compressed_batch_postgres_qual(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
 	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
@@ -368,6 +579,24 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 	for (; batch_state->next_batch_row < batch_state->total_batch_rows;
 		 batch_state->next_batch_row++)
 	{
+		if (!compressed_batch_vector_qual(chunk_state, batch_state))
+		{
+			/*
+			 * This row doesn't pass the vectorized quals. Advance the iterated
+			 * compressed columns if we have any.
+			 */
+			for (int i = 0; i < num_compressed_columns; i++)
+			{
+				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+				if (column_values->iterator)
+				{
+					column_values->iterator->try_next(column_values->iterator);
+				}
+			}
+			InstrCountFiltered1(&chunk_state->csstate, 1);
+			continue;
+		}
+
 		compressed_batch_make_next_tuple(chunk_state, batch_state);
 
 		if (!compressed_batch_postgres_qual(chunk_state, batch_state))
@@ -410,7 +639,7 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 /*
  * Before loading the first matching tuple from the batch, also save the very
  * first one into the given slot, even if it doesn't pass the quals. This is
- * needed for batch merge append.
+ * needed for batch sorted merge.
  */
 void
 compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
@@ -424,7 +653,8 @@ compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
 	compressed_batch_make_next_tuple(chunk_state, batch_state);
 	ExecCopySlot(first_tuple_slot, batch_state->decompressed_scan_slot);
 
-	const bool qual_passed = compressed_batch_postgres_qual(chunk_state, batch_state);
+	const bool qual_passed = compressed_batch_vector_qual(chunk_state, batch_state) &&
+							 compressed_batch_postgres_qual(chunk_state, batch_state);
 	batch_state->next_batch_row++;
 
 	if (!qual_passed)

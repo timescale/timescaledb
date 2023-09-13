@@ -80,6 +80,13 @@ typedef struct DecompressChunkPath
 	 */
 	bool have_bulk_decompression_columns;
 
+	/*
+	 * Maps the uncompressed chunk attno to the respective column compression
+	 * info. This lives only during planning so that we can understand on which
+	 * columns we can apply vectorized quals.
+	 */
+	DecompressChunkColumnCompression *uncompressed_chunk_attno_to_compression_info;
+
 	List *compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;

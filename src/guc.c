@@ -117,6 +117,17 @@ bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
 #endif
 
+#ifdef TS_DEBUG
+static const struct config_enum_entry require_vector_qual_options[] = {
+	{ "allow", RVQ_Allow, false },
+	{ "forbid", RVQ_Forbid, false },
+	{ "only", RVQ_Only, false },
+	{ NULL, 0, false }
+};
+#endif
+
+DebugRequireVectorQual ts_guc_debug_require_vector_qual = RVQ_Allow;
+
 static bool ts_guc_enable_hypertable_create = true;
 static bool ts_guc_enable_hypertable_compression = true;
 static bool ts_guc_enable_cagg_create = true;
@@ -724,6 +735,24 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+
+	DefineCustomEnumVariable(/* name= */ "timescaledb.debug_require_vector_qual",
+							 /* short_desc= */
+							 "ensure that non-vectorized or vectorized filters are used in "
+							 "DecompressChunk node",
+							 /* long_desc= */
+							 "this is for debugging purposes, to let us check if the vectorized "
+							 "quals are used or not. EXPLAIN differs after PG15 for custom nodes, "
+							 "and "
+							 "using the test templates is a pain",
+							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
+							 /* bootValue= */ RVQ_Allow,
+							 /* options = */ require_vector_qual_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 
 	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_require_batch_sorted_merge",
 							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
