@@ -90,6 +90,13 @@ typedef struct DecompressChunkState
 	MemoryContext bulk_decompression_context;
 
 	/*
+	 * For some predicates, we have more efficient implementation that work on
+	 * the entire compressed batch in one go. They go to this list, and the rest
+	 * goes into the usual ss.ps.qual.
+	 */
+	List *vectorized_quals;
+
+	/*
 	 * Make non-refcounted copies of the tupdesc for reuse across all batch states
 	 * and avoid spending CPU in ResourceOwner when creating a big number of table
 	 * slots. This happens because each new slot pins its tuple descriptor using

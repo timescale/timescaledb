@@ -22,6 +22,7 @@
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
 #include "guc.h"
+#include "import/ts_explain.h"
 #include "nodes/decompress_chunk/batch_array.h"
 #include "nodes/decompress_chunk/batch_queue_fifo.h"
 #include "nodes/decompress_chunk/batch_queue_heap.h"
@@ -154,6 +155,10 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->reverse = lthird_int(settings);
 	chunk_state->batch_sorted_merge = lfourth_int(settings);
 	chunk_state->enable_bulk_decompression = lfifth_int(settings);
+
+	Assert(IsA(cscan->custom_exprs, List));
+	Assert(list_length(cscan->custom_exprs) == 1);
+	chunk_state->vectorized_quals = linitial(cscan->custom_exprs);
 
 	return (Node *) chunk_state;
 }
@@ -544,6 +549,21 @@ static void
 decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+
+	ts_show_scan_qual(chunk_state->vectorized_quals,
+					  "Vectorized Filter",
+					  &node->ss.ps,
+					  ancestors,
+					  es);
+
+	if (!node->ss.ps.plan->qual && chunk_state->vectorized_quals)
+	{
+		/*
+		 * The normal explain won't show this if there are no normal quals but
+		 * only the vectorized ones.
+		 */
+		ts_show_instrumentation_count("Rows Removed by Filter", 1, &node->ss.ps, es);
+	}
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
 	{

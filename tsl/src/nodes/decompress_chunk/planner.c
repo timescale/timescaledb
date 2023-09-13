@@ -29,6 +29,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "vector_predicates.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "DecompressChunk",
@@ -118,6 +119,10 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 
 		compressed_attno_to_compression_info[compressed_attno] = fd;
 	}
+
+	path->uncompressed_chunk_attno_to_compression_info =
+		palloc0(sizeof(*path->uncompressed_chunk_attno_to_compression_info) *
+				(path->info->chunk_rel->max_attr + 1));
 
 	/*
 	 * Go over the scan targetlist and determine to which output column each
@@ -243,6 +248,14 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 		path->have_bulk_decompression_columns |= bulk_decompression_possible;
 		path->bulk_decompression_column =
 			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
+
+		if (destination_attno_in_uncompressed_chunk > 0)
+		{
+			path->uncompressed_chunk_attno_to_compression_info
+				[destination_attno_in_uncompressed_chunk] = (DecompressChunkColumnCompression){
+				.fd = *compression_info, .bulk_decompression_possible = bulk_decompression_possible
+			};
+		}
 	}
 
 	/*
@@ -349,6 +362,83 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 
 	elog(ERROR, "Unable to locate var %d in targetlist", pos);
 	pg_unreachable();
+}
+
+static bool
+qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
+{
+	/* Only simple "Var op Const" binary predicates for now. */
+	if (!IsA(qual, OpExpr))
+	{
+		return false;
+	}
+
+	OpExpr *o = castNode(OpExpr, qual);
+
+	if (list_length(o->args) != 2)
+	{
+		return false;
+	}
+
+	if (IsA(lsecond(o->args), Var) && IsA(linitial(o->args), Const))
+	{
+		/* Try to commute the operator if the constant is on the right. */
+		Oid commutator_opno = get_commutator(o->opno);
+		if (OidIsValid(commutator_opno))
+		{
+			o->opno = commutator_opno;
+			/*
+			 * opfuncid is a cache, we can set it to InvalidOid like the
+			 * CommuteOpExpr() does.
+			 */
+			o->opfuncid = InvalidOid;
+			o->args = list_make2(lsecond(o->args), linitial(o->args));
+		}
+	}
+
+	if (!IsA(linitial(o->args), Var) || !IsA(lsecond(o->args), Const))
+	{
+		return false;
+	}
+
+	Var *var = castNode(Var, linitial(o->args));
+	Assert((Index) var->varno == path->info->chunk_rel->relid);
+
+	/*
+	 * ExecQual is performed before ExecProject and operates on the decompressed
+	 * scan slot, so the qual attnos are the uncompressed chunk attnos.
+	 */
+	if (!path->uncompressed_chunk_attno_to_compression_info[var->varattno]
+			 .bulk_decompression_possible)
+	{
+		/* This column doesn't support bulk decompression. */
+		return false;
+	}
+
+	Oid opcode = get_opcode(o->opno);
+	if (get_vector_const_predicate(opcode))
+	{
+		return true;
+	}
+
+	return false;
+}
+
+/*
+ * Find the scan qualifiers that can be vectorized and put them into a separate
+ * list.
+ */
+static void
+find_vectorized_quals(DecompressChunkPath *path, List *qual, List **vectorized,
+					  List **nonvectorized)
+{
+	ListCell *lc;
+	foreach (lc, qual)
+	{
+		Node *node = lfirst(lc);
+		List **dest = qual_is_vectorizable(path, node) ? vectorized : nonvectorized;
+		*dest = lappend(*dest, node);
+	}
 }
 
 Plan *
@@ -662,11 +752,47 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 										   ts_guc_enable_bulk_decompression &&
 										   dcpath->have_bulk_decompression_columns;
 
+	/*
+	 * For some predicates, we have more efficient implementation that work on
+	 * the entire compressed batch in one go. They go to this list, and the rest
+	 * goes into the usual scan.plan.qual.
+	 */
+	List *vectorized_quals = NIL;
+	if (enable_bulk_decompression)
+	{
+		List *nonvectorized_quals = NIL;
+		find_vectorized_quals(dcpath,
+							  decompress_plan->scan.plan.qual,
+							  &vectorized_quals,
+							  &nonvectorized_quals);
+
+		decompress_plan->scan.plan.qual = nonvectorized_quals;
+	}
+
+#ifdef TS_DEBUG
+	if (ts_guc_debug_require_vector_qual == RVQ_Forbid && list_length(vectorized_quals) > 0)
+	{
+		elog(ERROR, "debug: encountered vector quals when they are disabled");
+	}
+	else if (ts_guc_debug_require_vector_qual == RVQ_Only &&
+			 list_length(decompress_plan->scan.plan.qual) > 0)
+	{
+		elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+	}
+#endif
+
 	settings = list_make5_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse,
 							  dcpath->batch_sorted_merge,
 							  enable_bulk_decompression);
+
+	/*
+	 * Vectorized quals must go into custom_exprs, because Postgres has to see
+	 * them and perform the varno adjustments on them when flattening the
+	 * subqueries.
+	 */
+	decompress_plan->custom_exprs = list_make1(vectorized_quals);
 
 	decompress_plan->custom_private = list_make5(settings,
 												 dcpath->decompression_map,

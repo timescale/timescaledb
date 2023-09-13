@@ -1,0 +1,219 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
+select create_hypertable('vectorqual', 'ts');
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
+NOTICE:  adding not-null constraint to column "ts"
+    create_hypertable    
+-------------------------
+ (1,public,vectorqual,t)
+(1 row)
+
+alter table vectorqual set (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+insert into vectorqual(ts, device, metric1, metric2) values ('2020-01-01 00:00:00', 1, 11, 12);
+select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table vectorqual drop column metric1;
+insert into vectorqual(ts, device, metric2) values ('2021-01-01 00:00:00', 2, 22);
+select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+ count 
+-------
+     2
+(1 row)
+
+alter table vectorqual add column metric3 int4 default 777;
+insert into vectorqual(ts, device, metric2, metric3) values ('2022-01-01 00:00:00', 3, 32, 33);
+select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+ count 
+-------
+     3
+(1 row)
+
+alter table vectorqual add column metric4 int8;
+insert into vectorqual(ts, device, metric2, metric3, metric4) values ('2023-01-01 00:00:00', 4, 42, 43, 44);
+select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+ count 
+-------
+     4
+(1 row)
+
+select * from vectorqual order by vectorqual;
+            ts            | metric2 | device | metric3 | metric4 
+--------------------------+---------+--------+---------+---------
+ Wed Jan 01 00:00:00 2020 |      12 |      1 |     777 |        
+ Fri Jan 01 00:00:00 2021 |      22 |      2 |     777 |        
+ Sat Jan 01 00:00:00 2022 |      32 |      3 |      33 |        
+ Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44
+(4 rows)
+
+set timescaledb.debug_require_vector_qual to 'only' /* all following quals must be vectorized */;
+select count(*) from vectorqual where ts > '1999-01-01 00:00:00';
+ count 
+-------
+     4
+(1 row)
+
+select count(*) from vectorqual where metric2 = 22;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where 22 = metric2 /* commutators */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric3 = 33;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric3 = 777 /* default value */;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric4 = 44 /* column with default null */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the qual */;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
+ count 
+-------
+     1
+(1 row)
+
+-- Test columns that don't support bulk decompression.
+alter table vectorqual add column tag text;
+insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
+select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_7_chunk" is already compressed
+ count 
+-------
+     5
+(1 row)
+
+set timescaledb.debug_require_vector_qual to 'only';
+select tag from vectorqual where metric2 > 0;
+ tag  
+------
+ 
+ 
+ 
+ 
+ tag5
+(5 rows)
+
+-- Queries without aggregation.
+select * from vectorqual where ts > '2021-01-01 00:00:00' order by vectorqual;
+            ts            | metric2 | device | metric3 | metric4 | tag  
+--------------------------+---------+--------+---------+---------+------
+ Sat Jan 01 00:00:00 2022 |      32 |      3 |      33 |         | 
+ Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
+ Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
+(3 rows)
+
+select * from vectorqual where metric4 >= 0 order by vectorqual;
+            ts            | metric2 | device | metric3 | metric4 | tag  
+--------------------------+---------+--------+---------+---------+------
+ Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
+ Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
+(2 rows)
+
+-- Constraints on columns not selected.
+select metric4 from vectorqual where ts > '2021-01-01 00:00:00' order by 1;
+ metric4 
+---------
+      44
+      54
+        
+(3 rows)
+
+-- ANDed constraints on multiple columns.
+select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order by vectorqual;
+            ts            | metric2 | device | metric3 | metric4 | tag  
+--------------------------+---------+--------+---------+---------+------
+ Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
+ Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
+(2 rows)
+
+-- ORed constrainst on multiple columns (not vectorized for now).
+set timescaledb.debug_require_vector_qual to 'forbid';
+select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order by vectorqual;
+            ts            | metric2 | device | metric3 | metric4 | tag  
+--------------------------+---------+--------+---------+---------+------
+ Wed Jan 01 00:00:00 2020 |      12 |      1 |     777 |         | 
+ Fri Jan 01 00:00:00 2021 |      22 |      2 |     777 |         | 
+ Sat Jan 01 00:00:00 2022 |      32 |      3 |      33 |         | 
+ Sun Jan 01 00:00:00 2023 |      42 |      4 |      43 |      44 | 
+ Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
+(5 rows)
+
+-- Test with unary operator.
+create operator !! (function = 'bool', rightarg = int4);
+select count(*) from vectorqual where !!metric3;
+ count 
+-------
+     5
+(1 row)
+
+-- NullTest is not vectorized.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where metric4 is null;
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from vectorqual where metric4 is not null;
+ count 
+-------
+     2
+(1 row)
+
+-- Test that the vectorized quals are disabled by disabling the bulk decompression.
+set timescaledb.enable_bulk_decompression to off;
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where metric4 > null;
+ count 
+-------
+     0
+(1 row)
+
+set timescaledb.enable_bulk_decompression to on;
+-- Test that the debug GUC works
+\set ON_ERROR_STOP 0
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where metric4 > 4;
+ERROR:  debug: encountered vector quals when they are disabled
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where metric4 is null;
+ERROR:  debug: encountered non-vector quals when they are disabled
+\set ON_ERROR_STOP 1

@@ -79,6 +79,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     data_node.sql
     ddl_hook.sql
     debug_notice.sql
+    decompress_vector_qual.sql
     deparse.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
