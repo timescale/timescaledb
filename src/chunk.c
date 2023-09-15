@@ -4781,13 +4781,22 @@ ts_chunk_attach_osm_table_chunk(PG_FUNCTION_ARGS)
 	bool ret = false;
 
 	Cache *hcache;
-	Hypertable *par_ht =
+	Hypertable *ht =
 		ts_hypertable_cache_get_cache_and_entry(hypertable_relid, CACHE_FLAG_MISSING_OK, &hcache);
-	if (par_ht == NULL)
-		elog(ERROR, "\"%s\" is not a hypertable", get_rel_name(hypertable_relid));
+
+	if (!ht)
+	{
+		char *name = get_rel_name(hypertable_relid);
+
+		if (!name)
+			ereport(ERROR, (errcode(ERRCODE_UNDEFINED_OBJECT), errmsg("invalid Oid")));
+		else
+			elog(ERROR, "\"%s\" is not a hypertable", name);
+	}
+
 	if (get_rel_relkind(ftable_relid) == RELKIND_FOREIGN_TABLE)
 	{
-		add_foreign_table_as_chunk(ftable_relid, par_ht);
+		add_foreign_table_as_chunk(ftable_relid, ht);
 		ret = true;
 	}
 	ts_cache_release(hcache);

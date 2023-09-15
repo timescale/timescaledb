@@ -7,7 +7,7 @@ WARNING:  function _timescaledb_internal.alter_job_set_hypertable_id(integer,reg
 ERROR:  job 0 not found
 SELECT _timescaledb_internal.attach_osm_table_chunk(0,0);
 WARNING:  function _timescaledb_internal.attach_osm_table_chunk(regclass,regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  "(null)" is not a hypertable
+ERROR:  invalid Oid
 SELECT _timescaledb_internal.cagg_migrate_plan_exists(0);
 WARNING:  function _timescaledb_internal.cagg_migrate_plan_exists(integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  cagg_migrate_plan_exists 
