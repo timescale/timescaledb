@@ -42,16 +42,12 @@ reviewers:
   fabriziomello: {}
   konskov: {}
   erimatnor: {}
-  pmwkaa: {}
   nikkhils: {}
   akuzm: {}
-  RafiaSabih: {}
   gayyappan: {}
   jnidzwetzki: {}
   mahipv: {}
-  lkshminarayanan: {}
-  sb230132: {}
-  shhnwz: {}
+  antekresic: {}
 
 # list of users who will never be notified
 review_blacklist:
