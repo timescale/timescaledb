@@ -17,6 +17,7 @@
 #include <optimizer/plancat.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
@@ -67,7 +68,8 @@ check_for_system_columns(Bitmapset *attrs_used)
  * attnos.
  */
 static void
-build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *chunk_attrs_needed)
+build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan_tlist,
+						Bitmapset *chunk_attrs_needed)
 {
 	/*
 	 * Track which normal and metadata columns we were able to find in the
@@ -75,15 +77,25 @@ build_decompression_map(DecompressChunkPath *path, List *scan_tlist, Bitmapset *
 	 */
 	bool missing_count = true;
 	bool missing_sequence = path->needs_sequence_num;
-	Bitmapset *chunk_attrs_found = NULL;
+	Bitmapset *chunk_attrs_found = NULL, *selectedCols = NULL;
 
+#if PG16_LT
+	selectedCols = path->info->ht_rte->selectedCols;
+#else
+	if (path->info->ht_rte->perminfoindex > 0)
+	{
+		RTEPermissionInfo *perminfo =
+			getRTEPermissionInfo(root->parse->rteperminfos, path->info->ht_rte);
+		selectedCols = perminfo->selectedCols;
+	}
+#endif
 	/*
 	 * FIXME this way to determine which columns are used is actually wrong, see
 	 * https://github.com/timescale/timescaledb/issues/4195#issuecomment-1104238863
 	 * Left as is for now, because changing it uncovers a whole new story with
 	 * ctid.
 	 */
-	check_for_system_columns(path->info->ht_rte->selectedCols);
+	check_for_system_columns(selectedCols);
 
 	/*
 	 * We allow tableoid system column, it won't be in the targetlist but will
@@ -562,7 +574,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * Determine which compressed colum goes to which output column.
 	 */
-	build_decompression_map(dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
+	build_decompression_map(root, dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
 
 	/* Build heap sort info for sorted_merge_append */
 	List *sort_options = NIL;

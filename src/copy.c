@@ -694,7 +694,7 @@ has_other_before_insert_row_trigger_than_ts(ResultRelInfo *resultRelInfo)
  * Use COPY FROM to copy data from file to relation.
  */
 static uint64
-copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryContext copycontext,
+copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryContext copycontext,
 		 void (*callback)(void *), void *arg)
 {
 	ResultRelInfo *resultRelInfo;
@@ -719,7 +719,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 	ExprState *qualexpr = NULL;
 	ChunkDispatch *dispatch = ccstate->dispatch;
 
-	Assert(range_table);
+	Assert(pstate->p_rtable);
 
 	if (ccstate->rel->rd_rel->relkind != RELKIND_RELATION)
 	{
@@ -813,7 +813,12 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 					  NULL,
 					  0);
 #else
-	ExecInitRangeTable(estate, range_table);
+#if PG16_LT
+	ExecInitRangeTable(estate, pstate->p_rtable);
+#else
+	Assert(pstate->p_rteperminfos != NULL);
+	ExecInitRangeTable(estate, pstate->p_rtable, pstate->p_rteperminfos);
+#endif
 	ExecInitResultRelation(estate, resultRelInfo, 1);
 #endif
 
@@ -825,7 +830,7 @@ copyfrom(CopyChunkState *ccstate, List *range_table, Hypertable *ht, MemoryConte
 	estate->es_result_relations = resultRelInfo;
 	estate->es_num_result_relations = 1;
 	estate->es_result_relation_info = resultRelInfo;
-	estate->es_range_table = range_table;
+	estate->es_range_table = pstate->p_rtable;
 
 	ExecInitRangeTable(estate, estate->es_range_table);
 #endif
@@ -1259,6 +1264,8 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 		addRangeTableEntryForRelation(pstate, rel, RowExclusiveLock, NULL, false, false);
 	RangeTblEntry *rte = nsitem->p_rte;
 	addNSItemToQuery(pstate, nsitem, true, true, true);
+
+#if PG16_LT
 	rte->requiredPerms = ACL_INSERT;
 
 	foreach (cur, attnums)
@@ -1268,6 +1275,18 @@ copy_constraints_and_check(ParseState *pstate, Relation rel, List *attnums)
 	}
 
 	ExecCheckRTPerms(pstate->p_rtable, true);
+#else
+	RTEPermissionInfo *perminfo = nsitem->p_perminfo;
+	perminfo->requiredPerms = ACL_INSERT;
+
+	foreach (cur, attnums)
+	{
+		int attno = lfirst_int(cur) - FirstLowInvalidHeapAttributeNumber;
+		perminfo->insertedCols = bms_add_member(perminfo->insertedCols, attno);
+	}
+
+	ExecCheckPermissions(pstate->p_rtable, list_make1(perminfo), true);
+#endif
 
 	/*
 	 * Permission check for row security policies.
@@ -1390,8 +1409,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 		/* Or create a new memory context. */
 		copycontext = AllocSetContextCreate(CurrentMemoryContext, "COPY", ALLOCSET_DEFAULT_SIZES);
 #endif
-		*processed =
-			copyfrom(ccstate, pstate->p_rtable, ht, copycontext, CopyFromErrorCallback, cstate);
+		*processed = copyfrom(ccstate, pstate, ht, copycontext, CopyFromErrorCallback, cstate);
 	}
 
 	copy_chunk_state_destroy(ccstate);
@@ -1467,12 +1485,7 @@ timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode)
 	snapshot = RegisterSnapshot(GetLatestSnapshot());
 	scandesc = table_beginscan(rel, snapshot, 0, NULL);
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from_table_to_chunks, NULL, scandesc);
-	copyfrom(ccstate,
-			 pstate->p_rtable,
-			 ht,
-			 copycontext,
-			 copy_table_to_chunk_error_callback,
-			 scandesc);
+	copyfrom(ccstate, pstate, ht, copycontext, copy_table_to_chunk_error_callback, scandesc);
 	copy_chunk_state_destroy(ccstate);
 	table_endscan(scandesc);
 	UnregisterSnapshot(snapshot);
