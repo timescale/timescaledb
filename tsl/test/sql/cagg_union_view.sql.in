@@ -21,7 +21,7 @@ INSERT INTO metrics(time, device_id, value) SELECT '2000-01-01'::timestamptz, de
 
 -- check default view for new continuous aggregate
 CREATE MATERIALIZED VIEW metrics_summary
-  WITH (timescaledb.continuous)
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
   SELECT time_bucket('1d',time), avg(value) FROM metrics GROUP BY 1 WITH NO DATA;
 
@@ -150,7 +150,7 @@ SELECT create_hypertable('boundary_test','time',chunk_time_interval:=10);
 SELECT set_integer_now_func('boundary_test','boundary_test_int_now');
 
 CREATE MATERIALIZED VIEW boundary_view
-  WITH (timescaledb.continuous)
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
   SELECT time_bucket(10,time), avg(value) FROM boundary_test GROUP BY 1 WITH NO DATA;
 
@@ -207,7 +207,7 @@ SELECT set_integer_now_func('ht_intdata', 'integer_now_ht_intdata');
 
 
 CREATE MATERIALIZED VIEW mat_m1(a, countb, sumbc, spreadcb, avgc)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket(1, a), count(*), sum(b+c), max(c)-min(b), avg(c)::int
 FROM ht_intdata
@@ -252,7 +252,7 @@ DROP MATERIALIZED VIEW mat_m1;
 
 --- TEST union view with multiple WHERE and HAVING clauses
 CREATE MATERIALIZED VIEW mat_m1
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket(5, a), sum(b+c)
 FROM ht_intdata
@@ -329,42 +329,42 @@ SELECT set_integer_now_func('int_table', 'int_now');
 SELECT set_integer_now_func('bigint_table', 'bigint_now');
 
 CREATE MATERIALIZED VIEW smallint_agg
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket(SMALLINT '10', time) AS bucket, avg(value)
 FROM smallint_table
 GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW int_agg
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket(5, time) AS bucket, avg(value)
 FROM int_table
 GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW bigint_agg
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket(BIGINT '10', time) AS bucket, avg(value)
 FROM bigint_table
 GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW date_agg
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket('2 days', time) AS bucket, avg(value)
 FROM date_table
 GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW timestamp_agg
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket('2 days', time) AS bucket, avg(value)
 FROM timestamp_table
 GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW timestamptz_agg
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket('2 days', time) AS bucket, avg(value)
 FROM timestamptz_table

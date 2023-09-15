@@ -20,7 +20,7 @@ FROM
        generate_series(1, 100, 1 ) AS g2(sensor_id)
 ORDER BY time;
 
-CREATE materialized VIEW sensor_data_v WITH(timescaledb.continuous) AS
+CREATE materialized VIEW sensor_data_v WITH(timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT sensor_id, time_bucket(INTERVAL '1 day', time) AS bucket,
 AVG(temperature) FROM sensor_data
 GROUP BY sensor_id, bucket;

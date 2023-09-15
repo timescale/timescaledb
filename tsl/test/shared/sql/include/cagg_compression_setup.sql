@@ -15,7 +15,7 @@ SELECT * FROM extra_devices;
 
 -- Compressed CAgg + Compressed Hypertable
 CREATE MATERIALIZED VIEW metrics_compressed_summary
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
 	device_id,
 	time_bucket(INTERVAL '1 week', time) AS bucket,
@@ -67,7 +67,7 @@ WHERE
 
 -- Compressed CAgg + Uncompressed Hypertable
 CREATE MATERIALIZED VIEW metrics_summary
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
 	device_id,
 	time_bucket(INTERVAL '1 week', time) AS bucket,

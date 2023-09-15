@@ -186,7 +186,7 @@ WHERE hypertable_id = :ht_id;
 
 -- Create a real-time aggregate with custom origin - June 2000
 CREATE MATERIALIZED VIEW conditions_summary_rt
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
    timescaledb_experimental.time_bucket_ng('1 month', day, '2000-06-01' :: date) AS bucket,
    MIN(temperature),
@@ -282,7 +282,7 @@ SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
 FROM generate_series('2010-01-01' :: date, '2010-03-01' :: date - interval '1 day', '1 day') as ts;
 
 CREATE MATERIALIZED VIEW conditions_dist_1m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('1 month', day, '2010-01-01') AS bucket,
    MIN(temperature),
@@ -479,7 +479,7 @@ SELECT create_hypertable(
 );
 
 CREATE MATERIALIZED VIEW conditions_summary_timestamp
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
    timescaledb_experimental.time_bucket_ng('12 hours', tstamp, '2000-06-01 12:00:00') AS bucket,
    MIN(temperature),
@@ -593,7 +593,7 @@ GROUP BY city, bucket;
 \set ON_ERROR_STOP 1
 
 CREATE MATERIALIZED VIEW conditions_summary_timestamptz
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
    timescaledb_experimental.time_bucket_ng('12 hours', tstamp, '2020-06-01 12:00:00 MSK', 'Europe/Moscow') AS bucket,
    MIN(temperature),

@@ -24,7 +24,7 @@ SELECT * FROM create_hypertable('records', 'time',
        chunk_time_interval => INTERVAL '1h');
 
 CREATE MATERIALIZED VIEW records_monthly
-    WITH (timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS
         SELECT time_bucket('1d', time) as bucket,
             clientId,

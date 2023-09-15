@@ -744,14 +744,14 @@ FROM (
     ('int8')) v (dt);
 
 -- width expression for int2 hypertables
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(1::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
 
 DROP MATERIALIZED VIEW width_expr;
 
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(1::smallint + 2::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
@@ -759,14 +759,14 @@ GROUP BY 1;
 DROP MATERIALIZED VIEW width_expr;
 
 -- width expression for int4 hypertables
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(1, time)
 FROM metrics_int4
 GROUP BY 1;
 
 DROP MATERIALIZED VIEW width_expr;
 
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(1 + 2, time)
 FROM metrics_int4
 GROUP BY 1;
@@ -774,14 +774,14 @@ GROUP BY 1;
 DROP MATERIALIZED VIEW width_expr;
 
 -- width expression for int8 hypertables
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(1, time)
 FROM metrics_int8
 GROUP BY 1;
 
 DROP MATERIALIZED VIEW width_expr;
 
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(1 + 2, time)
 FROM metrics_int8
 GROUP BY 1;
@@ -790,17 +790,17 @@ DROP MATERIALIZED VIEW width_expr;
 
 \set ON_ERROR_STOP 0
 -- non-immutable expresions should be rejected
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(extract(year FROM now())::smallint, time)
 FROM metrics_int2
 GROUP BY 1;
 
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int4
 GROUP BY 1;
 
-CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW width_expr WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(extract(year FROM now())::int, time)
 FROM metrics_int8
 GROUP BY 1;
@@ -810,7 +810,7 @@ GROUP BY 1;
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-CREATE MATERIALIZED VIEW owner_check WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW owner_check WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(1 + 2, time)
 FROM metrics_int8
 GROUP BY 1
@@ -921,7 +921,7 @@ SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
 \endif
 
 CREATE MATERIALIZED VIEW test_schema.telemetry_1s
-  WITH (timescaledb.continuous)
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS
 SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
        avg(value)
@@ -960,7 +960,7 @@ SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
 \endif
 
 CREATE MATERIALIZED VIEW test_schema.cagg1
-  WITH (timescaledb.continuous)
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS
 SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
        avg(value)
@@ -968,7 +968,7 @@ SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
  GROUP BY ts_1s WITH NO DATA;
 
 CREATE MATERIALIZED VIEW test_schema.cagg2
-  WITH (timescaledb.continuous)
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS
 SELECT time_bucket(INTERVAL '1s', ts) AS ts_1s,
        avg(value)
@@ -1102,14 +1102,14 @@ SELECT create_distributed_hypertable('i3696', 'time', replication_factor => 2);
 SELECT table_name FROM create_hypertable('i3696','time');
 \endif
 
-CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt +cnt2 , bucket, search_query;
 
 ALTER MATERIALIZED VIEW i3696_cagg1 SET (timescaledb.materialized_only = 'true');
 
-CREATE MATERIALIZED VIEW i3696_cagg2 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW i3696_cagg2 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt), time_bucket(INTERVAL '1 minute', time) AS bucket
  FROM i3696 GROUP BY cnt + cnt2, bucket, search_query
@@ -1126,7 +1126,7 @@ SELECT create_distributed_hypertable('test_setting', 'time', replication_factor 
 SELECT create_hypertable('test_setting', 'time');
 \endif
 
-CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous)
+CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
 
 INSERT INTO test_setting
@@ -1291,25 +1291,25 @@ SELECT * FROM cashflows;
 -- 4. test named bucket width
 -- named origin
 CREATE MATERIALIZED VIEW cagg_named_origin WITH
-(timescaledb.continuous) AS
+(timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1h', time, 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
 -- named timezone
 CREATE MATERIALIZED VIEW cagg_named_tz_origin WITH
-(timescaledb.continuous) AS
+(timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1h', time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
 -- named ts
 CREATE MATERIALIZED VIEW cagg_named_ts_tz_origin WITH
-(timescaledb.continuous) AS
+(timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
 -- named bucket width
 CREATE MATERIALIZED VIEW cagg_named_all WITH
-(timescaledb.continuous) AS
+(timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(bucket_width => '1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
@@ -1344,7 +1344,7 @@ SELECT * FROM transactions_montly ORDER BY bucket;
 
 -- Check set_chunk_time_interval on continuous aggregate
 CREATE MATERIALIZED VIEW cagg_set_chunk_time_interval
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(INTERVAL '1 month', time) AS bucket,
        SUM(fiat_value),
        MAX(fiat_value),
@@ -1360,3 +1360,56 @@ SELECT _timescaledb_functions.to_interval(d.interval_length) = interval '1 month
 FROM _timescaledb_catalog.dimension d
          RIGHT JOIN _timescaledb_catalog.continuous_agg ca ON ca.user_view_name = 'cagg_set_chunk_time_interval'
 WHERE d.hypertable_id = ca.mat_hypertable_id;
+
+-- Since #6077 CAggs are materialized only by default
+DROP TABLE conditions CASCADE;
+CREATE TABLE conditions (
+       time TIMESTAMPTZ NOT NULL,
+       location TEXT NOT NULL,
+       temperature DOUBLE PRECISION NULL
+);
+
+\if :IS_DISTRIBUTED
+SELECT create_distributed_hypertable('conditions', 'time', replication_factor => 2);
+\else
+SELECT create_hypertable('conditions', 'time');
+\endif
+
+INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
+INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
+INSERT INTO conditions VALUES ( '2018-01-02 09:20:00-08', 'SFO', 65);
+INSERT INTO conditions VALUES ( '2018-01-02 09:10:00-08', 'NYC', 65);
+INSERT INTO conditions VALUES ( '2018-11-01 09:20:00-08', 'NYC', 45);
+INSERT INTO conditions VALUES ( '2018-11-01 10:40:00-08', 'NYC', 55);
+INSERT INTO conditions VALUES ( '2018-11-01 11:50:00-08', 'NYC', 65);
+INSERT INTO conditions VALUES ( '2018-11-01 12:10:00-08', 'NYC', 75);
+INSERT INTO conditions VALUES ( '2018-11-01 13:10:00-08', 'NYC', 85);
+INSERT INTO conditions VALUES ( '2018-11-02 09:20:00-08', 'NYC', 10);
+INSERT INTO conditions VALUES ( '2018-11-02 10:30:00-08', 'NYC', 20);
+
+CREATE MATERIALIZED VIEW conditions_daily
+WITH (timescaledb.continuous) AS
+SELECT location,
+       time_bucket(INTERVAL '1 day', time) AS bucket,
+       AVG(temperature)
+  FROM conditions
+GROUP BY location, bucket
+WITH NO DATA;
+
+\d+ conditions_daily
+
+-- Should return NO ROWS
+SELECT * FROM conditions_daily ORDER BY bucket, avg;
+
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=false);
+
+\d+ conditions_daily
+
+-- Should return ROWS because now it is realtime
+SELECT * FROM conditions_daily ORDER BY bucket, avg;
+
+-- Should return ROWS because we refreshed it
+ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=true);
+\d+ conditions_daily
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+SELECT * FROM conditions_daily ORDER BY bucket, avg;

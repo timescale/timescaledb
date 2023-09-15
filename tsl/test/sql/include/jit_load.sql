@@ -18,7 +18,7 @@ CREATE TABLE jit_test_contagg (
 SELECT table_name FROM create_hypertable('jit_test_contagg', 'observation_time');
 
 CREATE MATERIALIZED VIEW jit_device_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1 hour', observation_time) as bucket,

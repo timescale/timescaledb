@@ -282,7 +282,7 @@ DROP MATERIALIZED VIEW conditions_summary_1w;
 
 -- Create a real-time aggregate
 CREATE MATERIALIZED VIEW conditions_summary_tz
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
    timescaledb_experimental.time_bucket_ng('1 month', day, 'MSK') AS bucket,
    MIN(temperature),
@@ -362,7 +362,7 @@ SELECT create_hypertable(
 
 -- Create a real-time aggregate on top of empty HT
 CREATE MATERIALIZED VIEW conditions2_summary
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
    timescaledb_experimental.time_bucket_ng('7 days', day, 'MSK') AS bucket,
    MIN(temperature),
@@ -443,7 +443,7 @@ SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
 FROM generate_series('2010-01-01 00:00:00 MSK' :: timestamptz, '2010-03-01 00:00:00 MSK' :: timestamptz - interval '1 day', '1 day') as ts;
 
 CREATE MATERIALIZED VIEW conditions_dist_1m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('1 month', day, 'MSK') AS bucket,
    MIN(temperature),

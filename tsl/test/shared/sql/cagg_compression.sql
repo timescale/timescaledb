@@ -100,7 +100,7 @@ DROP TABLE extra_devices;
 CREATE TABLE comp_rename(time timestamptz);
 SELECT table_name FROM create_hypertable('comp_rename', 'time');
 
-CREATE MATERIALIZED VIEW comp_rename_cagg WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW comp_rename_cagg WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1 week', time) AS bucket FROM comp_rename GROUP BY 1;
 
 ALTER MATERIALIZED VIEW comp_rename_cagg RENAME COLUMN bucket to "time";

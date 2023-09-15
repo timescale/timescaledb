@@ -897,7 +897,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -934,7 +934,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because non-multiple bucket sizes
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -958,7 +958,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [5] should be multip
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -998,7 +998,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -1035,7 +1035,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -1074,7 +1074,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -1113,7 +1113,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -1150,7 +1150,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -1174,7 +1174,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [2] should be greate
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -2077,7 +2077,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -2114,7 +2114,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because is not allowed variable-size bucket on top of fixed-size bucket
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -2139,7 +2139,7 @@ The variance can lead to the fixed width one not being a multiple of the variabl
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -2179,7 +2179,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -2216,7 +2216,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because non-multiple bucket sizes
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -2240,7 +2240,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should b
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -2280,7 +2280,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -2317,7 +2317,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -2356,7 +2356,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -2395,7 +2395,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -2432,7 +2432,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -2456,7 +2456,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -3358,7 +3358,7 @@ psql:include/cagg_on_cagg_common.sql:200: ERROR:  relation "conditions_summary_1
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -3395,7 +3395,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because is not allowed variable-size bucket on top of fixed-size bucket
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -3420,7 +3420,7 @@ The variance can lead to the fixed width one not being a multiple of the variabl
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -3460,7 +3460,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -3497,7 +3497,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because non-multiple bucket sizes
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -3521,7 +3521,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 3 hours] should b
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -3561,7 +3561,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -3598,7 +3598,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 SHOULD WORK because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -3637,7 +3637,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -3676,7 +3676,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -3713,7 +3713,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because new bucket should be greater than previous
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -3737,7 +3737,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 hour] should be
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -3784,7 +3784,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -3821,7 +3821,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -3860,7 +3860,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -3895,7 +3895,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -3932,7 +3932,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD ERROR because non-multiple bucket sizes
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -3956,7 +3956,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 16 mins] should b
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -3997,7 +3997,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4034,7 +4034,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4073,7 +4073,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4113,7 +4113,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4150,7 +4150,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4189,7 +4189,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4230,7 +4230,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4267,7 +4267,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4306,7 +4306,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4347,7 +4347,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4384,7 +4384,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4423,7 +4423,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4463,7 +4463,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4500,7 +4500,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4539,7 +4539,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4573,7 +4573,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4610,7 +4610,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4649,7 +4649,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4683,7 +4683,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4720,7 +4720,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4759,7 +4759,7 @@ UNION ALL
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4793,7 +4793,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4830,7 +4830,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4854,7 +4854,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 year] should be
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket
@@ -4889,7 +4889,7 @@ DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -4926,7 +4926,7 @@ UNION ALL
 \echo :WARNING_MESSAGE
 -- SHOULD WORK
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -4950,7 +4950,7 @@ DETAIL:  Time bucket width of "public.conditions_summary_2" [@ 1 mon] should be 
   CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket

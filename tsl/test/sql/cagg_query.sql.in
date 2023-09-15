@@ -46,7 +46,7 @@ insert into location_tab values( 2, 'NYC');
 insert into location_tab values( 3, 'por');
 
 create materialized view mat_m1( location, timec, minl, sumt , sumh)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 as
 select location, time_bucket('1day', timec), min(location), sum(temperature),sum(humidity)
 from conditions
@@ -59,7 +59,7 @@ CALL refresh_continuous_aggregate('mat_m1', NULL, NULL);
 
 --test first/last
 create materialized view mat_m2(location, timec, firsth, lasth, maxtemp, mintemp)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 as
 select location, time_bucket('1day', timec), first(humidity, timec), last(humidity, timec), max(temperature), min(temperature)
 from conditions

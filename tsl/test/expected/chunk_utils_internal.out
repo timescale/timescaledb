@@ -381,7 +381,7 @@ SELECT set_integer_now_func('test1.hyper1', 'hyper_dummy_now');
  
 (1 row)
 
-CREATE MATERIALIZED VIEW hyper1_cagg WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW hyper1_cagg WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT time_bucket( 5, "time") as bucket, count(*)
 FROM test1.hyper1 GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "hyper1_cagg"

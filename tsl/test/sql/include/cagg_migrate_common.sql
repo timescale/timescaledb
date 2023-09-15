@@ -69,7 +69,7 @@ CALL cagg_migrate('conditions_summary_daily');
 DROP TABLE conditions_summary_daily;
 
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -93,7 +93,7 @@ CALL cagg_migrate('conditions_summary_daily_new');
 
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -276,7 +276,7 @@ GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,

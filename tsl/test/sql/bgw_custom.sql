@@ -285,7 +285,7 @@ SELECT decompress_chunk(c) FROM show_chunks('conditions') c;
 
 -- TEST Continuous Aggregate job
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT location,
    time_bucket(INTERVAL '1 day', time) AS bucket,
    AVG(temperature),

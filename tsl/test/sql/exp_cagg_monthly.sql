@@ -224,7 +224,7 @@ WHERE hypertable_id = :ht_id;
 -- Create a real-time aggregate
 DROP MATERIALIZED VIEW conditions_summary;
 CREATE MATERIALIZED VIEW conditions_summary
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
    timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
    MIN(temperature),
@@ -306,7 +306,7 @@ SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
 FROM generate_series('2010-01-01' :: date, '2020-01-01' :: date - interval '1 day', '1 day') as ts;
 
 CREATE MATERIALIZED VIEW conditions_large_2m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('2 months', day) AS bucket,
    MIN(temperature),
@@ -317,7 +317,7 @@ GROUP BY bucket;
 SELECT * FROM conditions_large_2m ORDER BY bucket;
 
 CREATE MATERIALIZED VIEW conditions_large_3m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('3 months', day) AS bucket,
    MIN(temperature),
@@ -328,7 +328,7 @@ GROUP BY bucket;
 SELECT * FROM conditions_large_3m ORDER BY bucket;
 
 CREATE MATERIALIZED VIEW conditions_large_4m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('4 months', day) AS bucket,
    MIN(temperature),
@@ -339,7 +339,7 @@ GROUP BY bucket;
 SELECT * FROM conditions_large_4m ORDER BY bucket;
 
 CREATE MATERIALIZED VIEW conditions_large_5m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('5 months', day) AS bucket,
    MIN(temperature),
@@ -350,7 +350,7 @@ GROUP BY bucket;
 SELECT * FROM conditions_large_5m ORDER BY bucket;
 
 CREATE MATERIALIZED VIEW conditions_large_6m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('6 months', day) AS bucket,
    MIN(temperature),
@@ -361,7 +361,7 @@ GROUP BY bucket;
 SELECT * FROM conditions_large_6m ORDER BY bucket;
 
 CREATE MATERIALIZED VIEW conditions_large_1y
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('1 year', day) AS bucket,
    MIN(temperature),
@@ -372,7 +372,7 @@ GROUP BY bucket;
 SELECT * FROM conditions_large_1y ORDER BY bucket;
 
 CREATE MATERIALIZED VIEW conditions_large_1y1m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('1 year 1 month', day) AS bucket,
    MIN(temperature),
@@ -435,7 +435,7 @@ SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
 FROM generate_series('2010-01-01' :: date, '2010-03-01' :: date - interval '1 day', '1 day') as ts;
 
 CREATE MATERIALIZED VIEW conditions_dist_1m
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
    timescaledb_experimental.time_bucket_ng('1 month', day) AS bucket,
    MIN(temperature),
