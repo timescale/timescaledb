@@ -813,7 +813,11 @@ ht_ExecMergeNotMatched(ModifyTableContext * context, ResultRelInfo * resultRelIn
 				parenttupdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
 				chunktupdesc = RelationGetDescr(cds->rri->ri_RelationDesc);
 				/* map from parent to chunk */
+#if PG16_LT
 				map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc);
+#else
+				map = build_attrmap_by_name_if_req(parenttupdesc, chunktupdesc, false);
+#endif
 				if (map != NULL)
 					chunk_slot =
 						execute_attr_map_slot(map,
