@@ -80,7 +80,7 @@ psql:include/cagg_migrate_common.sql:66: ERROR:  continuous aggregate "public.co
 \set ON_ERROR_STOP 1
 DROP TABLE conditions_summary_daily;
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -103,7 +103,7 @@ psql:include/cagg_migrate_common.sql:91: ERROR:  continuous aggregate "public.co
 \set ON_ERROR_STOP 1
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -594,7 +594,7 @@ psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 10 other obj
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -784,7 +784,7 @@ psql:include/cagg_migrate_common.sql:66: ERROR:  continuous aggregate "public.co
 \set ON_ERROR_STOP 1
 DROP TABLE conditions_summary_daily;
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -807,7 +807,7 @@ psql:include/cagg_migrate_common.sql:91: ERROR:  continuous aggregate "public.co
 \set ON_ERROR_STOP 1
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -1278,7 +1278,7 @@ psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 6 other obje
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -1463,7 +1463,7 @@ psql:include/cagg_migrate_common.sql:66: ERROR:  continuous aggregate "public.co
 \set ON_ERROR_STOP 1
 DROP TABLE conditions_summary_daily;
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -1486,7 +1486,7 @@ psql:include/cagg_migrate_common.sql:91: ERROR:  continuous aggregate "public.co
 \set ON_ERROR_STOP 1
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,
@@ -1957,7 +1957,7 @@ psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 6 other obje
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
 \if :IS_TIME_DIMENSION
     time_bucket(INTERVAL '1 day', "time") AS bucket,

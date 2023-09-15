@@ -94,7 +94,7 @@ SELECT * FROM conditions_summary ORDER BY bucket, device_name;
 
 -- Tests without join
 CREATE MATERIALIZED VIEW conditions_summary_nojoin
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
     time_bucket(INTERVAL '1 week', "time") AS bucket,
     MIN(temperature),
@@ -111,7 +111,7 @@ CALL _timescaledb_internal.cagg_try_repair('conditions_summary_nojoin', TRUE);
 
 -- Tests with old cagg format
 CREATE MATERIALIZED VIEW conditions_summary_old_format
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
     time_bucket(INTERVAL '1 week', "time") AS bucket,
     MIN(temperature),

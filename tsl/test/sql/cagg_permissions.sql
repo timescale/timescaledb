@@ -48,7 +48,7 @@ SELECT set_integer_now_func('conditions', 'integer_now_test1');
 
 
 CREATE MATERIALIZED VIEW mat_refresh_test
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 as
 select location, max(humidity)
 from conditions
@@ -252,7 +252,7 @@ CREATE TABLE test_default_privileges.devices (
 SELECT create_hypertable('test_default_privileges.devices', 'time');
 
 CREATE MATERIALIZED VIEW test_default_privileges.devices_summary
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket('1 day', time) AS bucket, device, MAX(temp)
 FROM test_default_privileges.devices

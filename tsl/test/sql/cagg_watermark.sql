@@ -109,7 +109,7 @@ CREATE OR REPLACE FUNCTION integer_now_test2() returns int LANGUAGE SQL STABLE a
 SELECT set_integer_now_func('ca_inval_test', 'integer_now_test2');
 
 CREATE MATERIALIZED VIEW cit_view
-    WITH ( timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS SELECT time_bucket('5', time), COUNT(time)
         FROM ca_inval_test
         GROUP BY 1 WITH NO DATA;
@@ -167,7 +167,7 @@ SELECT set_integer_now_func('ts_continuous_test', 'integer_now_test3');
 INSERT INTO ts_continuous_test SELECT i, i FROM
     (SELECT generate_series(0, 29) AS i) AS i;
 CREATE MATERIALIZED VIEW continuous_view
-    WITH ( timescaledb.continuous)
+    WITH (timescaledb.continuous, timescaledb.materialized_only=false)
     AS SELECT time_bucket('5', time), COUNT(location)
         FROM ts_continuous_test
         GROUP BY 1 WITH NO DATA;

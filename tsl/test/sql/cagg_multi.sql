@@ -175,14 +175,14 @@ CREATE OR REPLACE FUNCTION integer_now_foo() returns int LANGUAGE SQL STABLE as 
 SELECT set_integer_now_func('foo', 'integer_now_foo');
 
 CREATE MATERIALIZED VIEW mat_m1(a, countb)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket(10, a), count(*)
 FROM foo
 GROUP BY time_bucket(10, a) WITH NO DATA;
 
 CREATE MATERIALIZED VIEW mat_m2(a, countb)
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT time_bucket(5, a), count(*)
 FROM foo

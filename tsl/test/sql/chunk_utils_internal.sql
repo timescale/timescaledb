@@ -238,7 +238,7 @@ CREATE OR REPLACE FUNCTION hyper_dummy_now() RETURNS BIGINT
 LANGUAGE SQL IMMUTABLE AS  'SELECT 100::BIGINT';
 SELECT set_integer_now_func('test1.hyper1', 'hyper_dummy_now');
 
-CREATE MATERIALIZED VIEW hyper1_cagg WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW hyper1_cagg WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT time_bucket( 5, "time") as bucket, count(*)
 FROM test1.hyper1 GROUP BY 1;
 SELECT * FROM hyper1_cagg ORDER BY 1;

@@ -58,7 +58,7 @@ static const WithClauseDefinition continuous_aggregate_with_clause_def[] = {
 		[ContinuousViewOptionMaterializedOnly] = {
 			.arg_name = "materialized_only",
 			.type_id = BOOLOID,
-			.default_val = (Datum)false,
+			.default_val = (Datum)true,
 		},
 		[ContinuousViewOptionCompress] = {
 			.arg_name = "compress",

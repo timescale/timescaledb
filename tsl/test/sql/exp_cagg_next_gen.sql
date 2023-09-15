@@ -32,7 +32,7 @@ INSERT INTO conditions (day, city, temperature) VALUES
   ('2021-06-27', 'Moscow', 31);
 
 CREATE MATERIALIZED VIEW conditions_summary_weekly
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
        timescaledb_experimental.time_bucket_ng('7 days', day) AS bucket,
        MIN(temperature),
@@ -75,7 +75,7 @@ INSERT INTO conditions (tstamp, city, temperature) VALUES
   ('2021-06-14 12:32:20', 'Moscow', 31);
 
 CREATE MATERIALIZED VIEW conditions_summary_30sec
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
        timescaledb_experimental.time_bucket_ng('30 seconds', tstamp) AS bucket,
        MIN(temperature),
@@ -84,7 +84,7 @@ FROM conditions
 GROUP BY city, bucket;
 
 CREATE MATERIALIZED VIEW conditions_summary_1min
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
        timescaledb_experimental.time_bucket_ng('1 minute', tstamp) AS bucket,
        MIN(temperature),
@@ -93,7 +93,7 @@ FROM conditions
 GROUP BY city, bucket;
 
 CREATE MATERIALIZED VIEW conditions_summary_1hour
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
        timescaledb_experimental.time_bucket_ng('1 hour', tstamp) AS bucket,
        MIN(temperature),

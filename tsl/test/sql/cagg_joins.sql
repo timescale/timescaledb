@@ -185,7 +185,7 @@ SELECT * FROM cagg ORDER BY bucket, name, thermo_id;
 -- Cagg with inner joins - realtime aggregate + JOIN clause
 
 CREATE MATERIALIZED VIEW cagg_join
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
    name
@@ -198,7 +198,7 @@ SELECT * FROM cagg_join ORDER BY bucket, name;
 -- Cagg with inner joins - realtime aggregate + USING clause
 
 CREATE MATERIALIZED VIEW cagg_using
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
    name
@@ -226,7 +226,7 @@ SELECT * FROM cagg_reorder ORDER BY bucket, name;
 -- Cagg with inner joins - realtime aggregate + JOIN clause
 
 CREATE MATERIALIZED VIEW cagg_reorder_join
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
    name
@@ -239,7 +239,7 @@ SELECT * FROM cagg_reorder_join;
 -- Cagg with inner joins - realtime aggregate + USING clause
 
 CREATE MATERIALIZED VIEW cagg_reorder_using
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
    name
@@ -408,14 +408,14 @@ GROUP BY name, bucket, devices.device_id;
 CREATE  TABLE mat_t1( a integer, b integer,c TEXT);
 
 --With LATERAL multiple tables old format
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.finalized = false)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE, timescaledb.finalized = false)
 as
 select temperature, count(*) from conditions,
 LATERAL (Select * from mat_t1 where a = conditions.temperature) q
 group by temperature WITH NO DATA;
 
 --With LATERAL multiple tables in new format
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE)
 as
 select temperature, count(*) from conditions,
 LATERAL (Select * from mat_t1 where a = conditions.temperature) q

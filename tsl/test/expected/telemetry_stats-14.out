@@ -61,7 +61,7 @@ SELECT table_name FROM create_hypertable('hyper', 'time');
 (1 row)
 
 CREATE MATERIALIZED VIEW contagg
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   time_bucket('1 hour', time) AS hour,
   device,
@@ -71,7 +71,7 @@ FROM
 GROUP BY hour, device;
 NOTICE:  continuous aggregate "contagg" is already up-to-date
 CREATE MATERIALIZED VIEW contagg_old
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
   time_bucket('1 hour', time) AS hour,
   device,
@@ -911,7 +911,7 @@ FROM relations;
 
 -- Create a continuous aggregate on the distributed hypertable
 CREATE MATERIALIZED VIEW distcontagg
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   time_bucket('1 hour', time) AS hour,
   device,
@@ -921,7 +921,7 @@ FROM
 GROUP BY hour, device;
 NOTICE:  refreshing continuous aggregate "distcontagg"
 CREATE MATERIALIZED VIEW distcontagg_old
-WITH (timescaledb.continuous, timescaledb.finalized=false) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
 SELECT
   time_bucket('1 hour', time) AS hour,
   device,

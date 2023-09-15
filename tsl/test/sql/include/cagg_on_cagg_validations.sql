@@ -10,7 +10,7 @@
 -- CAGG on hypertable (1st level)
 --
 CREATE MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_1ST
     time_bucket(:BUCKET_WIDTH_1ST, "time", :'BUCKET_TZNAME_1ST') AS bucket,
@@ -31,7 +31,7 @@ WITH NO DATA;
 \set ON_ERROR_STOP 0
 \echo :WARNING_MESSAGE
 CREATE MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
     time_bucket(:BUCKET_WIDTH_2TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket,
@@ -59,7 +59,7 @@ WITH NO DATA;
   CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 
   CREATE MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL
-  WITH (timescaledb.continuous) AS
+  WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
   SELECT
     \if :IS_TIME_DIMENSION_WITH_TIMEZONE_2TH
       time_bucket(:BUCKET_WIDTH_3TH, "bucket", :'BUCKET_TZNAME_2TH') AS bucket

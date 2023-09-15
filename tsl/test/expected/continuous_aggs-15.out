@@ -1175,7 +1175,7 @@ SELECT * FROM mat_refresh_test order by 1,2 ;
 (4 rows)
 
 -- test for bug when group by is not in project list
-CREATE MATERIALIZED VIEW conditions_grpby_view with (timescaledb.continuous) as
+CREATE MATERIALIZED VIEW conditions_grpby_view with (timescaledb.continuous, timescaledb.materialized_only=false) as
 select time_bucket(100, timec),  sum(humidity)
 from conditions
 group by time_bucket(100, timec), location;
@@ -1189,7 +1189,7 @@ select * from conditions_grpby_view order by 1, 2;
          200 |  75
 (4 rows)
 
-CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous) as
+CREATE MATERIALIZED VIEW conditions_grpby_view2 with (timescaledb.continuous, timescaledb.materialized_only=false) as
 select time_bucket(100, timec), sum(humidity)
 from conditions
 group by time_bucket(100, timec), location
@@ -1238,7 +1238,7 @@ SELECT
   'yellow',
   '{foo,bar,baz}',
   '{1,2.5,3}';
-CREATE MATERIALIZED VIEW mat_types WITH (timescaledb.continuous) AS
+CREATE MATERIALIZED VIEW mat_types WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
   time_bucket('1d', time),
   min(status) AS status,
@@ -1405,7 +1405,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 insert into raw_data select '2000-01-01','Q1';
 --having has exprs that appear in select
-CREATE MATERIALIZED VIEW search_query_count_1m WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW search_query_count_1m WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
  SELECT  search_query,count(search_query) as count,
          time_bucket(INTERVAL '1 minute', time) AS bucket
@@ -1414,7 +1414,7 @@ AS
  GROUP BY search_query, bucket HAVING count(search_query) > 3 OR sum(cnt) > 1;
 NOTICE:  refreshing continuous aggregate "search_query_count_1m"
 --having has aggregates + grp by columns that appear in select
-CREATE MATERIALIZED VIEW search_query_count_2 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW search_query_count_2 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt),
          time_bucket(INTERVAL '1 minute', time) AS bucket
@@ -1425,7 +1425,7 @@ HAVING count(search_query) > 3 OR sum(cnt) > 1 OR
        ( sum(cnt) + count(cnt)) > 1
        AND search_query = 'Q1';
 NOTICE:  refreshing continuous aggregate "search_query_count_2"
-CREATE MATERIALIZED VIEW search_query_count_3 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW search_query_count_3 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
  SELECT  search_query,count(search_query) as count, sum(cnt),
          time_bucket(INTERVAL '1 minute', time) AS bucket
@@ -1638,7 +1638,7 @@ SELECT create_hypertable('test_morecols', 'time', chunk_time_interval=> '7 days'
 
 INSERT INTO test_morecols
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 55, 75, 40, 70, NULL, 100, 200, 200;
-CREATE MATERIALIZED VIEW test_morecols_cagg with (timescaledb.continuous)
+CREATE MATERIALIZED VIEW test_morecols_cagg with (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
  FROM test_morecols GROUP BY 1;
 NOTICE:  refreshing continuous aggregate "test_morecols_cagg"
@@ -1700,7 +1700,7 @@ SELECT time, device_id, device_id, device_id + 2, device_id + 0.5, NULL
 FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','8h') gtime(time),
      generate_series(1,5,1) gdevice(device_id);
 ANALYZE issue3248;
-CREATE materialized view issue3248_cagg WITH (timescaledb.continuous)
+CREATE materialized view issue3248_cagg WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT time_bucket('1h',time), device_id, min(v0), max(v1), avg(v2)
 FROM issue3248 GROUP BY 1,2;
 NOTICE:  refreshing continuous aggregate "issue3248_cagg"
@@ -1727,7 +1727,7 @@ insert into test_group_idx
 select t, round(random()*10), random()*5
 from generate_series('2020-01-01', '2020-02-25', INTERVAL '12 hours') t;
 create materialized view cagg_index_true
-with (timescaledb.continuous, timescaledb.create_group_indexes=true) as
+with (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.create_group_indexes=true) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
@@ -1736,7 +1736,7 @@ from test_group_idx
 group by bucket, symbol;
 NOTICE:  refreshing continuous aggregate "cagg_index_true"
 create materialized view cagg_index_false
-with (timescaledb.continuous, timescaledb.create_group_indexes=false) as
+with (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.create_group_indexes=false) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
@@ -1745,7 +1745,7 @@ from test_group_idx
 group by bucket, symbol;
 NOTICE:  refreshing continuous aggregate "cagg_index_false"
 create materialized view cagg_index_default
-with (timescaledb.continuous) as
+with (timescaledb.continuous, timescaledb.materialized_only=false) as
 select
 	time_bucket('1 day', "time") as bucket,
 	sum(value),
@@ -1837,7 +1837,7 @@ VALUES
   ('2018-11-02 09:00:00-08', 'NYC', 35, 15),
   ('2018-11-03 09:00:00-08', 'NYC', 35, 25);
 -- aggregate with DISTINCT
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1week', timec),
@@ -1859,7 +1859,7 @@ SELECT * FROM mat_m1 ORDER BY 1, 2, 3;
 -- aggregate with FILTER
 DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to 2 other objects
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1week', timec),
@@ -1880,7 +1880,7 @@ SELECT * FROM mat_m1 ORDER BY 1, 2;
 -- aggregate with filter in having clause
 DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to 2 other objects
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1week', timec),
@@ -1901,7 +1901,7 @@ SELECT * FROM mat_m1 ORDER BY 1, 2;
 -- ordered set aggr
 DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_55_116_chunk
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1week', timec),
@@ -1920,7 +1920,7 @@ SELECT * FROM mat_m1 ORDER BY 1;
 -- hypothetical-set aggr
 DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to 2 other objects
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1week', timec),
@@ -1948,7 +1948,7 @@ CREATE AGGREGATE newavg (
   finalfunc = int8_avg,
   initcond1 = '{0,0}'
 );
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   SUM(humidity),
@@ -1969,7 +1969,7 @@ SELECT * FROM mat_m1 ORDER BY 1, 2;
 -- ORDER BY in the view definition
 DROP MATERIALIZED VIEW mat_m1;
 NOTICE:  drop cascades to 2 other objects
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1week', timec),
@@ -2301,7 +2301,7 @@ SELECT table_name FROM create_hypertable('conditions', 'timec');
 
 INSERT INTO conditions
 SELECT t, 10 FROM generate_series('2023-01-01 00:00-03'::timestamptz, '2023-12-31 23:59-03'::timestamptz, '1 hour'::interval) AS t;
-CREATE MATERIALIZED VIEW conditions_daily WITH (timescaledb.continuous)
+CREATE MATERIALIZED VIEW conditions_daily WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 SELECT
   time_bucket('1 day', timec),
