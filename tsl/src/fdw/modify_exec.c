@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <executor/executor.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <nodes/plannodes.h>
 #include <commands/explain.h>
@@ -347,10 +348,20 @@ fdw_begin_foreign_modify(PlanState *pstate, ResultRelInfo *rri, CmdType operatio
 	}
 
 	/* Construct an execution state. */
+	Oid checkAsUser = InvalidOid;
+#if PG16_LT
+	checkAsUser = rte->checkAsUser;
+#else
+	if (rte->perminfoindex > 0)
+	{
+		RTEPermissionInfo *perminfo = getRTEPermissionInfo(estate->es_rteperminfos, rte);
+		checkAsUser = perminfo->checkAsUser;
+	}
+#endif
 	fmstate = create_foreign_modify(estate,
 									rri->ri_RelationDesc,
 									operation,
-									rte->checkAsUser,
+									checkAsUser,
 									subplan,
 									query,
 									target_attrs,

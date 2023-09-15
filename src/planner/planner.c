@@ -21,6 +21,7 @@
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
+#include <parser/parse_relation.h>
 #include <utils/elog.h>
 #include <utils/fmgroids.h>
 #include <utils/guc.h>
@@ -1319,6 +1320,18 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 	Query *query = root->parse;
 	Hypertable *ht;
 	const TsRelType type = ts_classify_relation(root, rel, &ht);
+	AclMode requiredPerms = 0;
+
+#if PG16_LT
+	requiredPerms = rte->requiredPerms;
+#else
+	if (rte->perminfoindex > 0)
+	{
+		RTEPermissionInfo *perminfo = getRTEPermissionInfo(query->rteperminfos, rte);
+		requiredPerms = perminfo->requiredPerms;
+	}
+#endif
+
 	switch (type)
 	{
 		case TS_REL_HYPERTABLE:
@@ -1334,11 +1347,11 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * assumes permission checking has been done already during the first planner call.
 			 * We don't want to touch the UPDATE/DELETEs, so we need to check all the regular
 			 * conditions here that are checked during preprocess_query, as well as the
-			 * condition that rte->requiredPerms is not requiring UPDATE/DELETE on this rel.
+			 * condition that requiredPerms is not requiring UPDATE/DELETE on this rel.
 			 */
 			if (ts_guc_enable_optimizations && ts_guc_enable_constraint_exclusion && inhparent &&
 				rte->ctename == NULL && !IS_UPDL_CMD(query) && query->resultRelation == 0 &&
-				query->rowMarks == NIL && (rte->requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
+				query->rowMarks == NIL && (requiredPerms & (ACL_UPDATE | ACL_DELETE)) == 0)
 			{
 				rte_mark_for_expansion(rte);
 			}

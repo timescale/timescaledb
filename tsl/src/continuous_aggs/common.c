@@ -100,12 +100,14 @@ relation_oid(Name schema, Name name)
 void
 RemoveRangeTableEntries(Query *query)
 {
+#if PG16_LT
 	List *rtable = query->rtable;
 	Assert(list_length(rtable) >= 3);
 	rtable = list_delete_first(rtable);
 	query->rtable = list_delete_first(rtable);
 	OffsetVarNodes((Node *) query, -2, 0);
 	Assert(list_length(query->rtable) >= 1);
+#endif
 }
 
 /*

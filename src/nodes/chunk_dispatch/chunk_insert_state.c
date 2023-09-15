@@ -650,12 +650,16 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
+#if PG16_LT
 		RangeTblEntry *rte =
 			rt_fetch(relinfo->ri_RangeTableIndex, dispatch->estate->es_range_table);
 
 		Assert(rte != NULL);
 
 		state->user_id = OidIsValid(rte->checkAsUser) ? rte->checkAsUser : GetUserId();
+#else
+		state->user_id = ExecGetResultRelCheckAsUser(relinfo, state->estate);
+#endif
 		state->chunk_data_nodes = ts_chunk_data_nodes_copy(chunk);
 	}
 

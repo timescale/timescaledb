@@ -15,6 +15,7 @@
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
+#include <parser/parse_relation.h>
 #include <parser/parsetree.h>
 #include <planner/planner.h>
 #include <utils/builtins.h>
@@ -65,7 +66,8 @@ typedef enum MergeBatchResult
 	SCAN_BACKWARD
 } MergeBatchResult;
 
-static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode);
+static RangeTblEntry *decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode,
+												Query *parse);
 static void create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel,
 										 CompressionInfo *info, SortInfo *sort_info);
 
@@ -1530,7 +1532,8 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 																   CACHE_FLAG_NONE));
 
 	expand_planner_arrays(root, 1);
-	info->compressed_rte = decompress_chunk_make_rte(compressed_reloid, AccessShareLock);
+	info->compressed_rte =
+		decompress_chunk_make_rte(compressed_reloid, AccessShareLock, root->parse);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
@@ -1703,7 +1706,7 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
  * create RangeTblEntry for compressed chunk
  */
 static RangeTblEntry *
-decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
+decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
 {
 	RangeTblEntry *rte = makeNode(RangeTblEntry);
 	Relation r = table_open(compressed_relid, lockmode);
@@ -1745,11 +1748,17 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode)
 	rte->inh = false;
 	rte->inFromCl = false;
 
+#if PG16_LT
 	rte->requiredPerms = 0;
 	rte->checkAsUser = InvalidOid; /* not set-uid by default, either */
 	rte->selectedCols = NULL;
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
+#else
+	/* add perminfo for the new RTE */
+	RTEPermissionInfo *perminfo = addRTEPermissionInfo(&parse->rteperminfos, rte);
+	perminfo->requiredPerms |= ACL_SELECT;
+#endif
 
 	return rte;
 }
