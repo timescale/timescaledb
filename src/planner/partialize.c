@@ -767,6 +767,10 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	/* Calculate aggregation costs */
 	if (!extra_data->partial_costs_set)
 	{
+		/* Init costs */
+		MemSet(&extra_data->agg_partial_costs, 0, sizeof(AggClauseCosts));
+		MemSet(&extra_data->agg_final_costs, 0, sizeof(AggClauseCosts));
+
 		/* partial phase */
 		get_agg_clause_costs_compat(root,
 									(Node *) partial_grouping_target->exprs,
