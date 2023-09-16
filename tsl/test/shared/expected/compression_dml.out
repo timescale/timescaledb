@@ -104,3 +104,68 @@ QUERY PLAN
 
 DROP TABLE mytab CASCADE;
 NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_X_X_chunk
+-- test varchar segmentby
+CREATE TABLE comp_seg_varchar (
+  time timestamptz NOT NULL,
+  source_id varchar(64) NOT NULL,
+  label varchar NOT NULL,
+  data jsonb
+);
+SELECT table_name FROM create_hypertable('comp_seg_varchar', 'time');
+WARNING:  column type "character varying" used for "source_id" does not follow best practices
+WARNING:  column type "character varying" used for "label" does not follow best practices
+    table_name    
+ comp_seg_varchar
+(1 row)
+
+CREATE UNIQUE INDEX ON comp_seg_varchar(source_id, label, "time" DESC);
+ALTER TABLE comp_seg_varchar SET(timescaledb.compress, timescaledb.compress_segmentby = 'source_id, label', timescaledb.compress_orderby = 'time');
+INSERT INTO comp_seg_varchar
+SELECT time, source_id, label, '{}' AS data
+FROM
+generate_series('1990-01-01'::timestamptz, '1990-01-10'::timestamptz, INTERVAL '1 day') AS g1(time),
+generate_series(1, 3, 1 ) AS g2(source_id),
+generate_series(1, 3, 1 ) AS g3(label);
+SELECT compress_chunk(c) FROM show_chunks('comp_seg_varchar') c;
+              compress_chunk               
+ _timescaledb_internal._hyper_X_X_chunk
+ _timescaledb_internal._hyper_X_X_chunk
+(2 rows)
+
+-- all tuples should come from compressed chunks
+EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+QUERY PLAN
+ Append (actual rows=90 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=27 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+(5 rows)
+
+INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', 'test', 'test', '{}'::jsonb)
+ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
+-- no tuples should be moved into uncompressed
+EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+QUERY PLAN
+ Append (actual rows=91 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=27 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+   ->  Seq Scan on _hyper_X_X_chunk (actual rows=1 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+(6 rows)
+
+INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', '1', '2', '{}'::jsonb)
+ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
+-- 1 batch should be moved into uncompressed
+EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+QUERY PLAN
+ Append (actual rows=92 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=24 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
+   ->  Seq Scan on _hyper_X_X_chunk (actual rows=5 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+(6 rows)
+
+DROP TABLE comp_seg_varchar;
