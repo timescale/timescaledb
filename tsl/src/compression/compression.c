@@ -30,6 +30,7 @@
 #include <nodes/pg_list.h>
 #include <nodes/print.h>
 #include <parser/parsetree.h>
+#include <parser/parse_coerce.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
@@ -1962,8 +1963,18 @@ create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filte
 		elog(ERROR, "no btree opfamily for type \"%s\"", format_type_be(atttypid));
 
 	Oid opr = get_opfamily_member(tce->btree_opf, atttypid, atttypid, strategy);
-	Assert(OidIsValid(opr));
-	/* We should never end up here but: no operator, no optimization */
+
+	/*
+	 * Fall back to btree operator input type when it is binary compatible with
+	 * the column type and no operator for column type could be found.
+	 */
+	if (!OidIsValid(opr) && IsBinaryCoercible(atttypid, tce->btree_opintype))
+	{
+		opr =
+			get_opfamily_member(tce->btree_opf, tce->btree_opintype, tce->btree_opintype, strategy);
+	}
+
+	/* No operator could be found so we can't create the scankey. */
 	if (!OidIsValid(opr))
 		return num_scankeys;
 
