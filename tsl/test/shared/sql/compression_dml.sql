@@ -86,3 +86,43 @@ INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 
 EXPLAIN (costs off) SELECT * FROM :chunk_table;
 DROP TABLE mytab CASCADE;
 
+-- test varchar segmentby
+CREATE TABLE comp_seg_varchar (
+  time timestamptz NOT NULL,
+  source_id varchar(64) NOT NULL,
+  label varchar NOT NULL,
+  data jsonb
+);
+
+SELECT table_name FROM create_hypertable('comp_seg_varchar', 'time');
+
+CREATE UNIQUE INDEX ON comp_seg_varchar(source_id, label, "time" DESC);
+
+ALTER TABLE comp_seg_varchar SET(timescaledb.compress, timescaledb.compress_segmentby = 'source_id, label', timescaledb.compress_orderby = 'time');
+
+INSERT INTO comp_seg_varchar
+SELECT time, source_id, label, '{}' AS data
+FROM
+generate_series('1990-01-01'::timestamptz, '1990-01-10'::timestamptz, INTERVAL '1 day') AS g1(time),
+generate_series(1, 3, 1 ) AS g2(source_id),
+generate_series(1, 3, 1 ) AS g3(label);
+
+SELECT compress_chunk(c) FROM show_chunks('comp_seg_varchar') c;
+
+
+-- all tuples should come from compressed chunks
+EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+
+INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', 'test', 'test', '{}'::jsonb)
+ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
+
+-- no tuples should be moved into uncompressed
+EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+
+INSERT INTO comp_seg_varchar(time, source_id, label, data) VALUES ('1990-01-02 00:00:00+00', '1', '2', '{}'::jsonb)
+ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
+
+-- 1 batch should be moved into uncompressed
+EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
+
+DROP TABLE comp_seg_varchar;
