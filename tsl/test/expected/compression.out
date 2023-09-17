@@ -2008,3 +2008,151 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
                            Output: _hyper_41_75_chunk."time", _hyper_41_75_chunk.device, _hyper_41_75_chunk.value
 (28 rows)
 
+-- Test parameter change on rescan
+-- issue 6069
+CREATE TABLE IF NOT EXISTS i6069 (
+	timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+	attr_id SMALLINT NOT NULL,
+	number_val DOUBLE PRECISION DEFAULT NULL
+);
+SELECT table_name FROM create_hypertable(
+	'i6069', 'timestamp',
+	create_default_indexes => FALSE, if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day'
+);
+WARNING:  column type "timestamp without time zone" used for "timestamp" does not follow best practices
+ table_name 
+------------
+ i6069
+(1 row)
+
+ALTER TABLE i6069 SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'attr_id'
+);
+INSERT INTO i6069 VALUES('2023-07-01', 1, 1),('2023-07-03', 2, 1),('2023-07-05', 3, 1),
+	('2023-07-01', 4, 1),('2023-07-03', 5, 1),('2023-07-05', 6, 1),
+	('2023-07-01', 7, 1),('2023-07-03', 8, 1),('2023-07-05', 9, 1),
+	('2023-07-01', 10, 1),('2023-07-03', 11, 1),('2023-07-05', 12, 1),
+	('2023-07-01', 13, 1),('2023-07-03', 14, 1),('2023-07-05', 15, 1),
+	('2023-07-01', 16, 1),('2023-07-03', 17, 1),('2023-07-05', 18, 1),
+	('2023-07-01', 19, 1),('2023-07-03', 20, 1),('2023-07-05', 21, 1),
+	('2023-07-01', 22, 1),('2023-07-03', 23, 1),('2023-07-05', 24, 1),
+	('2023-07-01', 25, 1),('2023-07-03', 26, 1),('2023-07-05', 27, 1),
+	('2023-07-01', 28, 1),('2023-07-03', 29, 1),('2023-07-05', 30, 1),
+	('2023-07-01', 31, 1),('2023-07-03', 32, 1),('2023-07-05', 33, 1),
+	('2023-07-01', 34, 1),('2023-07-03', 35, 1),('2023-07-05', 36, 1),
+	('2023-07-01', 37, 1),('2023-07-03', 38, 1),('2023-07-05', 39, 1),
+	('2023-07-01', 40, 1),('2023-07-03', 41, 1),('2023-07-05', 42, 1),
+	('2023-07-01', 43, 1),('2023-07-03', 44, 1),('2023-07-05', 45, 1),
+	('2023-07-01', 46, 1),('2023-07-03', 47, 1),('2023-07-05', 48, 1),
+	('2023-07-01', 49, 1),('2023-07-03', 50, 1),('2023-07-05', 51, 1),
+	('2023-07-01', 52, 1),('2023-07-03', 53, 1),('2023-07-05', 54, 1),
+	('2023-07-01', 55, 1),('2023-07-03', 56, 1),('2023-07-05', 57, 1),
+	('2023-07-01', 58, 1),('2023-07-03', 59, 1),('2023-07-05', 60, 1),
+	('2023-07-01', 61, 1),('2023-07-03', 62, 1),('2023-07-05', 63, 1),
+	('2023-07-01', 64, 1),('2023-07-03', 65, 1),('2023-07-05', 66, 1),
+	('2023-07-01', 67, 1),('2023-07-03', 68, 1),('2023-07-05', 69, 1),
+	('2023-07-01', 70, 1),('2023-07-03', 71, 1),('2023-07-05', 72, 1),
+	('2023-07-01', 73, 1),('2023-07-03', 74, 1),('2023-07-05', 75, 1),
+	('2023-07-01', 76, 1),('2023-07-03', 77, 1),('2023-07-05', 78, 1),
+	('2023-07-01', 79, 1),('2023-07-03', 80, 1),('2023-07-05', 81, 1),
+	('2023-07-01', 82, 1),('2023-07-03', 83, 1),('2023-07-05', 84, 1),
+	('2023-07-01', 85, 1),('2023-07-03', 86, 1),('2023-07-05', 87, 1),
+	('2023-07-01', 88, 1),('2023-07-03', 89, 1),('2023-07-05', 90, 1),
+	('2023-07-01', 91, 1),('2023-07-03', 92, 1),('2023-07-05', 93, 1),
+	('2023-07-01', 94, 1),('2023-07-03', 95, 1),('2023-07-05', 96, 1),
+	('2023-07-01', 97, 1),('2023-07-03', 98, 1),('2023-07-05', 99, 1),
+	('2023-07-01', 100, 1),('2023-07-03', 101, 1),('2023-07-05', 102, 1),
+	('2023-07-01', 103, 1),('2023-07-03', 104, 1),('2023-07-05', 105, 1),
+	('2023-07-01', 106, 1),('2023-07-03', 107, 1),('2023-07-05', 108, 1),
+	('2023-07-01', 109, 1),('2023-07-03', 110, 1),('2023-07-05', 111, 1),
+	('2023-07-01', 112, 1),('2023-07-03', 113, 1),('2023-07-05', 114, 1),
+	('2023-07-01', 115, 1),('2023-07-03', 116, 1),('2023-07-05', 117, 1),
+	('2023-07-01', 118, 1),('2023-07-03', 119, 1),('2023-07-05', 120, 1);
+SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('i6069') i;
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_43_79_chunk
+ _timescaledb_internal._hyper_43_80_chunk
+ _timescaledb_internal._hyper_43_81_chunk
+(3 rows)
+
+SET enable_indexscan = ON;
+SET enable_seqscan = OFF;
+:explain
+SELECT * FROM ( VALUES(1),(2),(3),(4),(5),(6),(7),(8),(9),(10) ) AS attr_ids(attr_id)
+INNER JOIN LATERAL (
+  SELECT * FROM i6069
+  WHERE i6069.attr_id = attr_ids.attr_id AND
+    timestamp > '2023-06-30' AND timestamp < '2023-07-06'
+ORDER BY timestamp desc  LIMIT 1 ) a ON true;
+                                                                                                                                                                  QUERY PLAN                                                                                                                                                                  
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop
+   Output: "*VALUES*".column1, i6069."timestamp", i6069.attr_id, i6069.number_val
+   ->  Values Scan on "*VALUES*"
+         Output: "*VALUES*".column1
+   ->  Limit
+         Output: i6069."timestamp", i6069.attr_id, i6069.number_val
+         ->  Custom Scan (ChunkAppend) on public.i6069
+               Output: i6069."timestamp", i6069.attr_id, i6069.number_val
+               Order: i6069."timestamp" DESC
+               Startup Exclusion: false
+               Runtime Exclusion: true
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_43_81_chunk
+                     Output: _hyper_43_81_chunk."timestamp", _hyper_43_81_chunk.attr_id, _hyper_43_81_chunk.number_val
+                     Filter: ((_hyper_43_81_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_81_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
+                     Sorted merge append: true
+                     ->  Sort
+                           Output: compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk.number_val, compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1
+                           Sort Key: compress_hyper_44_84_chunk._ts_meta_max_1 DESC
+                           ->  Index Scan using compress_hyper_44_84_chunk__compressed_hypertable_44_attr_id__t on _timescaledb_internal.compress_hyper_44_84_chunk
+                                 Output: compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk.number_val, compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1
+                                 Index Cond: (compress_hyper_44_84_chunk.attr_id = "*VALUES*".column1)
+                                 Filter: ((compress_hyper_44_84_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_84_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_43_80_chunk
+                     Output: _hyper_43_80_chunk."timestamp", _hyper_43_80_chunk.attr_id, _hyper_43_80_chunk.number_val
+                     Filter: ((_hyper_43_80_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_80_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
+                     Sorted merge append: true
+                     ->  Sort
+                           Output: compress_hyper_44_83_chunk."timestamp", compress_hyper_44_83_chunk.attr_id, compress_hyper_44_83_chunk.number_val, compress_hyper_44_83_chunk._ts_meta_count, compress_hyper_44_83_chunk._ts_meta_sequence_num, compress_hyper_44_83_chunk._ts_meta_min_1, compress_hyper_44_83_chunk._ts_meta_max_1
+                           Sort Key: compress_hyper_44_83_chunk._ts_meta_max_1 DESC
+                           ->  Index Scan using compress_hyper_44_83_chunk__compressed_hypertable_44_attr_id__t on _timescaledb_internal.compress_hyper_44_83_chunk
+                                 Output: compress_hyper_44_83_chunk."timestamp", compress_hyper_44_83_chunk.attr_id, compress_hyper_44_83_chunk.number_val, compress_hyper_44_83_chunk._ts_meta_count, compress_hyper_44_83_chunk._ts_meta_sequence_num, compress_hyper_44_83_chunk._ts_meta_min_1, compress_hyper_44_83_chunk._ts_meta_max_1
+                                 Index Cond: (compress_hyper_44_83_chunk.attr_id = "*VALUES*".column1)
+                                 Filter: ((compress_hyper_44_83_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_83_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_43_79_chunk
+                     Output: _hyper_43_79_chunk."timestamp", _hyper_43_79_chunk.attr_id, _hyper_43_79_chunk.number_val
+                     Filter: ((_hyper_43_79_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_79_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
+                     Sorted merge append: true
+                     ->  Sort
+                           Output: compress_hyper_44_82_chunk."timestamp", compress_hyper_44_82_chunk.attr_id, compress_hyper_44_82_chunk.number_val, compress_hyper_44_82_chunk._ts_meta_count, compress_hyper_44_82_chunk._ts_meta_sequence_num, compress_hyper_44_82_chunk._ts_meta_min_1, compress_hyper_44_82_chunk._ts_meta_max_1
+                           Sort Key: compress_hyper_44_82_chunk._ts_meta_max_1 DESC
+                           ->  Index Scan using compress_hyper_44_82_chunk__compressed_hypertable_44_attr_id__t on _timescaledb_internal.compress_hyper_44_82_chunk
+                                 Output: compress_hyper_44_82_chunk."timestamp", compress_hyper_44_82_chunk.attr_id, compress_hyper_44_82_chunk.number_val, compress_hyper_44_82_chunk._ts_meta_count, compress_hyper_44_82_chunk._ts_meta_sequence_num, compress_hyper_44_82_chunk._ts_meta_min_1, compress_hyper_44_82_chunk._ts_meta_max_1
+                                 Index Cond: (compress_hyper_44_82_chunk.attr_id = "*VALUES*".column1)
+                                 Filter: ((compress_hyper_44_82_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_82_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
+(44 rows)
+
+SELECT * FROM ( VALUES(1),(2),(3),(4),(5),(6),(7),(8),(9),(10) ) AS attr_ids(attr_id)
+INNER JOIN LATERAL (
+  SELECT * FROM i6069
+  WHERE i6069.attr_id = attr_ids.attr_id AND
+    timestamp > '2023-06-30' AND timestamp < '2023-07-06'
+ORDER BY timestamp desc  LIMIT 1 ) a ON true;
+ attr_id |        timestamp         | attr_id | number_val 
+---------+--------------------------+---------+------------
+       1 | Sat Jul 01 00:00:00 2023 |       1 |          1
+       2 | Mon Jul 03 00:00:00 2023 |       2 |          1
+       3 | Wed Jul 05 00:00:00 2023 |       3 |          1
+       4 | Sat Jul 01 00:00:00 2023 |       4 |          1
+       5 | Mon Jul 03 00:00:00 2023 |       5 |          1
+       6 | Wed Jul 05 00:00:00 2023 |       6 |          1
+       7 | Sat Jul 01 00:00:00 2023 |       7 |          1
+       8 | Mon Jul 03 00:00:00 2023 |       8 |          1
+       9 | Wed Jul 05 00:00:00 2023 |       9 |          1
+      10 | Sat Jul 01 00:00:00 2023 |      10 |          1
+(10 rows)
+
+RESET enable_indexscan;
+RESET enable_seqscan;
