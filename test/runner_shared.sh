@@ -87,4 +87,5 @@ ${PSQL} -U ${TEST_PGUSER} \
                -e 's! Memory: [0-9]\{1,\}kB!!' \
                -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
                -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
-          grep -v 'DEBUG:  rehashing catalog cache id'
+          grep -v 'DEBUG:  rehashing catalog cache id' | \
+          grep -v 'DEBUG:  compacted fsync request queue from'
