@@ -39,7 +39,7 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
-        PATH="$GITHUB_WORKSPACE/coverity/bin:$PATH"
+        PATH="$GITHUB_WORKSPACE/coverity/bin:/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
         ./bootstrap -DCMAKE_BUILD_TYPE=Release
         cov-build --dir cov-int make -C build
 
