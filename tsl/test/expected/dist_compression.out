@@ -87,6 +87,7 @@ chunk_target_size        | 0
 compression_state        | 1
 compressed_hypertable_id | 
 replication_factor       | 2
+status                   | 0
 
 \x
 SELECT test.remote_exec(NULL, $$
