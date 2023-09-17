@@ -528,6 +528,9 @@ decompress_chunk_rescan(CustomScanState *node)
 
 	Assert(bms_num_members(chunk_state->unused_batch_states) == chunk_state->n_batch_states);
 
+	if (node->ss.ps.chgParam != NULL)
+		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
+
 	ExecReScan(linitial(node->custom_ps));
 }
 
