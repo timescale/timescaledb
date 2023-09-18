@@ -4,6 +4,68 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.12.0 (2023-09-20)
+
+This release contains performance improvements for compressed hypertables
+and continuous aggregates and bug fixes since the 2.11.2 release.
+We recommend that you upgrade at the next available opportunity.
+
+This release moves all internal functions from the _timescaleb_internal
+schema into the _timescaledb_functions schema. This separates code from
+internal data objects and improves security by allowing more restrictive
+permissions for the code schema. If you are calling any of those internal
+functions you should adjust your code as soon as possible. This version
+also includes a compatibility layer that allows calling them in the old
+location but that layer will be removed in 2.14.0.
+
+**PostgreSQL 12 support removal announcement**
+Following the deprecation announcement for PostgreSQL 12 in TimescaleDB 2.10,
+PostgreSQL 12 is not supported starting with TimescaleDB 2.12.
+Currently supported PostgreSQL major versions are 13, 14 and 15.
+PostgreSQL 16 support will be added with a following TimescaleDB release.
+
+**Features**
+* #5137 Insert into index during chunk compression
+* #5150 MERGE support on hypertables
+* #5515 Make hypertables support replica identity
+* #5586 Index scan support during UPDATE/DELETE on compressed hypertables
+* #5596 Support for partial aggregations at chunk level
+* #5599 Enable ChunkAppend for partially compressed chunks
+* #5655 Improve the number of parallel workers for decompression
+* #5758 Enable altering job schedule type through `alter_job`
+* #5805 Make logrepl markers for (partial) decompressions
+* #5809 Relax invalidation threshold table-level lock to row-level when refreshing a Continuous Aggregate
+* #5839 Support CAgg names in chunk_detailed_size
+* #5852 Make set_chunk_time_interval CAggs aware
+* #5868 Allow ALTER TABLE ... REPLICA IDENTITY (FULL|INDEX) on materialized hypertables (continuous aggregates)
+* #5875 Add job exit status and runtime to log
+* #5909 CREATE INDEX ONLY ON hypertable creates index on chunks
+
+**Bugfixes**
+* #5860 Fix interval calculation for hierarchical CAggs
+* #5894 Check unique indexes when enabling compression
+* #5951 _timescaledb_internal.create_compressed_chunk doesn't account for existing uncompressed rows
+* #5988 Move functions to _timescaledb_functions schema
+* #5788 Chunk_create must add an existing table or fail
+* #5872 Fix duplicates on partially compressed chunk reads
+* #5918 Fix crash in COPY from program returning error
+* #5990 Place data in first/last function in correct mctx 
+* #5991 Call eq_func correctly in time_bucket_gapfill
+* #6015 Correct row count in EXPLAIN ANALYZE INSERT .. ON CONFLICT output
+* #6035 Fix server crash on UPDATE of compressed chunk
+* #6044 Fix server crash when using duplicate segmentby column
+* #6045 Fix segfault in set_integer_now_func
+* #6053 Fix approximate_row_count for CAggs
+* #6081 Improve compressed DML datatype handling
+* #6084 Propagate parameter changes to decompress child nodes
+
+**Thanks**
+* @ajcanterbury for reporting a problem with lateral joins on compressed chunks 
+* @alexanderlaw for reporting multiple server crashes 
+* @lukaskirner for reporting a bug with monthly continuous aggregates
+* @mrksngl for reporting a bug with unusual user names
+* @willsbit for reporting a crash in time_bucket_gapfill
+
 ## 2.11.2 (2023-08-09)
 
 This release contains bug fixes since the 2.11.1 release.
@@ -72,7 +134,6 @@ This release includes these noteworthy features:
 * #5584 Reduce decompression during constraint checking
 * #5530 Optimize compressed chunk resorting
 * #5639 Support sending telemetry event reports
-* #5150 MERGE support on hypertables
 
 **Bugfixes**
 * #5396 Fix SEGMENTBY columns predicates to be pushed down
