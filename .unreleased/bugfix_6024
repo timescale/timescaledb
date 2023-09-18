@@ -1,3 +1,0 @@
-Fixes: #6035 UPDATE on compressed chunk crashes server
-
-Thanks: @alexanderlaw for reporting this issue on server crash
