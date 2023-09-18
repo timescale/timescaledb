@@ -1,2 +1,0 @@
-Fixes: #6084 Propagate parameter changes to decompress child nodes
-Thanks: @ajcanterbury for reporting a problem with lateral joins on compressed chunks 

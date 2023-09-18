@@ -37,11 +37,12 @@ set(MOD_FILES
     updates/2.10.2--2.10.3.sql
     updates/2.10.3--2.11.0.sql
     updates/2.11.0--2.11.1.sql
-    updates/2.11.1--2.11.2.sql)
+    updates/2.11.1--2.11.2.sql
+    updates/2.11.2--2.12.0.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
-set(CURRENT_REV_FILE reverse-dev.sql)
+set(CURRENT_REV_FILE 2.12.0--2.11.2.sql)
 # Files for generating old downgrade scripts. This should only include files for
 # downgrade from one version to its previous version since we do not support
 # skipping versions when downgrading.
@@ -70,7 +71,8 @@ set(OLD_REV_FILES
     2.10.3--2.10.2.sql
     2.11.0--2.10.3.sql
     2.11.1--2.11.0.sql
-    2.11.2--2.11.1.sql)
+    2.11.2--2.11.1.sql
+    2.12.0--2.11.2.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
