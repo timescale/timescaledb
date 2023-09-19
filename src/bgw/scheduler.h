@@ -16,7 +16,8 @@
 typedef struct ScheduledBgwJob ScheduledBgwJob;
 
 /* callback used in testing */
-typedef void (*register_background_worker_callback_type)(BackgroundWorkerHandle *);
+typedef void (*register_background_worker_callback_type)(BackgroundWorkerHandle *,
+														 MemoryContext scheduler_ctx);
 
 /* Exposed for testing */
 extern List *ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx);

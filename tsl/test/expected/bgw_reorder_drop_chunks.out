@@ -372,7 +372,7 @@ SELECT ts_bgw_params_reset_time();
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -----------------------------------
--- test drop chunnks policy runs --
+-- test drop chunks policy runs --
 -----------------------------------
 CREATE TABLE test_drop_chunks_table(time timestamptz, drop_order int);
 SELECT create_hypertable('test_drop_chunks_table', 'time', chunk_time_interval => INTERVAL '1 week');
@@ -647,14 +647,6 @@ SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  (1003,"@ 1 day","@ 5 mins",-1,"@ 5 mins",t,"{""drop_after"": ""@ 4 mons"", ""verbose_log"": true, ""hypertable_id"": 4}",-infinity,_timescaledb_functions.policy_retention_check,f,,)
 (1 row)
 
-CALL run_job(:drop_chunks_date_job_id);
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
- ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
-------------------------------------------------------------
- 
-(1 row)
-
-CALL run_job(:drop_chunks_tsntz_job_id);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
  ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
 ------------------------------------------------------------
@@ -671,8 +663,7 @@ SELECT * FROM sorted_bgw_log;
       1 |         0 | Retention Policy [1002] | job 1002 (Retention Policy [1002]) exiting with success: execution time (RANDOM) ms
       0 |         0 | Retention Policy [1003] | applying retention policy to hypertable "test_drop_chunks_table_tsntz": dropping...
       1 |         0 | Retention Policy [1003] | job 1003 (Retention Policy [1003]) exiting with success: execution time (RANDOM) ms
-      0 |   1000000 | DB Scheduler            | [TESTING] Wait until 2000000, started at 1000000
-(8 rows)
+(7 rows)
 
 -- test the schedule_interval parameter for policies
 CREATE TABLE test_schedint(time timestamptz, a int, b int);

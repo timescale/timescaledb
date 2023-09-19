@@ -399,7 +399,7 @@ scheduled_ts_bgw_job_start(ScheduledBgwJob *sjob,
 
 	Assert(sjob->handle != NULL);
 	if (bgw_register != NULL)
-		bgw_register(sjob->handle);
+		bgw_register(sjob->handle, scheduler_mctx);
 
 	status = WaitForBackgroundWorkerStartup(sjob->handle, &pid);
 	switch (status)

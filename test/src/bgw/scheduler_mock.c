@@ -220,19 +220,17 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	pid_t pid;
 
 	worker_handle = start_test_scheduler(PG_GETARG_INT32(0), GetUserId());
+	TestAssertTrue(worker_handle != NULL);
 
-	if (worker_handle != NULL)
-	{
-		BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
-		TestAssertTrue(BGWH_STARTED == status);
-		if (status != BGWH_STARTED)
-			elog(ERROR, "bgw not started");
+	BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
+	TestAssertTrue(BGWH_STARTED == status);
+	if (status != BGWH_STARTED)
+		elog(ERROR, "bgw not started");
 
-		status = WaitForBackgroundWorkerShutdown(worker_handle);
-		TestAssertTrue(BGWH_STOPPED == status);
-		if (status != BGWH_STOPPED)
-			elog(ERROR, "bgw not stopped");
-	}
+	status = WaitForBackgroundWorkerShutdown(worker_handle);
+	TestAssertTrue(BGWH_STOPPED == status);
+	if (status != BGWH_STOPPED)
+		elog(ERROR, "bgw not stopped");
 
 	PG_RETURN_VOID();
 }
