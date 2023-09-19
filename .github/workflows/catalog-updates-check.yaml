@@ -1,0 +1,60 @@
+name: Check for unsafe catalog updates in latest-dev
+"on":
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+jobs:
+  # Check if the PR has updated latest-dev. If a catalog update is required, but latest-dev
+  # is unchanged, this will be caught in the update tests so we don't need to double check here.
+  # Otherwise, read latest-dev contents to determine if there are column added or dropped from
+  # catalog tables. A "safe" modification should rebuild the table to ensure consistent attribute
+  # numbers across versions, instead of simply doing ALTER TABLE ... ADD/DROP COLUMN
+  check_latest_dev_correctly_updated:
+    name: Check that latest-dev.sql was properly updated by PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Check if latest-dev was modified
+        shell: bash {0}
+        id: check_updated
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          file="sql/updates/latest-dev.sql"
+          updated=0
+          diff=$(gh pr view $PR_NUMBER --json files --jq '.files[] | select(.path == "sql/updates/latest-dev.sql") | .path')
+          if [[ ${diff} != "" ]]; then
+            updated=1
+          fi
+          echo "latestdev_updated=$updated" >> $GITHUB_OUTPUT
+      - name: Check latest-dev contents
+        shell: bash {0}
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if [[ ${{ steps.check_updated.outputs.latestdev_updated }} == 0 ]]; then
+            exit 0; # did not update latest-dev, if anything should have been updated, it will be caught in the upgrade test
+          fi
+
+          echo "$BODY" | egrep -qsi '^disable-check:.*\<catalog-updates\>'
+
+          if [[ $? -ne 0 ]]; then
+            if ! python scripts/check_latest-dev_updates.py "sql/updates/latest-dev.sql"; then
+              echo
+              echo "Incorrect modification of catalog tables detected"
+              echo
+              echo "To disable the catalog updates check, add this trailer to pull request message:"
+              echo
+              echo "Disable-check: catalog-updates"
+              echo
+              echo "Trailers follow RFC2822 conventions, so no whitespace"
+              echo "before field name and the check is case-insensitive for"
+              echo "both the field name and the field body."
+              exit 1
+            fi
+          fi
+          exit 0
