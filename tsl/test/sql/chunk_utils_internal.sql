@@ -332,9 +332,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try','2020-01-01 0
 \set ON_ERROR_STOP 1
 
 SELECT _timescaledb_functions.attach_osm_table_chunk('ht_try', 'child_fdw_table');
--- must also update the range since the created chunk is assumed to be empty,
--- and its range actually updated when data is moved to OSM. But in this mock
--- test case, the attached OSM chunk contains data
+-- check hypertable status
+SELECT status FROM _timescaledb_catalog.hypertable WHERE table_name = 'ht_try';
+-- must also update the range since the created chunk contains data
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-01'::timestamptz, '2020-01-02');
 
 -- OSM chunk is not visible in chunks view

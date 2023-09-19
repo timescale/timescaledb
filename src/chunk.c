@@ -4614,10 +4614,17 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	chunk_add_inheritance(chunk, parent_ht);
 	/*
 	 * Update hypertable entry with tiering status information.
-	 * Noncontiguous flag is not set since the chunk is empty upon creation,
-	 * with an invalid range assigned, so ordered append should be allowed.
+	 * XXX: For compatibility reasons, we set the noncontiguous flag, but
+	 * this should be reverted as soon as the newer version of the OSM extension
+	 * is rolled out.
+	 * Noncontiguous flag should not be set since the chunk should be empty upon
+	 * creation, with an invalid range assigned, so ordered append should be allowed.
+	 * Once the data is moved into the OSM chunk, then our catalog should be
+	 * udpated with proper API calls from the OSM extension.
 	 */
-	parent_ht->fd.status = ts_set_flags_32(parent_ht->fd.status, HYPERTABLE_STATUS_OSM);
+	parent_ht->fd.status =
+		ts_set_flags_32(parent_ht->fd.status,
+						HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 	ts_hypertable_update(parent_ht);
 }
 
