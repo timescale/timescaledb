@@ -39,7 +39,7 @@ jobs:
         else
           .github/gh_matrix_builder.py ${{ github.event_name }}
         fi
-    
+
   regress:
     # Change the JOB_NAME variable below when changing the name.
     name: PG${{ matrix.pg }}${{ matrix.snapshot }} ${{ matrix.name }} ${{ matrix.os }}

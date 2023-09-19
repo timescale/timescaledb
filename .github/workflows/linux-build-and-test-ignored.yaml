@@ -5,13 +5,15 @@ name: Regression
 "on":
   push:
     branches:
-      - prerelease_test
+      - main
     paths:
+      - '!**'
       - '**.md'
       - 'LICENSE*'
       - NOTICE
   pull_request:
     paths:
+      - '!**'
       - '**.md'
       - 'LICENSE*'
       - NOTICE

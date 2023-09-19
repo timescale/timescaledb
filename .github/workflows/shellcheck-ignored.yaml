@@ -3,13 +3,13 @@
 # executed because some files were ignored.
 name: Shellcheck
 "on":
-  pull_request:
+  push:
+    branches:
+      - main
     paths-ignore:
       - '**.sh'
       - .github/workflows/shellcheck.yaml
-  push:
-    branches:
-      - prerelease_test
+  pull_request:
     paths-ignore:
       - '**.sh'
       - .github/workflows/shellcheck.yaml
