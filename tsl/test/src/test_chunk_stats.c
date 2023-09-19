@@ -58,7 +58,7 @@ static void
 osm_ht_drop_chunks_hook_mock(Oid osm_chunk_oid, const char *schema_name, const char *table_name,
 							 int64 range_start, int64 range_end)
 {
-	elog(NOTICE, "hypertable_drop_chunks_hook (%ld %ld)", range_start, range_end);
+	elog(NOTICE, "hypertable_drop_chunks_hook (" INT64_FORMAT " " INT64_FORMAT ")", range_start, range_end);
 }
 
 OsmCallbacks_Versioned fake_osm_callbacks = {
