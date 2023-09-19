@@ -1994,8 +1994,11 @@ update pg_class
 -- Make a relation with a couple of enormous tuples.
 create table wide(id int, t text);
 select table_name from create_hypertable('wide','id',chunk_time_interval:=5000);
-insert into wide select generate_series(1, 2) as id, rpad('', 320000, 'x') as t;
+insert into wide select generate_series(1, 10) as id, rpad('', 320000, 'x') as t;
 alter table wide set (parallel_workers = 2);
+
+-- update statistics
+analyze wide;
 
 -- The "optimal" case: the hash table fits in memory; we plan for 1
 -- batch, we stick to that number, and peak memory usage stays within
@@ -2210,6 +2213,10 @@ create table join_foo as select generate_series(1, 3) as id, 'xxxxx'::text as t;
 alter table join_foo set (parallel_workers = 0);
 create table join_bar as select generate_series(1, 10000) as id, 'xxxxx'::text as t;
 alter table join_bar set (parallel_workers = 2);
+
+-- update statistics
+analyze join_foo;
+analyze join_bar;
 
 -- multi-batch with rescan, parallel-oblivious
 savepoint settings;
