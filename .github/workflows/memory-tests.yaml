@@ -5,6 +5,7 @@ name: Memory tests
       - main
       - prerelease_test
       - memory_test
+      - trigger/memory_test
 jobs:
   memory_leak:
     name: Memory leak on insert PG${{ matrix.pg }}
@@ -28,6 +29,7 @@ jobs:
 
     - name: Build TimescaleDB
       run: |
+        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
         ./bootstrap -DCMAKE_BUILD_TYPE=Release
         make -C build
         sudo make -C build install
