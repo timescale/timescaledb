@@ -5,8 +5,9 @@ name: Regression Windows
 "on":
   push:
     branches:
-      - prerelease_test
+      - main
     paths:
+      - '!**'
       - '**.md'
       - CHANGELOG
       - 'LICENSE*'
@@ -14,6 +15,7 @@ name: Regression Windows
       - 'bootstrap*'
   pull_request:
     paths:
+      - '!**'
       - '**.md'
       - CHANGELOG
       - 'LICENSE*'
