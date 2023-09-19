@@ -30,23 +30,13 @@ sub check_extension_state
 	# report test failures from caller location
 	local $Test::Builder::Level = $Test::Builder::Level + 1;
 
-	# reset output collector
-	$out = "";
-	# restart per-command timer
-	$timer->start(5);
-	# send the data to be sent
-	$in .= "SELECT * FROM extension_state();\n";
-	# wait ...
+	my $result = $node->safe_psql(
+		'postgres',
+		q{
+		SELECT * FROM extension_state();
+	});
 
-	pump $h until ($out =~ $pattern || $timer->is_expired);
-	my $okay = ($out =~ $pattern && !$timer->is_expired);
-	ok($okay, $annotation);
-	# for debugging, log actual output if it didn't match
-	local $Data::Dumper::Terse = 1;
-	local $Data::Dumper::Useqq = 1;
-	diag 'Actual output was ' . Dumper($out) . "Did not match \"$pattern\"\n"
-	  if !$okay;
-	return;
+	is($result, $pattern, $annotation);
 }
 
 # Create extension_state function and check initial state
@@ -59,7 +49,7 @@ my $result = $node->safe_psql(
 
 # Initially, the state should be "created" in both sessions
 is($result, qq/created/, "initial state is \"created\"");
-check_extension_state(qr/created/, "initial state is \"created\"");
+check_extension_state(qq/created/, "initial state is \"created\"");
 
 # Drop the extension in one session, and the new state should be
 # reflected in the other backend.
@@ -72,7 +62,7 @@ $result = $node->safe_psql(
 # After dropping the extension, the new state in both sessions should
 # be "unknown"
 is($result, qq/unknown/, "state after dropped is \"unknown\"");
-check_extension_state(qr/unknown/,
+check_extension_state(qq/unknown/,
 	"state is \"unknown\" after extension is dropped in other backend");
 
 # Create the extension again, which should be reflected in both
@@ -86,7 +76,7 @@ $result = $node->safe_psql(
 # After creating the extension again in one session, the other session
 # should go back to "created" state.
 is($result, qq/created/, "state after creating extension is \"created\"");
-check_extension_state(qr/created/,
+check_extension_state(qq/created/,
 	"state is \"created\" after extension is created in other backend");
 
 # Quit the interactive psql session
