@@ -923,17 +923,14 @@ NOTICE:  hypertable_drop_chunks_hook (-9223372036854775808 10)
 (0 rows)
 
 CALL run_job(:deljob_id);
-NOTICE:  hypertable_drop_chunks_hook (-9223372036854775808 400)
 CALL run_job(:deljob_id);
-NOTICE:  hypertable_drop_chunks_hook (-9223372036854775808 400)
 SELECT chunk_name, range_start, range_end
 FROM chunk_view
 WHERE hypertable_name = 'hyper_constr'
 ORDER BY chunk_name;
-     chunk_name     |              range_start              | range_end 
---------------------+---------------------------------------+-----------
- child_hyper_constr | Sat Jan 09 20:00:54.775806 294247 PST | infinity
-(1 row)
+ chunk_name | range_start | range_end 
+------------+-------------+-----------
+(0 rows)
 
 SELECT ts_undo_osm_hook();
  ts_undo_osm_hook 
@@ -1027,7 +1024,6 @@ COPY test1.copy_test FROM STDIN DELIMITER ',';
 -- Indexes are not created on OSM chunks, they are skipped as these are foreign tables
 \c :TEST_DBNAME :ROLE_4
 CREATE INDEX hyper_constr_mid_idx ON hyper_constr( mid, time);
-NOTICE:  skipping index creation for tiered data
 SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
       indexname       |  tablename   
 ----------------------+--------------
@@ -1036,7 +1032,6 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 
 DROP INDEX hyper_constr_mid_idx;
 CREATE INDEX hyper_constr_mid_idx ON hyper_constr(mid, time) WITH (timescaledb.transaction_per_chunk);
-NOTICE:  skipping index creation for tiered data
 SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
       indexname       |  tablename   
 ----------------------+--------------
@@ -1044,26 +1039,6 @@ SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_
 (1 row)
 
 DROP INDEX hyper_constr_mid_idx;
---TEST policy is applied on OSM chunk
--- XXX this is to be updated once the hook for dropping chunks is added
-CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
-SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
- set_integer_now_func 
-----------------------
- 
-(1 row)
-
-SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
-CALL run_job(:deljob_id);
-CALL run_job(:deljob_id);
-SELECT chunk_name, range_start, range_end
-FROM chunk_view
-WHERE hypertable_name = 'hyper_constr'
-ORDER BY chunk_name;
- chunk_name | range_start | range_end 
-------------+-------------+-----------
-(0 rows)
-
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
 CREATE TABLE osm_int4(time int4 NOT NULL);

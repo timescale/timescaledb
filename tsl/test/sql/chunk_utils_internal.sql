@@ -602,20 +602,6 @@ CREATE INDEX hyper_constr_mid_idx ON hyper_constr(mid, time) WITH (timescaledb.t
 SELECT indexname, tablename FROM pg_indexes WHERE indexname = 'hyper_constr_mid_idx';
 DROP INDEX hyper_constr_mid_idx;
 
---TEST policy is applied on OSM chunk
--- XXX this is to be updated once the hook for dropping chunks is added
-CREATE OR REPLACE FUNCTION dummy_now_smallint() RETURNS BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 500::bigint' ;
-
-SELECT set_integer_now_func('hyper_constr', 'dummy_now_smallint');
-SELECT add_retention_policy('hyper_constr', 100::int) AS deljob_id \gset
-
-CALL run_job(:deljob_id);
-CALL run_job(:deljob_id);
-SELECT chunk_name, range_start, range_end
-FROM chunk_view
-WHERE hypertable_name = 'hyper_constr'
-ORDER BY chunk_name;
-
 -- test range of dimension slice for osm chunk for different datatypes
 CREATE TABLE osm_int2(time int2 NOT NULL);
 CREATE TABLE osm_int4(time int4 NOT NULL);
