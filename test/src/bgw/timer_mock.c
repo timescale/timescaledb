@@ -21,7 +21,7 @@
 #include "params.h"
 #include "bgw/launcher_interface.h"
 
-static BackgroundWorkerHandle *bgw_handle = NULL;
+static List *bgw_handles = NIL;
 
 static bool mock_wait(TimestampTz until);
 static TimestampTz mock_current_time(void);
@@ -32,10 +32,12 @@ const Timer ts_mock_timer = {
 };
 
 void
-ts_timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle)
+ts_timer_mock_register_bgw_handle(BackgroundWorkerHandle *handle, MemoryContext scheduler_mctx)
 {
 	elog(WARNING, "[TESTING] Registered new background worker");
-	bgw_handle = handle;
+	MemoryContext old_context = MemoryContextSwitchTo(scheduler_mctx);
+	bgw_handles = lappend(bgw_handles, handle);
+	MemoryContextSwitchTo(old_context);
 }
 
 /* WARNING: mock_wait must _only_ be called from the bgw_scheduler, calling it from a worker will
@@ -48,14 +50,17 @@ mock_wait(TimestampTz until)
 		 until,
 		 ts_params_get()->current_time);
 
+	ListCell *lc;
+
 	switch (ts_params_get()->mock_wait_type)
 	{
 		case WAIT_ON_JOB:
-			if (bgw_handle != NULL)
+			foreach (lc, bgw_handles)
 			{
+				BackgroundWorkerHandle *bgw_handle = lfirst(lc);
 				WaitForBackgroundWorkerShutdown(bgw_handle);
-				bgw_handle = NULL;
 			}
+			bgw_handles = NIL;
 			TS_FALLTHROUGH;
 		case IMMEDIATELY_SET_UNTIL:
 			ts_params_set_time(until, false);

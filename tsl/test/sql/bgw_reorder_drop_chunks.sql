@@ -198,7 +198,7 @@ SELECT ts_bgw_params_reset_time();
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -----------------------------------
--- test drop chunnks policy runs --
+-- test drop chunks policy runs --
 -----------------------------------
 
 
@@ -327,10 +327,6 @@ SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
 SELECT alter_job(id,config:=jsonb_set(config,'{verbose_log}', 'true'))
  FROM _timescaledb_config.bgw_job WHERE id = :drop_chunks_tsntz_job_id;
 
-CALL run_job(:drop_chunks_date_job_id);
-SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
-
-CALL run_job(:drop_chunks_tsntz_job_id);
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(1000);
 
 SELECT * FROM sorted_bgw_log;
