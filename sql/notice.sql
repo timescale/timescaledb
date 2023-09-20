@@ -30,8 +30,7 @@ BEGIN
     E'For more information on TimescaleDB, please visit the following links:\n\n'
     ||
     E' 1. Getting started: https://docs.timescale.com/timescaledb/latest/getting-started\n' ||
-    E' 2. API reference documentation: https://docs.timescale.com/api/latest\n' ||
-    E' 3. How TimescaleDB is designed: https://docs.timescale.com/timescaledb/latest/overview/core-concepts\n',
+    E' 2. API reference documentation: https://docs.timescale.com/api/latest\n',
     telemetry_string;
 END;
 $$;
