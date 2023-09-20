@@ -185,6 +185,9 @@ SELECT delete_job(:job_id);
 RESET client_min_messages;
 SELECT application_name FROM pg_stat_activity WHERE application_name LIKE 'User-Defined Action%';
 
+-- wait for scheduler finish
+SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
+
 --
 -- Test running a normal job
 --
