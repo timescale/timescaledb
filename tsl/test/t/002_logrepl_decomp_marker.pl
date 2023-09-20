@@ -219,9 +219,9 @@ query_generates_wal(
 	qq/INSERT INTO metrics VALUES ('2023-07-01 01:00:00', 1, 5555);/,
 	qq/BEGIN
 message: transactional: 1 prefix: ::timescaledb-decompression-start, sz: 0 content:
+table _timescaledb_internal.compress_hyper_3_4_chunk: DELETE: (no-tuple-data)
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 05:00:00-07' device_id[bigint]:1 value[double precision]:2
-table _timescaledb_internal.compress_hyper_3_4_chunk: DELETE: (no-tuple-data)
 message: transactional: 1 prefix: ::timescaledb-decompression-end, sz: 0 content:
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 01:00:00-07' device_id[bigint]:1 value[double precision]:5555
 table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:4 dropped[boolean]:false status[integer]:9 osm_chunk[boolean]:false

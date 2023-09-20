@@ -134,15 +134,15 @@ INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHI
 SELECT count(*) FROM ONLY :CHUNK;
 
 -- test 3: multi-column primary key with segmentby
-CREATE TABLE comp_conflicts_3(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
+CREATE TABLE comp_conflicts_3(time timestamptz NOT NULL, device text, label text DEFAULT 'label', value float, UNIQUE(time, device, label));
 
 SELECT table_name FROM create_hypertable('comp_conflicts_3','time');
-ALTER TABLE comp_conflicts_3 SET (timescaledb.compress,timescaledb.compress_segmentby='device');
+ALTER TABLE comp_conflicts_3 SET (timescaledb.compress,timescaledb.compress_segmentby='device, label');
 
 -- implicitly create chunk
-INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1',0.1);
-INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2',0.2);
-INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL,0.3);
+INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
+INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 
 SELECT compress_chunk(c) AS "CHUNK" FROM show_chunks('comp_conflicts_3') c
 \gset
@@ -152,13 +152,75 @@ SELECT count(*) FROM ONLY :CHUNK;
 
 -- should fail due to multiple entries with same time, device value
 \set ON_ERROR_STOP 0
-INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1',0.1);
-INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2',0.2);
+INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
 INSERT INTO comp_conflicts_3 VALUES
-('2020-01-01','d1',0.1),
-('2020-01-01','d2',0.2),
-('2020-01-01','d3',0.3);
+('2020-01-01','d1', 'label', 0.1),
+('2020-01-01','d2', 'label', 0.2),
+('2020-01-01','d3', 'label', 0.3);
+-- should work the same without the index present
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+ROLLBACK;
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d2', 'label', 0.2);
+ROLLBACK;
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  INSERT INTO comp_conflicts_3 VALUES
+  ('2020-01-01','d1', 'label', 0.1),
+  ('2020-01-01','d2', 'label', 0.2),
+  ('2020-01-01','d3', 'label', 0.3);
+ROLLBACK;
+
+-- using superuser to create indexes on compressed chunks
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+-- ignore matching partial index
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, label, _ts_meta_sequence_num)
+	WHERE label LIKE 'missing';
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+ROLLBACK;
+
+-- ignore matching covering index
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device) INCLUDE (label, _ts_meta_sequence_num);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+ROLLBACK;
+
+-- ignore matching but out of order segmentby index
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (label, device, _ts_meta_sequence_num);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+ROLLBACK;
+
+-- ignore index with sequence number in the middle
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  CREATE INDEX covering_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, _ts_meta_sequence_num, label);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+ROLLBACK;
+
+-- ignore expression index
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk (device, lower(label), _ts_meta_sequence_num);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+ROLLBACK;
+
+-- ignore non-btree index
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  CREATE INDEX partial_index ON _timescaledb_internal.compress_hyper_6_6_chunk USING brin (device, label, _ts_meta_sequence_num);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
+ROLLBACK;
 \set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- no data should be in uncompressed chunk since the inserts failed and their transaction rolled back
 SELECT count(*) FROM ONLY :CHUNK;
@@ -166,7 +228,17 @@ SELECT count(*) FROM ONLY :CHUNK;
 -- NULL is considered distinct from other NULL so even though the next INSERT looks
 -- like a conflict it is not a constraint violation (PG15 makes NULL behaviour configurable)
 BEGIN;
-  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL,0.3);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
+
+  -- data for 1 segment (count = 1 value + 1 inserted) should be present in uncompressed chunk
+  -- we treat NULLs as NOT DISTINCT and let the constraint configuration handle the check
+  SELECT count(*) FROM ONLY :CHUNK;
+ROLLBACK;
+
+-- check if NULL handling works the same with the compressed index dropped
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01',NULL, 'label', 0.3);
 
   -- data for 1 segment (count = 1 value + 1 inserted) should be present in uncompressed chunk
   -- we treat NULLs as NOT DISTINCT and let the constraint configuration handle the check
@@ -176,7 +248,20 @@ ROLLBACK;
 -- should succeed since there are no conflicts in the values
 BEGIN;
 
-  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1',0.1);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1', 'label', 0.1);
+
+  -- no data should have move into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
+  SELECT count(*) FROM ONLY :CHUNK;
+
+ROLLBACK;
+
+-- same as above but no index
+-- should succeed since there are no conflicts in the values
+BEGIN;
+
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d1', 'label', 0.1);
 
   -- no data should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
@@ -186,9 +271,22 @@ ROLLBACK;
 
 BEGIN;
   INSERT INTO comp_conflicts_3 VALUES
-  ('2020-01-01 0:00:01','d1',0.1),
-  ('2020-01-01 0:00:01','d2',0.2),
-  ('2020-01-01 0:00:01','d3',0.3);
+  ('2020-01-01 0:00:01','d1', 'label', 0.1),
+  ('2020-01-01 0:00:01','d2', 'label', 0.2),
+  ('2020-01-01 0:00:01','d3', 'label', 0.3);
+
+  -- no data for should have move into uncompressed chunk for conflict check
+  -- since we used metadata optimization to guarantee uniqueness
+  SELECT count(*) FROM ONLY :CHUNK;
+ROLLBACK;
+
+-- same as above but no index
+BEGIN;
+  DROP INDEX _timescaledb_internal.compress_hyper_6_6_chunk_device_label__ts_meta_sequence_num_idx;
+  INSERT INTO comp_conflicts_3 VALUES
+  ('2020-01-01 0:00:01','d1', 'label', 0.1),
+  ('2020-01-01 0:00:01','d2', 'label', 0.2),
+  ('2020-01-01 0:00:01','d3', 'label', 0.3);
 
   -- no data for should have move into uncompressed chunk for conflict check
   -- since we used metadata optimization to guarantee uniqueness
@@ -196,7 +294,7 @@ BEGIN;
 ROLLBACK;
 
 BEGIN;
-  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d3',0.2);
+  INSERT INTO comp_conflicts_3 VALUES ('2020-01-01 0:00:01','d3', 'label', 0.2);
 
   -- count = 1 since no data should have move into uncompressed chunk for conflict check since d3 is new segment
   SELECT count(*) FROM ONLY :CHUNK;
@@ -207,10 +305,10 @@ SELECT count(*) FROM ONLY :CHUNK;
 
 -- should fail since it conflicts with existing row
 \set ON_ERROR_STOP 0
-INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1',0.1);
+INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1);
 \set ON_ERROR_STOP 1
 
-INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHING;
+INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1) ON CONFLICT DO NOTHING;
 
 -- data should have move into uncompressed chunk for conflict check
 SELECT count(*) FROM ONLY :CHUNK;
