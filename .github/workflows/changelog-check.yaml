@@ -38,7 +38,7 @@ jobs:
           folder=".unreleased"
 
           # Get the list of modified files in this pull request
-          files=$(git --no-pager diff --name-only HEAD $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}))
+          files=$(git --no-pager diff --diff-filter=ACMR --name-only $(git merge-base HEAD ${{ github.event.pull_request.base.sha }}) HEAD)
 
           if  echo "$BODY" | egrep -qsi "Disable-check:[[:space:]]*force-changelog-file"; then
             # skip changelog checks if forced
@@ -46,8 +46,8 @@ jobs:
           else
             # if no changelog files found, and the PR does not have the force disable check option
             if ! echo "${files}" | grep -Eq "^(${folder})/.+$"; then
-              echo "PR does not add a change log file in .unlreased/ folder"
-              echo "Check .unlreased/template.rfc822 for the format of the change log file."
+              echo "PR does not add a change log file in .unreleased/ folder"
+              echo "Check .unreleased/template.rfc822 for the format of the change log file."
               echo
               echo "To disable changelog updated check, add this trailer to pull request message:"
               echo
