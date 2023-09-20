@@ -595,6 +595,18 @@ SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
 WARNING:  you may need to manually restart any running background workers after this command
--- clean up additional database
+-- tear down test and clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE :TEST_DBNAME_2;
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
+ pg_terminate_backend 
+----------------------
+ t
+(1 row)
+
+DROP DATABASE :TEST_DBNAME_2 WITH (force);
