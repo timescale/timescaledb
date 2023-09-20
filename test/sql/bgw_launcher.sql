@@ -256,7 +256,9 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
 
--- clean up additional database
+-- tear down test and clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE :TEST_DBNAME_2;
+SELECT _timescaledb_functions.stop_background_workers();
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
+DROP DATABASE :TEST_DBNAME_2 WITH (force);
 
