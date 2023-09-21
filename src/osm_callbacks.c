@@ -61,7 +61,7 @@ ts_get_osm_hypertable_drop_hook()
 	{
 		OsmCallbacks *ptr_old = ts_get_osm_callbacks_old();
 		if (ptr_old)
-			return ptr->hypertable_drop_hook;
+			return ptr_old->hypertable_drop_hook;
 	}
 	return NULL;
 }
