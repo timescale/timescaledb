@@ -1,10 +1,14 @@
 # Test building the extension on Windows
 name: Regression Windows
 "on":
+  schedule:
+    # run daily 0:00 on main branch
+    - cron: '0 0 * * *'
   push:
     branches:
       - main
       - prerelease_test
+      - trigger/windows_tests
     paths-ignore:
       - '**.md'
       - 'LICENSE*'
