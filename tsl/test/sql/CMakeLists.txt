@@ -18,6 +18,7 @@ set(TEST_FILES
     compression_bgw.sql
     compression_conflicts.sql
     compression_insert.sql
+    compression_policy.sql
     compression_qualpushdown.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql

@@ -20,21 +20,33 @@ SELECT
 
 DO LANGUAGE PLPGSQL $$
 DECLARE
-  ts_version TEXT;
+  ts_major INT;
+  ts_minor INT;
 BEGIN
 
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
+  WITH timescale_version AS (
+      SELECT string_to_array(extversion,'.') AS v
+      FROM pg_extension
+      WHERE extname = 'timescaledb'
+  )
+  SELECT v[1], v[2]
+  INTO ts_major, ts_minor
+  FROM timescale_version;
 
   PERFORM add_reorder_policy('policy_test_timestamptz','policy_test_timestamptz_time_idx');
 
   -- some policy API functions got renamed for 2.0 so we need to make
-  -- sure to use the right name for the version
-  IF ts_version < '2.0.0' THEN
+  -- sure to use the right name for the version. The schedule_interval
+  -- parameter of add_compression_policy was introduced in 2.8.0
+  IF ts_major < 2 THEN
     PERFORM add_drop_chunks_policy('policy_test_timestamptz','60d'::interval);
     PERFORM add_compress_chunks_policy('policy_test_timestamptz','10d'::interval);
-  ELSE
+  ELSIF ts_major <= 2 AND ts_minor < 8 THEN
     PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
     PERFORM add_compression_policy('policy_test_timestamptz','10d'::interval);
+  ELSE
+    PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
+    PERFORM add_compression_policy('policy_test_timestamptz','10d'::interval, schedule_interval => '3 days 12:00:00'::interval);
   END IF;
 END
 $$;
