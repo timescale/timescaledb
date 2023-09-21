@@ -124,26 +124,3 @@ All submitted pull requests are also automatically
 run against our test suite via [Github Actions](https://github.com/timescale/timescaledb/actions)
 (that link shows the latest build status of the repository).
 
-## Advanced Topics
-
-### Testing on Windows
-
-Currently our CI infrastructure only ensures that TimescaleDB builds on
-Windows, but does not run regression tests due to differences between
-Unix-based systems and Windows. We do run these tests before releases
-manually, and it would be a bonus if you could test at least non-trivial
-contributions for Windows. This involves setting up a remote Windows machine
-with TimescaleDB and a Unix-based (e.g., macOS or Linux) machine
-to serve as the client. To set up the Windows machine, build from source:
-```bash
-./bootstrap -DCMAKE_BUILD_TYPE=Debug
-cmake --build ./build --config Debug
-cmake --build ./build --config Debug --target install
-```
-
-Then on the client machine:
-```bash
-./bootstrap -DCMAKE_BUILD_TYPE=Debug -DTEST_PGHOST=ip_addr_of_Win_machine
-cd build && make
-make installchecklocal
-```
