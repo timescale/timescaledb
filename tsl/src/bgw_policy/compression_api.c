@@ -34,6 +34,10 @@
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))
 
+/* Default max schedule period for the compression policy is 12 hours. The actual schedule period
+ * will be chunk_interval/2 if the chunk_interval is < 12 hours. */
+#define DEFAULT_MAX_SCHEDULE_PERIOD (int64)(12 * 3600 * 1000 * (int64) 1000)
+
 static Hypertable *validate_compress_chunks_hypertable(Cache *hcache, Oid user_htoid,
 													   bool *is_cagg);
 
@@ -248,8 +252,20 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
 		!user_defined_schedule_interval)
 	{
-		default_schedule_interval = DatumGetIntervalP(
-			ts_internal_to_interval_value(dim->fd.interval_length / 2, INTERVALOID));
+		int64 hypertable_schedule_interval = dim->fd.interval_length / 2;
+
+		/* On hypertables with a small chunk_time_interval, schedule the compression job more often
+		 * than DEFAULT_MAX_SCHEDULE_PERIOD */
+		if (DEFAULT_MAX_SCHEDULE_PERIOD > hypertable_schedule_interval)
+		{
+			default_schedule_interval = DatumGetIntervalP(
+				ts_internal_to_interval_value(hypertable_schedule_interval, INTERVALOID));
+		}
+		else
+		{
+			default_schedule_interval = DatumGetIntervalP(
+				ts_internal_to_interval_value(DEFAULT_MAX_SCHEDULE_PERIOD, INTERVALOID));
+		}
 	}
 
 	/* insert a new job into jobs table */
