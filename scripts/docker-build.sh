@@ -80,7 +80,7 @@ build_timescaledb()
         cd /build/debug \
         && git config --global --add safe.directory /src \
         && cmake -DGENERATE_DOWNGRADE_SCRIPT=${GENERATE_DOWNGRADE_SCRIPT} -DENABLE_DEBUG_UTILS=off -DUSE_OPENSSL=${USE_OPENSSL} -DCMAKE_BUILD_TYPE=${BUILD_TYPE} /src \
-        && make && make install \
+        && make -j $(nproc) && make install \
         && echo \"shared_preload_libraries = 'timescaledb'\" >> /usr/local/share/postgresql/postgresql.conf.sample \
         && echo \"timescaledb.telemetry_level=off\" >> /usr/local/share/postgresql/postgresql.conf.sample \
         && cd / && rm -rf /build"

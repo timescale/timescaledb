@@ -439,7 +439,7 @@ SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                         show_policies                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 12 hours"}
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 15 days"}
  {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
@@ -454,7 +454,7 @@ SELECT timescaledb_experimental.alter_policies('max_mat_view_date', refresh_star
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                         show_policies                                                                         
 --------------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 26 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_compression", "compress_after": "@ 26 days", "compress_interval": "@ 12 hours"}
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": "@ 1 day", "refresh_start_offset": "@ 16 days"}
  {"drop_after": "@ 40 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
@@ -503,7 +503,7 @@ ERROR:  refresh and compression policies overlap
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                      show_policies                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 12 hours"}
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 5 days"}
  {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
@@ -514,7 +514,7 @@ ERROR:  refresh and retention policies overlap
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
                                                                      show_policies                                                                      
 --------------------------------------------------------------------------------------------------------------------------------------------------------
- {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 35 days"}
+ {"policy_name": "policy_compression", "compress_after": "@ 20 days", "compress_interval": "@ 12 hours"}
  {"policy_name": "policy_refresh_continuous_aggregate", "refresh_interval": "@ 1 hour", "refresh_end_offset": null, "refresh_start_offset": "@ 5 days"}
  {"drop_after": "@ 25 days", "policy_name": "policy_retention", "retention_interval": "@ 1 day"}
 (3 rows)
