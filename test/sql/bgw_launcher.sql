@@ -253,12 +253,19 @@ DROP TABLESPACE IF EXISTS tablespace1;
 RESET client_min_messages;
 CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE1_PATH;
 
+-- Stop background worker before we change the tablespace of the database (otherwise, the database might be used)
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
+
+-- Connect to TEST_DBNAME (_timescaledb_functions.stop_background_workers() is not available in TEST_DBNAME_2)
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
+\c :TEST_DBNAME_2 :ROLE_SUPERUSER
+
+-- Change tablespace
 ALTER DATABASE :TEST_DBNAME SET TABLESPACE tablespace1;
 
 -- tear down test and clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_functions.stop_background_workers();
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
 DROP DATABASE :TEST_DBNAME_2 WITH (force);
 
