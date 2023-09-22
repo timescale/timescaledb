@@ -272,6 +272,7 @@ ALTER TABLE test_table_nologin set (timescaledb.compress);
 SELECT add_compression_policy('test_table_nologin', 2::int);
 ERROR:  permission denied to start background process as role "nologin_role"
 \set ON_ERROR_STOP 1
+DROP TABLE test_table_nologin;
 RESET ROLE;
 REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
@@ -651,3 +652,7 @@ SELECT delete_job(:JOB_RECOMPRESS);
  
 (1 row)
 
+-- Teardown test
+\c :TEST_DBNAME :ROLE_SUPERUSER
+REVOKE CREATE ON SCHEMA public FROM NOLOGIN_ROLE;
+DROP ROLE NOLOGIN_ROLE;
