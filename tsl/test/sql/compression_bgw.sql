@@ -159,6 +159,7 @@ ALTER TABLE test_table_nologin set (timescaledb.compress);
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('test_table_nologin', 2::int);
 \set ON_ERROR_STOP 1
+DROP TABLE test_table_nologin;
 RESET ROLE;
 REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;
 
@@ -217,3 +218,8 @@ SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
 
 \i include/recompress_basic.sql
+
+-- Teardown test
+\c :TEST_DBNAME :ROLE_SUPERUSER
+REVOKE CREATE ON SCHEMA public FROM NOLOGIN_ROLE;
+DROP ROLE NOLOGIN_ROLE;
