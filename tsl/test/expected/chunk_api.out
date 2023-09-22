@@ -563,8 +563,8 @@ WARNING:  insufficient number of data nodes for distributed hypertable "disttabl
  t
 (1 row)
 
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
 -- Test create_chunk_table to recreate the chunk table and show dimension slices
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 SELECT * FROM chunkapi ORDER BY time;

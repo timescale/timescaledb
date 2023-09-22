@@ -2451,7 +2451,7 @@ ERROR:  UPDATE/DELETE is disabled on compressed chunks
 --github issue: 5586
 --testcase with multiple indexes
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE IF EXISTS test;
+DROP DATABASE IF EXISTS test WITH (FORCE);
 NOTICE:  database "test" does not exist, skipping
 CREATE DATABASE test;
 \c test :ROLE_SUPERUSER

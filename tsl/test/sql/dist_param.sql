@@ -9,7 +9,7 @@
 -- pg_regress doesn't drop these databases for repeated invocation such as in
 -- the flaky check.
 set client_min_messages to ERROR;
-drop database if exists :"DN_DBNAME_1";
+drop database if exists :"DN_DBNAME_1" with (force);
 select 1 from add_data_node('data_node_1', host => 'localhost',
                             database => :'DN_DBNAME_1');
 grant usage on foreign server data_node_1 to public;

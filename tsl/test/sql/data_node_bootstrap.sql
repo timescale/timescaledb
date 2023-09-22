@@ -49,7 +49,7 @@ SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstr
 SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
 \set ON_ERROR_STOP 0
 
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 ----------------------------------------------------------------------
 -- Bootstrap the database and check that calling it without
@@ -131,14 +131,14 @@ SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
 
 \set ON_ERROR_STOP 0
 -- Dropping the database now should fail since it no longer exists
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 \set ON_ERROR_STOP 1
 
 -- Adding the data node again should work
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 -- Now drop the database manually before using the drop_database option
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 \set ON_ERROR_STOP 0
 -- Expect an error since the database does not exist.
 SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
@@ -164,7 +164,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 
 SELECT * FROM delete_data_node('bootstrap_test');
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 ----------------------------------------------------------------------
 -- Do a manual bootstrap of the data node and check that it can be
@@ -183,7 +183,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 
 SELECT * FROM delete_data_node('bootstrap_test');
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 ----------------------------------------------------------------------
 -- Create a database and check that a mismatching encoding is caught
@@ -202,7 +202,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 \set ON_ERROR_STOP 1
 
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 ----------------------------------------------------------------------
 -- Do a manual bootstrap of the data but check that a mismatching
@@ -241,7 +241,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 CREATE DATABASE bootstrap_test
    ENCODING :"enc"
@@ -261,7 +261,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 CREATE DATABASE bootstrap_test
    ENCODING :"enc"
@@ -281,7 +281,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 -----------------------------------------------------------------------
 -- Bootstrap the database and remove it. Check that the missing
@@ -291,7 +291,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
 SELECT * FROM show_data_nodes();
 SELECT * FROM delete_data_node('bootstrap_test');
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 \set ON_ERROR_STOP 0
 SELECT node_name, database, node_created, database_created, extension_created
@@ -319,7 +319,7 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
 \set ON_ERROR_STOP 1
 
-DROP DATABASE bootstrap_test;
+DROP DATABASE bootstrap_test WITH (FORCE);
 
 -----------------------------------------------------------------------
 -- Create a new access node manually so that we can set a specific
@@ -359,8 +359,8 @@ SELECT * FROM ts_non_default.delete_data_node('bootstrap_test');
 \set ON_ERROR_STOP 1
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE bootstrap_test;
-DROP DATABASE access_node;
+DROP DATABASE bootstrap_test WITH (FORCE);
+DROP DATABASE access_node WITH (FORCE);
 
 ----------------------------------------------------------------------
 -- Test for ongoing transaction
@@ -388,15 +388,15 @@ $$ LANGUAGE plpgsql;
 SELECT test_database_name('Unusual Name');
 SELECT test_database_name(U&'\0441\043B\043E\043D');
 
-DROP DATABASE "Unusual Name";
-DROP DATABASE U&"\0441\043B\043E\043D";
+DROP DATABASE "Unusual Name" WITH (FORCE);
+DROP DATABASE U&"\0441\043B\043E\043D" WITH (FORCE);
 
 -- Test Access Node DATABASE DROP NOTICE message
 --
 
 -- Make sure the NOTICE message not shown on a DROP DATABASE error
 \set ON_ERROR_STOP 0
-DROP DATABASE :TEST_DBNAME;
+DROP DATABASE :TEST_DBNAME WITH (FORCE);
 \set ON_ERROR_STOP 1
 
 CREATE DATABASE drop_db_test;
@@ -483,8 +483,8 @@ SECURITY LABEL ON TABLE seclabel_test IS 'label';
 DROP TABLE seclabel_test;
 
 -- This will generate NOTICE message
-DROP DATABASE drop_db_test;
-DROP DATABASE drop_db_test_dn;
+DROP DATABASE drop_db_test WITH (FORCE);
+DROP DATABASE drop_db_test_dn WITH (FORCE);
 
 -- Ensure label is deleted after the DROP
 SELECT label FROM pg_shseclabel

@@ -79,7 +79,7 @@ SELECT create_distributed_restore_point('test');
 ERROR:  distributed restore point must be created on the access node
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE dist_rp_test;
+DROP DATABASE dist_rp_test WITH (FORCE);
 -- test on data node
 \c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
@@ -157,6 +157,6 @@ SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn 
                   | access_node | t
 (4 rows)
 
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
-DROP DATABASE :DATA_NODE_3;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
+DROP DATABASE :DATA_NODE_3 WITH (FORCE);

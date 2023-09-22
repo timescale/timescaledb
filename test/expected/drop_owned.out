@@ -89,7 +89,7 @@ CREATE database test_drop_owned;
 \c test_drop_owned
 DROP OWNED BY :ROLE_SUPERUSER;
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test_drop_owned;
+DROP DATABASE test_drop_owned WITH (FORCE);
 -- Test that dependencies on roles are added to chunks when creating
 -- new chunks. If that is not done, DROP OWNED BY will not revoke the
 -- privilege on the chunk.
