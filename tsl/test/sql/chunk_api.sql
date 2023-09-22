@@ -254,8 +254,8 @@ RESET ROLE;
 TRUNCATE disttable;
 SELECT * FROM delete_data_node(:'DATA_NODE_1', force => true);
 SELECT * FROM delete_data_node(:'DATA_NODE_2', force => true);
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
 
 -- Test create_chunk_table to recreate the chunk table and show dimension slices
 SET ROLE :ROLE_DEFAULT_PERM_USER;

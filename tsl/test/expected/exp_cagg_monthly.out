@@ -1197,9 +1197,9 @@ NOTICE:  drop cascades to 5 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
-DROP DATABASE :DATA_NODE_3;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
+DROP DATABASE :DATA_NODE_3 WITH (FORCE);
 -- Test the specific code path of creating a CAGG on top of empty hypertable.
 CREATE TABLE conditions_empty(
   day DATE NOT NULL,

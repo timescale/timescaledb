@@ -114,9 +114,9 @@ SELECT * FROM hypertable_partitions;
 -- Cleanup databases
 RESET ROLE;
 SET client_min_messages TO ERROR;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
+DROP DATABASE :DN_DBNAME_1 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_2 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_3 WITH (FORCE);
 SET client_min_messages TO INFO;
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
@@ -442,10 +442,10 @@ SELECT * FROM create_distributed_hypertable('disttable', 'time');
 \set ON_ERROR_STOP 1
 
 -- These data nodes have been deleted, so safe to remove their databases.
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
-DROP DATABASE :DN_DBNAME_4;
+DROP DATABASE :DN_DBNAME_1 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_2 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_3 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_4 WITH (FORCE);
 
 -- there should be no data nodes
 SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
@@ -694,7 +694,7 @@ SELECT * FROM add_data_node('data_node_6');
 -- establish connection to a data node.
 --
 RESET ROLE;
-DROP DATABASE :DN_DBNAME_1;
+DROP DATABASE :DN_DBNAME_1 WITH (FORCE);
 CREATE DATABASE :DN_DBNAME_1 OWNER :ROLE_1;
 
 \c :DN_DBNAME_1
@@ -778,12 +778,12 @@ SELECT node_name, database, node_created, database_created, extension_created FR
 SELECT * FROM delete_data_node('data_node_6');
 
 RESET ROLE;
-DROP DATABASE :DN_DBNAME_1;
-DROP DATABASE :DN_DBNAME_2;
-DROP DATABASE :DN_DBNAME_3;
-DROP DATABASE :DN_DBNAME_4;
-DROP DATABASE :DN_DBNAME_5;
-DROP DATABASE :DN_DBNAME_6;
+DROP DATABASE :DN_DBNAME_1 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_2 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_3 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_4 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_5 WITH (FORCE);
+DROP DATABASE :DN_DBNAME_6 WITH (FORCE);
 
 
 -----------------------------------------------

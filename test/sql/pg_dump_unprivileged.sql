@@ -17,6 +17,6 @@ CREATE database dump_unprivileged;
 
 \c template1 :ROLE_SUPERUSER
 DROP EXTENSION timescaledb;
-DROP DATABASE dump_unprivileged;
+DROP DATABASE dump_unprivileged WITH (FORCE);
 DROP USER dump_unprivileged;
 

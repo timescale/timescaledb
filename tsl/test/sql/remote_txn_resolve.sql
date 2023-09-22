@@ -141,4 +141,4 @@ SELECT _timescaledb_functions.remote_txn_heal_data_node((SELECT OID FROM pg_fore
 \c test_an2
 ROLLBACK PREPARED 'ts-1-10-20-30';
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE test_an2;
+DROP DATABASE test_an2 WITH (FORCE);

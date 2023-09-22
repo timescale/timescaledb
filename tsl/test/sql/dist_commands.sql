@@ -187,9 +187,9 @@ SELECT * FROM delete_data_node(:'DATA_NODE_3');
 -- Test health check when no longer an access node (no data nodes)
 SELECT * FROM _timescaledb_functions.health() ORDER BY 1 NULLS FIRST;
 
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
-DROP DATABASE :DATA_NODE_3;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
+DROP DATABASE :DATA_NODE_3 WITH (FORCE);
 
 \set ON_ERROR_STOP 0
 -- Calling distributed_exec without data nodes should fail
@@ -229,7 +229,7 @@ CALL distributed_exec('CREATE DATABASE dist_commands_magic',
 \set ON_ERROR_STOP 1
 CALL distributed_exec('CREATE DATABASE dist_commands_magic',
        node_list => '{dist_commands_1}', transactional => FALSE);
-DROP DATABASE dist_commands_magic;
+DROP DATABASE dist_commands_magic WITH (FORCE);
 
 -- Test that distributed_exec honor the 2PC behaviour when starting a
 -- transaction locally. It should also give an error if attempting to
@@ -281,5 +281,5 @@ COMMIT;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM my_table; $$);
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);

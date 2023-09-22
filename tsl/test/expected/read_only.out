@@ -345,5 +345,5 @@ ERROR:  cannot execute alter_job() in a read-only transaction
 SELECT delete_job(1);
 ERROR:  cannot execute delete_job() in a read-only transaction
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);

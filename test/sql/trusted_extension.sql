@@ -31,4 +31,4 @@ SELECT * FROM timescaledb_information.hypertables;
 DROP EXTENSION timescaledb CASCADE;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE trusted_test;
+DROP DATABASE trusted_test WITH (FORCE);

@@ -360,8 +360,8 @@ SET timescaledb.passfile TO 'passfile';
 
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SET client_min_messages TO ERROR;
-DROP DATABASE backend_1_1;
-DROP DATABASE backend_x_2;
-DROP DATABASE backend_2_1;
-DROP DATABASE frontend_1;
-DROP DATABASE frontend_2;
+DROP DATABASE backend_1_1 WITH (FORCE);
+DROP DATABASE backend_x_2 WITH (FORCE);
+DROP DATABASE backend_2_1 WITH (FORCE);
+DROP DATABASE frontend_1 WITH (FORCE);
+DROP DATABASE frontend_2 WITH (FORCE);

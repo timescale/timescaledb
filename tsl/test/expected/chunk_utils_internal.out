@@ -1418,6 +1418,6 @@ ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attem
 \set ON_ERROR_STOP 1
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE postgres_fdw_db;
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
+DROP DATABASE postgres_fdw_db WITH (FORCE);
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);

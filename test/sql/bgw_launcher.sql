@@ -25,7 +25,7 @@ CREATE EXTENSION timescaledb CASCADE;
 RESET client_min_messages;
 SELECT wait_worker_counts(1,1,1,0);
 
-DROP DATABASE :TEST_DBNAME;
+DROP DATABASE :TEST_DBNAME WITH (FORCE);
 
 -- Now the db_scheduler for test db should have disappeared
 SELECT wait_worker_counts(1,0,1,0);
@@ -216,7 +216,7 @@ SELECT wait_worker_counts(1,0,0,0);
 -- Make sure we see a scheduler start.
 CREATE DATABASE :TEST_DBNAME;
 SELECT wait_worker_counts(1,1,0,0);
-DROP DATABASE :TEST_DBNAME;
+DROP DATABASE :TEST_DBNAME WITH (FORCE);
 -- Now make sure that there's no race between create database and create extension.
 -- Although to be honest, this race probably wouldn't manifest in this test.
 \c template1
@@ -239,13 +239,13 @@ CREATE EXTENSION timescaledb;
 \c :TEST_DBNAME_2 :ROLE_SUPERUSER
 SELECT wait_for_bgw_scheduler('db_rename_test');
 ALTER DATABASE db_rename_test RENAME TO db_rename_test2;
-DROP DATABASE db_rename_test2;
+DROP DATABASE db_rename_test2 WITH (FORCE);
 
 -- test create database with timescaledb database as template
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
 CREATE DATABASE db_from_template WITH TEMPLATE :TEST_DBNAME;
 SELECT wait_for_bgw_scheduler(:'TEST_DBNAME');
-DROP DATABASE db_from_template;
+DROP DATABASE db_from_template WITH (FORCE);
 
 -- test alter database set tablespace
 SET client_min_messages TO error;

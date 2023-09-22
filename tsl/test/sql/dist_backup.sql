@@ -79,7 +79,7 @@ CREATE EXTENSION timescaledb;
 SELECT create_distributed_restore_point('test');
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
-DROP DATABASE dist_rp_test;
+DROP DATABASE dist_rp_test WITH (FORCE);
 
 -- test on data node
 \c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
@@ -120,6 +120,6 @@ SELECT create_distributed_restore_point('test');
 SELECT alter_data_node(:'DATA_NODE_1', available => true);
 SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('test') ORDER BY node_name;
 
-DROP DATABASE :DATA_NODE_1;
-DROP DATABASE :DATA_NODE_2;
-DROP DATABASE :DATA_NODE_3;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
+DROP DATABASE :DATA_NODE_3 WITH (FORCE);

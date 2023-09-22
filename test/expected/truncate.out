@@ -264,6 +264,6 @@ TRUNCATE TABLE test_hypertable;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 -- set client_min_messages to ERROR to suppress warnings about orphaned files
 SET client_min_messages TO ERROR;
-DROP DATABASE test_trunc_ht;
+DROP DATABASE test_trunc_ht WITH (FORCE);
 DROP ROLE owner;
 DROP ROLE truncator;

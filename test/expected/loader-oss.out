@@ -550,6 +550,6 @@ WARNING:  mock init "mock-2"
 
 -- clean up additional database
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE :"TEST_DBNAME_2";
+DROP DATABASE :"TEST_DBNAME_2" WITH (FORCE);
 WARNING:  mock init "mock-2"
 WARNING:  mock post_analyze_hook "mock-2"

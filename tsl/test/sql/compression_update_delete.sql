@@ -1258,7 +1258,7 @@ DELETE FROM sample_table WHERE time >= '2023-03-17 00:00:00-00'::timestamptz;
 --github issue: 5586
 --testcase with multiple indexes
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE IF EXISTS test;
+DROP DATABASE IF EXISTS test WITH (FORCE);
 CREATE DATABASE test;
 \c test :ROLE_SUPERUSER
 SET client_min_messages = ERROR;

@@ -4,4 +4,4 @@
 
 DROP TABLE disthyper;
 SELECT delete_data_node('dn1');
-drop database if exists dn1;
+drop database if exists dn1 with (force);
