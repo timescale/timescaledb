@@ -811,13 +811,20 @@ ts_dimension_slice_scan_iterator_get_by_id(ScanIterator *it, int32 slice_id,
 										   const ScanTupLock *tuplock)
 {
 	TupleInfo *ti;
+	DimensionSlice *slice = NULL;
 
 	ts_dimension_slice_scan_iterator_set_slice_id(it, slice_id, tuplock);
 	ts_scan_iterator_start_or_restart_scan(it);
 	ti = ts_scan_iterator_next(it);
 	Assert(ti);
-	Assert(ts_scan_iterator_next(it) == NULL); /* This is a heavy call, consider removing it */
-	return ti ? ts_dimension_slice_from_tuple(ti) : NULL;
+
+	if (ti)
+	{
+		slice = ts_dimension_slice_from_tuple(ti);
+		Assert(ts_scan_iterator_next(it) == NULL);
+	}
+
+	return slice;
 }
 
 DimensionSlice *
