@@ -738,8 +738,32 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', '2020-01-0
 -- udpate range of timestamp with bigint
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', 9223372036854771806, 9223372036854775406);
 \set ON_ERROR_STOP 1
+
+-- test dimension slice tuple visibility
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE osm_slice_update(time int not null);
+SELECT hypertable_id AS ht_id FROM create_hypertable('osm_slice_update', 'time', chunk_time_interval => 10) \gset
+
+INSERT INTO osm_slice_update VALUES (1);
+UPDATE _timescaledb_catalog.hypertable SET status = 3 WHERE id = :ht_id;
+UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :ht_id;
+
+\c
+BEGIN;
+ 	SELECT _timescaledb_functions.hypertable_osm_range_update('osm_slice_update',40,50);
+ROLLBACK;
+
+\c
+-- new session should not be affected by previous rolled back transaction
+-- should show 0 10 as range
+\set ON_ERROR_STOP 0
+INSERT INTO osm_slice_update VALUES (1);
+INSERT INTO osm_slice_update VALUES (1);
+\set ON_ERROR_STOP 1
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;
 DROP DATABASE :DATA_NODE_1;
 DROP DATABASE :DATA_NODE_2;
+

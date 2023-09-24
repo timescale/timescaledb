@@ -1391,6 +1391,31 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', '2020-01-0
 SELECT _timescaledb_functions.hypertable_osm_range_update('osm_tstz', 9223372036854771806, 9223372036854775406);
 ERROR:  invalid time argument type "bigint"
 \set ON_ERROR_STOP 1
+-- test dimension slice tuple visibility
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE osm_slice_update(time int not null);
+SELECT hypertable_id AS ht_id FROM create_hypertable('osm_slice_update', 'time', chunk_time_interval => 10) \gset
+INSERT INTO osm_slice_update VALUES (1);
+UPDATE _timescaledb_catalog.hypertable SET status = 3 WHERE id = :ht_id;
+UPDATE _timescaledb_catalog.chunk SET osm_chunk = true WHERE hypertable_id = :ht_id;
+\c
+BEGIN;
+ 	SELECT _timescaledb_functions.hypertable_osm_range_update('osm_slice_update',40,50);
+ hypertable_osm_range_update 
+-----------------------------
+ f
+(1 row)
+
+ROLLBACK;
+\c
+-- new session should not be affected by previous rolled back transaction
+-- should show 0 10 as range
+\set ON_ERROR_STOP 0
+INSERT INTO osm_slice_update VALUES (1);
+ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+INSERT INTO osm_slice_update VALUES (1);
+ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
+\set ON_ERROR_STOP 1
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db;
