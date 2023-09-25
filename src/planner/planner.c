@@ -388,19 +388,18 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							query->rowMarks == NIL && rte->inh)
 							rte_mark_for_expansion(rte);
 
+						if (hypertable_is_distributed(ht))
+						{
+							context->num_distributed_tables++;
+						}
+
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
 							int compr_htid = ht->fd.compressed_hypertable_id;
 
 							/* Also warm the cache with the compressed
 							 * companion hypertable */
-							ht = ts_hypertable_cache_get_entry_by_id(hcache, compr_htid);
-							Assert(ht != NULL);
-						}
-
-						if (hypertable_is_distributed(ht))
-						{
-							context->num_distributed_tables++;
+							ts_hypertable_cache_get_entry_by_id(hcache, compr_htid);
 						}
 					}
 					else

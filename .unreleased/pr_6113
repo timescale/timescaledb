@@ -1,0 +1,3 @@
+Fixes: #6113 Fix planner distributed table count
+
+Thanks: @symbx for reporting a crash when selecting from empty hypertables
