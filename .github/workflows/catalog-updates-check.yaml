@@ -45,8 +45,6 @@ jobs:
           if [[ $? -ne 0 ]]; then
             if ! python scripts/check_latest-dev_updates.py "sql/updates/latest-dev.sql"; then
               echo
-              echo "Incorrect modification of catalog tables detected"
-              echo
               echo "To disable the catalog updates check, add this trailer to pull request message:"
               echo
               echo "Disable-check: catalog-updates"
