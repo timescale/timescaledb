@@ -581,10 +581,6 @@ INSERT INTO sensor_data
 
 -- enable compression
 ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
--- add new compression policy job
-SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
--- set recompress to true
-SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 -- create new chunks
 INSERT INTO sensor_data
@@ -606,6 +602,11 @@ SELECT chunk_name AS new_uncompressed_chunk_name
 
 -- change compression status so that this chunk is skipped when policy is run
 update _timescaledb_catalog.chunk set status=3 where table_name = :'new_uncompressed_chunk_name';
+
+-- add new compression policy job
+SELECT add_compression_policy('sensor_data', INTERVAL '1' minute) AS compressjob_id \gset
+-- set recompress to true
+SELECT alter_job(id,config:=jsonb_set(config,'{recompress}', 'true')) FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 
 -- verify that there are other uncompressed new chunks that need to be compressed
 SELECT count(*) > 1
