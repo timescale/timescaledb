@@ -26,6 +26,7 @@ set(TEST_FILES
     exp_cagg_timezone.sql
     move.sql
     partialize_finalize.sql
+    policy_api_enable_disable.sql
     reorder.sql
     skip_scan.sql
     size_utils_tsl.sql)

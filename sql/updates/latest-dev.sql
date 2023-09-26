@@ -179,3 +179,93 @@ DROP TABLE _timescaledb_internal.tmp_chunk_seq_value;
 GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 -- end recreate _timescaledb_catalog.chunk table --
+
+CREATE FUNCTION _timescaledb_functions.set_policy_scheduled(hypertable REGCLASS, policy_type TEXT, scheduled BOOL)
+RETURNS INTEGER
+AS $$
+    WITH affected_policies AS (
+        SELECT @extschema@.alter_job(j.id, scheduled => set_policy_scheduled.scheduled)
+        FROM _timescaledb_config.bgw_job j
+            JOIN _timescaledb_catalog.hypertable h ON h.id = j.hypertable_id
+        WHERE j.proc_schema IN ('_timescaledb_internal', '_timescaledb_functions')
+        AND j.proc_name = set_policy_scheduled.policy_type
+        AND j.id >= 1000
+        AND scheduled <> set_policy_scheduled.scheduled
+        AND format('%I.%I', h.schema_name, h.table_name) = set_policy_scheduled.hypertable::text
+    )
+SELECT count(*) FROM affected_policies;
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.set_all_policy_scheduled(hypertable REGCLASS, scheduled BOOL)
+RETURNS INTEGER
+AS $$
+    WITH affected_policies AS (
+        SELECT @extschema@.alter_job(j.id, scheduled => set_all_policy_scheduled.scheduled)
+        FROM _timescaledb_config.bgw_job j
+            JOIN _timescaledb_catalog.hypertable h ON h.id = j.hypertable_id
+        WHERE j.proc_schema IN ('_timescaledb_internal', '_timescaledb_functions')
+        AND j.id >= 1000
+        AND scheduled <> set_all_policy_scheduled.scheduled
+        AND format('%I.%I', h.schema_name, h.table_name) = set_all_policy_scheduled.hypertable::text
+    )
+SELECT count(*) FROM affected_policies;
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.disable_all_policies(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_all_policy_scheduled(hypertable, false);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.enable_all_policies(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_all_policy_scheduled(hypertable, true);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.disable_compression_policy(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_policy_scheduled(hypertable, 'policy_compression', false);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.enable_compression_policy(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_policy_scheduled(hypertable, 'policy_compression', true);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.disable_reorder_policy(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_policy_scheduled(hypertable, 'policy_reorder', false);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.enable_reorder_policy(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_policy_scheduled(hypertable, 'policy_reorder', true);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.disable_retention_policy(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_policy_scheduled(hypertable, 'policy_retention', false);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION @extschema@.enable_retention_policy(hypertable REGCLASS)
+RETURNS INTEGER
+AS $$
+SELECT _timescaledb_functions.set_policy_scheduled(hypertable, 'policy_retention', true);
+$$
+LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+

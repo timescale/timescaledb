@@ -124,3 +124,14 @@ GRANT SELECT ON _timescaledb_catalog.chunk_id_seq TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.chunk table --
+
+DROP FUNCTION _timescaledb_functions.set_policy_scheduled(hypertable REGCLASS, policy_type TEXT, scheduled BOOL);
+DROP FUNCTION _timescaledb_functions.set_all_policy_scheduled(hypertable REGCLASS, scheduled BOOL);
+DROP FUNCTION @extschema@.disable_all_policies(hypertable REGCLASS);
+DROP FUNCTION @extschema@.enable_all_policies(hypertable REGCLASS);
+DROP FUNCTION @extschema@.disable_compression_policy(hypertable REGCLASS);
+DROP FUNCTION @extschema@.enable_compression_policy(hypertable REGCLASS);
+DROP FUNCTION @extschema@.disable_reorder_policy(hypertable REGCLASS);
+DROP FUNCTION @extschema@.enable_reorder_policy(hypertable REGCLASS);
+DROP FUNCTION @extschema@.disable_retention_policy(hypertable REGCLASS);
+DROP FUNCTION @extschema@.enable_retention_policy(hypertable REGCLASS);

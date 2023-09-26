@@ -1,0 +1,194 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE TABLE test_table(time timestamptz, chunk_id int);
+SELECT create_hypertable('test_table', 'time');
+NOTICE:  adding not-null constraint to column "time"
+    create_hypertable    
+-------------------------
+ (1,public,test_table,t)
+(1 row)
+
+ALTER TABLE test_table SET (timescaledb.compress);
+-- reorder
+SELECT add_reorder_policy('test_table', 'test_table_time_idx') AS reorder_job_id \gset
+SELECT disable_reorder_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT disable_reorder_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=0;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT scheduled FROM _timescaledb_config.bgw_job WHERE id = :reorder_job_id \gset
+SELECT :'scheduled'::bool = false;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_reorder_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_reorder_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=0;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT scheduled FROM _timescaledb_config.bgw_job WHERE id = :reorder_job_id \gset
+SELECT :'scheduled'::bool = true;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT remove_reorder_policy('test_table');
+ remove_reorder_policy 
+-----------------------
+ 
+(1 row)
+
+-- retention
+SELECT add_retention_policy('test_table', INTERVAL '4 months', true) AS retention_job_id \gset
+SELECT disable_retention_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT disable_retention_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=0;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT scheduled FROM _timescaledb_config.bgw_job WHERE id = :retention_job_id \gset
+SELECT :'scheduled'::bool = false;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_retention_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_retention_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=0;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT scheduled FROM _timescaledb_config.bgw_job WHERE id = :retention_job_id \gset
+SELECT :'scheduled'::bool = true;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT remove_retention_policy('test_table');
+ remove_retention_policy 
+-------------------------
+ 
+(1 row)
+
+-- compression
+SELECT add_compression_policy('test_table', compress_after => '1 month'::INTERVAL) AS compression_job_id \gset
+SELECT disable_compression_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT disable_compression_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=0;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT scheduled FROM _timescaledb_config.bgw_job WHERE id = :compression_job_id \gset
+SELECT :'scheduled'::bool = false;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_compression_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=1;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_compression_policy('test_table') AS affected_policies \gset
+SELECT :affected_policies=0;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT scheduled FROM _timescaledb_config.bgw_job WHERE id = :compression_job_id \gset
+SELECT :'scheduled'::bool = true;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT remove_compression_policy('test_table');
+ remove_compression_policy 
+---------------------------
+ t
+(1 row)
+
+-- all together now
+SELECT add_reorder_policy('test_table', 'test_table_time_idx') AS reorder_job_id \gset
+SELECT add_retention_policy('test_table', INTERVAL '4 months', true) AS retention_job_id \gset
+SELECT add_compression_policy('test_table', compress_after => '1 month'::INTERVAL) AS compression_job_id \gset
+SELECT disable_all_policies('test_table') AS affected_policies \gset
+SELECT :affected_policies = 3;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT disable_all_policies('test_table') AS affected_policies \gset
+SELECT :affected_policies = 0;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_all_policies('test_table') AS affected_policies \gset
+SELECT :affected_policies = 3;
+ ?column? 
+----------
+ t
+(1 row)
+
+SELECT enable_all_policies('test_table') AS affected_policies \gset
+SELECT :affected_policies = 0;
+ ?column? 
+----------
+ t
+(1 row)
+
