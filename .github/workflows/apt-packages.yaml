@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04" ]
+        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:23.04" ]
         pg: [ 13, 14, 15 ]
         license: [ "TSL", "Apache"]
         include:
@@ -81,6 +81,7 @@ jobs:
         fi
 
     - name: Test Downgrade
+      if: matrix.image != 'ubuntu:23.04'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
