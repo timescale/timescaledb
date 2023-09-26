@@ -758,7 +758,7 @@ dimension_slice_tuple_found(TupleInfo *ti, void *data)
  * it to not change nor disappear. */
 DimensionSlice *
 ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLock *tuplock,
-									   MemoryContext mctx)
+									   MemoryContext mctx, LOCKMODE mode)
 {
 	DimensionSlice *slice = NULL;
 	ScanKeyData scankey[1];
@@ -775,7 +775,7 @@ ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id, const ScanTupLo
 										dimension_slice_tuple_found,
 										&slice,
 										1,
-										AccessShareLock,
+										mode,
 										tuplock,
 										mctx);
 

@@ -3231,8 +3231,19 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 		.lockmode = LockTupleExclusive,
 		.waitpolicy = LockWaitBlock,
 	};
+	// this is required for isolation
+	tuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
 	DimensionSlice *slice =
-		ts_dimension_slice_scan_by_id_and_lock(dimension_slice_id, &tuplock, CurrentMemoryContext);
+		ts_dimension_slice_scan_by_id_and_lock(dimension_slice_id,
+											   &tuplock,
+											   CurrentMemoryContext,
+											   RowShareLock); /* select FOR UPDATE so take a
+																 RowShareLock */
 
 	if (!slice)
 		ereport(ERROR, errmsg("could not find slice with id %d", dimension_slice_id));

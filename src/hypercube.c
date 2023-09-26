@@ -179,7 +179,8 @@ ts_hypercube_get_slice_by_dimension_id(const Hypercube *hc, int32 dimension_id)
  * Given a set of constraints, build the corresponding hypercube.
  */
 Hypercube *
-ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator *slice_it)
+ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator *slice_it,
+							  bool lock_dimslice)
 {
 	Hypercube *hc;
 	int i;
@@ -201,7 +202,8 @@ ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator 
 		if (is_dimension_constraint(cc))
 		{
 			DimensionSlice *slice;
-			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
+			ScanTupLock *const tuplock_ptr =
+				(RecoveryInProgress() || !lock_dimslice) ? NULL : &tuplock;
 
 			Assert(hc->num_slices < constraints->num_dimension_constraints);
 

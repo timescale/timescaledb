@@ -115,6 +115,8 @@ typedef struct ChunkStubScanCtx
 	ChunkStub *stub;
 	Chunk *chunk;
 	bool is_dropped;
+	bool lock_dimslice; /* in some cases, we may not want to lock the dimension slice tuple for this
+						   chunk */
 } ChunkStubScanCtx;
 
 static bool
@@ -1631,7 +1633,8 @@ ts_chunk_create_base(int32 id, int16 num_constraints, const char relkind)
  * rescanned/recreated.
  */
 Chunk *
-ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub *stub)
+ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkStub *stub,
+								   bool lock_dimslice)
 {
 	Chunk *chunk = NULL;
 	int num_constraints_hint = stub ? stub->constraints->num_constraints : 2;
@@ -1675,7 +1678,7 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 	else
 	{
 		ScanIterator it = ts_dimension_slice_scan_iterator_create(NULL, ti->mctx);
-		chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
+		chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it, lock_dimslice);
 		ts_scan_iterator_close(&it);
 	}
 
@@ -1719,7 +1722,10 @@ chunk_tuple_found(TupleInfo *ti, void *arg)
 	ChunkStubScanCtx *stubctx = arg;
 	Chunk *chunk;
 
-	chunk = ts_chunk_build_from_tuple_and_stub(&stubctx->chunk, ti, stubctx->stub);
+	chunk = ts_chunk_build_from_tuple_and_stub(&stubctx->chunk,
+											   ti,
+											   stubctx->stub,
+											   stubctx->lock_dimslice);
 	Assert(!chunk->fd.dropped);
 
 	/* Fill in table relids. Note that we cannot do this in
@@ -1934,6 +1940,7 @@ chunk_scan_context_add_chunk(ChunkScanCtx *scanctx, ChunkStub *stub)
 	ChunkStubScanCtx stubctx = {
 		.chunk = &data->chunks[data->num_chunks],
 		.stub = stub,
+		.lock_dimslice = true,
 	};
 
 	Assert(data->num_chunks < data->max_chunks);
@@ -1976,7 +1983,8 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 		Assert(count == 0 && chunk == NULL);
 		chunk = ts_chunk_build_from_tuple_and_stub(/* chunkptr = */ NULL,
 												   ti,
-												   /* stub = */ NULL);
+												   /* stub = */ NULL,
+												   /* lock_dimslice */ true);
 		Assert(chunk->fd.dropped);
 
 		/* Create data table and related objects */
@@ -2421,7 +2429,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 			chunk->constraints = ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id, 1, mctx);
 
 			it = ts_dimension_slice_scan_iterator_create(NULL, mctx);
-			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it);
+			chunk->cube = ts_hypercube_from_constraints(chunk->constraints, &it, true);
 			ts_scan_iterator_close(&it);
 
 			/* Allocate the list on the same memory context as the chunks */
@@ -2450,9 +2458,10 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 
 static Chunk *
 chunk_scan_find(int indexid, ScanKeyData scankey[], int nkeys, MemoryContext mctx,
-				bool fail_if_not_found, const DisplayKeyData displaykey[])
+				bool fail_if_not_found, const DisplayKeyData displaykey[], bool lock_dimslice)
 {
 	ChunkStubScanCtx stubctx = { 0 };
+	stubctx.lock_dimslice = lock_dimslice;
 	Chunk *chunk;
 	int num_found;
 
@@ -2548,7 +2557,8 @@ ts_chunk_get_by_name_with_memory_context(const char *schema_name, const char *ta
 						   2,
 						   mctx,
 						   fail_if_not_found,
-						   displaykey);
+						   displaykey,
+						   true);
 }
 
 Chunk *
@@ -2616,7 +2626,8 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 						   1,
 						   CurrentMemoryContext,
 						   fail_if_not_found,
-						   displaykey);
+						   displaykey,
+						   true);
 }
 
 /*
@@ -2984,7 +2995,8 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 				DimensionSlice *slice =
 					ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
 														   &tuplock,
-														   CurrentMemoryContext);
+														   CurrentMemoryContext,
+														   AccessShareLock);
 				/* If the slice is not found in the scan above, the table is
 				 * broken so we do not delete the slice. We proceed
 				 * anyway since users need to be able to drop broken tables or
@@ -3279,6 +3291,7 @@ chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 {
 	ChunkStubScanCtx stubctx = {
 		.stub = stub,
+		.lock_dimslice = true,
 	};
 	Chunk *chunk = chunk_create_from_stub(&stubctx);
 
@@ -4927,7 +4940,40 @@ ts_osm_chunk_range_is_invalid(int64 range_start, int64 range_end)
 int32
 ts_chunk_get_osm_slice_id(int32 chunk_id, int32 time_dim_id)
 {
-	Chunk *chunk = ts_chunk_get_by_id(chunk_id, true);
+	ScanKeyData scankey[1];
+	static const DisplayKeyData displaykey[1] = {
+		[0] = { .name = "id", .as_string = DatumGetInt32AsString },
+	};
+
+	/*
+	 * Perform an index scan on chunk id.
+	 */
+	ScanKeyInit(&scankey[0],
+				Anum_chunk_idx_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(chunk_id));
+
+	/*
+	 * Read the dimension slice id for this chunk without locking the tuple.
+	 * The reason for this is that if we take the FOR KEY SHARE lock on the tuple
+	 * that ts_hypercube_from_constraints otherwise takes, then two concurrent
+	 * updates of the OSM chunk range will deadlock: They are both granted the
+	 * FOR KEY SHARE lock and then request an UPDATE lock when trying to update
+	 * the tuple. However, they both need to wait on one another to acquire it,
+	 * since it conflicts with the FOR KEY SHARE lock already held by the other
+	 * session.
+	 * Hence, we skip taking the shared lock here and instead take a FOR UPDATE
+	 * lock on the dimension slice later.
+	 */
+	Chunk *chunk = chunk_scan_find(CHUNK_ID_INDEX,
+								   scankey,
+								   1,
+								   CurrentMemoryContext,
+								   true /*fail_if_not_found*/,
+								   displaykey,
+								   false /*lock_dimslice*/);
+
 	const DimensionSlice *ds = ts_hypercube_get_slice_by_dimension_id(chunk->cube, time_dim_id);
 	const int slice_id = ds->fd.id;
 	return slice_id;
