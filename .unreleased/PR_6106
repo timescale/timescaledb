@@ -1,1 +1,0 @@
-Fixes: #6106 incorrect pointer usage in OSM hook callback

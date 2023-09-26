@@ -4,7 +4,7 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 2.12.0 (2023-09-20)
+## 2.12.0 (2023-09-27)
 
 This release contains performance improvements for compressed hypertables
 and continuous aggregates and bug fixes since the 2.11.2 release.
@@ -58,6 +58,7 @@ PostgreSQL 16 support will be added with a following TimescaleDB release.
 * #6053 Fix approximate_row_count for CAggs
 * #6081 Improve compressed DML datatype handling
 * #6084 Propagate parameter changes to decompress child nodes
+* #6102 Schedule compression policy more often
 
 **Thanks**
 * @ajcanterbury for reporting a problem with lateral joins on compressed chunks 
