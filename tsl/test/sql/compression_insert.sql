@@ -659,3 +659,32 @@ ALTER TABLE test4 DROP COLUMN two;
 INSERT INTO test4 VALUES ('2021-10-14 17:50:16.207', '7', NULL);
 INSERT INTO test4 (timestamp, ident) VALUES ('2021-10-14 17:50:16.207', '7');
 
+DROP TABLE test4;
+
+
+-- Test COPY when trying to flush an empty buffer
+-- In this case we send an empty slot used to
+-- search for compressed tuples.
+
+CREATE TABLE test_copy (
+    timestamp int not null,
+    id bigint
+);
+
+CREATE UNIQUE INDEX timestamp_id_idx ON test_copy(timestamp, id);
+
+SELECT * FROM create_hypertable('test_copy', 'timestamp', chunk_time_interval=>10);
+
+ALTER TABLE test_copy SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'timestamp',
+    timescaledb.compress_segmentby = 'id'
+);
+
+INSERT INTO test_copy SELECT generate_series(1,25,1), -1;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
+
+\copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
+
+DROP TABLE test_copy;

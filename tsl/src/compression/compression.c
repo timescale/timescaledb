@@ -2000,6 +2000,15 @@ create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filte
 void
 decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlot *slot)
 {
+	/* COPY operation can end up flushing an empty buffer which
+	 * could in turn send an empty slot our way. No need to decompress
+	 * anything if that happens.
+	 */
+	if (TTS_EMPTY(slot))
+	{
+		return;
+	}
+
 	Relation out_rel = cis->rel;
 
 	if (!ts_indexing_relation_has_primary_or_unique_index(out_rel))
