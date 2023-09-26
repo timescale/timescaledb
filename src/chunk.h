@@ -229,7 +229,7 @@ extern TSDLLEXPORT int64 ts_chunk_primary_dimension_start(const Chunk *chunk);
 
 extern TSDLLEXPORT int64 ts_chunk_primary_dimension_end(const Chunk *chunk);
 extern Chunk *ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti,
-												 const ChunkStub *stub);
+												 const ChunkStub *stub, bool lock_dimslice);
 
 extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);

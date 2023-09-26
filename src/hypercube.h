@@ -35,7 +35,7 @@ ts_hypercube_add_slice_from_range(Hypercube *hc, int32 dimension_id, int64 start
 extern TSDLLEXPORT DimensionSlice *ts_hypercube_add_slice(Hypercube *hc,
 														  const DimensionSlice *slice);
 extern Hypercube *ts_hypercube_from_constraints(const ChunkConstraints *constraints,
-												ScanIterator *slice_it);
+												ScanIterator *slice_it, bool lock_dimslice);
 extern int ts_hypercube_find_existing_slices(const Hypercube *cube, const ScanTupLock *tuplock);
 extern Hypercube *ts_hypercube_calculate_from_point(const Hyperspace *hs, const Point *p,
 													const ScanTupLock *tuplock);

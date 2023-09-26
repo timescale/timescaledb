@@ -58,7 +58,7 @@ extern bool ts_dimension_slice_scan_for_existing(const DimensionSlice *slice,
 												 const ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
 															  const ScanTupLock *tuplock,
-															  MemoryContext mctx);
+															  MemoryContext mctx, LOCKMODE mode);
 extern DimensionVec *ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit);
 extern DimensionVec *ts_dimension_slice_scan_by_dimension_before_point(int32 dimension_id,
 																	   int64 point, int limit,
