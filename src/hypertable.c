@@ -1597,6 +1597,11 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
 	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
 	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
+	const int origin_paramnum = is_dist_call ? 17 : 16;
+	bool origin_isnull = PG_ARGISNULL(origin_paramnum);
+	Datum origin = origin_isnull ? 0 : PG_GETARG_DATUM(origin_paramnum);
+	Oid origin_type =
+		origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, origin_paramnum);
 
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
@@ -1609,11 +1614,13 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 
 	DimensionInfo *open_dim_info =
 		ts_dimension_info_create_open(table_relid,
-									  open_dim_name,		 /* column name */
-									  default_interval,		 /* interval */
-									  interval_type,		 /* interval type */
-									  open_partitioning_func /* partitioning func */
-		);
+									  open_dim_name,		  /* column name */
+									  default_interval,		  /* interval */
+									  interval_type,		  /* interval type */
+									  open_partitioning_func, /* partitioning func */
+									  origin,
+									  origin_isnull,
+									  origin_type);
 
 	DimensionInfo *closed_dim_info = NULL;
 	if (closed_dim_name)

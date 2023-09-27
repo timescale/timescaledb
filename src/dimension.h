@@ -32,6 +32,7 @@ typedef struct Dimension
 	DimensionType type;
 	AttrNumber column_attno;
 	Oid main_table_relid;
+	bool calendar_based;
 	PartitioningInfo *partitioning;
 } Dimension;
 
@@ -40,6 +41,7 @@ typedef struct Dimension
 #define IS_VALID_OPEN_DIM_TYPE(type)                                                               \
 	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || ts_type_is_int8_binary_compatible(type))
 
+#define IS_FLAT_INTERVAL(i) ((d)->day == 0 && (d)->month == 0)
 /*
  * A hyperspace defines how to partition in a N-dimensional space.
  */
@@ -106,6 +108,9 @@ typedef struct DimensionInfo
 	Datum interval_datum;
 	Oid interval_type; /* Type of the interval datum */
 	int64 interval;
+	Datum interval_origin;
+	bool interval_origin_isnull;
+	Oid interval_origin_type;
 	int32 num_slices;
 	regproc partitioning_func;
 	bool if_not_exists;
@@ -146,7 +151,9 @@ extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete
 
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_open(Oid table_relid, Name column_name,
 																Datum interval, Oid interval_type,
-																regproc partitioning_func);
+																regproc partitioning_func,
+																Datum origin, bool origin_isnull,
+																Oid origin_type);
 
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_relid, Name column_name,
 																  int32 num_slices,

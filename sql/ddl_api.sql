@@ -34,7 +34,8 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
     chunk_sizing_func       REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
-    time_partitioning_func  REGPROC = NULL
+    time_partitioning_func  REGPROC = NULL,
+	origin                  ANYELEMENT = NULL::timestamptz
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
 
 -- A generalized hypertable creation API that can be used to convert a PostgreSQL table
@@ -50,9 +51,9 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     dimension               _timescaledb_internal.dimension_info,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE,
-    migrate_data            BOOLEAN = FALSE
+    migrate_data            BOOLEAN = FALSE,
+	origin                  ANYELEMENT = NULL::timestamptz
 ) RETURNS TABLE(hypertable_id INT, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create_general' LANGUAGE C VOLATILE;
-
 
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
 CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
@@ -73,7 +74,8 @@ CREATE OR REPLACE FUNCTION @extschema@.set_adaptive_chunking(
 CREATE OR REPLACE FUNCTION @extschema@.set_chunk_time_interval(
     hypertable              REGCLASS,
     chunk_time_interval     ANYELEMENT,
-    dimension_name          NAME = NULL
+    dimension_name          NAME = NULL,	
+	origin                  TIMESTAMPTZ = NULL
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_set_interval' LANGUAGE C VOLATILE;
 
 -- Update partition_interval for a hypertable.
@@ -133,7 +135,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
     number_partitions       INTEGER = NULL,
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,
     partitioning_func       REGPROC = NULL,
-    if_not_exists           BOOLEAN = FALSE
+    if_not_exists           BOOLEAN = FALSE,
+	origin                  TIMESTAMPTZ = NULL
 ) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
 
