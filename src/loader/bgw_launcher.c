@@ -84,6 +84,8 @@ typedef enum SchedulerState
 
 static volatile sig_atomic_t got_SIGHUP = false;
 
+int ts_guc_bgw_scheduler_restart_time_sec = BGW_DEFAULT_RESTART_INTERVAL;
+
 static void
 launcher_sighup(SIGNAL_ARGS)
 {
@@ -238,13 +240,27 @@ terminate_background_worker(BackgroundWorkerHandle *handle)
 }
 
 extern void
-ts_bgw_cluster_launcher_register(void)
+ts_bgw_cluster_launcher_init(void)
 {
 	BackgroundWorker worker;
 
+	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("bgw_scheduler_restart_time"),
+							/* short_desc= */ "Restart time for scheduler in seconds",
+							/* long_desc= */
+							"The number of seconds until the scheduler restart on failure.",
+							/* valueAddr= */ &ts_guc_bgw_scheduler_restart_time_sec,
+							/* bootValue= */ BGW_DEFAULT_RESTART_INTERVAL,
+							/* minValue= */ 1,
+							/* maxValue= */ 3600,
+							/* context= */ PGC_SIGHUP,
+							/* flags= */ GUC_UNIT_S,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
+
 	memset(&worker, 0, sizeof(worker));
 	/* set up worker settings for our main worker */
-	snprintf(worker.bgw_name, BGW_MAXLEN, "TimescaleDB Background Worker Launcher");
+	snprintf(worker.bgw_name, BGW_MAXLEN, TS_BGW_TYPE_LAUNCHER);
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
 	worker.bgw_restart_time = BGW_LAUNCHER_RESTART_TIME_S;
 
@@ -274,9 +290,10 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 	BackgroundWorker worker;
 
 	memset(&worker, 0, sizeof(worker));
-	snprintf(worker.bgw_name, BGW_MAXLEN, "TimescaleDB Background Worker Scheduler");
+	snprintf(worker.bgw_type, BGW_MAXLEN, TS_BGW_TYPE_SCHEDULER);
+	snprintf(worker.bgw_name, BGW_MAXLEN, "%s for database %d", TS_BGW_TYPE_SCHEDULER, db_id);
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-	worker.bgw_restart_time = BGW_NEVER_RESTART;
+	worker.bgw_restart_time = ts_guc_bgw_scheduler_restart_time_sec,
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	snprintf(worker.bgw_library_name, BGW_MAXLEN, EXTENSION_NAME);
 	snprintf(worker.bgw_function_name, BGW_MAXLEN, BGW_ENTRYPOINT_FUNCNAME);
@@ -333,14 +350,88 @@ db_hash_entry_create_if_not_exists(HTAB *db_htab, Oid db_oid)
 }
 
 /*
+ * Result from signalling a backend.
+ *
+ * Error codes are non-zero, and success is zero.
+ */
+enum SignalBackendResult
+{
+	SIGNAL_BACKEND_SUCCESS = 0,
+	SIGNAL_BACKEND_ERROR,
+	SIGNAL_BACKEND_NOPERMISSION,
+	SIGNAL_BACKEND_NOSUPERUSER,
+};
+
+/*
+ * Terminate a background worker.
+ *
+ * This is copied from pg_signal_backend() in
+ * src/backend/storage/ipc/signalfuncs.c but tweaked to not require a database
+ * connection since the launcher does not have one.
+ */
+static enum SignalBackendResult
+ts_signal_backend(int pid, int sig)
+{
+	PGPROC *proc = BackendPidGetProc(pid);
+
+	if (unlikely(proc == NULL))
+	{
+		ereport(WARNING, (errmsg("PID %d is not a PostgreSQL backend process", pid)));
+		return SIGNAL_BACKEND_ERROR;
+	}
+
+	if (unlikely(kill(pid, sig)))
+	{
+		/* Again, just a warning to allow loops */
+		ereport(WARNING, (errmsg("could not send signal to process %d: %m", pid)));
+		return SIGNAL_BACKEND_ERROR;
+	}
+
+	return SIGNAL_BACKEND_SUCCESS;
+}
+
+/*
+ * Terminate backends by backend type.
+ *
+ * We iterate through all backends and mark those that match the given backend
+ * type as terminated.
+ *
+ * Note that there is potentially a delay between marking backends as
+ * terminated and their actual termination, so the backends have to be able to
+ * run even if there are multiple instances accessing the same data.
+ *
+ * Parts of this code is taken from pg_stat_get_activity() in
+ * src/backend/utils/adt/pgstatfuncs.c.
+ */
+static void
+terminate_backends_by_backend_type(const char *backend_type)
+{
+	Assert(backend_type);
+
+	const int num_backends = pgstat_fetch_stat_numbackends();
+	for (int curr_backend = 1; curr_backend <= num_backends; ++curr_backend)
+	{
+		const LocalPgBackendStatus *local_beentry =
+			pgstat_get_local_beentry_by_index_compat(curr_backend);
+		const PgBackendStatus *beentry = &local_beentry->backendStatus;
+		const char *bgw_type = GetBackgroundWorkerTypeByPid(beentry->st_procpid);
+		if (bgw_type && strcmp(backend_type, bgw_type) == 0)
+		{
+			int error = ts_signal_backend(beentry->st_procpid, SIGTERM);
+			if (error)
+				elog(LOG, "failed to terminate backend with pid %d", beentry->st_procpid);
+		}
+	}
+}
+
+/*
  * Model this on autovacuum.c -> get_database_list.
  *
- * Note that we are not doing
- * all the things around memory context that they do, because the hashtable
- * we're using to store db entries is automatically created in its own memory
- * context (a child of TopMemoryContext) This can get called at two different
- * times 1) when the cluster launcher starts and is looking for dbs and 2) if
- * it restarts due to a postmaster signal.
+ * Note that we are not doing all the things around memory context that they
+ * do, because the hashtable we're using to store db entries is automatically
+ * created in its own memory context (a child of TopMemoryContext) This can
+ * get called at two different times 1) when the cluster launcher starts and
+ * is looking for dbs and 2) if it restarts due to a postmaster signal.
  */
 static void
 populate_database_htab(HTAB *db_htab)
@@ -757,6 +848,16 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	db_htab = init_database_htab();
 	*htab_storage = db_htab;
 
+	/*
+	 * If the launcher was restarted and discovers old schedulers, these has
+	 * to be terminated to avoid exhausting the worker slots.
+	 *
+	 * We cannot easily pick up the old schedulers since we do not have access
+	 * to the slots array in PostgreSQL, so instead we scan for something that
+	 * looks like schedulers for databases, and kill them. New ones will then
+	 * be spawned below.
+	 */
+	terminate_backends_by_backend_type(TS_BGW_TYPE_SCHEDULER);
 	populate_database_htab(db_htab);
 
 	while (true)
