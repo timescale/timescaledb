@@ -62,11 +62,12 @@ lock_cagg
 (1 row)
 
 step Refresh3: CALL refresh_continuous_aggregate('continuous_view_2', NULL, 15); <waiting ...>
-step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15);
+step Refresh: CALL refresh_continuous_aggregate('continuous_view_1', NULL, 15); <waiting ...>
 step I21: INSERT INTO ts_continuous_test_2 VALUES (1, 1);
 step I2c: COMMIT;
 step UnLockCagg2: ROLLBACK;
 step Refresh3: <... completed>
+step Refresh: <... completed>
 
 starting permutation: Sb LockCagg1 Refresh S1 Sc UnLockCagg1
 step Sb: BEGIN; SET LOCAL lock_timeout = '500ms'; SET LOCAL deadlock_timeout = '10ms';
