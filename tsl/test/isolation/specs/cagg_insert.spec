@@ -155,8 +155,8 @@ permutation "LockInvalThrEx" "Refresh" "Refresh2" (Refresh) "Refresh3" (Refresh,
 permutation "Ib" "LockCagg1" "I1" "Refresh" "Ic" "UnLockCagg1"
 permutation "Ib" "LockCagg1" "Refresh" "I1" "Ic" "UnLockCagg1"
 
-permutation "I2b" "LockCagg2" "I21" "Refresh" "Refresh3" "I2c" "UnLockCagg2"
-permutation "I2b" "LockCagg2" "Refresh3" "Refresh" "I21" "I2c" "UnLockCagg2"
+permutation "I2b" "LockCagg2" "I21" Refresh Refresh3(Refresh) "I2c" "UnLockCagg2"
+permutation "I2b" "LockCagg2" Refresh3 Refresh(*,Refresh3) "I21" "I2c" "UnLockCagg2"
 
 #refresh and select can run concurrently. Refresh blocked only by lock on
 # cagg's materialized hypertable. Needs RowExclusive for 2nd txn.
@@ -184,8 +184,8 @@ permutation "Refresh" "SV1" "LockMatInval" "Refresh1" "Ib" "I1" "LockInvalThrEx"
 permutation "I1" "Refresh" "LockInval" "Refresh" "Sb" "S1" "Sc" "UnlockInval"
 permutation "I1" "Refresh" "LockInval" "Sb" "S1" "Refresh" "Sc" "UnlockInval"
 
-permutation "I1" "I21" "Refresh1" "Refresh2" "Refresh3"
-permutation "I1" "I2b" "I21" "Refresh2" "Refresh3" "I2c" "Refresh3"
+permutation "I1" "I21" Refresh1 Refresh2(Refresh1) Refresh3(Refresh1,Refresh2)
+permutation "I1" "I2b" "I21" Refresh2 Refresh3(Refresh2) "I2c" Refresh3(Refresh2)
 
 # check for race condition creating triggers on the original hypertable by concurrent create matviews
 permutation "CreateMatView1_Begin" "CreateMatView2_Begin" "CreateMatView1_Commit" "CreateMatView2_Commit"
