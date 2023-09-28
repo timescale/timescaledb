@@ -21,11 +21,12 @@ CREATE DATABASE :TEST_DBNAME_2;
 -- Further Note: PG 9.6 changed what appeared in pg_stat_activity, so the launcher doesn't actually show up.
 -- we can still test its interactions with its children, but can't test some of the things specific to the launcher.
 -- So we've added some bits about the version number as needed.
-CREATE VIEW worker_counts as SELECT count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Launcher') as launcher,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
-FROM pg_stat_activity;
+CREATE VIEW worker_counts as
+SELECT count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Launcher') as launcher,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
+  FROM pg_stat_activity;
 CREATE FUNCTION wait_worker_counts(launcher_ct INTEGER,  scheduler1_ct INTEGER, scheduler2_ct INTEGER, template1_ct INTEGER) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -103,7 +104,7 @@ SELECT wait_worker_counts(1,0,1,0);
 -- Now let's restart the scheduler in test db 2 and make sure our backend_start changed
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 -- We'll do this in a txn so that we can see that the worker locks on our txn before continuing
 BEGIN;
@@ -122,7 +123,7 @@ SELECT wait_worker_counts(1,0,1,0);
 SELECT (backend_start > :'orig_backend_start'::timestamptz) backend_start_changed,
 (wait_event = 'virtualxid') wait_event_changed
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2';
  backend_start_changed | wait_event_changed 
 -----------------------+--------------------
@@ -138,7 +139,7 @@ SELECT wait_worker_counts(1,0,1,0);
 
 SELECT (wait_event IS DISTINCT FROM 'virtualxid') wait_event_changed
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2';
  wait_event_changed 
 --------------------
@@ -187,7 +188,7 @@ SELECT wait_worker_counts(1,0,1,0);
 -- make sure start is idempotent
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 -- Since we're doing idempotency tests, we're also going to exercise our queue and start 20 times
 SELECT _timescaledb_functions.start_background_workers() as start_background_workers, * FROM generate_series(1,20);
@@ -227,7 +228,7 @@ FOR i in 1..5
 LOOP
 SELECT (backend_start = $1::timestamptz) backend_start_unchanged
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = $2 into r;
 if(r) THEN
   PERFORM pg_sleep(0.1);
@@ -274,7 +275,7 @@ SELECT wait_worker_counts(1,0,1,0);
 -- Now let's restart the scheduler and make sure our backend_start changed
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
 BEGIN;
 DROP EXTENSION timescaledb;
@@ -294,7 +295,7 @@ FOR i in 1..10
 LOOP
 SELECT (backend_start > $1::timestamptz) backend_start_changed
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = $2 into r;
 if(NOT r) THEN
   PERFORM pg_sleep(0.1);
@@ -315,9 +316,9 @@ SELECT wait_greater(:'orig_backend_start',:'TEST_DBNAME_2');
 -- Make sure canceling the launcher backend causes a restart of schedulers
 SELECT backend_start as orig_backend_start
 FROM pg_stat_activity
-WHERE application_name = 'TimescaleDB Background Worker Scheduler'
+WHERE backend_type = 'TimescaleDB Background Worker Scheduler'
 AND datname = :'TEST_DBNAME_2' \gset
-SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
+SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE backend_type = 'TimescaleDB Background Worker Launcher';
  pg_cancel_backend 
 -------------------
  t
@@ -445,11 +446,12 @@ ALTER ROLE :ROLE_DEFAULT_PERM_USER WITH NOSUPERUSER;
 -- Further Note: PG 9.6 changed what appeared in pg_stat_activity, so the launcher doesn't actually show up.
 -- we can still test its interactions with its children, but can't test some of the things specific to the launcher.
 -- So we've added some bits about the version number as needed.
-CREATE VIEW worker_counts as SELECT count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Launcher') as launcher,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
-count(*) filter (WHERE application_name = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
-FROM pg_stat_activity;
+CREATE VIEW worker_counts as
+SELECT count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Launcher') as launcher,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME') as single_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = :'TEST_DBNAME_2') as single_2_scheduler,
+       count(*) filter (WHERE backend_type = 'TimescaleDB Background Worker Scheduler' AND datname = 'template1') as template1_scheduler
+  FROM pg_stat_activity;
 CREATE FUNCTION wait_worker_counts(launcher_ct INTEGER,  scheduler1_ct INTEGER, scheduler2_ct INTEGER, template1_ct INTEGER) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
 $BODY$
 DECLARE
@@ -602,7 +604,7 @@ SELECT _timescaledb_functions.stop_background_workers();
  t
 (1 row)
 
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = 'TimescaleDB Background Worker Launcher';
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE backend_type = 'TimescaleDB Background Worker Launcher';
  pg_terminate_backend 
 ----------------------
  t
