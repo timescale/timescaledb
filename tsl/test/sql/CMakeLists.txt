@@ -73,6 +73,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_job_stat_history_errors.sql
     bgw_job_stat_history_errors_permissions.sql
     bgw_db_scheduler_fixed.sql
+    bgw_scheduler_restart.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
     compress_bgw_reorder_drop_chunks.sql
@@ -185,6 +186,7 @@ set(SOLO_TESTS
     # log level.
     bgw_custom
     bgw_scheduler_control
+    bgw_scheduler_restart
     bgw_db_scheduler
     bgw_job_stat_history_errors_permissions
     bgw_job_stat_history_errors
