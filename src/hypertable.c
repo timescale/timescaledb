@@ -3143,6 +3143,47 @@ ts_hypertable_update_dimension_partitions(const Hypertable *ht)
 }
 
 /*
+ * hypertable status update is done in two steps, similar to
+ * chunk_update_status
+ * This is again equivalent to a SELECT FOR UPDATE, followed by UPDATE
+ * 1. RowShareLock to SELECT for UPDATE
+ * 2. UPDATE status using RowExclusiveLock
+ */
+static bool
+hypertable_update_status_osm(Hypertable *ht)
+{
+	bool success = false;
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	ScanIterator iterator = ts_scan_iterator_create(HYPERTABLE, RowShareLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_ID_INDEX);
+	iterator.ctx.tuplock = &scantuplock;
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_pkey_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(ht->fd.id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		int status;
+		bool status_isnull;
+
+		status = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_status, &status_isnull));
+		Assert(!status_isnull);
+		if (status != ht->fd.status)
+		{
+			success = ts_hypertable_update(ht); // get RowExclusiveLock and update here
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+	return success;
+}
+
+/*
  * hypertable_osm_range_update
  * 0 hypertable REGCLASS,
  * 1 range_start=NULL::bigint,
@@ -3231,7 +3272,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 		.lockmode = LockTupleExclusive,
 		.waitpolicy = LockWaitBlock,
 	};
-	// this is required for isolation
+	/* required for isolation */
 	tuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
 	if (!IsolationUsesXactSnapshot())
 	{
@@ -3264,6 +3305,9 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 					   NameStr(ht->fd.schema_name),
 					   NameStr(ht->fd.table_name)),
 				errhint("Range should be set to invalid for tiered chunk"));
+	/* take lock on hypertable, keep until end of transaction */
+	// LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
+
 	range_invalid = ts_osm_chunk_range_is_invalid(range_start_internal, range_end_internal);
 	/* Update the hypertable flags regarding the validity of the OSM range */
 	if (range_invalid)
@@ -3280,7 +3324,8 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	}
 	else
 		ht->fd.status = ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update(ht);
+
+	hypertable_update_status_osm(ht);
 	ts_cache_release(hcache);
 
 	slice->fd.range_start = range_start_internal;

@@ -1,4 +1,5 @@
-Parsed test spec with 4 sessions
+unused step name: LHTb
+Parsed test spec with 6 sessions
 
 starting permutation: LockDimSliceTuple UR1b UR1u UR2b UR2u UnlockDimSliceTuple UR1c UR2c
 step LockDimSliceTuple: 
@@ -115,3 +116,30 @@ t
 (1 row)
 
 step DTc: COMMIT;
+
+starting permutation: LockHypertableTuple Cb UR1b Cenable UR1u UnlockHypertableTuple Ccommit UR1c
+step LockHypertableTuple: 
+  SELECT table_name, compression_state, compressed_hypertable_id, status
+  FROM _timescaledb_catalog.hypertable WHERE table_name = 'osm_test' FOR UPDATE;
+
+table_name|compression_state|compressed_hypertable_id|status
+----------+-----------------+------------------------+------
+osm_test  |                0|                        |     3
+(1 row)
+
+step Cb: BEGIN;
+step UR1b: BEGIN;
+step Cenable: 
+  ALTER TABLE osm_test set (timescaledb.compress);
+
+step UR1u: SELECT _timescaledb_functions.hypertable_osm_range_update('osm_test', 0, 10); <waiting ...>
+LHT: WARNING:  there is no transaction in progress
+step UnlockHypertableTuple: ROLLBACK;
+step Ccommit: COMMIT;
+step UR1u: <... completed>
+hypertable_osm_range_update
+---------------------------
+f                          
+(1 row)
+
+step UR1c: COMMIT;

@@ -54,6 +54,21 @@ step "DropOsmChunk" {
 }
 step "DTc" { COMMIT; }
 
+session "LHT"
+step "LHTb" { BEGIN; }
+step "LockHypertableTuple" {
+  SELECT table_name, compression_state, compressed_hypertable_id, status
+  FROM _timescaledb_catalog.hypertable WHERE table_name = 'osm_test' FOR UPDATE;
+}
+step "UnlockHypertableTuple" { ROLLBACK; }
+
+session "C"
+step "Cb" { BEGIN; }
+step "Cenable" {
+  ALTER TABLE osm_test set (timescaledb.compress);
+}
+step "Ccommit" { COMMIT; }
+
 # Concurrent updates will block one another
 # this previously deadlocked one of the two transactions
 permutation "LockDimSliceTuple" "UR1b" "UR1u" "UR2b" "UR2u" "UnlockDimSliceTuple" "UR1c" "UR2c"
@@ -64,3 +79,5 @@ permutation "LockDimSliceTuple" "UR1b" "UR1u" "UR2b" "UR2u" "UnlockDimSliceTuple
 # the future.
 permutation "LockDimSliceTuple" "DTb" "UR1b" "DropOsmChunk" "UR1u" "UnlockDimSliceTuple" "DTc" "UR1c"
 permutation "LockDimSliceTuple" "DTb" "UR1b" "UR1u" "DropOsmChunk" "UnlockDimSliceTuple" "UR1c" "DTc"
+# one session enables compression -> thus changing the hypertable status
+permutation "LockHypertableTuple" "Cb" "UR1b" "Cenable" "UR1u" "UnlockHypertableTuple" "Ccommit" "UR1c"
