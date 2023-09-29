@@ -972,7 +972,19 @@ SELECT count(*) = 0
 (1 row)
 
 -- cleanup
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
 DROP TABLE sensor_data;
+SELECT _timescaledb_functions.restart_background_workers();
+ restart_background_workers 
+----------------------------
+ t
+(1 row)
+
 -- Github issue #5537
 -- Proc that waits until the given job enters the expected state
 CREATE OR REPLACE PROCEDURE wait_for_job_status(job_param_id INTEGER, expected_status TEXT, spins INTEGER=:TEST_SPINWAIT_ITERS)
