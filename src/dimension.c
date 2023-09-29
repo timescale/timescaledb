@@ -23,6 +23,7 @@
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "error_utils.h"
 #include "hypertable.h"
 #include "indexing.h"
 #include "hypertable_cache.h"
@@ -1808,7 +1809,9 @@ Datum
 ts_hash_dimension(PG_FUNCTION_ARGS)
 {
 	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
-	DimensionInfo *info = make_dimension_info(PG_GETARG_NAME(0), DIMENSION_TYPE_CLOSED);
+	Name column_name;
+	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
+	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_CLOSED);
 	info->num_slices = PG_ARGISNULL(1) ? DatumGetInt32(-1) : PG_GETARG_INT32(1);
 	info->num_slices_is_set = !PG_ARGISNULL(1);
 	info->partitioning_func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
@@ -1825,7 +1828,9 @@ Datum
 ts_range_dimension(PG_FUNCTION_ARGS)
 {
 	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
-	DimensionInfo *info = make_dimension_info(PG_GETARG_NAME(0), DIMENSION_TYPE_OPEN);
+	Name column_name;
+	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
+	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_OPEN);
 	info->interval_datum = PG_ARGISNULL(1) ? Int32GetDatum(-1) : PG_GETARG_DATUM(1);
 	info->interval_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	info->partitioning_func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);

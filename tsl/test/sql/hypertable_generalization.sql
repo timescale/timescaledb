@@ -22,6 +22,8 @@ SELECT by_hash('id', 3, partition_func => 'part_func');
 
 \set ON_ERROR_STOP 0
 SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
+SELECT by_range(NULL::name);
+SELECT by_hash(NULL::name, 3);
 \set ON_ERROR_STOP 1
 
 -- Validate generalized hypertable for smallint

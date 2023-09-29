@@ -50,6 +50,10 @@ SELECT by_hash('id', 3, partition_func => 'part_func');
 \set ON_ERROR_STOP 0
 SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
 ERROR:  cannot construct type "dimension_info" from string at character 8
+SELECT by_range(NULL::name);
+ERROR:  column_name cannot be NULL
+SELECT by_hash(NULL::name, 3);
+ERROR:  column_name cannot be NULL
 \set ON_ERROR_STOP 1
 -- Validate generalized hypertable for smallint
 CREATE TABLE test_table_smallint(id SMALLINT, device INTEGER, time TIMESTAMPTZ);
