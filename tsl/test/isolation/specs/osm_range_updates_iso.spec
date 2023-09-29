@@ -4,7 +4,7 @@
 
 setup
 {
-	CREATE TABLE osm_test (time INTEGER, a INTEGER);
+  CREATE TABLE osm_test (time INTEGER, a INTEGER);
   SELECT create_hypertable('osm_test', 'time', chunk_time_interval => 10);
   INSERT INTO osm_test VALUES (1, 111);
   UPDATE _timescaledb_catalog.hypertable set status = 3 WHERE table_name = 'osm_test';
