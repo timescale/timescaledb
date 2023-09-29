@@ -629,7 +629,9 @@ SELECT count(*) = 0
   WHERE hypertable_name = 'sensor_data' AND NOT is_compressed;
 
 -- cleanup
+SELECT _timescaledb_functions.stop_background_workers();
 DROP TABLE sensor_data;
+SELECT _timescaledb_functions.restart_background_workers();
 
 -- Github issue #5537
 -- Proc that waits until the given job enters the expected state
