@@ -13,6 +13,13 @@ BEGIN
 END
 $BODY$;
 
+-- test null handling
+\set ON_ERROR_STOP 0
+CREATE TABLE n();
+SELECT create_hypertable('n',NULL::_timescaledb_internal.dimension_info);
+SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
+\set ON_ERROR_STOP 1
+
 SELECT by_range('id');
 SELECT by_range('id', partition_func => 'part_func');
 SELECT by_range('id', '1 week'::interval);

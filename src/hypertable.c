@@ -67,6 +67,7 @@
 #include "scan_iterator.h"
 #include "debug_assert.h"
 #include "osm_callbacks.h"
+#include "error_utils.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -2135,7 +2136,8 @@ Datum
 ts_hypertable_create_general(PG_FUNCTION_ARGS)
 {
 	Oid table_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	DimensionInfo *dim_info = (DimensionInfo *) PG_GETARG_POINTER(1);
+	DimensionInfo *dim_info = NULL;
+	GETARG_NOTNULL_POINTER(dim_info, 1, "dimension", DimensionInfo);
 	bool create_default_indexes = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool if_not_exists = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	bool migrate_data = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
