@@ -11,6 +11,14 @@ BEGIN
 	RETURN retval;
 END
 $BODY$;
+-- test null handling
+\set ON_ERROR_STOP 0
+CREATE TABLE n();
+SELECT create_hypertable('n',NULL::_timescaledb_internal.dimension_info);
+ERROR:  dimension cannot be NULL
+SELECT add_dimension('n',NULL::_timescaledb_internal.dimension_info);
+ERROR:  dimension cannot be NULL
+\set ON_ERROR_STOP 1
 SELECT by_range('id');
     by_range     
 -----------------

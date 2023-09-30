@@ -31,6 +31,7 @@
 #include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
+#include "error_utils.h"
 #include "debug_point.h"
 
 /* add_dimension record attribute numbers */
@@ -1835,7 +1836,8 @@ ts_range_dimension(PG_FUNCTION_ARGS)
 Datum
 ts_dimension_add_general(PG_FUNCTION_ARGS)
 {
-	DimensionInfo *info = (DimensionInfo *) PG_GETARG_POINTER(1);
+	DimensionInfo *info = NULL;
+	GETARG_NOTNULL_POINTER(info, 1, "dimension", DimensionInfo);
 	info->table_relid = PG_GETARG_OID(0);
 	if (PG_GETARG_BOOL(2))
 		info->if_not_exists = true;

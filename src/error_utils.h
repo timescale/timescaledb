@@ -15,6 +15,15 @@
 					 errmsg("%s cannot be NULL", name)));                                          \
 	}
 
+#define GETARG_NOTNULL_POINTER(var, arg, name, type)                                               \
+	{                                                                                              \
+		if (PG_ARGISNULL(arg))                                                                     \
+			ereport(ERROR,                                                                         \
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),                                     \
+					 errmsg("%s cannot be NULL", name)));                                          \
+		var = (type *) PG_GETARG_POINTER(arg);                                                     \
+	}
+
 #define GETARG_NOTNULL_NULLABLE(var, arg, name, type)                                              \
 	{                                                                                              \
 		if (PG_ARGISNULL(arg))                                                                     \
