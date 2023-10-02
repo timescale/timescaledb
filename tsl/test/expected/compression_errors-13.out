@@ -584,12 +584,12 @@ SELECT 1 FROM test GROUP BY enum_col;
         1
 (2 rows)
 
-EXPLAIN SELECT DISTINCT 1 FROM test;
-                                    QUERY PLAN                                    
-----------------------------------------------------------------------------------
- Unique  (cost=0.00..50.80 rows=1 width=4)
-   ->  Result  (cost=0.00..50.80 rows=2040 width=4)
-         ->  Seq Scan on _hyper_31_19_chunk  (cost=0.00..30.40 rows=2040 width=0)
+EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT DISTINCT 1 FROM test;
+                 QUERY PLAN                 
+--------------------------------------------
+ Unique
+   ->  Result
+         ->  Seq Scan on _hyper_31_19_chunk
 (3 rows)
 
 --compress chunks
@@ -608,13 +608,13 @@ SELECT 1 FROM test GROUP BY enum_col;
         1
 (2 rows)
 
-EXPLAIN SELECT DISTINCT 1 FROM test;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
- Unique  (cost=0.51..21.02 rows=1 width=4)
-   ->  Result  (cost=0.51..21.02 rows=2000 width=4)
-         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk  (cost=0.51..1.02 rows=2000 width=0)
-               ->  Seq Scan on compress_hyper_32_20_chunk  (cost=0.00..1.02 rows=2 width=4)
+EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT DISTINCT 1 FROM test;
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Unique
+   ->  Result
+         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk
+               ->  Seq Scan on compress_hyper_32_20_chunk
 (4 rows)
 
 --github issue 4398

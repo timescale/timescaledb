@@ -802,7 +802,8 @@ SELECT m1.location, m1.timec, sumt, sumh, firsth, lasth, maxtemp, mintemp
 FROM mat_m1 m1 RIGHT JOIN mat_m2 m2
 ON (m1.location = m2.location
 AND m1.timec = m2.timec)
-ORDER BY m1.location COLLATE "C" NULLS LAST, m1.timec DESC NULLS LAST, firsth NULLS LAST
+ORDER BY m1.location COLLATE "C" NULLS LAST, m1.timec DESC NULLS LAST, firsth NULLS LAST,
+         lasth NULLS LAST, mintemp NULLS LAST, maxtemp NULLS LAST
 LIMIT 10;
  location |            timec             | sumt | sumh | firsth | lasth | maxtemp | mintemp 
 ----------+------------------------------+------+------+--------+-------+---------+---------
@@ -812,8 +813,8 @@ LIMIT 10;
  por      | Mon Jan 01 16:00:00 2018 PST |  100 |  100 |    100 |   100 |     100 |     100
           |                              |      |      |     10 |       |      20 |      10
           |                              |      |      |     30 |    50 |      85 |      45
-          |                              |      |      |     45 |    45 |      65 |      55
           |                              |      |      |     45 |    30 |      65 |      45
+          |                              |      |      |     45 |    45 |      65 |      55
           |                              |      |      |        |       |         |        
 (9 rows)
 

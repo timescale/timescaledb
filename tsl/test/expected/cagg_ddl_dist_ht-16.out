@@ -1,7 +1,44 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set IS_DISTRIBUTED FALSE
+------------------------------------
+-- Set up a distributed environment
+------------------------------------
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+\ir include/remote_exec.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+CREATE SCHEMA IF NOT EXISTS test;
+psql:include/remote_exec.sql:5: NOTICE:  schema "test" already exists, skipping
+GRANT USAGE ON SCHEMA test TO PUBLIC;
+CREATE OR REPLACE FUNCTION test.remote_exec(srv_name name[], command text)
+RETURNS VOID
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec'
+LANGUAGE C;
+CREATE OR REPLACE FUNCTION test.remote_exec_get_result_strings(srv_name name[], command text)
+RETURNS TABLE("table_record" CSTRING[])
+AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
+LANGUAGE C;
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+       node_name       |       database        | node_created | database_created | extension_created 
+-----------------------+-----------------------+--------------+------------------+-------------------
+ db_cagg_ddl_dist_ht_1 | db_cagg_ddl_dist_ht_1 | t            | t                | t
+ db_cagg_ddl_dist_ht_2 | db_cagg_ddl_dist_ht_2 | t            | t                | t
+ db_cagg_ddl_dist_ht_3 | db_cagg_ddl_dist_ht_3 | t            | t                | t
+(3 rows)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
+-- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
+GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
+\set IS_DISTRIBUTED TRUE
 \ir include/cagg_ddl_common.sql
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -11,9 +48,9 @@
 \set QUERY_RESULT_TEST_EQUAL_RELPATH '../../../../test/sql/include/query_result_test_equal.sql'
 \if :IS_DISTRIBUTED
 \echo 'Running distributed hypertable tests'
+Running distributed hypertable tests
 \else
 \echo 'Running local hypertable tests'
-Running local hypertable tests
 \endif
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 --DDL commands on continuous aggregates
@@ -27,13 +64,13 @@ CREATE TABLE conditions (
 );
 \if :IS_DISTRIBUTED
 SELECT table_name FROM create_distributed_hypertable('conditions', 'timec', replication_factor => 2);
-\else
-SELECT table_name FROM create_hypertable('conditions', 'timec');
  table_name 
 ------------
  conditions
 (1 row)
 
+\else
+SELECT table_name FROM create_hypertable('conditions', 'timec');
 \endif
 -- schema tests
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
@@ -45,13 +82,13 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE foo(time TIMESTAMPTZ NOT NULL, data INTEGER);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('foo', 'time', replication_factor => 2);
-\else
-SELECT create_hypertable('foo', 'time');
- create_hypertable 
--------------------
+ create_distributed_hypertable 
+-------------------------------
  (2,public,foo,t)
 (1 row)
 
+\else
+SELECT create_hypertable('foo', 'time');
 \endif
 CREATE MATERIALIZED VIEW rename_test
   WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
@@ -478,13 +515,13 @@ psql:include/cagg_ddl_common.sql:326: ERROR:  hypertable is a continuous aggrega
 CREATE TABLE metrics(time timestamptz NOT NULL, device_id int, v1 float, v2 float);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('metrics', 'time', replication_factor => 2);
-\else
-SELECT create_hypertable('metrics','time');
-  create_hypertable   
-----------------------
+ create_distributed_hypertable 
+-------------------------------
  (8,public,metrics,t)
 (1 row)
 
+\else
+SELECT create_hypertable('metrics','time');
 \endif
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
 -- check expressions in view definition
@@ -550,9 +587,9 @@ AS SELECT time_bucket('5', time), max(data)
 INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 20) AS i;
 --dropping chunks will process the invalidations
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_10_13_chunk
+                  drop_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_10_13_chunk
 (1 row)
 
 SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
@@ -574,11 +611,11 @@ INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(35, 39) AS i;
 SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table';
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_10_14_chunk |                  10 |                20
- _hyper_10_15_chunk |                  20 |                30
- _hyper_10_16_chunk |                  30 |                40
+       chunk_name        | range_start_integer | range_end_integer 
+-------------------------+---------------------+-------------------
+ _dist_hyper_10_14_chunk |                  10 |                20
+ _dist_hyper_10_15_chunk |                  20 |                30
+ _dist_hyper_10_16_chunk |                  30 |                40
 (3 rows)
 
 --the invalidation on 25 not yet seen
@@ -596,10 +633,10 @@ SELECT * FROM drop_chunks_view ORDER BY time_bucket DESC;
 --refresh to process the invalidations and then drop
 CALL refresh_continuous_aggregate('drop_chunks_view', NULL, (integer_now_test2()-9));
 SELECT drop_chunks('drop_chunks_table', older_than => (integer_now_test2()-9));
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_10_14_chunk
- _timescaledb_internal._hyper_10_15_chunk
+                  drop_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_10_14_chunk
+ _timescaledb_internal._dist_hyper_10_15_chunk
 (2 rows)
 
 --new values on 25 now seen in view
@@ -623,11 +660,11 @@ SELECT * FROM drop_chunks_table ORDER BY time ASC limit 1;
 
 --we see the chunks row with the dropped flags set;
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk where dropped;
- id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk 
-----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------
- 13 |            10 | _timescaledb_internal | _hyper_10_13_chunk |                     | t       |      0 | f
- 14 |            10 | _timescaledb_internal | _hyper_10_14_chunk |                     | t       |      0 | f
- 15 |            10 | _timescaledb_internal | _hyper_10_15_chunk |                     | t       |      0 | f
+ id | hypertable_id |      schema_name      |       table_name        | compressed_chunk_id | dropped | status | osm_chunk 
+----+---------------+-----------------------+-------------------------+---------------------+---------+--------+-----------
+ 13 |            10 | _timescaledb_internal | _dist_hyper_10_13_chunk |                     | t       |      0 | f
+ 14 |            10 | _timescaledb_internal | _dist_hyper_10_14_chunk |                     | t       |      0 | f
+ 15 |            10 | _timescaledb_internal | _dist_hyper_10_15_chunk |                     | t       |      0 | f
 (3 rows)
 
 --still see data in the view
@@ -680,12 +717,12 @@ SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY range_start_integer;
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_10_13_chunk |                   0 |                10
- _hyper_10_14_chunk |                  10 |                20
- _hyper_10_15_chunk |                  20 |                30
- _hyper_10_16_chunk |                  30 |                40
+       chunk_name        | range_start_integer | range_end_integer 
+-------------------------+---------------------+-------------------
+ _dist_hyper_10_13_chunk |                   0 |                10
+ _dist_hyper_10_14_chunk |                  10 |                20
+ _dist_hyper_10_15_chunk |                  20 |                30
+ _dist_hyper_10_16_chunk |                  30 |                40
 (4 rows)
 
 --We dropped everything up to the bucket starting at 30 and then
@@ -748,14 +785,14 @@ SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY 2,3;
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_10_13_chunk |                   0 |                10
- _hyper_10_14_chunk |                  10 |                20
- _hyper_10_15_chunk |                  20 |                30
- _hyper_10_16_chunk |                  30 |                40
- _hyper_10_18_chunk |                  40 |                50
- _hyper_10_19_chunk |                  50 |                60
+       chunk_name        | range_start_integer | range_end_integer 
+-------------------------+---------------------+-------------------
+ _dist_hyper_10_13_chunk |                   0 |                10
+ _dist_hyper_10_14_chunk |                  10 |                20
+ _dist_hyper_10_15_chunk |                  20 |                30
+ _dist_hyper_10_16_chunk |                  30 |                40
+ _dist_hyper_10_18_chunk |                  40 |                50
+ _dist_hyper_10_19_chunk |                  50 |                60
 (6 rows)
 
 -- Pick the second chunk as the one to drop
@@ -804,9 +841,11 @@ ORDER BY 1;
           10 |  14
           15 |  19
           20 |  20
+          30 | 200
+          35 |  39
           45 | 500
           50 | 500
-(7 rows)
+(9 rows)
 
 -- Drop the second chunk, to leave a gap in the data
 \if :IS_DISTRIBUTED
@@ -820,13 +859,13 @@ SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY 2,3;
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_10_13_chunk |                   0 |                10
- _hyper_10_15_chunk |                  20 |                30
- _hyper_10_16_chunk |                  30 |                40
- _hyper_10_18_chunk |                  40 |                50
- _hyper_10_19_chunk |                  50 |                60
+       chunk_name        | range_start_integer | range_end_integer 
+-------------------------+---------------------+-------------------
+ _dist_hyper_10_13_chunk |                   0 |                10
+ _dist_hyper_10_15_chunk |                  20 |                30
+ _dist_hyper_10_16_chunk |                  30 |                40
+ _dist_hyper_10_18_chunk |                  40 |                50
+ _dist_hyper_10_19_chunk |                  50 |                60
 (5 rows)
 
 -- Data is no longer in the table but still in the view
@@ -853,10 +892,10 @@ INSERT INTO drop_chunks_table VALUES (:range_start_integer-1, 100);
 -- Now refresh and drop the two adjecent chunks
 CALL refresh_continuous_aggregate('drop_chunks_view', NULL, 30);
 SELECT drop_chunks('drop_chunks_table', older_than=>30);
-               drop_chunks                
-------------------------------------------
- _timescaledb_internal._hyper_10_13_chunk
- _timescaledb_internal._hyper_10_15_chunk
+                  drop_chunks                  
+-----------------------------------------------
+ _timescaledb_internal._dist_hyper_10_13_chunk
+ _timescaledb_internal._dist_hyper_10_15_chunk
 (2 rows)
 
 -- Verify that the chunks are dropped
@@ -864,11 +903,11 @@ SELECT chunk_name, range_start_integer, range_end_integer
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'drop_chunks_table'
 ORDER BY 2,3;
-     chunk_name     | range_start_integer | range_end_integer 
---------------------+---------------------+-------------------
- _hyper_10_16_chunk |                  30 |                40
- _hyper_10_18_chunk |                  40 |                50
- _hyper_10_19_chunk |                  50 |                60
+       chunk_name        | range_start_integer | range_end_integer 
+-------------------------+---------------------+-------------------
+ _dist_hyper_10_16_chunk |                  30 |                40
+ _dist_hyper_10_18_chunk |                  40 |                50
+ _dist_hyper_10_19_chunk |                  50 |                60
 (3 rows)
 
 -- The continuous aggregate should be refreshed in the regions covered
@@ -881,9 +920,11 @@ ORDER BY 1;
            0 |   4
            5 | 100
           20 |  20
+          30 | 200
+          35 |  39
           45 | 500
           50 | 500
-(5 rows)
+(7 rows)
 
 -- Now refresh in the region of the first two dropped chunks
 CALL refresh_continuous_aggregate('drop_chunks_view', 0, :range_end_integer);
@@ -894,9 +935,11 @@ ORDER BY 1;
  time_bucket | max 
 -------------+-----
           20 |  20
+          30 | 200
+          35 |  39
           45 | 500
           50 | 500
-(3 rows)
+(5 rows)
 
 --------------------------------------------------------------------
 -- Check that we can create a materialized table in a tablespace. We
@@ -1016,19 +1059,19 @@ FROM (
   VALUES ('int2'),
     ('int4'),
     ('int8')) v (dt);
+ create_distributed_hypertable 
+-------------------------------
+ (15,public,metrics_int2,t)
+ (16,public,metrics_int4,t)
+ (17,public,metrics_int8,t)
+(3 rows)
+
 \else
 SELECT create_hypertable (('metrics_' || dt)::regclass, 'time', chunk_time_interval => 10)
 FROM (
   VALUES ('int2'),
     ('int4'),
     ('int8')) v (dt);
-     create_hypertable      
-----------------------------
- (15,public,metrics_int2,t)
- (16,public,metrics_int4,t)
- (17,public,metrics_int8,t)
-(3 rows)
-
 \endif
 CREATE OR REPLACE FUNCTION int2_now ()
   RETURNS int2
@@ -1178,7 +1221,7 @@ tablespace         |
 -- we test that the normal checks are done when changing the owner.
 \set ON_ERROR_STOP 0
 ALTER MATERIALIZED VIEW owner_check OWNER TO :ROLE_1;
-psql:include/cagg_ddl_common.sql:826: ERROR:  must be member of role "test_role_1"
+psql:include/cagg_ddl_common.sql:826: ERROR:  must be able to SET ROLE "test_role_1"
 \set ON_ERROR_STOP 1
 -- Superuser can always change owner
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
@@ -1219,13 +1262,13 @@ $DIST$);
 CREATE TABLE conditionsnm(time_int INT NOT NULL, device INT, value FLOAT);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10, replication_factor => 2);
-\else
-SELECT create_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10);
-     create_hypertable      
-----------------------------
+ create_distributed_hypertable 
+-------------------------------
  (25,public,conditionsnm,t)
 (1 row)
 
+\else
+SELECT create_hypertable('conditionsnm', 'time_int', chunk_time_interval => 10);
 \endif
 SELECT set_integer_now_func('conditionsnm', 'test_int_now');
  set_integer_now_func 
@@ -1284,13 +1327,13 @@ CREATE TABLE test_schema.telemetry_raw (
 );
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_schema.telemetry_raw', 'ts', replication_factor => 2);
-\else
-SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
-        create_hypertable         
+  create_distributed_hypertable   
 ----------------------------------
  (29,test_schema,telemetry_raw,t)
 (1 row)
 
+\else
+SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
 \endif
 CREATE MATERIALIZED VIEW test_schema.telemetry_1s
   WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -1347,13 +1390,13 @@ CREATE TABLE test_schema.telemetry_raw (
 );
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_schema.telemetry_raw', 'ts', replication_factor => 2);
-\else
-SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
-        create_hypertable         
+  create_distributed_hypertable   
 ----------------------------------
  (31,test_schema,telemetry_raw,t)
 (1 row)
 
+\else
+SELECT create_hypertable('test_schema.telemetry_raw', 'ts');
 \endif
 CREATE MATERIALIZED VIEW test_schema.cagg1
   WITH (timescaledb.continuous, timescaledb.materialized_only=false)
@@ -1452,13 +1495,13 @@ CREATE TABLE conditions (
 );
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-\else
-SELECT create_hypertable('conditions', 'time');
-    create_hypertable     
---------------------------
+ create_distributed_hypertable 
+-------------------------------
  (34,public,conditions,t)
 (1 row)
 
+\else
+SELECT create_hypertable('conditions', 'time');
 \endif
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
 INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
@@ -1596,13 +1639,13 @@ SELECT * FROM test.show_indexespred(:'MAT_TABLE_NAME');
 CREATE TABLE i3696(time timestamptz NOT NULL, search_query text, cnt integer, cnt2 integer);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('i3696', 'time', replication_factor => 2);
-\else
-SELECT table_name FROM create_hypertable('i3696','time');
- table_name 
-------------
- i3696
+ create_distributed_hypertable 
+-------------------------------
+ (36,public,i3696,t)
 (1 row)
 
+\else
+SELECT table_name FROM create_hypertable('i3696','time');
 \endif
 CREATE MATERIALIZED VIEW i3696_cagg1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
@@ -1622,13 +1665,13 @@ ALTER MATERIALIZED VIEW i3696_cagg2 SET (timescaledb.materialized_only = 'true')
 CREATE TABLE test_setting(time timestamptz not null, val numeric);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('test_setting', 'time', replication_factor => 2);
-\else
-SELECT create_hypertable('test_setting', 'time');
-     create_hypertable      
-----------------------------
+ create_distributed_hypertable 
+-------------------------------
  (39,public,test_setting,t)
 (1 row)
 
+\else
+SELECT create_hypertable('test_setting', 'time');
 \endif
 CREATE MATERIALIZED VIEW test_setting_cagg with (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT time_bucket('1h',time), avg(val), count(*) FROM test_setting GROUP BY 1;
@@ -1812,13 +1855,13 @@ CREATE TABLE transactions
 );
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('transactions', 'time', replication_factor => 2);
-\else
-SELECT create_hypertable('transactions', 'time');
-     create_hypertable      
-----------------------------
+ create_distributed_hypertable 
+-------------------------------
  (46,public,transactions,t)
 (1 row)
 
+\else
+SELECT create_hypertable('transactions', 'time');
 \endif
 INSERT INTO transactions VALUES ( '2018-01-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
 INSERT INTO transactions VALUES ( '2018-01-02 09:30:00-08', 0, 0, 0, 0, 0, -1, 10);
@@ -1868,15 +1911,15 @@ WHERE user_view_name = 'cashflows'
  cashflow  | bigint                   |           |          |         | plain   | 
  cashflow2 | bigint                   |           |          |         | plain   | 
 View definition:
- SELECT time_bucket('@ 1 day'::interval, transactions."time") AS bucket,
-    transactions.amount,
+ SELECT time_bucket('@ 1 day'::interval, "time") AS bucket,
+    amount,
         CASE
-            WHEN transactions.amount < 0 THEN 0 - sum(transactions.fiat_value)
-            ELSE sum(transactions.fiat_value)
+            WHEN amount < 0 THEN 0 - sum(fiat_value)
+            ELSE sum(fiat_value)
         END AS cashflow,
-    transactions.amount + sum(transactions.fiat_value) AS cashflow2
+    amount + sum(fiat_value) AS cashflow2
    FROM transactions
-  GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount;
+  GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"PART_VIEW_NAME"
                          View "_timescaledb_internal._partial_view_47"
@@ -1887,15 +1930,15 @@ View definition:
  cashflow  | bigint                   |           |          |         | plain   | 
  cashflow2 | bigint                   |           |          |         | plain   | 
 View definition:
- SELECT time_bucket('@ 1 day'::interval, transactions."time") AS bucket,
-    transactions.amount,
+ SELECT time_bucket('@ 1 day'::interval, "time") AS bucket,
+    amount,
         CASE
-            WHEN transactions.amount < 0 THEN 0 - sum(transactions.fiat_value)
-            ELSE sum(transactions.fiat_value)
+            WHEN amount < 0 THEN 0 - sum(fiat_value)
+            ELSE sum(fiat_value)
         END AS cashflow,
-    transactions.amount + sum(transactions.fiat_value) AS cashflow2
+    amount + sum(fiat_value) AS cashflow2
    FROM transactions
-  GROUP BY (time_bucket('@ 1 day'::interval, transactions."time")), transactions.amount;
+  GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
                           Table "_timescaledb_internal._materialized_hypertable_47"
@@ -1922,10 +1965,10 @@ Child tables: _timescaledb_internal._hyper_47_52_chunk,
  cashflow  | bigint                   |           |          |         | plain   | 
  cashflow2 | bigint                   |           |          |         | plain   | 
 View definition:
- SELECT _materialized_hypertable_47.bucket,
-    _materialized_hypertable_47.amount,
-    _materialized_hypertable_47.cashflow,
-    _materialized_hypertable_47.cashflow2
+ SELECT bucket,
+    amount,
+    cashflow,
+    cashflow2
    FROM _timescaledb_internal._materialized_hypertable_47;
 
 SELECT * FROM cashflows;
@@ -2050,13 +2093,13 @@ CREATE TABLE conditions (
 );
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-\else
-SELECT create_hypertable('conditions', 'time');
-    create_hypertable     
---------------------------
+ create_distributed_hypertable 
+-------------------------------
  (54,public,conditions,t)
 (1 row)
 
+\else
+SELECT create_hypertable('conditions', 'time');
 \endif
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
 INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
@@ -2085,9 +2128,9 @@ WITH NO DATA;
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_55.location,
-    _materialized_hypertable_55.bucket,
-    _materialized_hypertable_55.avg
+ SELECT location,
+    bucket,
+    avg
    FROM _timescaledb_internal._materialized_hypertable_55;
 
 -- Should return NO ROWS
@@ -2123,8 +2166,8 @@ SELECT * FROM conditions_daily ORDER BY bucket, avg;
  location |            bucket            | avg 
 ----------+------------------------------+-----
  SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  NYC      | Mon Jan 01 16:00:00 2018 PST |  65
+ SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  por      | Mon Jan 01 16:00:00 2018 PST | 100
  NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
  NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
@@ -2140,9 +2183,9 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=true
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_55.location,
-    _materialized_hypertable_55.bucket,
-    _materialized_hypertable_55.avg
+ SELECT location,
+    bucket,
+    avg
    FROM _timescaledb_internal._materialized_hypertable_55;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
@@ -2157,3 +2200,8 @@ SELECT * FROM conditions_daily ORDER BY bucket, avg;
  NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
 (6 rows)
 
+-- cleanup
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
+DROP DATABASE :DATA_NODE_3 WITH (FORCE);

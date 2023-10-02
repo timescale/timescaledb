@@ -192,7 +192,7 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 #if PG16_LT
 			Bitmapset *updatedCols = rte->updatedCols;
 #else
-			Bitmapset *updatedCols;
+			Bitmapset *updatedCols = NULL;
 			if (rte->perminfoindex > 0)
 			{
 				RTEPermissionInfo *perminfo = getRTEPermissionInfo(root->parse->rteperminfos, rte);
