@@ -3305,8 +3305,6 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 					   NameStr(ht->fd.schema_name),
 					   NameStr(ht->fd.table_name)),
 				errhint("Range should be set to invalid for tiered chunk"));
-	/* take lock on hypertable, keep until end of transaction */
-	// LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 
 	range_invalid = ts_osm_chunk_range_is_invalid(range_start_internal, range_end_internal);
 	/* Update the hypertable flags regarding the validity of the OSM range */

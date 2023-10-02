@@ -69,6 +69,11 @@ step "Cenable" {
 }
 step "Ccommit" { COMMIT; }
 
+session "AlterSchema"
+step "Ab" { BEGIN; }
+step "Aadd" { ALTER TABLE osm_test ADD COLUMN b INTEGER; }
+step "Ac" { COMMIT; }
+
 # Concurrent updates will block one another
 # this previously deadlocked one of the two transactions
 permutation "LockDimSliceTuple" "UR1b" "UR1u" "UR2b" "UR2u" "UnlockDimSliceTuple" "UR1c" "UR2c"
@@ -81,3 +86,8 @@ permutation "LockDimSliceTuple" "DTb" "UR1b" "DropOsmChunk" "UR1u" "UnlockDimSli
 permutation "LockDimSliceTuple" "DTb" "UR1b" "UR1u" "DropOsmChunk" "UnlockDimSliceTuple" "UR1c" "DTc"
 # one session enables compression -> thus changing the hypertable status
 permutation "LockHypertableTuple" "Cb" "UR1b" "Cenable" "UR1u" "UnlockHypertableTuple" "Ccommit" "UR1c"
+
+# schema changes to the table would propagate to the OSM chunk
+# one session updates the range while the other updates the schema
+permutation "Ab" "UR1b" "UR1u" "Aadd" "UR1c" "Ac"
+permutation "Ab" "UR1b" "Aadd" "UR1u" "UR1c" "Ac"
