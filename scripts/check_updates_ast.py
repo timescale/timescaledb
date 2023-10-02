@@ -16,7 +16,7 @@ class SQLVisitor(Visitor):
         super().__init__()
 
     # ALTER TABLE _timescaledb_catalog.<tablename> ADD/DROP COLUMN
-    def visit_AlterTableStmt(self, ancestors, node):
+    def visit_AlterTableStmt(self, ancestors, node):  # pylint: disable=unused-argument
         if (
             "schemaname" in node.relation
             and node.relation.schemaname in self.catalog_schemata
@@ -41,7 +41,7 @@ class SQLVisitor(Visitor):
                         )
 
     # ALTER TABLE _timescaledb_catalog.<tablename> RENAME TO
-    def visit_RenameStmt(self, ancestors, node):
+    def visit_RenameStmt(self, ancestors, node):  # pylint: disable=unused-argument
         if (
             node.renameType == enums.ObjectType.OBJECT_TABLE
             and node.relation.schemaname in self.catalog_schemata
@@ -52,7 +52,7 @@ class SQLVisitor(Visitor):
             )
 
     # CREATE TEMP | TEMPORARY TABLE ..
-    def visit_CreateStmt(self, ancestors, node):
+    def visit_CreateStmt(self, ancestors, node):  # pylint: disable=unused-argument
         if node.relation.relpersistence == "t":
             self.errors += 1
             schema = (
@@ -65,7 +65,9 @@ class SQLVisitor(Visitor):
             )
 
     # CREATE FUNCTION / PROCEDURE _timescaledb_internal...
-    def visit_CreateFunctionStmt(self, ancestors, node):
+    def visit_CreateFunctionStmt(
+        self, ancestors, node
+    ):  # pylint: disable=unused-argument
         if len(node.funcname) == 2 and node.funcname[0].sval == "_timescaledb_internal":
             self.errors += 1
             functype = "procedure" if node.is_procedure else "function"
