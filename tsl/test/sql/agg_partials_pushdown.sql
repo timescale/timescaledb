@@ -86,7 +86,7 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t DESC NULLS LAST limit 2;
 
 -- Force parallel query
-SET force_parallel_mode = 'on';
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 

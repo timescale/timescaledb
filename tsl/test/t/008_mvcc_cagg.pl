@@ -92,7 +92,7 @@ for (my $iteration = 0; $iteration < 10; $iteration++)
 	{
 		# Encourage the use of parallel workers
 		my $sql = q{
-           SET force_parallel_mode = 1;
+           SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
            SET enable_bitmapscan = 0;
            SET parallel_setup_cost = 0;
            SET parallel_tuple_cost = 0;

@@ -20,7 +20,7 @@ ALTER TABLE :CHUNK1 SET (parallel_workers=2);
 ALTER TABLE :CHUNK2 SET (parallel_workers=2);
 
 SET work_mem TO '50MB';
-SET force_parallel_mode = 'on';
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost TO 0;
 
@@ -126,7 +126,7 @@ RESET parallel_leader_participation;
 
 -- Ensure the same query result is produced by a sequencial query
 SET max_parallel_workers_per_gather TO 0;
-SET force_parallel_mode = 'off';
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
 SELECT * FROM sensor_data AS s1 JOIN sensor_data AS s2 ON (TRUE) WHERE s1.time > '2020-01-01 00:00:30'::text::timestamptz AND s2.time > '2020-01-01 00:00:30' AND s2.time < '2021-01-01 00:00:30' AND s1.sensor_id > 50 ORDER BY s2.time, s1.time, s1.sensor_id, s2.sensor_id;
 
 RESET enable_material;
@@ -135,7 +135,7 @@ RESET min_parallel_index_scan_size;
 RESET enable_hashjoin;
 RESET enable_nestloop;
 RESET parallel_tuple_cost;
-SET force_parallel_mode = 'on';
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
 
 -- test worker assignment
 -- first chunk should have 1 worker and second chunk should have 2

@@ -227,9 +227,9 @@ UNION SELECT b.* FROM
 :PREFIX INSERT INTO skip_scan_insert(time, dev, val, query) SELECT time, dev, val, 'q10_1' FROM (SELECT DISTINCT ON (dev) * FROM :TABLE) a;
 
 -- parallel query
-SET force_parallel_mode TO true;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
-RESET force_parallel_mode;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
 
 TRUNCATE skip_scan_insert;
 
