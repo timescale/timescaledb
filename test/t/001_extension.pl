@@ -20,8 +20,17 @@ my $node  = TimescaleNode->create('extension');
 my $in    = '';
 my $out   = '';
 my $timer = IPC::Run::timeout(180);
-my $h =
-  $node->background_psql('postgres', \$in, \$out, $timer, on_error_stop => 0);
+my $h;
+
+if ($ENV{PG_VERSION_MAJOR} >= 16)
+{
+	$h = $node->background_psql('postgres', on_error_stop => 0);
+}
+else
+{
+	$h = $node->background_psql('postgres', \$in, \$out, $timer,
+		on_error_stop => 0);
+}
 
 sub check_extension_state
 {
@@ -80,9 +89,17 @@ check_extension_state(qq/created/,
 	"state is \"created\" after extension is created in other backend");
 
 # Quit the interactive psql session
-$in .= q{
-	\q
-};
+if ($ENV{PG_VERSION_MAJOR} >= 16)
+{
+	$h->quit or die "psql returned $?";
+}
+else
+{
+	$in .= q{
+		\q
+	};
 
-$h->finish or die "psql returned $?";
+	$h->finish or die "psql returned $?";
+}
+
 $node->stop;

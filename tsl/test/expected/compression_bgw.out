@@ -274,7 +274,6 @@ ERROR:  permission denied to start background process as role "nologin_role"
 \set ON_ERROR_STOP 1
 DROP TABLE test_table_nologin;
 RESET ROLE;
-REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE conditions(
     time TIMESTAMPTZ NOT NULL,

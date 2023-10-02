@@ -54,7 +54,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_utils_compression.sql
     compression_algos.sql
     compression_ddl.sql
-    compression_errors.sql
     compression_hypertable.sql
     compression_merge.sql
     compression_indexscan.sql
@@ -62,27 +61,21 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compress_sorted_merge_filter.sql
     compress_table.sql
     cagg_bgw_drop_chunks.sql
-    cagg_bgw.sql
-    cagg_ddl.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
-    cagg_errors_deprecated.sql
     cagg_joins.sql
     cagg_migrate.sql
     cagg_multi.sql
     cagg_on_cagg.sql
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
-    cagg_usage.sql
     cagg_policy_run.sql
-    cagg_repair.sql
     data_fetcher.sql
     data_node_bootstrap.sql
     data_node.sql
     ddl_hook.sql
     debug_notice.sql
     decompress_vector_qual.sql
-    deparse.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
     information_view_chunk_count.sql
@@ -101,7 +94,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       TEST_FILES
       cagg_bgw_dist_ht.sql
       cagg_migrate_dist_ht.sql
-      cagg_ddl_dist_ht.sql
       cagg_on_cagg_dist_ht.sql
       cagg_on_cagg_joins_dist_ht.sql
       dist_api_calls.sql
@@ -185,12 +177,24 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
-  list(APPEND TEST_TEMPLATES cagg_query.sql.in continuous_aggs.sql.in
-       continuous_aggs_deprecated.sql.in)
+  list(
+    APPEND
+    TEST_TEMPLATES
+    cagg_bgw.sql.in
+    cagg_ddl.sql.in
+    cagg_errors_deprecated.sql.in
+    cagg_query.sql.in
+    cagg_repair.sql.in
+    cagg_usage.sql.in
+    compression_errors.sql.in
+    continuous_aggs.sql.in
+    continuous_aggs_deprecated.sql.in
+    deparse.sql.in)
   if(ENABLE_MULTINODE_TESTS)
     list(
       APPEND
       TEST_TEMPLATES
+      cagg_ddl_dist_ht.sql.in
       cagg_invalidation_dist_ht.sql.in
       dist_hypertable.sql.in
       dist_grant.sql.in

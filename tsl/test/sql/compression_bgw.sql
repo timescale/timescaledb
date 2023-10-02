@@ -161,7 +161,6 @@ SELECT add_compression_policy('test_table_nologin', 2::int);
 \set ON_ERROR_STOP 1
 DROP TABLE test_table_nologin;
 RESET ROLE;
-REVOKE NOLOGIN_ROLE FROM :ROLE_DEFAULT_PERM_USER;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 

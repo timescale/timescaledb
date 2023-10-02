@@ -616,6 +616,9 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	RTEPermissionInfo *perminfo;
 #endif
 
+	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
+	final_selquery->hasAggs = !inp->finalized;
+
 	/*
 	 * For initial cagg creation rtable will have only 1 entry,
 	 * for alter table rtable will have multiple entries with our
@@ -634,6 +637,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		rte->inh = true;
 		rte->rellockmode = 1;
 		rte->eref = copyObject(rte->alias);
+		rte->relid = mattbladdress->objectId;
 #if PG16_GE
 		perminfo = addRTEPermissionInfo(&final_selquery->rteperminfos, rte);
 		perminfo->selectedCols = NULL;
@@ -735,8 +739,6 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 		}
 	}
 
-	CAGG_MAKEQUERY(final_selquery, inp->final_userquery);
-	final_selquery->hasAggs = !inp->finalized;
 	if (list_length(inp->final_userquery->jointree->fromlist) >=
 			CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
 		!IsA(linitial(inp->final_userquery->jointree->fromlist), RangeTblRef))

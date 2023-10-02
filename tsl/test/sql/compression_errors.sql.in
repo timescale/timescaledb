@@ -351,7 +351,7 @@ ALTER TABLE test SET (
 
 --below queries will pass before chunks are compressed
 SELECT 1 FROM test GROUP BY enum_col;
-EXPLAIN SELECT DISTINCT 1 FROM test;
+EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT DISTINCT 1 FROM test;
 
 --compress chunks
 SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
@@ -359,7 +359,7 @@ ANALYZE test;
 
 --below query should pass after chunks are compressed
 SELECT 1 FROM test GROUP BY enum_col;
-EXPLAIN SELECT DISTINCT 1 FROM test;
+EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT DISTINCT 1 FROM test;
 
 --github issue 4398
 SELECT format('CREATE TABLE data_table AS SELECT now() AS tm, %s', array_to_string(array_agg(format('125 AS c%s',a)), ', ')) FROM generate_series(1,550)a \gexec
