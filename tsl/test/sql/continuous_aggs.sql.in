@@ -1539,7 +1539,7 @@ FROM conditions
 GROUP BY 1
 ORDER BY 2 DESC;
 
-SET force_parallel_mode = 'on';
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
 SET max_parallel_workers_per_gather = 4;
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;

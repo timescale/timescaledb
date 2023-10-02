@@ -1275,7 +1275,12 @@ UNION SELECT b.* FROM
 (6 rows)
 
 -- parallel query
-SET force_parallel_mode TO true;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+ set_config 
+------------
+ on
+(1 row)
+
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
@@ -1286,7 +1291,12 @@ SET force_parallel_mode TO true;
                Heap Fetches: 12
 (5 rows)
 
-RESET force_parallel_mode;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+ set_config 
+------------
+ off
+(1 row)
+
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;
@@ -3710,7 +3720,12 @@ UNION SELECT b.* FROM
 (14 rows)
 
 -- parallel query
-SET force_parallel_mode TO true;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'on', false);
+ set_config 
+------------
+ on
+(1 row)
+
 :PREFIX SELECT DISTINCT dev FROM :TABLE ORDER BY dev;
                                                          QUERY PLAN                                                         
 ----------------------------------------------------------------------------------------------------------------------------
@@ -3735,7 +3750,12 @@ SET force_parallel_mode TO true;
                      Heap Fetches: 11
 (19 rows)
 
-RESET force_parallel_mode;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END,'off', false);
+ set_config 
+------------
+ off
+(1 row)
+
 TRUNCATE skip_scan_insert;
 -- table with only nulls
 :PREFIX SELECT DISTINCT ON (time) time FROM skip_scan_nulls;
