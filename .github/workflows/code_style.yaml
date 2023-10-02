@@ -89,7 +89,7 @@ jobs:
           # sporadically when a new version becomes available.
           pip install black prospector==1.8.4 pylint==2.16.0 dodgy==0.2.1 \
             mccabe==0.7.0 pycodestyle==2.9.1 pyflakes==2.5.0 \
-            psutil pygithub
+            psutil pygithub pglast
           pip list
           pip list --user
       - name: Checkout source
