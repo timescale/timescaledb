@@ -3022,6 +3022,78 @@ ts_hypertable_update_dimension_partitions(const Hypertable *ht)
 }
 
 /*
+ * hypertable status update is done in two steps, similar to
+ * chunk_update_status
+ * This is again equivalent to a SELECT FOR UPDATE, followed by UPDATE
+ * 1. RowShareLock to SELECT for UPDATE
+ * 2. UPDATE status using RowExclusiveLock
+ */
+static bool
+hypertable_update_status_osm(Hypertable *ht)
+{
+	bool success = false;
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	ScanIterator iterator = ts_scan_iterator_create(HYPERTABLE, RowShareLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_ID_INDEX);
+	iterator.ctx.tuplock = &scantuplock;
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_pkey_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(ht->fd.id));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		int status;
+		bool status_isnull;
+
+		status = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_status, &status_isnull));
+		Assert(!status_isnull);
+		if (status != ht->fd.status)
+		{
+			success = ts_hypertable_update(ht); // get RowExclusiveLock and update here
+		}
+	}
+	ts_scan_iterator_close(&iterator);
+	return success;
+}
+
+static DimensionSlice *
+ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
+{
+	ChunkConstraints *constraints =
+		ts_chunk_constraint_scan_by_chunk_id(osm_chunk_id, 1, CurrentMemoryContext);
+
+	for (int i = 0; i < constraints->num_constraints; i++)
+	{
+		ChunkConstraint *cc = chunk_constraints_get(constraints, i);
+		if (is_dimension_constraint(cc))
+		{
+			ScanTupLock tuplock = {
+				.lockmode = LockTupleExclusive,
+				.waitpolicy = LockWaitBlock,
+			};
+			if (!IsolationUsesXactSnapshot())
+			{
+				/* in read committed mode, we follow all updates to this tuple */
+				tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+			}
+			DimensionSlice *dimslice =
+				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
+													   &tuplock,
+													   CurrentMemoryContext,
+													   RowShareLock);
+			if (dimslice->fd.dimension_id == time_dim_id)
+				return dimslice;
+		}
+	}
+	return NULL;
+}
+/*
  * hypertable_osm_range_update
  * 0 hypertable REGCLASS,
  * 1 range_start=NULL::bigint,
@@ -3062,9 +3134,6 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 			 "no OSM chunk found for hypertable %s.%s",
 			 quote_identifier(NameStr(ht->fd.schema_name)),
 			 quote_identifier(NameStr(ht->fd.table_name)));
-
-	int32 dimension_slice_id = ts_chunk_get_osm_slice_id(osm_chunk_id, time_dim->fd.id);
-
 	/*
 	 * range_start, range_end arguments must be converted to internal representation
 	 * a NULL start value is interpreted as INT64_MAX - 1 and a NULL end value is
@@ -3106,15 +3175,12 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	bool overlap = false, range_invalid = false;
 
-	ScanTupLock tuplock = {
-		.lockmode = LockTupleExclusive,
-		.waitpolicy = LockWaitBlock,
-	};
-	DimensionSlice *slice =
-		ts_dimension_slice_scan_by_id_and_lock(dimension_slice_id, &tuplock, CurrentMemoryContext);
+	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id, time_dim->fd.id);
 
 	if (!slice)
-		ereport(ERROR, errmsg("could not find slice with id %d", dimension_slice_id));
+		ereport(ERROR, errmsg("could not find time dimension slice for chunk %d", osm_chunk_id));
+
+	int32 dimension_slice_id = slice->fd.id;
 	overlap = ts_osm_chunk_range_overlaps(dimension_slice_id,
 										  slice->fd.dimension_id,
 										  range_start_internal,
@@ -3148,7 +3214,8 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	}
 	else
 		ht->fd.status = ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update(ht);
+
+	hypertable_update_status_osm(ht);
 	ts_cache_release(hcache);
 
 	slice->fd.range_start = range_start_internal;
