@@ -15,7 +15,8 @@ list(
   cagg_insert.spec
   cagg_multi_iso.spec
   cagg_concurrent_refresh.spec
-  deadlock_drop_chunks_compress.spec)
+  deadlock_drop_chunks_compress.spec
+  osm_range_updates_iso.spec)
 
 if(ENABLE_MULTINODE_TESTS)
   list(APPEND TEST_FILES cagg_concurrent_refresh_dist_ht.spec)
