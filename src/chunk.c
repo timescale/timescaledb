@@ -2984,7 +2984,8 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 				DimensionSlice *slice =
 					ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
 														   &tuplock,
-														   CurrentMemoryContext);
+														   CurrentMemoryContext,
+														   AccessShareLock);
 				/* If the slice is not found in the scan above, the table is
 				 * broken so we do not delete the slice. We proceed
 				 * anyway since users need to be able to drop broken tables or
