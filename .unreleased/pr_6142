@@ -1,0 +1,1 @@
+Fixes: #6142 do not throw an error when deprecation GUC cannot be read
