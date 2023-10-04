@@ -195,7 +195,7 @@ SELECT locf(1);
 SELECT interpolate(1);
 -- test locf and interpolate call with NULL input
 SELECT locf(NULL::int);
-SELECT interpolate(NULL);
+SELECT interpolate(NULL::bigint);
 
 \set ON_ERROR_STOP 0
 -- test time_bucket_gapfill not top level function call
