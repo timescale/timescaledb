@@ -926,7 +926,7 @@ SELECT locf(NULL::int);
      
 (1 row)
 
-SELECT interpolate(NULL);
+SELECT interpolate(NULL::bigint);
  interpolate 
             
 (1 row)
