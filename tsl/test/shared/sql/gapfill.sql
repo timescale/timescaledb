@@ -1512,4 +1512,20 @@ FROM (
     SELECT ARRAY[1,2,3,4]::int[] as int_arr, x as ts, x+500000 as value
     FROM generate_series(1, 10, 100) as x
     ) t
-GROUP BY 1, 2
+GROUP BY 1, 2;
+
+-- Test gapfill is aligned with non-gapfill time_bucket
+-- when using different timezones and month bucketing
+CREATE TABLE month_timezone(time timestamptz NOT NULL, value float);
+SELECT table_name FROM create_hypertable('month_timezone','time');
+
+INSERT INTO month_timezone VALUES ('2023-03-01 14:05:00+01', 3.123), ('2023-04-01 14:05:00+01',4.123), ('2023-05-01 14:05:00+01', 5.123);
+
+SELECT
+  time_bucket_gapfill('1 month'::interval, time, 'Europe/Berlin', '2023-01-01', '2023-07-01') AS time,
+  sum(value)
+FROM
+  month_timezone
+GROUP BY 1;
+
+DROP TABLE month_timezone;
