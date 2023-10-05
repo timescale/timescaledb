@@ -3196,8 +3196,8 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
 		{
 			// just like in chunk_tuple_delete
 			ScanTupLock tuplock = {
-					.lockmode = LockTupleExclusive,
-					.waitpolicy = LockWaitBlock,
+				.lockmode = LockTupleExclusive,
+				.waitpolicy = LockWaitBlock,
 			};
 			if (!IsolationUsesXactSnapshot())
 			{
@@ -3206,8 +3206,9 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
 			}
 			DimensionSlice *dimslice =
 				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-														&tuplock,
-														CurrentMemoryContext);
+													   &tuplock,
+													   CurrentMemoryContext,
+													   RowShareLock);
 			if (dimslice->fd.dimension_id == time_dim_id)
 				return dimslice;
 		}
