@@ -139,6 +139,8 @@ ORDER BY 1,2;
 FROM gapfill_plan_test
 ORDER BY 2,1;
 
+DROP TABLE gapfill_plan_test;
+
 \set METRICS metrics_int
 
 -- All test against table :METRICS first
@@ -622,6 +624,8 @@ GROUP BY 1,color ORDER BY 2,1;
 CREATE TABLE gapfill_insert_test(id INT);
 INSERT INTO gapfill_insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
 SELECT * FROM gapfill_insert_test;
+
+DROP TABLE gapfill_insert_test;
 
 -- test join
 SELECT t1.*,t2.m FROM
@@ -1510,12 +1514,26 @@ SET timezone TO 'Europe/Berlin';
 SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
 RESET timezone;
 
-DROP INDEX gapfill_plan_test_indx;
-
 -- Test gapfill with arrays (#5981)
 SELECT time_bucket_gapfill(5, ts, 1, 100) as ts, int_arr, locf(last(value, ts))
 FROM (
     SELECT ARRAY[1,2,3,4]::int[] as int_arr, x as ts, x+500000 as value
     FROM generate_series(1, 10, 100) as x
     ) t
-GROUP BY 1, 2
+GROUP BY 1, 2;
+
+-- Test gapfill is aligned with non-gapfill time_bucket
+-- when using different timezones and month bucketing
+CREATE TABLE month_timezone(time timestamptz NOT NULL, value float);
+SELECT table_name FROM create_hypertable('month_timezone','time');
+
+INSERT INTO month_timezone VALUES ('2023-03-01 14:05:00+01', 3.123), ('2023-04-01 14:05:00+01',4.123), ('2023-05-01 14:05:00+01', 5.123);
+
+SELECT
+  time_bucket_gapfill('1 month'::interval, time, 'Europe/Berlin', '2023-01-01', '2023-07-01') AS time,
+  sum(value)
+FROM
+  month_timezone
+GROUP BY 1;
+
+DROP TABLE month_timezone;
