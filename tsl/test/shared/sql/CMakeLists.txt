@@ -14,13 +14,6 @@ set(TEST_TEMPLATES_SHARED
     generated_columns.sql.in ordered_append.sql.in ordered_append_join.sql.in
     transparent_decompress_chunk.sql.in space_constraint.sql.in)
 
-if(ENABLE_MULTINODE_TESTS)
-  list(APPEND TEST_FILES_SHARED dist_chunk.sql dist_distinct_pushdown.sql
-       dist_gapfill.sql dist_insert.sql)
-  list(APPEND TEST_TEMPLATES_SHARED dist_fetcher_type.sql.in
-       dist_distinct.sql.in)
-endif()
-
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED compression_dml.sql memoize.sql)
 endif()
@@ -35,9 +28,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
        with_clause_parser.sql)
   list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
-  if(ENABLE_MULTINODE_TESTS)
-    list(APPEND TEST_FILES_SHARED dist_parallel_agg.sql dist_queries.sql)
-  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are

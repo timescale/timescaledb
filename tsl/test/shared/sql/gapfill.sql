@@ -6,6 +6,10 @@
 -- we want to see error details in the output
 \set VERBOSITY default
 
+CREATE TABLE gapfill_plan_test(time timestamptz NOT NULL, value float);
+SELECT table_name FROM create_hypertable('gapfill_plan_test','time',chunk_time_interval=>'4 weeks'::interval);
+INSERT INTO gapfill_plan_test SELECT generate_series('2018-01-01'::timestamptz,'2018-04-01'::timestamptz,'1m'::interval), 1.0;
+
 -- simple example
 :EXPLAIN
 SELECT
@@ -614,8 +618,10 @@ FROM (VALUES (1,'blue',1),(2,'red',2)) v(time,color,value)
 WHERE false
 GROUP BY 1,color ORDER BY 2,1;
 
--- test insert into SELECT
-SELECT * FROM insert_test;
+--- test insert into SELECT
+CREATE TABLE gapfill_insert_test(id INT);
+INSERT INTO gapfill_insert_test SELECT time_bucket_gapfill(1,time,1,5) FROM (VALUES (1),(2)) v(time) GROUP BY 1 ORDER BY 1;
+SELECT * FROM gapfill_insert_test;
 
 -- test join
 SELECT t1.*,t2.m FROM
