@@ -113,7 +113,7 @@ WARNING:  function _timescaledb_internal.drop_dist_ht_invalidation_trigger(integ
 ERROR:  function was not provided with a valid distributed hypertable id
 SELECT _timescaledb_internal.drop_stale_chunks(NULL,NULL);
 WARNING:  function _timescaledb_internal.drop_stale_chunks(name,integer[]) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  node_name argument cannot be NULL
+ERROR:  current server is not an access node or data node
 SELECT _timescaledb_internal.freeze_chunk(0);
 WARNING:  function _timescaledb_internal.freeze_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
@@ -167,10 +167,7 @@ SELECT pg_typeof(_timescaledb_internal.health());
 WARNING:  function _timescaledb_internal.health() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  pg_typeof 
  record
- record
- record
- record
-(4 rows)
+(1 row)
 
 SELECT _timescaledb_internal.hypertable_constraint_add_table_fk_constraint(NULL,NULL,NULL,0);
 WARNING:  function _timescaledb_internal.hypertable_constraint_add_table_fk_constraint(name,name,name,integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -319,10 +316,7 @@ ERROR:  invalid Oid
 SELECT pg_typeof(_timescaledb_internal.show_connection_cache());
 WARNING:  function _timescaledb_internal.show_connection_cache() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  pg_typeof 
- record
- record
- record
-(3 rows)
+(0 rows)
 
 SELECT _timescaledb_internal.start_background_workers();
 WARNING:  function _timescaledb_internal.start_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
@@ -380,7 +374,11 @@ WARNING:  function _timescaledb_internal.unfreeze_chunk(regclass) is deprecated 
 ERROR:  invalid Oid
 SELECT _timescaledb_internal.validate_as_data_node();
 WARNING:  function _timescaledb_internal.validate_as_data_node() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  node is already an access node
+WARNING:  max_prepared_transactions is set low
+ validate_as_data_node 
+ 
+(1 row)
+
 CALL _timescaledb_internal.cagg_migrate_create_plan(NULL,NULL,true,true);
 WARNING:  procedure _timescaledb_internal.cagg_migrate_create_plan(_timescaledb_catalog.continuous_agg,text,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  permission denied for table continuous_agg_migrate_plan
