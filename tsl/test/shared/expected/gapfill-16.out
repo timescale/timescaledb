@@ -315,6 +315,7 @@ QUERY PLAN
                ->  Index Only Scan using _hyper_X_X_chunk_gapfill_plan_test_indx on _hyper_X_X_chunk
 (10 rows)
 
+DROP TABLE gapfill_plan_test;
 \set METRICS metrics_int
 -- All test against table :METRICS first
 \set ON_ERROR_STOP 0
@@ -1581,6 +1582,7 @@ SELECT * FROM gapfill_insert_test;
   4
 (4 rows)
 
+DROP TABLE gapfill_insert_test;
 -- test join
 SELECT t1.*,t2.m FROM
 (
@@ -3294,11 +3296,11 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01
      time_bucket_gapfill      
  Fri Dec 31 15:00:00 1999 PST
  Tue Feb 29 15:00:00 2000 PST
- Sat Apr 29 15:00:00 2000 PDT
- Thu Jun 29 15:00:00 2000 PDT
- Tue Aug 29 15:00:00 2000 PDT
- Sun Oct 29 15:00:00 2000 PST
- Fri Dec 29 15:00:00 2000 PST
+ Sun Apr 30 15:00:00 2000 PDT
+ Fri Jun 30 15:00:00 2000 PDT
+ Thu Aug 31 15:00:00 2000 PDT
+ Tue Oct 31 15:00:00 2000 PST
+ Sun Dec 31 15:00:00 2000 PST
 (7 rows)
 
 SELECT time_bucket_gapfill('2 month'::interval, ts, current_setting('timezone'), '2000-01-01','2001-01-01') FROM (VALUES ('2000-03-01'::timestamptz)) v(ts) GROUP BY 1;
@@ -3315,11 +3317,11 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01
      time_bucket_gapfill      
  Fri Dec 31 16:00:00 1999 PST
  Tue Feb 29 16:00:00 2000 PST
- Sat Apr 29 16:00:00 2000 PDT
- Thu Jun 29 16:00:00 2000 PDT
- Tue Aug 29 16:00:00 2000 PDT
- Sun Oct 29 16:00:00 2000 PST
- Fri Dec 29 16:00:00 2000 PST
+ Sun Apr 30 16:00:00 2000 PDT
+ Fri Jun 30 16:00:00 2000 PDT
+ Thu Aug 31 16:00:00 2000 PDT
+ Tue Oct 31 16:00:00 2000 PST
+ Sun Dec 31 16:00:00 2000 PST
 (7 rows)
 
 SET timezone TO 'Europe/Berlin';
@@ -3334,14 +3336,13 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'Europe/Berlin', '2000-01-01
 (6 rows)
 
 RESET timezone;
-DROP INDEX gapfill_plan_test_indx;
 -- Test gapfill with arrays (#5981)
 SELECT time_bucket_gapfill(5, ts, 1, 100) as ts, int_arr, locf(last(value, ts))
 FROM (
     SELECT ARRAY[1,2,3,4]::int[] as int_arr, x as ts, x+500000 as value
     FROM generate_series(1, 10, 100) as x
     ) t
-GROUP BY 1, 2
+GROUP BY 1, 2;
  ts |  int_arr  |  locf  
 ----+-----------+--------
   0 | {1,2,3,4} | 500001
@@ -3366,3 +3367,30 @@ GROUP BY 1, 2
  95 | {1,2,3,4} | 500001
 (20 rows)
 
+-- Test gapfill is aligned with non-gapfill time_bucket
+-- when using different timezones and month bucketing
+CREATE TABLE month_timezone(time timestamptz NOT NULL, value float);
+SELECT table_name FROM create_hypertable('month_timezone','time');
+   table_name   
+ month_timezone
+(1 row)
+
+INSERT INTO month_timezone VALUES ('2023-03-01 14:05:00+01', 3.123), ('2023-04-01 14:05:00+01',4.123), ('2023-05-01 14:05:00+01', 5.123);
+SELECT
+  time_bucket_gapfill('1 month'::interval, time, 'Europe/Berlin', '2023-01-01', '2023-07-01') AS time,
+  sum(value)
+FROM
+  month_timezone
+GROUP BY 1;
+             time             |  sum  
+------------------------------+-------
+ Sat Dec 31 15:00:00 2022 PST |      
+ Tue Jan 31 15:00:00 2023 PST |      
+ Tue Feb 28 15:00:00 2023 PST | 3.123
+ Fri Mar 31 15:00:00 2023 PDT | 4.123
+ Sun Apr 30 15:00:00 2023 PDT | 5.123
+ Wed May 31 15:00:00 2023 PDT |      
+ Fri Jun 30 15:00:00 2023 PDT |      
+(7 rows)
+
+DROP TABLE month_timezone;
