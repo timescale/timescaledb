@@ -4,6 +4,19 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.12.1 (2023-10-11)
+
+This release contains bug fixes since the 2.12.0 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #6113 Fix planner distributed table count
+* #6117 Avoid decompressing batches using an empty slot
+* #6123 Fix concurrency errors in OSM API
+* #6142 do not throw an error when deprecation GUC cannot be read
+**Thanks**
+* @symbx for reporting a crash when selecting from empty hypertables
+
 ## 2.12.0 (2023-09-27)
 
 This release contains performance improvements for compressed hypertables
