@@ -218,7 +218,8 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	char *hypertable_id_str, *parent_hypertable_id_str;
 	int32 hypertable_id, parent_hypertable_id = 0;
 	bool is_distributed_hypertable_trigger = false;
-	if (trigdata->tg_trigger->tgnargs < 0)
+
+	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
 		elog(ERROR, "must supply hypertable id");
 
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];

@@ -409,6 +409,9 @@ SELECT relname FROM pg_class WHERE oid = :mat_table;
 ----------------------------------------------------------------
 -- Cleanup
 DROP TABLE whatever;
+-- Check that continuous_agg_invalidation_trigger() handles no arguments properly
+SELECT _timescaledb_functions.continuous_agg_invalidation_trigger();
+ERROR:  must supply hypertable id
 -- END OF BASIC USAGE TESTS --
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
 SELECT table_name FROM create_hypertable('metrics','time');
