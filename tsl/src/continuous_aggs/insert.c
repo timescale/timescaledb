@@ -155,6 +155,13 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	/* NOTE: we can remove the id=>relid scan, if it becomes an issue, by getting the
 	 * hypertable_relid directly from the Chunk*/
 	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, hypertable_id);
+	if (ht == NULL)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("unable to determine relid for hypertable %d", hypertable_id)));
+	}
+
 	cache_entry->hypertable_id = hypertable_id;
 	cache_entry->entry_id = entry_id;
 	cache_entry->hypertable_relid = ht->main_table_relid;
