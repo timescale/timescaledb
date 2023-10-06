@@ -267,6 +267,9 @@ SELECT relname FROM pg_class WHERE oid = :mat_table;
 -- Cleanup
 DROP TABLE whatever;
 
+-- Check that continuous_agg_invalidation_trigger() handles no arguments properly
+SELECT _timescaledb_functions.continuous_agg_invalidation_trigger();
+
 -- END OF BASIC USAGE TESTS --
 
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
