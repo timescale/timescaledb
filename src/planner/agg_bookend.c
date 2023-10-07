@@ -60,6 +60,7 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "compat/compat.h"
 #include "planner.h"
 #include "utils.h"
 #include "extension.h"
@@ -593,6 +594,9 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	/* and we haven't made equivalence classes, either */
 	Assert(subroot->eq_classes == NIL);
 	/* and we haven't created PlaceHolderInfos, either */
+#if PG16_GE
+	subroot->placeholdersFrozen = false;
+#endif
 	Assert(subroot->placeholder_list == NIL);
 
 	mminfo = fl_info->m_agg_info;
