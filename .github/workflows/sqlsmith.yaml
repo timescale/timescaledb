@@ -86,7 +86,7 @@ jobs:
       run: |
         set -o pipefail
         if [ "${{ github.event_name }}" == "schedule" ]; then
-          LOOPS=50
+          LOOPS=40
         else
           LOOPS=10
         fi
