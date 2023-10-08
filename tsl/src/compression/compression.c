@@ -59,6 +59,7 @@
 #include "gorilla.h"
 #include "guc.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
+#include "nodes/hypertable_modify.h"
 #include "indexing.h"
 #include "segment_meta.h"
 #include "ts_catalog/compression_chunk_size.h"
@@ -1556,6 +1557,7 @@ row_decompressor_decompress_row(RowDecompressor *decompressor, Tuplesortstate *t
 											  decompressor->compressed_datums,
 											  decompressor->compressed_is_nulls);
 
+	decompressor->batches_decompressed++;
 	do
 	{
 		/* we're done if all the decompressors return NULL */
@@ -1578,6 +1580,7 @@ row_decompressor_decompress_row(RowDecompressor *decompressor, Tuplesortstate *t
 														   decompressor->decompressed_datums,
 														   decompressor->decompressed_is_nulls);
 			TupleTableSlot *slot = MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsVirtual);
+			decompressor->tuples_decompressed++;
 
 			if (tuplesortstate == NULL)
 			{
@@ -2097,6 +2100,8 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 									&tmfd,
 									false);
 		Assert(result == TM_Ok);
+		cis->cds->batches_decompressed += decompressor.batches_decompressed;
+		cis->cds->tuples_decompressed += decompressor.tuples_decompressed;
 	}
 
 	table_endscan(heapScan);
@@ -3199,7 +3204,8 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
  *  4. Update catalog table to change status of moved chunk.
  */
 static void
-decompress_batches_for_update_delete(Chunk *chunk, List *predicates, EState *estate)
+decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chunk,
+									 List *predicates, EState *estate)
 {
 	/* process each chunk with its corresponding predicates */
 
@@ -3292,6 +3298,8 @@ decompress_batches_for_update_delete(Chunk *chunk, List *predicates, EState *est
 		filter = lfirst(lc);
 		pfree(filter);
 	}
+	ht_state->batches_decompressed += decompressor.batches_decompressed;
+	ht_state->tuples_decompressed += decompressor.tuples_decompressed;
 }
 
 /*
@@ -3299,19 +3307,32 @@ decompress_batches_for_update_delete(Chunk *chunk, List *predicates, EState *est
  * Once Scan node is found check if chunk is compressed, if so then
  * decompress those segments which match the filter conditions if present.
  */
-static bool decompress_chunk_walker(PlanState *ps, List *relids);
+
+struct decompress_chunk_context
+{
+	List *relids;
+	HypertableModifyState *ht_state;
+};
+
+static bool decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx);
 
 bool
-decompress_target_segments(ModifyTableState *ps)
+decompress_target_segments(HypertableModifyState *ht_state)
 {
-	List *relids = castNode(ModifyTable, ps->ps.plan)->resultRelations;
-	Assert(relids);
+	ModifyTableState *ps =
+		linitial_node(ModifyTableState, castNode(CustomScanState, ht_state)->custom_ps);
 
-	return decompress_chunk_walker(&ps->ps, relids);
+	struct decompress_chunk_context ctx = {
+		.ht_state = ht_state,
+		.relids = castNode(ModifyTable, ps->ps.plan)->resultRelations,
+	};
+	Assert(ctx.relids);
+
+	return decompress_chunk_walker(&ps->ps, &ctx);
 }
 
 static bool
-decompress_chunk_walker(PlanState *ps, List *relids)
+decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 {
 	RangeTblEntry *rte = NULL;
 	bool needs_decompression = false;
@@ -3330,7 +3351,7 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 		case T_IndexScanState:
 		{
 			/* Get the index quals on the original table and also include
-			 * any filters that are used to for filtering heap tuples
+			 * any filters that are used for filtering heap tuples
 			 */
 			predicates = list_union(((IndexScan *) ps->plan)->indexqualorig, ps->plan->qual);
 			needs_decompression = true;
@@ -3362,7 +3383,7 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 		 * even when it is a self join
 		 */
 		int scanrelid = ((Scan *) ps->plan)->scanrelid;
-		if (list_member_int(relids, scanrelid))
+		if (list_member_int(ctx->relids, scanrelid))
 		{
 			rte = rt_fetch(scanrelid, ps->state->es_range_table);
 			current_chunk = ts_chunk_get_by_relid(rte->relid, false);
@@ -3374,7 +3395,10 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 							 errmsg("UPDATE/DELETE is disabled on compressed chunks"),
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
-				decompress_batches_for_update_delete(current_chunk, predicates, ps->state);
+				decompress_batches_for_update_delete(ctx->ht_state,
+													 current_chunk,
+													 predicates,
+													 ps->state);
 
 				/* This is a workaround specifically for bitmap heap scans:
 				 * during node initialization, initialize the scan state with the active snapshot
@@ -3400,7 +3424,7 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 	if (predicates)
 		pfree(predicates);
 
-	return planstate_tree_walker(ps, decompress_chunk_walker, relids);
+	return planstate_tree_walker(ps, decompress_chunk_walker, ctx);
 }
 
 #endif

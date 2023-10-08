@@ -1,0 +1,100 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
+\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
+CREATE TABLE decompress_tracking(time timestamptz not null, device text, value float, primary key(time, device));
+SELECT table_name FROM create_hypertable('decompress_tracking','time');
+     table_name      
+ decompress_tracking
+(1 row)
+
+ALTER TABLE decompress_tracking SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+INSERT INTO decompress_tracking SELECT '2020-01-01'::timestamptz + format('%s hour', g)::interval, 'd1', random() FROM generate_series(1,10) g;
+INSERT INTO decompress_tracking SELECT '2020-01-01'::timestamptz + format('%s hour', g)::interval, 'd2', random() FROM generate_series(1,20) g;
+INSERT INTO decompress_tracking SELECT '2020-01-01'::timestamptz + format('%s hour', g)::interval, 'd3', random() FROM generate_series(1,30) g;
+SELECT count(compress_chunk(ch)) FROM show_chunks('decompress_tracking') ch;
+ count 
+     2
+(1 row)
+
+-- no tracking without analyze
+:EXPLAIN UPDATE decompress_tracking SET value = value + 3;
+QUERY PLAN
+ Custom Scan (HypertableModify)
+   ->  Update on decompress_tracking
+         Update on _hyper_X_X_chunk decompress_tracking_1
+         Update on _hyper_X_X_chunk decompress_tracking_2
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2
+(8 rows)
+
+BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 5
+   Tuples decompressed: 60
+   ->  Update on decompress_tracking (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk decompress_tracking_1
+         Update on _hyper_X_X_chunk decompress_tracking_2
+         ->  Result (actual rows=60 loops=1)
+               ->  Append (actual rows=60 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1 (actual rows=40 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=20 loops=1)
+(10 rows)
+
+BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 5
+   Tuples decompressed: 60
+   ->  Delete on decompress_tracking (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk decompress_tracking_1
+         Delete on _hyper_X_X_chunk decompress_tracking_2
+         ->  Append (actual rows=60 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1 (actual rows=40 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=20 loops=1)
+(9 rows)
+
+BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 10
+   ->  Insert on decompress_tracking (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(7 rows)
+
+BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d2',random(); ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on decompress_tracking (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(5 rows)
+
+BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d4',random(); ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on decompress_tracking (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(5 rows)
+
+BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:30','d1',random()),('2020-01-01 1:30','d2',random())); ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 25
+   ->  Insert on decompress_tracking (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=2 loops=1)
+               ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+(6 rows)
+
+DROP TABLE decompress_tracking;
