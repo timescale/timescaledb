@@ -2,6 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+-- Make parallel plans predictable
+SET max_parallel_workers_per_gather = 1;
+SET parallel_leader_participation = off;
 CREATE TABLE testtable(filter_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 SELECT create_hypertable('testtable', 'time');
    create_hypertable    
@@ -354,29 +357,34 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
 -- Test that we don't process groupingSets
 :PREFIX
 SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY ROLLUP(t);
-                                              QUERY PLAN                                               
--------------------------------------------------------------------------------------------------------
- MixedAggregate (actual rows=7 loops=1)
-   Output: _hyper_3_5_chunk.timecustom, min(_hyper_3_5_chunk.series_0)
-   Hash Key: _hyper_3_5_chunk.timecustom
-   Group Key: ()
-   Batches: 1 
-   ->  Gather (actual rows=11 loops=1)
-         Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
-         Workers Planned: 2
-         Workers Launched: 2
-         ->  Parallel Append (actual rows=4 loops=3)
-               Worker 0:  actual rows=0 loops=1
-               Worker 1:  actual rows=0 loops=1
-               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_5_chunk (actual rows=7 loops=1)
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Gather (actual rows=7 loops=1)
+   Output: _hyper_3_5_chunk.timecustom, (min(_hyper_3_5_chunk.series_0))
+   Workers Planned: 1
+   Workers Launched: 1
+   Single Copy: true
+   ->  MixedAggregate (actual rows=7 loops=1)
+         Output: _hyper_3_5_chunk.timecustom, min(_hyper_3_5_chunk.series_0)
+         Hash Key: _hyper_3_5_chunk.timecustom
+         Group Key: ()
+         Worker 0:  actual rows=7 loops=1
+           Batches: 1 
+         ->  Append (actual rows=11 loops=1)
+               Worker 0:  actual rows=11 loops=1
+               ->  Seq Scan on _timescaledb_internal._hyper_3_5_chunk (actual rows=7 loops=1)
                      Output: _hyper_3_5_chunk.timecustom, _hyper_3_5_chunk.series_0
-               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
+                     Worker 0:  actual rows=7 loops=1
+               ->  Seq Scan on _timescaledb_internal._hyper_3_6_chunk (actual rows=1 loops=1)
                      Output: _hyper_3_6_chunk.timecustom, _hyper_3_6_chunk.series_0
-               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
+                     Worker 0:  actual rows=1 loops=1
+               ->  Seq Scan on _timescaledb_internal._hyper_3_7_chunk (actual rows=2 loops=1)
                      Output: _hyper_3_7_chunk.timecustom, _hyper_3_7_chunk.series_0
-               ->  Parallel Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
+                     Worker 0:  actual rows=2 loops=1
+               ->  Seq Scan on _timescaledb_internal._hyper_3_8_chunk (actual rows=1 loops=1)
                      Output: _hyper_3_8_chunk.timecustom, _hyper_3_8_chunk.series_0
-(20 rows)
+                     Worker 0:  actual rows=1 loops=1
+(25 rows)
 
 -- Check parallel fallback into a non-partial aggregation
 SET timescaledb.enable_chunkwise_aggregation = OFF;

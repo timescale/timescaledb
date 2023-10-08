@@ -4,6 +4,10 @@
 
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 
+-- Make parallel plans predictable
+SET max_parallel_workers_per_gather = 1;
+SET parallel_leader_participation = off;
+
 CREATE TABLE testtable(filter_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 SELECT create_hypertable('testtable', 'time');
 ALTER TABLE testtable SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
