@@ -1,7 +1,7 @@
 /*
- * This file and its contents are licensed under the Timescale License.
+ * This file and its contents are licensed under the Apache License 2.0.
  * Please see the included NOTICE for copyright information and
- * LICENSE-TIMESCALE for a copy of the license.
+ * LICENSE-APACHE for a copy of the license.
  */
 
 /*
@@ -19,8 +19,10 @@
 #include <nodes/execnodes.h>
 #include <nodes/pg_list.h>
 
-void ts_show_scan_qual(List *qual, const char *qlabel, PlanState *planstate, List *ancestors,
-					   ExplainState *es);
+#include "export.h"
 
-void ts_show_instrumentation_count(const char *qlabel, int which, PlanState *planstate,
-								   ExplainState *es);
+extern TSDLLEXPORT void ts_show_scan_qual(List *qual, const char *qlabel, PlanState *planstate,
+										  List *ancestors, ExplainState *es);
+
+extern TSDLLEXPORT void ts_show_instrumentation_count(const char *qlabel, int which,
+													  PlanState *planstate, ExplainState *es);
