@@ -22,7 +22,8 @@ if(ENABLE_MULTINODE_TESTS)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES_SHARED compression_dml.sql memoize.sql)
+  list(APPEND TEST_FILES_SHARED compression_dml.sql decompress_tracking.sql
+       memoize.sql)
 endif()
 
 # this test was changing the contents of tables in shared_setup.sql thus causing

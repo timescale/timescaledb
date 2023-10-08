@@ -242,6 +242,32 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 	mtstate->ps.instrument = node->ss.ps.instrument;
 #endif
 
+	/*
+	 * For INSERT we have to read the number of decompressed batches and
+	 * tuples from the ChunkDispatchState below the ModifyTable.
+	 */
+	if ((mtstate->operation == CMD_INSERT
+#if PG15_GE
+		 || mtstate->operation == CMD_MERGE
+#endif
+		 ) &&
+		outerPlanState(mtstate))
+	{
+		List *chunk_dispatch_states = get_chunk_dispatch_states(outerPlanState(mtstate));
+		ListCell *lc;
+
+		foreach (lc, chunk_dispatch_states)
+		{
+			ChunkDispatchState *cds = (ChunkDispatchState *) lfirst(lc);
+			state->batches_decompressed += cds->batches_decompressed;
+			state->tuples_decompressed += cds->tuples_decompressed;
+		}
+	}
+	if (state->batches_decompressed > 0)
+		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
+	if (state->tuples_decompressed > 0)
+		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
+
 	if (NULL != state->fdwroutine)
 	{
 		appendStringInfo(es->str, "Insert on distributed hypertable");
@@ -793,7 +819,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	{
 		if (ts_cm_functions->decompress_target_segments)
 		{
-			ts_cm_functions->decompress_target_segments(node);
+			ts_cm_functions->decompress_target_segments(ht_state);
 			ht_state->comp_chunks_processed = true;
 			/*
 			 * save snapshot set during ExecutorStart(), since this is the same

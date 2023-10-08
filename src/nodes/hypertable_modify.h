@@ -30,6 +30,8 @@ typedef struct HypertableModifyState
 	bool comp_chunks_processed;
 	Snapshot snapshot;
 	FdwRoutine *fdwroutine;
+	int64 tuples_decompressed;
+	int64 batches_decompressed;
 } HypertableModifyState;
 
 extern void ts_hypertable_modify_fixup_tlist(Plan *plan);

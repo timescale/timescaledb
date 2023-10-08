@@ -150,6 +150,8 @@ typedef struct RowDecompressor
 	bool *decompressed_is_nulls;
 
 	MemoryContext per_compressed_row_ctx;
+	int64 batches_decompressed;
+	int64 tuples_decompressed;
 } RowDecompressor;
 
 /*
@@ -323,7 +325,8 @@ typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
 										  TupleTableSlot *slot);
 #if PG14_GE
-extern bool decompress_target_segments(ModifyTableState *ps);
+typedef struct HypertableModifyState HypertableModifyState;
+extern bool decompress_target_segments(HypertableModifyState *ht_state);
 #endif
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;

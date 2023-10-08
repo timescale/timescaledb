@@ -27,7 +27,7 @@
 typedef struct ChunkDispatch
 {
 	/* Link to the executor state for INSERTs. This is not set for COPY path. */
-	const struct ChunkDispatchState *dispatch_state;
+	struct ChunkDispatchState *dispatch_state;
 	Hypertable *hypertable;
 	SubspaceStore *cache;
 	EState *estate;
@@ -74,6 +74,8 @@ typedef struct ChunkDispatchState
 	ResultRelInfo *rri;
 	/* flag to represent dropped attributes */
 	bool is_dropped_attr_exists;
+	int64 batches_decompressed;
+	int64 tuples_decompressed;
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);
