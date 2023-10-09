@@ -511,14 +511,14 @@ limit 1
    Output: metric_dist.id, metric_dist.ts, metric_dist.value
    ->  Unique
          Output: metric_dist.id, metric_dist.ts, metric_dist.value
-         ->  Sort
+         ->  Incremental Sort
                Output: metric_dist.id, metric_dist.ts, metric_dist.value
                Sort Key: metric_dist.id, metric_dist.ts, metric_dist.value
+               Presorted Key: metric_dist.id
                ->  Nested Loop
                      Output: metric_dist.id, metric_dist.ts, metric_dist.value
-                     ->  Index Scan using metric_name_name on public.metric_name
+                     ->  Index Scan using metric_name_id on public.metric_name
                            Output: metric_name.id, metric_name.name
-                           Index Cond: ((metric_name.name >= 'cpu'::text) AND (metric_name.name < 'cpv'::text))
                            Filter: (metric_name.name ~~ 'cpu%'::text)
                      ->  Custom Scan (DataNodeScan) on public.metric_dist
                            Output: metric_dist.id, metric_dist.ts, metric_dist.value
@@ -556,9 +556,10 @@ limit 1
    Output: metric_name.name, metric_dist.ts, metric_dist.value
    ->  Unique
          Output: metric_name.name, metric_dist.ts, metric_dist.value
-         ->  Sort
+         ->  Incremental Sort
                Output: metric_name.name, metric_dist.ts, metric_dist.value
                Sort Key: metric_name.name COLLATE "C", metric_dist.ts, metric_dist.value
+               Presorted Key: metric_name.name
                ->  Nested Loop
                      Output: metric_name.name, metric_dist.ts, metric_dist.value
                      ->  Index Scan using metric_name_name on public.metric_name
@@ -570,7 +571,7 @@ limit 1
                            Data node: data_node_1
                            Chunks: _dist_hyper_1_3_chunk, _dist_hyper_1_16_chunk, _dist_hyper_1_20_chunk, _dist_hyper_1_37_chunk, _dist_hyper_1_52_chunk
                            Remote SQL: SELECT ts, id, value FROM public.metric_dist WHERE _timescaledb_functions.chunks_in(public.metric_dist.*, ARRAY[3, 16, 20, 37, 52]) AND ((ts >= '2022-02-01 15:02:02-08'::timestamp with time zone)) AND ((ts <= '2022-03-02 15:02:02-08'::timestamp with time zone)) AND (($1::integer = id))
-(18 rows)
+(19 rows)
 
 -- If there are a lot of rows chosen from the local table, the parameterized
 -- nested loop might download the entire dist table or even more than that (in
@@ -673,7 +674,7 @@ group by id
                ->  Nested Loop
                      Output: metric_location.id, metric_name.id
                      Inner Unique: true
-                     Join Filter: (metric_location.id = metric_name.id)
+                     Join Filter: (metric_name.id = metric_location.id)
                      ->  Seq Scan on public.metric_location
                            Output: metric_location.id, metric_location.location
                            Filter: texteq(metric_location.location, 'Yerevan'::text)
@@ -708,7 +709,7 @@ order by 1
    Output: metric_dist.id, metric_dist.value
    ->  Nested Loop
          Output: max_value_times.ts, max_value_times.id, metric_name.id
-         Join Filter: (max_value_times.id = metric_name.id)
+         Join Filter: (metric_name.id = max_value_times.id)
          ->  Index Scan using metric_name_id on public.metric_name
                Output: metric_name.id, metric_name.name
                Filter: (metric_name.name ~~ 'cpu%'::text)

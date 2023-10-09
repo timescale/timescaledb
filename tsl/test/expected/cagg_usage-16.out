@@ -412,6 +412,20 @@ DROP TABLE whatever;
 -- Check that continuous_agg_invalidation_trigger() handles no arguments properly
 SELECT _timescaledb_functions.continuous_agg_invalidation_trigger();
 ERROR:  must supply hypertable id
+-- Check that continuous_agg_invalidation_trigger() not crashes when an invalid ht id is used
+CREATE TABLE sensor_data (
+time timestamptz NOT NULL,
+sensor_id integer NOT NULL,
+cpu double precision NULL,
+temperature double precision NULL);
+SELECT FROM create_hypertable('sensor_data','time');
+--
+(1 row)
+
+CREATE TRIGGER ts_cagg_invalidation_trigger AFTER INSERT OR DELETE OR UPDATE ON sensor_data FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.continuous_agg_invalidation_trigger(999999);
+INSERT INTO sensor_data values('1980-01-01 00:00:00-00', 1, 1, 1);
+ERROR:  unable to determine relid for hypertable 999999
+DROP TABLE sensor_data;
 -- END OF BASIC USAGE TESTS --
 CREATE TABLE metrics(time timestamptz, device TEXT, value float);
 SELECT table_name FROM create_hypertable('metrics','time');
