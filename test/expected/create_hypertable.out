@@ -795,7 +795,20 @@ select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_I
  29 |            17 | time        | bigint      | t       |            |                          |                   |               1 |                          | public                  | dummy_now
 (1 row)
 
+-- show chunks works with "created_before" and errors out with time used in "older_than"
+SELECT SHOW_CHUNKS('test_table_int', older_than => 10);
+ show_chunks 
+-------------
+(0 rows)
+
+SELECT SHOW_CHUNKS('test_table_int', created_before => now());
+ show_chunks 
+-------------
+(0 rows)
+
 \set ON_ERROR_STOP 0
+SELECT SHOW_CHUNKS('test_table_int', older_than => now());
+ERROR:  invalid time argument type "timestamp with time zone"
 select set_integer_now_func('test_table_int', 'dummy_now');
 ERROR:  custom time function already set for hypertable "test_table_int"
 select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);

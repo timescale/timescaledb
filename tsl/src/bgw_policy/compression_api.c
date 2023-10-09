@@ -142,12 +142,14 @@ policy_recompression_proc(PG_FUNCTION_ARGS)
 }
 
 static void
-validate_compress_after_type(Oid partitioning_type, Oid compress_after_type)
+validate_compress_after_type(const Dimension *dim, Oid partitioning_type, Oid compress_after_type)
 {
 	Oid expected_type = InvalidOid;
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
-		if (!IS_INTEGER_TYPE(compress_after_type))
+		Oid now_func = ts_get_integer_now_func(dim, false);
+
+		if (!IS_INTEGER_TYPE(compress_after_type) && OidIsValid(now_func))
 			expected_type = partitioning_type;
 	}
 	else if (compress_after_type != INTERVALOID)
@@ -280,7 +282,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_int32(parse_state, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
-	validate_compress_after_type(partitioning_type, compress_after_type);
+	validate_compress_after_type(dim, partitioning_type, compress_after_type);
 	switch (compress_after_type)
 	{
 		case INTERVALOID:

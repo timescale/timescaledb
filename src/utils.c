@@ -837,10 +837,10 @@ ts_get_reloptions(Oid relid)
  * Get the integer_now function for a dimension
  */
 Oid
-ts_get_integer_now_func(const Dimension *open_dim)
+ts_get_integer_now_func(const Dimension *open_dim, bool fail_if_not_found)
 {
 	Oid rettype;
-	Oid now_func;
+	Oid now_func = InvalidOid;
 	Oid argtypes[] = { 0 };
 
 	rettype = ts_dimension_get_partition_type(open_dim);
@@ -849,8 +849,14 @@ ts_get_integer_now_func(const Dimension *open_dim)
 
 	if (strlen(NameStr(open_dim->fd.integer_now_func)) == 0 &&
 		strlen(NameStr(open_dim->fd.integer_now_func_schema)) == 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_UNDEFINED_FUNCTION), (errmsg("integer_now function not set"))));
+	{
+		if (fail_if_not_found)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
+					 (errmsg("integer_now function not set"))));
+		else
+			return now_func;
+	}
 
 	List *name = list_make2(makeString((char *) NameStr(open_dim->fd.integer_now_func_schema)),
 							makeString((char *) NameStr(open_dim->fd.integer_now_func)));
@@ -931,7 +937,7 @@ ts_subtract_integer_from_now(PG_FUNCTION_ARGS)
 	if (!IS_INTEGER_TYPE(partitioning_type))
 		elog(ERROR, "hypertable has no integer partitioning dimension");
 
-	Oid now_func = ts_get_integer_now_func(dim);
+	Oid now_func = ts_get_integer_now_func(dim, true);
 	if (!OidIsValid(now_func))
 		elog(ERROR, "could not find valid integer_now function for hypertable");
 

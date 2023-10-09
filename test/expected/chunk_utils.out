@@ -193,11 +193,6 @@ ERROR:  invalid time range for dropping chunks
 SELECT drop_chunks('drop_chunk_test1', older_than => NULL::int);
 ERROR:  invalid time range for dropping chunks
 DROP VIEW dependent_view;
--- should error because wrong time type
-SELECT drop_chunks('drop_chunk_test1', older_than => now());
-ERROR:  invalid time argument type "timestamp with time zone"
-SELECT show_chunks('drop_chunk_test3', now());
-ERROR:  invalid time argument type "timestamp with time zone"
 -- should error because of wrong relative order of time constraints
 SELECT show_chunks('drop_chunk_test1', older_than=>3, newer_than=>4);
 ERROR:  invalid time range
@@ -771,13 +766,65 @@ ORDER BY c.id;
        12 |             2 | _timescaledb_internal | _hyper_2_12_chunk |           6 |         7
 (6 rows)
 
+-- We support show/drop chunks using timestamps/interval even with integer partitioning
+-- the chunk creation time gets used for these. But we need to use "created_before, created_after"
+-- for these
+\set ON_ERROR_STOP 0
+SELECT show_chunks('drop_chunk_test3', older_than => now());
+ERROR:  invalid time argument type "timestamp with time zone"
+SELECT show_chunks('drop_chunk_test2', older_than => now());
+ERROR:  invalid time argument type "timestamp with time zone"
+SELECT show_chunks('drop_chunk_test1', newer_than => INTERVAL '15 minutes');
+ERROR:  invalid time argument type "interval"
+SELECT show_chunks('drop_chunk_test1', older_than => now(), newer_than => INTERVAL '15 minutes');
+ERROR:  invalid time argument type "timestamp with time zone"
+SELECT drop_chunks('drop_chunk_test1', older_than => now());
+ERROR:  invalid time argument type "timestamp with time zone"
+-- mix of older_than/newer_than and created_after/created_before doesn't work
+SELECT show_chunks('drop_chunk_test1', older_than => now(), created_after => INTERVAL '15 minutes');
+ERROR:  invalid time argument type "timestamp with time zone"
+SELECT show_chunks('drop_chunk_test1', created_before => now(), newer_than => INTERVAL '15 minutes');
+ERROR:  invalid time argument type "interval"
+\set ON_ERROR_STOP 1
+SELECT show_chunks('drop_chunk_test3', created_before => now() + INTERVAL '1 hour');
+ show_chunks 
+-------------
+(0 rows)
+
+SELECT show_chunks('drop_chunk_test2', created_before => now() + INTERVAL '1 hour');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_2_8_chunk
+ _timescaledb_internal._hyper_2_9_chunk
+ _timescaledb_internal._hyper_2_10_chunk
+ _timescaledb_internal._hyper_2_11_chunk
+ _timescaledb_internal._hyper_2_12_chunk
+(5 rows)
+
+SELECT show_chunks('drop_chunk_test1', created_after => INTERVAL '15 minutes');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_4_chunk
+(1 row)
+
+SELECT show_chunks('drop_chunk_test1', created_before => now() + INTERVAL '1 hour', created_after => INTERVAL '1 hour');
+              show_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_4_chunk
+(1 row)
+
+SELECT drop_chunks('drop_chunk_test1', created_before => now() + INTERVAL '1 hour');
+              drop_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_4_chunk
+(1 row)
+
 SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older_than => 5, newer_than => 4)
   FROM _timescaledb_catalog.hypertable WHERE schema_name = 'public';
                drop_chunks               
 -----------------------------------------
- _timescaledb_internal._hyper_1_4_chunk
  _timescaledb_internal._hyper_2_10_chunk
-(2 rows)
+(1 row)
 
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
@@ -813,6 +860,14 @@ SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
 -----------------------------------------+------------
  _timescaledb_internal._hyper_5_21_chunk | 
  _timescaledb_internal._hyper_5_22_chunk | 
+(2 rows)
+
+-- "created_before/after" can be used with time partitioning in show chunks
+SELECT show_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_5_21_chunk
+ _timescaledb_internal._hyper_5_22_chunk
 (2 rows)
 
 BEGIN;
@@ -1000,13 +1055,20 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(interval '1 minute');
 ERROR:  function drop_chunks(interval) does not exist at character 8
-SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
-ERROR:  can only use an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types
 SELECT drop_chunks('drop_chunk_test_ts', (now()-interval '1 minute'));
 ERROR:  invalid time argument type "timestamp with time zone"
 SELECT drop_chunks('drop_chunk_test3', verbose => true);
 ERROR:  invalid time range for dropping chunks
+SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
+ERROR:  invalid time argument type "interval"
 \set ON_ERROR_STOP 1
+-- Interval boundary for INTEGER type columns. It uses chunk creation
+-- time to identify the affected chunks.
+SELECT drop_chunks('drop_chunk_test3', created_after => interval '1 minute');
+ drop_chunks 
+-------------
+(0 rows)
+
 \dt "_timescaledb_internal"._hyper*
                            List of relations
         Schema         |       Name        | Type  |       Owner       
@@ -1465,4 +1527,12 @@ ORDER BY chunk_name ;
 -----------------------+--------------------
  _timescaledb_internal | _hyper_12_41_chunk
 (1 row)
+
+-- "created_before/after" can be used with time partitioning in drop chunks
+SELECT drop_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
+               drop_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_5_21_chunk
+ _timescaledb_internal._hyper_5_22_chunk
+(2 rows)
 
