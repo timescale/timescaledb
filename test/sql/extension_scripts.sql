@@ -44,7 +44,7 @@ CREATE EXTENSION timescaledb;
 DROP FUNCTION time_bucket;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION show_chunks(relation regclass, older_than "any" DEFAULT NULL, newer_than "any" DEFAULT NULL) RETURNS SETOF regclass language internal as 'pg_partition_ancestors';
+CREATE OR REPLACE FUNCTION show_chunks(relation regclass, older_than "any" DEFAULT NULL, newer_than "any" DEFAULT NULL, created_before "any" DEFAULT NULL, created_after "any" DEFAULT NULL) RETURNS SETOF regclass language internal as 'pg_partition_ancestors';
 CREATE EXTENSION timescaledb;
 DROP FUNCTION show_chunks;
 
@@ -58,6 +58,7 @@ DROP EXTENSION timescaledb;
 RESET client_min_messages;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+DROP USER "FooBar";
 SET client_min_messages TO ERROR;
 CREATE EXTENSION timescaledb;
 

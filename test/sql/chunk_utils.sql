@@ -95,10 +95,6 @@ SELECT drop_chunks('drop_chunk_test1', older_than => NULL::int);
 
 DROP VIEW dependent_view;
 
--- should error because wrong time type
-SELECT drop_chunks('drop_chunk_test1', older_than => now());
-SELECT show_chunks('drop_chunk_test3', now());
-
 -- should error because of wrong relative order of time constraints
 SELECT show_chunks('drop_chunk_test1', older_than=>3, newer_than=>4);
 
@@ -274,8 +270,29 @@ INNER JOIN  _timescaledb_catalog.chunk_constraint cc ON (cc.dimension_slice_id =
 WHERE h.schema_name = 'public'
 ORDER BY c.id;
 
+-- We support show/drop chunks using timestamps/interval even with integer partitioning
+-- the chunk creation time gets used for these. But we need to use "created_before, created_after"
+-- for these
+\set ON_ERROR_STOP 0
+SELECT show_chunks('drop_chunk_test3', older_than => now());
+SELECT show_chunks('drop_chunk_test2', older_than => now());
+SELECT show_chunks('drop_chunk_test1', newer_than => INTERVAL '15 minutes');
+SELECT show_chunks('drop_chunk_test1', older_than => now(), newer_than => INTERVAL '15 minutes');
+SELECT drop_chunks('drop_chunk_test1', older_than => now());
+-- mix of older_than/newer_than and created_after/created_before doesn't work
+SELECT show_chunks('drop_chunk_test1', older_than => now(), created_after => INTERVAL '15 minutes');
+SELECT show_chunks('drop_chunk_test1', created_before => now(), newer_than => INTERVAL '15 minutes');
+\set ON_ERROR_STOP 1
+SELECT show_chunks('drop_chunk_test3', created_before => now() + INTERVAL '1 hour');
+SELECT show_chunks('drop_chunk_test2', created_before => now() + INTERVAL '1 hour');
+SELECT show_chunks('drop_chunk_test1', created_after => INTERVAL '15 minutes');
+SELECT show_chunks('drop_chunk_test1', created_before => now() + INTERVAL '1 hour', created_after => INTERVAL '1 hour');
+SELECT drop_chunks('drop_chunk_test1', created_before => now() + INTERVAL '1 hour');
+
 SELECT drop_chunks(format('%1$I.%2$I', schema_name, table_name)::regclass, older_than => 5, newer_than => 4)
   FROM _timescaledb_catalog.hypertable WHERE schema_name = 'public';
+
+
 
 CREATE TABLE PUBLIC.drop_chunk_test_ts(time timestamp, temp float8, device_id text);
 SELECT create_hypertable('public.drop_chunk_test_ts', 'time', chunk_time_interval => interval '1 minute', create_default_indexes=>false);
@@ -291,6 +308,8 @@ INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()+INTERVAL '5 minutes', 1.0, 
 
 SELECT * FROM test.show_subtables('drop_chunk_test_ts');
 SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
+-- "created_before/after" can be used with time partitioning in show chunks
+SELECT show_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
 
 BEGIN;
     SELECT show_chunks('drop_chunk_test_ts');
@@ -373,10 +392,14 @@ ROLLBACK;
 
 \set ON_ERROR_STOP 0
 SELECT drop_chunks(interval '1 minute');
-SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
 SELECT drop_chunks('drop_chunk_test_ts', (now()-interval '1 minute'));
 SELECT drop_chunks('drop_chunk_test3', verbose => true);
+SELECT drop_chunks('drop_chunk_test3', interval '1 minute');
 \set ON_ERROR_STOP 1
+
+-- Interval boundary for INTEGER type columns. It uses chunk creation
+-- time to identify the affected chunks.
+SELECT drop_chunks('drop_chunk_test3', created_after => interval '1 minute');
 
 \dt "_timescaledb_internal"._hyper*
 
@@ -625,3 +648,6 @@ SELECT chunk_schema as "CHSCHEMA",  chunk_name as "CHNAME"
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name ;
+
+-- "created_before/after" can be used with time partitioning in drop chunks
+SELECT drop_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');

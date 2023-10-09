@@ -105,7 +105,7 @@ subtract_interval_from_now(Interval *lag, Oid time_dim_type)
 }
 
 const Dimension *
-get_open_dimension_for_hypertable(const Hypertable *ht)
+get_open_dimension_for_hypertable(const Hypertable *ht, bool fail_if_not_found)
 {
 	int32 mat_id = ht->fd.id;
 
@@ -122,7 +122,7 @@ get_open_dimension_for_hypertable(const Hypertable *ht)
 		 */
 
 		open_dim = ts_continuous_agg_find_integer_now_func_by_materialization_id(mat_id);
-		if (open_dim == NULL)
+		if (open_dim == NULL && fail_if_not_found)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_TS_UNEXPECTED),
