@@ -891,9 +891,10 @@ FROM disttable
 ORDER BY device, temp;
                                                                                        QUERY PLAN                                                                                       
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort
+ Incremental Sort
    Output: disttable.device, disttable.temp, (avg(disttable.temp) OVER (?))
    Sort Key: disttable.device, disttable.temp
+   Presorted Key: disttable.device
    ->  WindowAgg
          Output: disttable.device, disttable.temp, avg(disttable.temp) OVER (?)
          ->  Custom Scan (AsyncAppend)
@@ -915,7 +916,7 @@ ORDER BY device, temp;
                            Data node: db_dist_hypertable_3
                            Chunks: _dist_hyper_1_2_chunk, _dist_hyper_1_6_chunk
                            Remote SQL: SELECT device, temp FROM public.disttable WHERE _timescaledb_functions.chunks_in(public.disttable.*, ARRAY[1, 2]) ORDER BY device ASC NULLS LAST
-(24 rows)
+(25 rows)
 
 SELECT device, temp, avg(temp) OVER (PARTITION BY device)
 FROM disttable

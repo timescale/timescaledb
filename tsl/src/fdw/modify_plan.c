@@ -8,50 +8,14 @@
 #include <parser/parsetree.h>
 #include <access/sysattr.h>
 #include <utils/rel.h>
+#include <optimizer/inherit.h>
+#include <optimizer/pathnode.h>
 
 #include <chunk.h>
 #include "deparse.h"
 #include "errors.h"
 #include "modify_plan.h"
 #include "ts_catalog/chunk_data_node.h"
-
-static List *
-get_insert_attrs(Relation rel)
-{
-	TupleDesc tupdesc = RelationGetDescr(rel);
-	List *attrs = NIL;
-	int i;
-
-	for (i = 0; i < tupdesc->natts; i++)
-	{
-		Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
-
-		if (!attr->attisdropped)
-			attrs = lappend_int(attrs, AttrOffsetGetAttrNumber(i));
-	}
-
-	return attrs;
-}
-
-static List *
-get_update_attrs(Bitmapset *updatedCols)
-{
-	List *attrs = NIL;
-	int col = -1;
-
-	while ((col = bms_next_member(updatedCols, col)) >= 0)
-	{
-		/* bit numbers are offset by FirstLowInvalidHeapAttributeNumber */
-		AttrNumber attno = col + FirstLowInvalidHeapAttributeNumber;
-
-		if (attno <= InvalidAttrNumber) /* shouldn't happen */
-			elog(ERROR, "system-column update is not supported");
-
-		attrs = lappend_int(attrs, attno);
-	}
-
-	return attrs;
-}
 
 /* get a list of "live" DNs associated with this chunk */
 List *
@@ -145,6 +109,60 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 		returning_list = (List *) list_nth(plan->returningLists, subplan_index);
 
 	/*
+	 * Core code already has some lock on each rel being planned, so we can
+	 * use NoLock here.
+	 */
+	rel = table_open(rte->relid, NoLock);
+	TupleDesc tupdesc = RelationGetDescr(rel);
+
+	/*
+	 * In an INSERT, we transmit all columns that are defined in the foreign
+	 * table.  In an UPDATE, if there are BEFORE ROW UPDATE triggers on the
+	 * foreign table, we transmit all columns like INSERT; else we transmit
+	 * only columns that were explicitly targets of the UPDATE, so as to avoid
+	 * unnecessary data transmission.  (We can't do that for INSERT since we
+	 * would miss sending default values for columns not listed in the source
+	 * statement, and for UPDATE if there are BEFORE ROW UPDATE triggers since
+	 * those triggers might change values for non-target columns, in which
+	 * case we would miss sending changed values for those columns.)
+	 */
+	if (operation == CMD_INSERT ||
+		(operation == CMD_UPDATE && rel->trigdesc && rel->trigdesc->trig_update_before_row))
+	{
+		AttrNumber attnum;
+
+		for (attnum = 1; attnum <= tupdesc->natts; attnum++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attnum));
+
+			if (!attr->attisdropped)
+				target_attrs = lappend_int(target_attrs, attnum);
+		}
+	}
+	else if (operation == CMD_UPDATE)
+	{
+		RelOptInfo *rel = find_base_rel(root, result_relation);
+		Bitmapset *allUpdatedCols = (Bitmapset *) get_rel_all_updated_cols(root, rel);
+		int col = -1;
+
+		while ((col = bms_next_member(allUpdatedCols, col)) >= 0)
+		{
+			/* bit numbers are offset by FirstLowInvalidHeapAttributeNumber */
+			AttrNumber attno = col + FirstLowInvalidHeapAttributeNumber;
+			Form_pg_attribute attr = TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
+
+			if (attno <= InvalidAttrNumber) /* shouldn't happen */
+				elog(ERROR, "system-column update is not supported");
+
+			/* Ignore generated columns */
+			if (attr->attgenerated)
+				continue;
+
+			target_attrs = lappend_int(target_attrs, attno);
+		}
+	}
+
+	/*
 	 * ON CONFLICT DO UPDATE and DO NOTHING case with inference specification
 	 * should have already been rejected in the optimizer, as presently there
 	 * is no way to recognize an arbiter index on a foreign table.  Only DO
@@ -159,12 +177,6 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 						" on distributed hypertables")));
 
 	/*
-	 * Core code already has some lock on each rel being planned, so we can
-	 * use NoLock here.
-	 */
-	rel = table_open(rte->relid, NoLock);
-
-	/*
 	 * Construct the SQL command string
 	 *
 	 * In an INSERT, we transmit all columns that are defined in the foreign
@@ -176,7 +188,6 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 	switch (operation)
 	{
 		case CMD_INSERT:
-			target_attrs = get_insert_attrs(rel);
 			deparseInsertSql(&sql,
 							 rte,
 							 result_relation,
@@ -189,17 +200,6 @@ fdw_plan_foreign_modify(PlannerInfo *root, ModifyTable *plan, Index result_relat
 			break;
 		case CMD_UPDATE:
 		{
-#if PG16_LT
-			Bitmapset *updatedCols = rte->updatedCols;
-#else
-			Bitmapset *updatedCols = NULL;
-			if (rte->perminfoindex > 0)
-			{
-				RTEPermissionInfo *perminfo = getRTEPermissionInfo(root->parse->rteperminfos, rte);
-				updatedCols = perminfo->updatedCols;
-			}
-#endif
-			target_attrs = get_update_attrs(updatedCols);
 			deparseUpdateSql(&sql,
 							 rte,
 							 result_relation,

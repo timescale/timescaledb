@@ -31,7 +31,7 @@ set(TEST_FILES
     size_utils_tsl.sql)
 
 if(ENABLE_MULTINODE_TESTS)
-  list(APPEND TEST_FILES dist_param.sql dist_views.sql)
+  list(APPEND TEST_FILES dist_views.sql)
 endif()
 
 if(USE_TELEMETRY)
@@ -92,7 +92,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(
       APPEND
       TEST_FILES
-      cagg_bgw_dist_ht.sql
       cagg_migrate_dist_ht.sql
       cagg_on_cagg_dist_ht.sql
       cagg_on_cagg_joins_dist_ht.sql
@@ -171,6 +170,10 @@ set(TEST_TEMPLATES
     transparent_decompression_ordered_index.sql.in
     merge_append_partially_compressed.sql.in)
 
+if(ENABLE_MULTINODE_TESTS)
+  list(APPEND TEST_TEMPLATES dist_param.sql.in)
+endif()
+
 # This test runs only with PG version >= 14
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   set(TEST_FILES_ON_VERSION_GE_14 modify_exclusion.sql.in)
@@ -194,6 +197,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(
       APPEND
       TEST_TEMPLATES
+      cagg_bgw_dist_ht.sql.in
       cagg_ddl_dist_ht.sql.in
       cagg_invalidation_dist_ht.sql.in
       dist_hypertable.sql.in

@@ -1956,6 +1956,7 @@ void
 deparseUpdateSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel, List *targetAttrs,
 				 List *returningList, List **retrieved_attrs)
 {
+	TupleDesc tupdesc = RelationGetDescr(rel);
 	AttrNumber pindex;
 	bool first;
 	ListCell *lc;
@@ -1969,14 +1970,20 @@ deparseUpdateSql(StringInfo buf, RangeTblEntry *rte, Index rtindex, Relation rel
 	foreach (lc, targetAttrs)
 	{
 		int attnum = lfirst_int(lc);
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, attnum - 1);
 
 		if (!first)
 			appendStringInfoString(buf, ", ");
 		first = false;
 
 		deparseColumnRef(buf, rtindex, attnum, rte, false);
-		appendStringInfo(buf, " = $%d", pindex);
-		pindex++;
+		if (attr->attgenerated)
+			appendStringInfoString(buf, " = DEFAULT");
+		else
+		{
+			appendStringInfo(buf, " = $%d", pindex);
+			pindex++;
+		}
 	}
 	appendStringInfoString(buf, " WHERE ctid = $1");
 

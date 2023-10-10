@@ -1,5 +1,6 @@
 /*.pgbinary
 /cagg_bgw-*.sql
+/cagg_bgw_dist_ht-*.sql
 /cagg_ddl-*.sql
 /cagg_ddl_dist_ht-*.sql
 /cagg_errors_deprecated-*.sql
@@ -16,6 +17,7 @@
 /continuous_aggs_deprecated-*.sql
 /deparse-*.sql
 /dist_grant-*.sql
+/dist_param-*.sql
 /dist_query-*.sql
 /dist_hypertable-*.sql
 /dist_partial_agg-*.sql
