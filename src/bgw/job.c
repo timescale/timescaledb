@@ -377,7 +377,7 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		 * handle them below. We can only use memcpy for the non-nullable fixed
 		 * width starting part of the BgwJob struct.
 		 */
-		memcpy(job, GETSTRUCT(tuple), offsetof(FormData_bgw_job, fixed_schedule));
+		memcpy(job, GETSTRUCT(tuple), offsetof(FormData_bgw_job, initial_start));
 
 		if (should_free)
 			heap_freetuple(tuple);
@@ -390,27 +390,27 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 			continue;
 		}
 #endif
-
 		/* handle NULL columns */
-		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
-		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
-
 		initial_start = slot_getattr(ti->slot, Anum_bgw_job_initial_start, &initial_start_isnull);
 		if (!initial_start_isnull)
 			job->fd.initial_start = DatumGetTimestampTz(initial_start);
 		else
 			job->fd.initial_start = DT_NOBEGIN;
-		timezone = slot_getattr(ti->slot, Anum_bgw_job_timezone, &timezone_isnull);
-		if (!timezone_isnull)
-			job->fd.timezone = DatumGetTextPP(timezone);
-		else
-			job->fd.timezone = NULL;
+
+		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
+		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
 
 		/* We skip config, check_name, and check_schema since the scheduler
 		 * doesn't need these, it saves us from detoasting, and simplifies
 		 * freeing job lists in the scheduler as otherwise the config field
 		 * would have to be freed separately when freeing a job. */
 		job->fd.config = NULL;
+
+		timezone = slot_getattr(ti->slot, Anum_bgw_job_timezone, &timezone_isnull);
+		if (!timezone_isnull)
+			job->fd.timezone = DatumGetTextPP(timezone);
+		else
+			job->fd.timezone = NULL;
 
 		old_ctx = MemoryContextSwitchTo(mctx);
 		jobs = lappend(jobs, job);
