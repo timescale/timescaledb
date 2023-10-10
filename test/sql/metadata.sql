@@ -52,3 +52,23 @@ SELECT _timescaledb_internal.test_exported_uuid() = :'uuid_ex_1' as exported_uui
 -- Verify that the uuid and timestamp are new
 SELECT _timescaledb_internal.test_uuid() = :'uuid_1' as exported_uuids_diff;
 SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as exported_uuids_diff;
+
+-- check metadata version matches expected value
+SELECT x.extversion = m.value AS "version match"
+FROM pg_extension x
+JOIN _timescaledb_catalog.metadata m ON m.key='timescaledb_version'
+WHERE x.extname='timescaledb';
+
+-- test version check in post_restore
+\c :TEST_DBNAME :ROLE_SUPERUSER
+UPDATE _timescaledb_catalog.metadata SET value = '1.2.3' WHERE key = 'timescaledb_version';
+\set ON_ERROR_STOP 0
+-- set verbosity to sqlstate to suppress version dependant error message
+\set VERBOSITY sqlstate
+SELECT timescaledb_post_restore();
+\set ON_ERROR_STOP 1
+
+UPDATE _timescaledb_catalog.metadata m SET value = x.extversion FROM pg_extension x WHERE m.key = 'timescaledb_version' AND x.extname='timescaledb';
+SELECT timescaledb_post_restore();
+
+

@@ -140,6 +140,23 @@ function(version_files SRC_FILE_LIST OUTPUT_FILE_LIST)
       PARENT_SCOPE)
 endfunction()
 
+# Function to replace @VARIABLE@ in source files, producing an output file in
+# the build dir.  Unlike the previous function we need to build a versioned file
+# for every version we create an update script for.
+function(version_check_file SRC_FILE_LIST OUTPUT_FILE_LIST)
+  set(result "")
+  foreach(unversioned_file ${SRC_FILE_LIST})
+    set(versioned_file ${unversioned_file}-${START_VERSION})
+    list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/${versioned_file})
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${unversioned_file})
+      configure_file(${unversioned_file} ${versioned_file} @ONLY)
+    endif()
+  endforeach(unversioned_file)
+  set(${OUTPUT_FILE_LIST}
+      "${result}"
+      PARENT_SCOPE)
+endfunction()
+
 # Create versioned files (replacing MODULE_PATHNAME) in the build directory of
 # all our source files
 version_files("${PRE_UPDATE_FILES}" PRE_UPDATE_FILES_VERSIONED)
@@ -250,6 +267,9 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
     list(APPEND PRE_FILES ${ORIGIN_MOD_FILE})
   endif()
 
+  version_check_file("updates/version_check.sql" VERSION_CHECK_VERSIONED)
+  list(PREPEND PRE_FILES ${VERSION_CHECK_VERSIONED})
+
   # There might not have been any changes in the modfile, in which case the
   # modfile need not be present
   if(EXISTS ${transition_mod_file})
@@ -271,6 +291,7 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
       "${PRE_FILES};${PRE_INSTALL_FUNCTION_FILES_VERSIONED};${SOURCE_FILES_VERSIONED};${POST_FILES_PROCESSED}"
       ${UPDATE_SCRIPT})
   endif()
+
 endforeach(transition_mod_file)
 
 add_custom_target(sqlupdatescripts ALL DEPENDS ${UPDATE_SCRIPTS})

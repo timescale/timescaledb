@@ -12,3 +12,9 @@ INSERT INTO _timescaledb_catalog.metadata
 SELECT 'uuid', _timescaledb_functions.generate_uuid(), TRUE ON CONFLICT DO NOTHING;
 INSERT INTO _timescaledb_catalog.metadata
 SELECT 'install_timestamp', now(), TRUE ON CONFLICT DO NOTHING;
+
+-- Install catalog version on database installation and upgrade.
+-- This allows us to detect catalog mismatches in dump/restore cycle.
+INSERT INTO _timescaledb_catalog.metadata (key, value, include_in_telemetry)
+SELECT 'timescaledb_version', '@PROJECT_VERSION_MOD@', FALSE ON CONFLICT (key) DO UPDATE SET value = excluded.value;
+
