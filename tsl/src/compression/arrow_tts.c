@@ -108,8 +108,7 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *compressed_slot, uin
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	aslot->compressed_slot = compressed_slot;
 	aslot->tuple_index = tuple_index;
-	ItemPointerCopy(&compressed_slot->tts_tid, &slot->tts_tid);
-	slot->tts_tid.ip_blkid.bi_hi = tuple_index;
+	tid_to_compressed_tid(&slot->tts_tid, &compressed_slot->tts_tid, tuple_index);
 	Assert(!TTS_EMPTY(aslot->compressed_slot));
 }
 
@@ -290,7 +289,7 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 			 * reads, so technically we have to do memcpy.
 			 */
 			uint64 value;
-			memcpy(&value, &values[value_bytes * aslot->tuple_index], 8);
+			memcpy(&value, &values[value_bytes * (aslot->tuple_index - 1)], 8);
 
 #ifdef USE_FLOAT8_BYVAL
 			Datum datum = Int64GetDatum(value);
@@ -310,7 +309,7 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 			}
 #endif
 			slot->tts_values[i] = datum;
-			slot->tts_isnull[i] = !arrow_row_is_valid(validity, aslot->tuple_index);
+			slot->tts_isnull[i] = !arrow_row_is_valid(validity, (aslot->tuple_index - 1));
 		}
 	}
 
@@ -364,6 +363,13 @@ tts_arrow_copy_minimal_tuple(TupleTableSlot *slot)
 	tts_arrow_materialize(slot);
 
 	return heap_form_minimal_tuple(slot->tts_tupleDescriptor, slot->tts_values, slot->tts_isnull);
+}
+
+void
+tts_arrow_set_heaptuple_mode(TupleTableSlot *slot)
+{
+	TupleTableSlotOps **ops = (TupleTableSlotOps **) &slot->tts_ops;
+	*ops = (TupleTableSlotOps *) &TTSOpsBufferHeapTuple;
 }
 
 const TupleTableSlotOps TTSOpsArrowTuple = { .base_slot_size = sizeof(ArrowTupleTableSlot),
