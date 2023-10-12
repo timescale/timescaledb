@@ -1510,56 +1510,6 @@ ts_hypertable_insert_blocker(PG_FUNCTION_ARGS)
 }
 
 /*
- * Get the legacy insert blocker trigger on a table.
- *
- * Note that we cannot get the old insert trigger by name since internal triggers
- * are made unique by appending the trigger OID, which we do not
- * know. Instead, we have to search all triggers.
- */
-static Oid
-old_insert_blocker_trigger_get(Oid relid)
-{
-	Relation tgrel;
-	ScanKeyData skey[1];
-	SysScanDesc tgscan;
-	HeapTuple tuple;
-	Oid tgoid = InvalidOid;
-
-	tgrel = table_open(TriggerRelationId, AccessShareLock);
-
-	ScanKeyInit(&skey[0],
-				Anum_pg_trigger_tgrelid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(relid));
-
-	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true, NULL, 1, skey);
-
-	while (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
-	{
-		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
-
-		if (TRIGGER_TYPE_MATCHES(trig->tgtype,
-								 TRIGGER_TYPE_ROW,
-								 TRIGGER_TYPE_BEFORE,
-								 TRIGGER_TYPE_INSERT) &&
-			strncmp(OLD_INSERT_BLOCKER_NAME,
-					NameStr(trig->tgname),
-					strlen(OLD_INSERT_BLOCKER_NAME)) == 0 &&
-			trig->tgisinternal)
-		{
-			tgoid = trig->oid;
-			break;
-		}
-	}
-
-	systable_endscan(tgscan);
-	table_close(tgrel, AccessShareLock);
-
-	return tgoid;
-}
-
-/*
  * Add an INSERT blocking trigger to a table.
  *
  * The blocking trigger is used to block accidental INSERTs on a hypertable's
@@ -1621,7 +1571,6 @@ Datum
 ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 {
 	Oid relid = PG_GETARG_OID(0);
-	Oid old_trigger;
 
 	ts_hypertable_permissions_check(relid, GetUserId());
 
@@ -1640,15 +1589,6 @@ ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
 						 "> SET timescaledb.restoring = 'off';\n"
 						 "> COMMIT;",
 						 get_rel_name(relid))));
-
-	/* Now drop the old trigger */
-	old_trigger = old_insert_blocker_trigger_get(relid);
-	if (OidIsValid(old_trigger))
-	{
-		ObjectAddress objaddr = { .classId = TriggerRelationId, .objectId = old_trigger };
-
-		performDeletion(&objaddr, DROP_RESTRICT, 0);
-	}
 
 	/* Add the new trigger */
 	PG_RETURN_OID(insert_blocker_trigger_add(relid));
