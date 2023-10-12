@@ -1197,6 +1197,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
+	log_min_messages = ts_guc_bgw_log_level;
+
+	elog(DEBUG2, "job %d started execution", params.job_id);
+
 	ts_license_enable_module_loading();
 
 	INSTR_TIME_SET_CURRENT(start);
@@ -1215,6 +1219,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	if (job == NULL)
 		elog(ERROR, "job %d not found when running the background worker", params.job_id);
+
+	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
@@ -1324,7 +1330,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, start);
 
-	elog(LOG,
+	elog(DEBUG1,
 		 "job %d (%s) exiting with %s: execution time %.2f ms",
 		 params.job_id,
 		 NameStr(job->fd.application_name),

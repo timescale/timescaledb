@@ -63,6 +63,14 @@ static const struct config_enum_entry dist_copy_transfer_formats[] = {
 	{ NULL, 0, false }
 };
 
+/* Copied from contrib/auto_explain/auto_explain.c */
+static const struct config_enum_entry loglevel_options[] = {
+	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
+	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
+	{ "info", INFO, false },	 { "notice", NOTICE, false }, { "warning", WARNING, false },
+	{ "log", LOG, false },		 { NULL, 0, false }
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -86,6 +94,7 @@ bool ts_guc_enable_async_append = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
+TSDLLEXPORT int ts_guc_bgw_log_level;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
@@ -713,6 +722,18 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
+	DefineCustomEnumVariable("timescaledb.bgw_log_level",
+							 "Log level for the background worker subsystem",
+							 "Log level for the scheduler and workers of the background worker "
+							 "subsystem. Requires configuration reload to change.",
+							 /* valueAddr= */ &ts_guc_bgw_log_level,
+							 /* bootValue= */ log_min_messages,
+							 /* options= */ loglevel_options,
+							 /* context= */ PGC_SIGHUP,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 #ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
 							   /* short_desc= */ "cloud provider",

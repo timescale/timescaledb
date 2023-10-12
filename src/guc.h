@@ -64,6 +64,7 @@ extern TSDLLEXPORT char *ts_guc_passfile;
 extern TSDLLEXPORT bool ts_guc_enable_remote_explain;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
+extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
 typedef enum DataFetcherType
 {
