@@ -126,10 +126,16 @@ DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorith
 }
 
 DecompressAllFunction
-tsl_get_decompress_all_function(CompressionAlgorithms algorithm)
+tsl_get_decompress_all_function(CompressionAlgorithms algorithm, Oid type)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+
+	if (type != TEXTOID &&
+		(algorithm == COMPRESSION_ALGORITHM_DICTIONARY || algorithm == COMPRESSION_ALGORITHM_ARRAY))
+	{
+		return NULL;
+	}
 
 	return definitions[algorithm].decompress_all;
 }
@@ -1756,6 +1762,21 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 
 	SRF_RETURN_NEXT(funcctx, res.val);
 	;
+}
+
+TS_FUNCTION_INFO_V1(tsl_compressed_data_info);
+
+Datum
+tsl_compressed_data_info(PG_FUNCTION_ARGS)
+{
+	StringInfoData buf = { 0 };
+	initStringInfo(&buf);
+
+	CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+
+	appendStringInfo(&buf, "algo: %d", header->compression_algorithm);
+
+	PG_RETURN_CSTRING(buf.data);
 }
 
 Datum

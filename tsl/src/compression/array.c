@@ -19,6 +19,8 @@
 #include "compression/simple8b_rle.h"
 #include "datum_serialize.h"
 
+#include "compression/arrow_c_data_interface.h"
+
 /* A "compressed" array
  *     uint8 has_nulls: 1 iff this has a nulls bitmap stored before the data
  *     Oid element_type: the element stored by this array
@@ -457,6 +459,87 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	iterator->deserializer = create_datum_deserializer(iterator->base.element_type);
 
 	return &iterator->base;
+}
+
+static uint64
+pad64(uint64 value)
+{
+	return ((value + 63) / 64) * 64;
+}
+
+#define ELEMENT_TYPE uint16
+#include "simple8b_rle_decompress_all.h"
+#undef ELEMENT_TYPE
+
+ArrowArray *
+tsl_text_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == TEXTOID);
+	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
+	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
+	CheckCompressedData(header->element_type == TEXTOID);
+
+	return text_array_decompress_all_serialized_no_header(&si, header->has_nulls, dest_mctx);
+}
+
+ArrowArray *
+text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
+											   MemoryContext dest_mctx)
+{
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (has_nulls)
+	{
+		Assert(false);
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(si);
+	}
+	(void) nulls_serialized;
+
+	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(si);
+
+	uint16 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	const uint16 n = simple8brle_decompress_all_buf_uint16(sizes_serialized,
+														   sizes,
+														   sizeof(sizes) / sizeof(sizes[0]));
+
+	uint32 *offsets =
+		(uint32 *) MemoryContextAllocZero(dest_mctx, pad64(sizeof(*offsets) * (n + 1)));
+	uint8 *arrow_bodies = (uint8 *) MemoryContextAllocZero(dest_mctx, pad64(si->len - si->cursor));
+
+	int offset = 0;
+	for (int i = 0; i < n; i++)
+	{
+		void *vardata = consumeCompressedData(si, sizes[i]);
+		// CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
+		// CheckCompressedData(sizes[i] > VARHDRSZ);
+		const int textlen = VARSIZE_ANY_EXHDR(vardata);
+		memcpy(&arrow_bodies[offset], VARDATA_ANY(vardata), textlen);
+
+		//		fprintf(stderr, "%d: copied: '%s' len %d varsize %d result %.*s\n",
+		//			i, text_to_cstring(vardata), textlen, (int) VARSIZE_ANY(vardata), textlen,
+		//&arrow_bodies[offset]);
+
+		offsets[i] = offset;
+		offset += textlen;
+	}
+	offsets[n] = offset;
+
+	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n);
+	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+
+	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 3);
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = offsets;
+	buffers[2] = arrow_bodies;
+	result->n_buffers = 3;
+	result->buffers = buffers;
+	result->length = n;
+	result->null_count = 0;
+	return result;
 }
 
 DecompressResult

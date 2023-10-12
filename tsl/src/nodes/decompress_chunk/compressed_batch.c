@@ -335,7 +335,8 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 					}
 
 					DecompressAllFunction decompress_all =
-						tsl_get_decompress_all_function(header->compression_algorithm);
+						tsl_get_decompress_all_function(header->compression_algorithm,
+														column_description->typid);
 					Assert(decompress_all != NULL);
 
 					MemoryContext context_before_decompression =
@@ -434,6 +435,20 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 	MemoryContextSwitchTo(old_context);
 }
 
+static Datum
+get_text_datum(ArrowArray *arrow, int arrow_row)
+{
+	Assert(arrow->dictionary == NULL);
+	const uint32 start = ((uint32 *) arrow->buffers[1])[arrow_row];
+	const int32 value_bytes = ((uint32 *) arrow->buffers[1])[arrow_row + 1] - start;
+	Assert(value_bytes >= 0);
+	Datum datum = PointerGetDatum(palloc0(value_bytes + VARHDRSZ));
+	SET_VARSIZE(datum, value_bytes + VARHDRSZ);
+	memcpy(VARDATA(datum), &((uint8 *) arrow->buffers[2])[start], value_bytes);
+
+	return datum;
+}
+
 /*
  * Construct the next tuple in the decompressed scan slot.
  * Doesn't check the quals.
@@ -473,39 +488,59 @@ compressed_batch_make_next_tuple(DecompressChunkState *chunk_state,
 		}
 		else if (column_values.arrow_values != NULL)
 		{
-			const char *restrict src = column_values.arrow_values;
-			Assert(column_values.value_bytes > 0);
-
-			/*
-			 * The conversion of Datum to more narrow types will truncate
-			 * the higher bytes, so we don't care if we read some garbage
-			 * into them, and can always read 8 bytes. These are unaligned
-			 * reads, so technically we have to do memcpy.
-			 */
-			uint64 value;
-			memcpy(&value, &src[column_values.value_bytes * arrow_row], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-			Datum datum = Int64GetDatum(value);
-#else
-			/*
-			 * On 32-bit systems, the data larger than 4 bytes go by
-			 * reference, so we have to jump through these hoops.
-			 */
-			Datum datum;
-			if (column_values.value_bytes <= 4)
+			const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
+			if (column_values.value_bytes == -1)
 			{
-				datum = Int32GetDatum((uint32) value);
+				if (column_values.arrow->dictionary == NULL)
+				{
+					decompressed_scan_slot->tts_values[attr] =
+						get_text_datum(column_values.arrow, arrow_row);
+				}
+				else
+				{
+					const int16 index = ((int16 *) column_values.arrow->buffers[1])[arrow_row];
+					decompressed_scan_slot->tts_values[attr] =
+						get_text_datum(column_values.arrow->dictionary, index);
+				}
+
+				decompressed_scan_slot->tts_isnull[attr] =
+					!arrow_row_is_valid(column_values.arrow->buffers[0], arrow_row);
 			}
 			else
 			{
-				datum = Int64GetDatum(value);
-			}
+				Assert(column_values.value_bytes > 0);
+				const char *restrict src = column_values.arrow_values;
+
+				/*
+				 * The conversion of Datum to more narrow types will truncate
+				 * the higher bytes, so we don't care if we read some garbage
+				 * into them, and can always read 8 bytes. These are unaligned
+				 * reads, so technically we have to do memcpy.
+				 */
+				uint64 value;
+				memcpy(&value, &src[column_values.value_bytes * arrow_row], 8);
+
+#ifdef USE_FLOAT8_BYVAL
+				Datum datum = Int64GetDatum(value);
+#else
+				/*
+				 * On 32-bit systems, the data larger than 4 bytes go by
+				 * reference, so we have to jump through these hoops.
+				 */
+				Datum datum;
+				if (column_values.value_bytes <= 4)
+				{
+					datum = Int32GetDatum((uint32) value);
+				}
+				else
+				{
+					datum = Int64GetDatum(value);
+				}
 #endif
-			const AttrNumber attr = AttrNumberGetAttrOffset(column_values.output_attno);
-			decompressed_scan_slot->tts_values[attr] = datum;
-			decompressed_scan_slot->tts_isnull[attr] =
-				!arrow_row_is_valid(column_values.arrow_validity, arrow_row);
+				decompressed_scan_slot->tts_values[attr] = datum;
+				decompressed_scan_slot->tts_isnull[attr] =
+					!arrow_row_is_valid(column_values.arrow_validity, arrow_row);
+			}
 		}
 	}
 

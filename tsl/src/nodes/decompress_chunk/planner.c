@@ -254,13 +254,28 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 			lappend_int(path->is_segmentby_column,
 						compression_info && compression_info->segmentby_column_index != 0);
 
-		const bool bulk_decompression_possible =
-			destination_attno_in_uncompressed_chunk > 0 && compression_info &&
-			tsl_get_decompress_all_function(compression_info->algo_id) != NULL;
+		/*
+		 * Determine if we can use bulk decompression for this column.
+		 */
+		bool bulk_decompression_possible = false;
+		if (destination_attno_in_uncompressed_chunk > 0 && compression_info)
+		{
+			Oid typid =
+				get_atttype(path->info->chunk_rte->relid, destination_attno_in_uncompressed_chunk);
+			Assert(OidIsValid(typid));
+			if (tsl_get_decompress_all_function(compression_info->algo_id, typid) != NULL)
+			{
+				bulk_decompression_possible = true;
+			}
+		}
 		path->have_bulk_decompression_columns |= bulk_decompression_possible;
 		path->bulk_decompression_column =
 			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
 
+		/*
+		 * Save information about decompressed columns in uncompressed chunk
+		 * for planning of vectorized filters.
+		 */
 		if (destination_attno_in_uncompressed_chunk > 0)
 		{
 			path->uncompressed_chunk_attno_to_compression_info

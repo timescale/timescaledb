@@ -86,7 +86,7 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 		 * might be incorrect.                                                                     \
 		 */                                                                                        \
 		const uint16 n_block_values = SIMPLE8B_NUM_ELEMENTS[X];                                    \
-		CheckCompressedData(decompressed_index + n_block_values < n_buffer_elements);              \
+		CheckCompressedData(decompressed_index + n_block_values <= n_buffer_elements);             \
                                                                                                    \
 		const uint64 bitmask = simple8brle_selector_get_bitmask(X);                                \
                                                                                                    \

@@ -316,7 +316,8 @@ extern void decompress_chunk(Oid in_table, Oid out_table);
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
 
-extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithms algorithm);
+extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithms algorithm,
+															 Oid type);
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
@@ -374,9 +375,13 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 #define CORRUPT_DATA_MESSAGE (errcode(ERRCODE_DATA_CORRUPTED))
 #endif
 
-#define CheckCompressedData(X)                                                                     \
-	if (unlikely(!(X)))                                                                            \
-	ereport(ERROR, CORRUPT_DATA_MESSAGE)
+#define CDSTR(X) #X
+#define CDSTR2(X) CDSTR(X)
+
+#define CheckCompressedData Assert
+// #define CheckCompressedData(X)                                                                     \
+// 	if (unlikely(!(X)))                                                                            \
+// 	ereport(ERROR, CORRUPT_DATA_MESSAGE, errdetail(#X))
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)
