@@ -16,16 +16,6 @@ SET LOCAL max_parallel_workers = 0;
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_sql_drop;
 
--- These are legacy triggers. They need to be disabled here even
--- though they don't exist in newer versions, because they might still
--- exist when upgrading from older versions. Thus we need to DROP all
--- triggers here that have ever been created.
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.hypertable;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk_constraint;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension_slice;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
-
 -- Since we want to call the new version of restart_background_workers we
 -- create a function that points to that version. The proper restart_background_workers
 -- may either be in _timescaledb_internal or in _timescaledb_functions
