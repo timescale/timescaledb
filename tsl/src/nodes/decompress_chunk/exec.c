@@ -432,7 +432,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 				 * estimate the width currently.
 				 */
 				chunk_state->batch_memory_context_bytes +=
-					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) * ( column->value_bytes > 0 ? column->value_bytes : 16 );
+					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) *
+					(column->value_bytes > 0 ? column->value_bytes : 16);
 				/* Also nulls bitmap. */
 				chunk_state->batch_memory_context_bytes +=
 					GLOBAL_MAX_ROWS_PER_COMPRESSION / (64 * sizeof(uint64));

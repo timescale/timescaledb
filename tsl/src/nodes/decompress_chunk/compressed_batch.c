@@ -206,6 +206,23 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 	}
 }
 
+static int
+get_max_element_bytes(ArrowArray *text_array)
+{
+	int maxbytes = 0;
+	uint32 *offsets = (uint32 *) text_array->buffers[1];
+	for (int i = 0; i < text_array->length; i++)
+	{
+		const int curbytes = offsets[i + 1] - offsets[i];
+		if (curbytes > maxbytes)
+		{
+			maxbytes = curbytes;
+		}
+	}
+
+	return maxbytes;
+}
+
 /*
  * Initialize the batch decompression state with the new compressed  tuple.
  */
@@ -258,9 +275,7 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 		Assert(chunk_state->decompressed_slot_scan_tdesc->tdrefcount == -1);
 
 		batch_state->decompressed_scan_slot =
-			MakeSingleTupleTableSlot(chunk_state->decompressed_slot_scan_tdesc,
-				&TTSOpsVirtual);
-
+			MakeSingleTupleTableSlot(chunk_state->decompressed_slot_scan_tdesc, &TTSOpsVirtual);
 	}
 	else
 	{
@@ -370,6 +385,20 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 
 					column_values->value_bytes = get_typlen(column_description->typid);
 
+					if (column_values->value_bytes == -1)
+					{
+						const int maxbytes =
+							VARHDRSZ +
+							(column_values->arrow->dictionary ?
+								 get_max_element_bytes(column_values->arrow->dictionary) :
+								 get_max_element_bytes(column_values->arrow));
+
+						const AttrNumber attr =
+							AttrNumberGetAttrOffset(column_values->output_attno);
+						batch_state->decompressed_scan_slot->tts_values[attr] = PointerGetDatum(
+							MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+					}
+
 					break;
 				}
 
@@ -438,7 +467,7 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 }
 
 static void
-store_text_datum(ArrowArray *arrow, int arrow_row, Datum *dest, MemoryContext mctx)
+store_text_datum(ArrowArray *arrow, int arrow_row, Datum *dest)
 {
 	Assert(arrow->dictionary == NULL);
 	const uint32 start = ((uint32 *) arrow->buffers[1])[arrow_row];
@@ -446,15 +475,7 @@ store_text_datum(ArrowArray *arrow, int arrow_row, Datum *dest, MemoryContext mc
 	Assert(value_bytes >= 0);
 
 	const int total_bytes = value_bytes + VARHDRSZ;
-	if (DatumGetPointer(*dest) == NULL)
-	{
-		*dest = PointerGetDatum(MemoryContextAlloc(mctx, total_bytes));
-	}
-	else
-	{
-		*dest = PointerGetDatum(repalloc(DatumGetPointer(*dest), total_bytes));
-	}
-
+	Assert(DatumGetPointer(*dest) != NULL);
 	SET_VARSIZE(*dest, total_bytes);
 	memcpy(VARDATA(*dest), &((uint8 *) arrow->buffers[2])[start], value_bytes);
 }
@@ -503,16 +524,16 @@ compressed_batch_make_next_tuple(DecompressChunkState *chunk_state,
 			{
 				if (column_values.arrow->dictionary == NULL)
 				{
-					store_text_datum(column_values.arrow, arrow_row,
-						&decompressed_scan_slot->tts_values[attr],
-						batch_state->per_batch_context);
+					store_text_datum(column_values.arrow,
+									 arrow_row,
+									 &decompressed_scan_slot->tts_values[attr]);
 				}
 				else
 				{
 					const int16 index = ((int16 *) column_values.arrow->buffers[1])[arrow_row];
-					store_text_datum(column_values.arrow->dictionary, index,
-						&decompressed_scan_slot->tts_values[attr],
-						batch_state->per_batch_context);
+					store_text_datum(column_values.arrow->dictionary,
+									 index,
+									 &decompressed_scan_slot->tts_values[attr]);
 				}
 
 				decompressed_scan_slot->tts_isnull[attr] =
