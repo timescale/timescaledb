@@ -73,7 +73,8 @@ set(OLD_REV_FILES
     2.11.0--2.10.3.sql
     2.11.1--2.11.0.sql
     2.11.2--2.11.1.sql
-    2.12.0--2.11.2.sql)
+    2.12.0--2.11.2.sql
+    2.12.1--2.12.0.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
