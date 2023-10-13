@@ -23,6 +23,7 @@
 #include <parser/parsetree.h>
 #include <pgstat.h>
 #include <postgres_ext.h>
+#include <storage/block.h>
 #include <storage/buf.h>
 #include <storage/bufmgr.h>
 #include <storage/lockdefs.h>
@@ -268,7 +269,6 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		if (!table_scan_getnextslot(scan->compressed_scan_desc, direction, scan->compressed_slot))
 		{
 			ExecClearTuple(slot);
-			tts_arrow_set_heaptuple_mode(slot);
 			scan->compressed_read_done = true;
 			return compressionam_getnextslot(sscan, direction, slot);
 		}
@@ -310,8 +310,10 @@ typedef struct IndexFetchComprData
 {
 	IndexFetchTableData h_base; /* AM independent part of the descriptor */
 	IndexFetchTableData *compr_hscan;
+	IndexFetchTableData *uncompr_hscan;
 	Relation compr_rel;
 	TupleTableSlot *compressed_slot;
+	TupleTableSlot *uncompressed_slot;
 	ItemPointerData tid;
 	int64 num_decompressions;
 } IndexFetchComprData;
@@ -323,6 +325,7 @@ typedef struct IndexFetchComprData
 static IndexFetchTableData *
 compressionam_index_fetch_begin(Relation rel)
 {
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
 	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(rel));
 	Relation crel = table_open(cchunk_relid, AccessShareLock);
@@ -330,7 +333,10 @@ compressionam_index_fetch_begin(Relation rel)
 	cscan->h_base.rel = rel;
 	cscan->compr_rel = crel;
 	cscan->compressed_slot = table_slot_create(crel, NULL);
+	cscan->uncompressed_slot =
+		MakeSingleTupleTableSlot(RelationGetDescr(rel), &TTSOpsBufferHeapTuple);
 	cscan->compr_hscan = crel->rd_tableam->index_fetch_begin(crel);
+	cscan->uncompr_hscan = heapam->index_fetch_begin(rel);
 	ItemPointerSetInvalid(&cscan->tid);
 
 	return &cscan->h_base;
@@ -340,19 +346,24 @@ static void
 compressionam_index_fetch_reset(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	ItemPointerSetInvalid(&cscan->tid);
 	cscan->compr_rel->rd_tableam->index_fetch_reset(cscan->compr_hscan);
+	heapam->index_fetch_reset(cscan->uncompr_hscan);
 }
 
 static void
 compressionam_index_fetch_end(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	Relation crel = cscan->compr_rel;
 
 	crel->rd_tableam->index_fetch_end(cscan->compr_hscan);
+	heapam->index_fetch_end(cscan->uncompr_hscan);
 	ExecDropSingleTupleTableSlot(cscan->compressed_slot);
+	ExecDropSingleTupleTableSlot(cscan->uncompressed_slot);
 	table_close(crel, AccessShareLock);
 	pfree(cscan);
 }
@@ -365,6 +376,24 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	Relation crel = cscan->compr_rel;
 	ItemPointerData orig_tid;
+
+	if (!is_compressed_tid(tid))
+	{
+		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+		bool result = heapam->index_fetch_tuple(cscan->uncompr_hscan,
+												tid,
+												snapshot,
+												cscan->uncompressed_slot,
+												call_again,
+												all_dead);
+
+		if (result)
+		{
+			ExecStoreArrowTuple(slot, cscan->uncompressed_slot, InvalidTupleIndex);
+		}
+
+		return result;
+	}
 
 	/* Recreate the original TID for the compressed table */
 	uint16 tuple_index = compressed_tid_to_tid(&orig_tid, tid);
@@ -642,6 +671,7 @@ compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXm
 typedef struct IndexCallbackState
 {
 	IndexBuildCallback callback;
+	Relation rel;
 	CompressionInfoData *cdata;
 	IndexInfo *index_info;
 	EState *estate;
@@ -775,6 +805,7 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	IndexCallbackState icstate = {
 		.callback = callback,
 		.orig_state = callback_state,
+		.rel = relation,
 		.estate = CreateExecutorState(),
 		.index_info = indexInfo,
 		.tuple_index = -1,
@@ -831,6 +862,22 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	MemoryContextDelete(icstate.decompression_mcxt);
 	pfree(icstate.attrs_map);
 	pfree((void *) icstate.arrow_columns);
+
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	const TableAmRoutine *oldam = relation->rd_tableam;
+	relation->rd_tableam = heapam;
+	icstate.ntuples += heapam->index_build_range_scan(relation,
+													  indexRelation,
+													  indexInfo,
+													  allow_sync,
+													  anyvisible,
+													  progress,
+													  start_blockno,
+													  numblocks,
+													  callback,
+													  callback_state,
+													  scan);
+	relation->rd_tableam = oldam;
 
 	return icstate.ntuples;
 }
