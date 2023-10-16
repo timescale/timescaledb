@@ -27,6 +27,8 @@ t
 (1 row)
 
 step s1_init: INSERT INTO metric1(ts, val, dev_id) SELECT s.*, 3.14, d.* FROM generate_series('2021-08-17 00:00:00'::timestamp, '2021-08-17 00:00:59'::timestamp, '1 s'::interval) s CROSS JOIN generate_series(1, 500) d;
+s1: WARNING:  altering data node is deprecated
+DETAIL:  Multi-node is deprecated and will be removed in future releases.
 step s1_set_unavailable: SELECT alter_data_node('data_node_4', available=>false);
 alter_data_node                       
 --------------------------------------
@@ -49,6 +51,8 @@ debug_waitpoint_release
 
 step s1_insert: <... completed>
 step s2_insert: <... completed>
+s1: WARNING:  altering data node is deprecated
+DETAIL:  Multi-node is deprecated and will be removed in future releases.
 step s1_set_available: SELECT alter_data_node('data_node_4', available=>true);
 alter_data_node                       
 --------------------------------------

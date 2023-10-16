@@ -65,6 +65,18 @@ create_restore_point_datum(TupleDesc tupdesc, const char *node_name, XLogRecPtr 
 Datum
 create_distributed_restore_point(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("creating distributed restore point is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("creating distributed restore point is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
+
 	const char *name = TextDatumGetCString(PG_GETARG_DATUM(0));
 	DistCmdResult *result_cmd;
 	FuncCallContext *funcctx;

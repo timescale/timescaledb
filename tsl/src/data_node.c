@@ -857,18 +857,52 @@ data_node_add_internal(PG_FUNCTION_ARGS, bool set_distid)
 Datum
 data_node_add(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("adding data node is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("adding data node is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
 	return data_node_add_internal(fcinfo, true);
 }
 
 Datum
 data_node_add_without_dist_id(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("adding data node is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("adding data node is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
 	return data_node_add_internal(fcinfo, false);
 }
 
 Datum
 data_node_attach(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("attaching data node is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("attaching data node is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
+
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	Oid table_id = PG_GETARG_OID(1);
 	bool if_not_attached = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
@@ -1404,6 +1438,18 @@ data_node_block_new_chunks(PG_FUNCTION_ARGS)
 Datum
 data_node_detach(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("detaching data node is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("detaching data node is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
+
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	Oid table_id = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
 	bool all_hypertables = PG_ARGISNULL(1);
@@ -1601,6 +1647,18 @@ append_data_node_option(List *new_options, List **current_options, const char *n
 Datum
 data_node_alter(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("altering data node is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("altering data node is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
+
 	const char *node_name = PG_ARGISNULL(0) ? NULL : NameStr(*PG_GETARG_NAME(0));
 	const char *host = PG_ARGISNULL(1) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(1));
 	const char *database = PG_ARGISNULL(2) ? NULL : NameStr(*PG_GETARG_NAME(2));
@@ -1826,6 +1884,18 @@ drop_data_node_database(const ForeignServer *server)
 Datum
 data_node_delete(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("deleting data node is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("deleting data node is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
+
 	const char *node_name = PG_ARGISNULL(0) ? NULL : PG_GETARG_CSTRING(0);
 	bool if_exists = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
 	bool force = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);

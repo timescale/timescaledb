@@ -3,10 +3,6 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-
-\ir include/remote_exec.sql
 GRANT CREATE ON DATABASE :"TEST_DBNAME" TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
@@ -136,126 +132,6 @@ FROM pg_stats WHERE tablename IN
 (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
 FROM show_chunks('chunkapi'))
 ORDER BY tablename, attname;
-
--- Test getting chunk stats on a distribute hypertable
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
-
-SELECT node_name, database, node_created, database_created, extension_created
-FROM (
-  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
-  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2')) v(name)
-) a;
-
-GRANT USAGE
-   ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2
-   TO :ROLE_1, :ROLE_DEFAULT_PERM_USER;
--- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
-GRANT CREATE ON SCHEMA public TO :ROLE_1;
-
-SET ROLE :ROLE_1;
-CREATE TABLE disttable (time timestamptz, device int, temp float, color text);
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
-INSERT INTO disttable VALUES ('2018-01-01 05:00:00-8', 1, 23.4, 'green'),
-                             ('2018-01-01 06:00:00-8', 4, 22.3, NULL),
-                             ('2018-01-01 06:00:00-8', 1, 21.1, 'green');
-
--- Make sure we get deterministic behavior across all nodes
-CALL distributed_exec($$ SELECT setseed(1); $$);
-
--- No stats on the local table
-SELECT * FROM _timescaledb_functions.get_chunk_relstats('disttable');
-SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
-
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY relname;
-SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY 1,2,3;
-
--- Run ANALYZE on data node 1
-CALL distributed_exec('ANALYZE disttable', ARRAY[:'DATA_NODE_1']);
-
--- Stats should now be refreshed after running get_chunk_{col,rel}stats
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY relname;
-SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY 1,2,3;
-
-SELECT * FROM _timescaledb_functions.get_chunk_relstats('disttable');
-SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
-
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY relname;
-
-SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY 1,2,3;
-
--- Test that user without table permissions can't get column stats
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
-SET ROLE :ROLE_1;
-
--- Run ANALYZE again, but on both nodes.
-ANALYZE disttable;
-
--- Now expect stats from all data node chunks
-SELECT * FROM _timescaledb_functions.get_chunk_relstats('disttable');
-SELECT * FROM _timescaledb_functions.get_chunk_colstats('disttable');
-
--- Test ANALYZE with a replica chunk. We'd like to ensure the
--- stats-fetching functions handle duplicate stats from different (but
--- identical) replica chunks.
-SELECT set_replication_factor('disttable', 2);
-INSERT INTO disttable VALUES ('2019-01-01 05:00:00-8', 1, 23.4, 'green');
--- Run twice to test that stats-fetching functions handle replica chunks.
-ANALYZE disttable;
-ANALYZE disttable;
-
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY relname;
-SELECT * FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('disttable'))
-ORDER BY 1,2,3;
-
--- Check underlying pg_statistics table (looking at all columns except
--- starelid, which changes depending on how many tests are run before
--- this)
-RESET ROLE;
-SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
-stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
-FROM pg_statistic st, show_chunks('disttable') ch
-WHERE st.starelid = ch
-ORDER BY ch, staattnum;
-
-SELECT test.remote_exec(NULL, $$
-SELECT ch, staattnum, stainherit, stanullfrac, stawidth, stadistinct, stakind1, stakind2, stakind3, stakind4, stakind5, staop1, staop2, staop3, staop4, staop5,
-stanumbers1, stanumbers2, stanumbers3, stanumbers4, stanumbers5, stavalues1, stavalues2, stavalues3, stavalues4, stavalues5
-FROM pg_statistic st, show_chunks('disttable') ch
-WHERE st.starelid = ch
-ORDER BY ch, staattnum;
-$$);
-
--- Clean up
-RESET ROLE;
-TRUNCATE disttable;
-SELECT * FROM delete_data_node(:'DATA_NODE_1', force => true);
-SELECT * FROM delete_data_node(:'DATA_NODE_2', force => true);
-DROP DATABASE :DATA_NODE_1 WITH (FORCE);
-DROP DATABASE :DATA_NODE_2 WITH (FORCE);
 
 -- Test create_chunk_table to recreate the chunk table and show dimension slices
 SET ROLE :ROLE_DEFAULT_PERM_USER;
@@ -517,10 +393,3 @@ SELECT * FROM chunkapi ORDER BY 1,2,3;
 SELECT * FROM test.show_constraints(format('%I.%I', :'CHUNK_SCHEMA', :'CHUNK_NAME')::regclass);
 
 DROP TABLE chunkapi;
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SET client_min_messages = ERROR;
-DROP TABLESPACE tablespace1;
-DROP TABLESPACE tablespace2;
-SET client_min_messages = NOTICE;
-\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

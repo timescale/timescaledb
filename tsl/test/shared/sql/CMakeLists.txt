@@ -7,12 +7,12 @@ set(TEST_FILES_SHARED
     constraint_exclusion_prepared.sql
     decompress_join.sql
     decompress_placeholdervar.sql
-    gapfill.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
-    generated_columns.sql.in ordered_append.sql.in ordered_append_join.sql.in
-    transparent_decompress_chunk.sql.in space_constraint.sql.in)
+    generated_columns.sql.in gapfill.sql.in ordered_append.sql.in
+    ordered_append_join.sql.in transparent_decompress_chunk.sql.in
+    space_constraint.sql.in)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED compression_dml.sql decompress_tracking.sql

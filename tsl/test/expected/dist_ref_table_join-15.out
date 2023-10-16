@@ -12,6 +12,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
         node_name         |         database         | node_created | database_created | extension_created 
 --------------------------+--------------------------+--------------+------------------+-------------------
  db_dist_ref_table_join_1 | db_dist_ref_table_join_1 | t            | t                | t
@@ -33,6 +36,7 @@ drop table if exists metric;
 NOTICE:  table "metric" does not exist, skipping
 CREATE table metric(ts timestamptz, id int, value float);
 SELECT create_distributed_hypertable('metric', 'ts', 'id');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "ts"
  create_distributed_hypertable 
 -------------------------------
@@ -53,6 +57,7 @@ CALL distributed_exec($$INSERT into metric_name values (2, 'cpu2');$$);
 -- The reference table as DHT
 CREATE TABLE metric_name_dht(id BIGSERIAL, name text);
 SELECT create_distributed_hypertable('metric_name_dht', 'id', chunk_time_interval => 9223372036854775807, replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (2,public,metric_name_dht,t)
@@ -66,6 +71,7 @@ INSERT into metric_name_local values (1, 'cpu1');
 INSERT into metric_name_local values (2, 'cpu2');
 CREATE table reference_table2(id int primary key, name text);
 SELECT create_distributed_hypertable('reference_table2', 'id', chunk_time_interval => 2147483647, replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (3,public,reference_table2,t)

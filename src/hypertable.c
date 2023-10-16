@@ -68,6 +68,7 @@
 #include "debug_assert.h"
 #include "osm_callbacks.h"
 #include "error_utils.h"
+#include "compat/compat.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -2046,6 +2047,17 @@ ts_hypertable_create(PG_FUNCTION_ARGS)
 Datum
 ts_hypertable_distributed_create(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("distributed hypertable is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("distributed hypertable is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
 	return ts_hypertable_create_time_prev(fcinfo, true);
 }
 

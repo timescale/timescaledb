@@ -53,12 +53,14 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
 AS :TSL_MODULE_PATHNAME, 'ts_unchecked_add_data_node'
 LANGUAGE C;
 SELECT server_name, database, server_created, database_created, extension_created FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
+WARNING:  adding data node is deprecated
  server_name |   database    | server_created | database_created | extension_created 
 -------------+---------------+----------------+------------------+-------------------
  loopback    | db_remote_txn | t              | f                | f
 (1 row)
 
 SELECT server_name, database, server_created, database_created, extension_created FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
+WARNING:  adding data node is deprecated
  server_name |   database    | server_created | database_created | extension_created 
 -------------+---------------+----------------+------------------+-------------------
  loopback2   | db_remote_txn | t              | f                | f
@@ -109,6 +111,7 @@ FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
 
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -141,6 +144,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20001;
 --aborted transaction
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -173,6 +177,7 @@ SELECT count(*) FROM "S 1"."T 1" WHERE "C 1" = 20002;
 --constraint violation
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
@@ -309,6 +314,7 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -358,6 +364,7 @@ FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
 --block preparing transactions on the access node
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (20006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -382,6 +389,7 @@ FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
 --simple commit
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -420,6 +428,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 --simple
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (11001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -458,6 +467,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 --constraint violation should fail the txn
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
@@ -485,6 +495,7 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10002,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -535,6 +546,7 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10003,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -601,6 +613,7 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10004,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -695,6 +708,7 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10006,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -776,6 +790,7 @@ BEGIN;
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10005,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -832,6 +847,7 @@ select count(*) from _timescaledb_catalog.remote_txn;
 --should be fine if we don't see any WARNINGS.
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ PREPARE prep_1 AS SELECT 1 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1 
  remote_exec 
 -------------
@@ -839,6 +855,7 @@ NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
@@ -853,6 +870,7 @@ FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
 BEGIN;
     SAVEPOINT save_1;
         SELECT test.remote_exec('{loopback}', $$ PREPARE prep_1 AS SELECT 1 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1 
  remote_exec 
 -------------
@@ -869,6 +887,7 @@ NOTICE:  [loopback]:  PREPARE prep_1 AS SELECT 1
 
         --generate a unique violation
         SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
     ROLLBACK TO SAVEPOINT save_1;
@@ -882,6 +901,7 @@ ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 (1 row)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (81,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
 ERROR:  [loopback]: duplicate key value violates unique constraint "t1_pkey"
 COMMIT;
@@ -1078,6 +1098,7 @@ FROM _timescaledb_functions.show_connection_cache() ORDER BY 1,4;
 --test simple subtrans abort.
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -1085,6 +1106,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10012,1,'bleh', '2001-01-0
 (1 row)
 
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -1101,6 +1123,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10013,1,'bleh', '2001-01-
 
     SAVEPOINT save_1;
         SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -1127,6 +1150,7 @@ NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10001,1,'bleh', '2001-01-
 (2 rows)
 
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -1134,6 +1158,7 @@ NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10014,1,'bleh', '2001-01-0
 (1 row)
 
     SELECT test.remote_exec('{loopback2}', $$ INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback2]:  INSERT INTO "S 1"."T 1" VALUES (10015,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -1246,6 +1271,7 @@ SELECT count(*) FROM pg_prepared_xacts;
 --block preparing transactions on the frontend
 BEGIN;
     SELECT test.remote_exec('{loopback}', $$ INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [loopback]:  INSERT INTO "S 1"."T 1" VALUES (10051,1,'bleh', '2001-01-01', '2001-01-01', 'bleh') 
  remote_exec 
 -------------
@@ -1263,6 +1289,7 @@ SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loo
 (1 row)
 
 SELECT * FROM delete_data_node('loopback');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -1275,6 +1302,7 @@ SELECT count(*) FROM _timescaledb_catalog.remote_txn WHERE data_node_name = 'loo
 (1 row)
 
 SELECT * FROM delete_data_node('loopback2');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t

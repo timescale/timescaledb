@@ -43,6 +43,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+psql:include/dist_query_load.sql:17: WARNING:  adding data node is deprecated
+psql:include/dist_query_load.sql:17: WARNING:  adding data node is deprecated
+psql:include/dist_query_load.sql:17: WARNING:  adding data node is deprecated
     node_name    |    database     | node_created | database_created | extension_created 
 -----------------+-----------------+--------------+------------------+-------------------
  db_dist_query_1 | db_dist_query_1 | t            | t                | t
@@ -61,12 +64,14 @@ CREATE TABLE hyper (LIKE reference);
 CREATE TABLE hyper1d (LIKE reference);
 SELECT create_distributed_hypertable('hyper', 'time', 'device', 3,
                                      chunk_time_interval => interval '18 hours');
+psql:include/dist_query_load.sql:30: WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (1,public,hyper,t)
 (1 row)
 
 SELECT create_distributed_hypertable('hyper1d', 'time', chunk_time_interval => interval '36 hours');
+psql:include/dist_query_load.sql:32: WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (2,public,hyper1d,t)

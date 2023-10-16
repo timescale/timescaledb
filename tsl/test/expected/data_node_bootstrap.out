@@ -16,6 +16,7 @@ SELECT QUOTE_LITERAL(PG_ENCODING_TO_CHAR(encoding)) AS enc
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  bootstrap_test | bootstrap_test | t            | t                | t
@@ -44,6 +45,7 @@ SELECT PG_ENCODING_TO_CHAR(encoding) = :enc
 -- After delete_data_node, the database and extension should still
 -- exist on the data node
 SELECT * FROM delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -66,8 +68,10 @@ SELECT extname, extnamespace::regnamespace FROM pg_extension e WHERE extname = '
 -- Trying to add the data node again should fail, with or without
 -- bootstrapping.
 SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap=>false);
+WARNING:  adding data node is deprecated
 ERROR:  cannot add "bootstrap_test" as a data node
 SELECT add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+WARNING:  adding data node is deprecated
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
 ERROR:  cannot add "bootstrap_test" as a data node
@@ -79,6 +83,7 @@ DROP DATABASE bootstrap_test WITH (FORCE);
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  bootstrap_test | bootstrap_test | t            | t                | t
@@ -91,6 +96,7 @@ SELECT * FROM show_data_nodes();
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -111,6 +117,7 @@ DELETE FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  bootstrap_test | bootstrap_test | t            | f                | f
@@ -121,11 +128,13 @@ FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap
 -- transaction block since it is non-transactional.
 BEGIN;
 SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+WARNING:  deleting data node is deprecated
 ERROR:  delete_data_node() cannot run inside a transaction block
 ROLLBACK;
 \set ON_ERROR_STOP 1
 CREATE TABLE conditions (time timestamptz, device int, temp float);
 SELECT create_distributed_hypertable('conditions', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
 WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
@@ -136,17 +145,20 @@ NOTICE:  adding not-null constraint to column "time"
 \set ON_ERROR_STOP 0
 -- Should fail because the data node is the last one
 SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+WARNING:  deleting data node is deprecated
 ERROR:  insufficient number of data nodes for distributed hypertable "conditions"
 \set ON_ERROR_STOP 1
 -- Add another data node
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test_2', host => 'localhost', database => 'bootstrap_test_2', bootstrap => true);
+WARNING:  adding data node is deprecated
     node_name     |     database     | node_created | database_created | extension_created 
 ------------------+------------------+--------------+------------------+-------------------
  bootstrap_test_2 | bootstrap_test_2 | t            | t                | t
 (1 row)
 
 SELECT attach_data_node('bootstrap_test_2', 'conditions');
+WARNING:  attaching data node is deprecated
 NOTICE:  the number of partitions in dimension "device" was increased to 2
     attach_data_node    
 ------------------------
@@ -158,6 +170,7 @@ INSERT INTO conditions VALUES ('2021-12-01 10:30', 2, 20.3);
 \set ON_ERROR_STOP 0
 -- Should fail because the data node still holds data
 SELECT * FROM delete_data_node('bootstrap_test_2', drop_database => true);
+WARNING:  deleting data node is deprecated
 ERROR:  insufficient number of data nodes
 \set ON_ERROR_STOP 1
 -- Data node's database still exists after failure to delete
@@ -175,6 +188,7 @@ SELECT drop_chunks('conditions', older_than => '2022-01-01'::timestamptz);
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test_2', drop_database => true);
+WARNING:  deleting data node is deprecated
 NOTICE:  the number of partitions in dimension "device" of hypertable "conditions" was decreased to 1
  delete_data_node 
 ------------------
@@ -205,6 +219,7 @@ DROP TABLE conditions;
 -- Now drop the data node and it should clear the connection from the
 -- cache first
 SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -218,6 +233,7 @@ ERROR:  database "bootstrap_test" does not exist
 -- Adding the data node again should work
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  bootstrap_test | bootstrap_test | t            | t                | t
@@ -228,11 +244,13 @@ DROP DATABASE bootstrap_test WITH (FORCE);
 \set ON_ERROR_STOP 0
 -- Expect an error since the database does not exist.
 SELECT * FROM delete_data_node('bootstrap_test', drop_database => true);
+WARNING:  deleting data node is deprecated
 ERROR:  [bootstrap_test]: database "bootstrap_test" does not exist
 \set ON_ERROR_STOP 1
 -- Delete it without the drop_database option set since the database
 -- was manually deleted.
 SELECT * FROM delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -250,12 +268,14 @@ SET client_min_messages TO NOTICE;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  bootstrap_test | bootstrap_test | t            | f                | f
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -275,6 +295,7 @@ SET client_min_messages TO NOTICE;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+WARNING:  adding data node is deprecated
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
    node_name    |    database    | node_created | database_created | extension_created 
@@ -283,6 +304,7 @@ NOTICE:  extension "timescaledb" already exists on data node, skipping
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -302,6 +324,7 @@ CREATE DATABASE bootstrap_test
 \set ON_ERROR_STOP 0
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+WARNING:  adding data node is deprecated
 ERROR:  database exists but has wrong encoding
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test WITH (FORCE);
@@ -336,6 +359,7 @@ SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 0
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+WARNING:  adding data node is deprecated
 ERROR:  database exists but has wrong encoding
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test WITH (FORCE);
@@ -353,6 +377,7 @@ SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 0
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+WARNING:  adding data node is deprecated
 ERROR:  database exists but has wrong collation
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test WITH (FORCE);
@@ -370,6 +395,7 @@ SET client_min_messages TO NOTICE;
 \set ON_ERROR_STOP 0
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+WARNING:  adding data node is deprecated
 ERROR:  database exists but has wrong LC_CTYPE
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test WITH (FORCE);
@@ -379,6 +405,7 @@ DROP DATABASE bootstrap_test WITH (FORCE);
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  bootstrap_test | bootstrap_test | t            | t                | t
@@ -391,6 +418,7 @@ SELECT * FROM show_data_nodes();
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -400,6 +428,7 @@ DROP DATABASE bootstrap_test WITH (FORCE);
 \set ON_ERROR_STOP 0
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+WARNING:  adding data node is deprecated
 ERROR:  could not connect to "bootstrap_test"
 \set ON_ERROR_STOP 1
 -----------------------------------------------------------------------
@@ -410,12 +439,14 @@ ERROR:  could not connect to "bootstrap_test"
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => true);
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  bootstrap_test | bootstrap_test | t            | t                | t
 (1 row)
 
 SELECT * FROM delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -438,6 +469,7 @@ SELECT extname FROM pg_extension WHERE extname = 'timescaledb';
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test', bootstrap => false);
+WARNING:  adding data node is deprecated
 ERROR:  cannot add "bootstrap_test" as a data node
 \set ON_ERROR_STOP 1
 DROP DATABASE bootstrap_test WITH (FORCE);
@@ -474,9 +506,11 @@ SELECT node_name, database, node_created, database_created, extension_created
 FROM ts_non_default.add_data_node(
        'bootstrap_test', host => 'localhost',
        database => 'bootstrap_test', bootstrap => true);
+WARNING:  adding data node is deprecated
 NOTICE:  database "bootstrap_test" already exists on data node, skipping
 ERROR:  schema "ts_non_default" already exists in database, aborting
 SELECT * FROM ts_non_default.delete_data_node('bootstrap_test');
+WARNING:  deleting data node is deprecated
 ERROR:  server "bootstrap_test" does not exist
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
@@ -489,6 +523,7 @@ BEGIN;
 \set ON_ERROR_STOP 0
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('bootstrap_test', host => 'localhost', database => 'bootstrap_test');
+WARNING:  adding data node is deprecated
 ERROR:  add_data_node() cannot run inside a transaction block
 \set ON_ERROR_STOP 1
 COMMIT;
@@ -509,12 +544,16 @@ END;
 $$ LANGUAGE plpgsql;
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT test_database_name('Unusual Name');
+WARNING:  adding data node is deprecated
+WARNING:  deleting data node is deprecated
  test_database_name 
 --------------------
  
 (1 row)
 
 SELECT test_database_name(U&'\0441\043B\043E\043D');
+WARNING:  adding data node is deprecated
+WARNING:  deleting data node is deprecated
  test_database_name 
 --------------------
  
@@ -544,6 +583,7 @@ SELECT label FROM pg_shseclabel
 
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node('drop_db_test_dn', host => 'localhost', database => 'drop_db_test_dn');
+WARNING:  adding data node is deprecated
     node_name    |    database     | node_created | database_created | extension_created 
 -----------------+-----------------+--------------+------------------+-------------------
  drop_db_test_dn | drop_db_test_dn | t            | t                | t

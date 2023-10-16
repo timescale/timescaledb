@@ -40,6 +40,7 @@ setup
 {
 	SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 	SET application_name = 's1';
+	SET client_min_messages = 'ERROR';
 }
 step "s1_create_dist_rp" { SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s1_test'); }
 
@@ -49,7 +50,7 @@ setup
 {
 	SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 	SET application_name = 's2';
-	SET client_min_messages TO warning;
+	SET client_min_messages = 'ERROR';
 }
 step "s2_create_dist_rp" { SELECT restore_point > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('s2_test'); }
 step "s2_insert"         { INSERT INTO disttable VALUES ('2019-08-02 10:45', 0, 0.0); }
@@ -68,6 +69,7 @@ setup
 {
 	SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 	SET application_name = 's3';
+	SET client_min_messages = 'ERROR';
 }
 step "s3_lock_enable"   { SELECT debug_waitpoint_enable('create_distributed_restore_point_lock'); }
 step "s3_lock_release"  { SELECT debug_waitpoint_release('create_distributed_restore_point_lock'); }

@@ -33,6 +33,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
        node_name       |       database        | node_created | database_created | extension_created 
 -----------------------+-----------------------+--------------+------------------+-------------------
  db_dist_compression_1 | db_dist_compression_1 | t            | t                | t
@@ -47,6 +50,7 @@ SET ROLE :ROLE_1;
 CREATE TABLE compressed(time timestamptz, device int, temp float);
 -- Replicate twice to see that compress_chunk compresses all replica chunks
 SELECT create_distributed_hypertable('compressed', 'time', 'device', replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -95,6 +99,7 @@ SELECT table_name, compressed_hypertable_id
 FROM _timescaledb_catalog.hypertable
 WHERE table_name = 'compressed';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_compression_1]: 
 SELECT table_name, compressed_hypertable_id
 FROM _timescaledb_catalog.hypertable
@@ -290,6 +295,7 @@ ORDER BY chunk_name, node_name;
 SELECT test.remote_exec(NULL, $$
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_compression_1]: 
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk ORDER BY id
 NOTICE:  [db_dist_compression_1]:
@@ -591,6 +597,7 @@ SELECT * FROM test.remote_exec( NULL,
        WHERE attname = 'device_id' OR attname = 'new_intcol'  and
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
                        WHERE table_name = 'compressed' ) ORDER BY attname; $$ );
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_compression_1]:  SELECT * FROM _timescaledb_catalog.hypertable_compression
        WHERE attname = 'device_id' OR attname = 'new_intcol'  and
        hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
@@ -654,6 +661,7 @@ CREATE TABLE conditions (
       humidity    DOUBLE PRECISION  NULL
     );
 SELECT create_distributed_hypertable('conditions', 'time', chunk_time_interval => '31days'::interval, replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (2,public,conditions,t)
@@ -767,6 +775,7 @@ DROP TABLE IF EXISTS conditions CASCADE;
 --smallint tests
 CREATE TABLE test_table_smallint(time smallint, val int);
 SELECT create_distributed_hypertable('test_table_smallint', 'time', chunk_time_interval => 1, replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
   create_distributed_hypertable   
 ----------------------------------
@@ -809,6 +818,7 @@ ORDER BY chunk_name;
 --integer tests
 CREATE TABLE test_table_integer(time int, val int);
 SELECT create_distributed_hypertable('test_table_integer', 'time', chunk_time_interval => 1, replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
   create_distributed_hypertable  
 ---------------------------------
@@ -851,6 +861,7 @@ ORDER BY chunk_name;
 --bigint tests
 CREATE TABLE test_table_bigint(time bigint, val int);
 SELECT create_distributed_hypertable('test_table_bigint', 'time', chunk_time_interval => 1, replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable  
 --------------------------------
@@ -893,6 +904,7 @@ ORDER BY chunk_name;
 --TEST8 insert into compressed chunks on dist. hypertable
 CREATE TABLE test_recomp_int(time bigint, val int);
 SELECT create_distributed_hypertable('test_recomp_int', 'time', chunk_time_interval => 20);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -1271,6 +1283,7 @@ NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_27_chunk
 -- test compression default handling
 CREATE TABLE test_defaults(time timestamptz NOT NULL, device_id int);
 SELECT create_distributed_hypertable('test_defaults','time');
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (8,public,test_defaults,t)
@@ -1325,6 +1338,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 -- test dropping columns from compressed
 CREATE TABLE test_drop(f1 text, f2 text, f3 text, time timestamptz, device int, o1 text, o2 text);
 SELECT create_distributed_hypertable('test_drop','time');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -1409,6 +1423,7 @@ ORDER BY 1;
 -- test ADD COLUMN IF NOT EXISTS on a distributed hypertable
 CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4 NOT NULL);
 SELECT create_distributed_hypertable('metric', 'time');
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (10,public,metric,t)
@@ -1506,6 +1521,7 @@ SELECT * FROM metric where medium is not null ORDER BY time LIMIT 1;
 -- create compressed distributed hypertable
 CREATE TABLE compressed(time timestamptz NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('compressed', 'time', 'device', replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (11,public,compressed,t)
@@ -1526,6 +1542,7 @@ ORDER BY chunk;
 (3 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_compression_1]:  SELECT * from show_chunks('compressed')
 NOTICE:  [db_dist_compression_1]:
 show_chunks                                  
@@ -1580,6 +1597,7 @@ SELECT count(*) FROM compressed;
 -- make data node unavailable
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT alter_data_node(:'DATA_NODE_1', port => 55433, available => false);
+WARNING:  altering data node is deprecated
 WARNING:  could not switch data node on 5 chunks
                          alter_data_node                         
 -----------------------------------------------------------------
@@ -1611,6 +1629,7 @@ SELECT * from show_chunks('compressed');
 (3 rows)
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_2', :'DATA_NODE_3'], $$ SELECT * from show_chunks('compressed'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_compression_2]:  SELECT * from show_chunks('compressed')
 NOTICE:  [db_dist_compression_2]:
 show_chunks                                  
@@ -1645,12 +1664,14 @@ SELECT count(*) FROM compressed;
 -- make data node available again
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
 SELECT alter_data_node(:'DATA_NODE_1', port => 55432);
+WARNING:  altering data node is deprecated
                          alter_data_node                         
 -----------------------------------------------------------------
  (db_dist_compression_1,localhost,55432,db_dist_compression_1,f)
 (1 row)
 
 SELECT alter_data_node(:'DATA_NODE_1', available => true);
+WARNING:  altering data node is deprecated
                          alter_data_node                         
 -----------------------------------------------------------------
  (db_dist_compression_1,localhost,55432,db_dist_compression_1,t)
@@ -1667,6 +1688,7 @@ SELECT * from show_chunks('compressed');
 (3 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_compression_2]:  SELECT * from show_chunks('compressed')
 NOTICE:  [db_dist_compression_2]:
 show_chunks                                  
@@ -1722,6 +1744,7 @@ SELECT * from show_chunks('compressed');
 (3 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('compressed'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_compression_2]:  SELECT * from show_chunks('compressed')
 NOTICE:  [db_dist_compression_2]:
 show_chunks                                  

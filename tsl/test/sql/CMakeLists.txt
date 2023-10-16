@@ -30,7 +30,7 @@ set(TEST_FILES
     skip_scan.sql
     size_utils_tsl.sql)
 
-if(ENABLE_MULTINODE_TESTS)
+if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
   list(APPEND TEST_FILES dist_param.sql dist_views.sql)
 endif()
 
@@ -71,11 +71,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
     cagg_policy_run.sql
-    data_fetcher.sql
-    data_node_bootstrap.sql
-    data_node.sql
     ddl_hook.sql
-    debug_notice.sql
     decompress_vector_qual.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
@@ -88,15 +84,23 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     transparent_decompression_join_index.sql
     feature_flags.sql)
+  if(USE_TELEMETRY)
+    list(APPEND TEST_FILES telemetry_stats.sql)
+  endif()
 
-  if(ENABLE_MULTINODE_TESTS)
+  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
     list(
       APPEND
       TEST_FILES
       cagg_bgw_dist_ht.sql
+      cagg_ddl_dist_ht.sql
       cagg_migrate_dist_ht.sql
       cagg_on_cagg_dist_ht.sql
       cagg_on_cagg_joins_dist_ht.sql
+      data_fetcher.sql
+      data_node_bootstrap.sql
+      data_node.sql
+      debug_notice.sql
       dist_api_calls.sql
       dist_commands.sql
       dist_compression.sql
@@ -148,11 +152,8 @@ set(SOLO_TESTS
     compress_bgw_reorder_drop_chunks
     compression_ddl
     cagg_bgw
-    cagg_bgw_dist_ht
-    cagg_ddl
-    cagg_ddl_dist_ht
+    cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    data_fetcher
     dist_util
     move
     remote_connection_cache
@@ -163,8 +164,14 @@ set(SOLO_TESTS
     telemetry_stats-${PG_VERSION_MAJOR})
 # In PG versions 15.0 to 15.2, dist_move_chunk can cause a deadlock when run in
 # parallel with other tests as mentioned in #4972.
-if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "3")
+if(ENABLE_MULTINODE_TESTS
+   AND ${PG_VERSION_MAJOR} EQUAL "15"
+   AND ${PG_VERSION_MINOR} LESS "3")
   list(APPEND SOLO_TESTS dist_move_chunk)
+endif()
+
+if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
+  list(APPEND SOLO_TESTS cagg_bgw_dist_ht data_fetcher)
 endif()
 
 set(TEST_TEMPLATES
@@ -194,11 +201,10 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     continuous_aggs.sql.in
     continuous_aggs_deprecated.sql.in
     deparse.sql.in)
-  if(ENABLE_MULTINODE_TESTS)
+  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
     list(
       APPEND
       TEST_TEMPLATES
-      cagg_ddl_dist_ht.sql.in
       cagg_invalidation_dist_ht.sql.in
       dist_hypertable.sql.in
       dist_grant.sql.in
@@ -206,9 +212,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       dist_remote_error.sql.in
       dist_partial_agg.sql.in
       dist_query.sql.in)
-  endif()
-  if(USE_TELEMETRY)
-    list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
