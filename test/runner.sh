@@ -140,4 +140,5 @@ ${PSQL} -U ${TEST_PGUSER} \
                -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
                -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \
           grep -v 'DEBUG:  rehashing catalog cache id' | \
-          grep -v 'DEBUG:  compacted fsync request queue from'
+          grep -v 'DEBUG:  compacted fsync request queue from' | \
+          grep -v 'NOTICE:  cancelling the background worker for job'
