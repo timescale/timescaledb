@@ -803,44 +803,6 @@ ORDER BY table_name;
 ------------+--------+-----------
 (0 rows)
 
--- TEST error try freeze/unfreeze on dist hypertable
--- Add distributed hypertables
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT node_name, database, node_created, database_created, extension_created
-FROM (
-  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
-  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2')) v(name)
-) a;
-         node_name         |         database          | node_created | database_created | extension_created 
----------------------------+---------------------------+--------------+------------------+-------------------
- db_chunk_utils_internal_1 | db_chunk_utils_internal_1 | t            | t                | t
- db_chunk_utils_internal_2 | db_chunk_utils_internal_2 | t            | t                | t
-(2 rows)
-
-CREATE TABLE disthyper (timec timestamp, device integer);
-SELECT create_distributed_hypertable('disthyper', 'timec', 'device');
-WARNING:  column type "timestamp without time zone" used for "timec" does not follow best practices
-NOTICE:  adding not-null constraint to column "timec"
- create_distributed_hypertable 
--------------------------------
- (6,public,disthyper,t)
-(1 row)
-
-INSERT into disthyper VALUES ('2020-01-01', 10);
---freeze one of the chunks
-SELECT chunk_schema || '.' ||  chunk_name as "CHNAME3"
-FROM timescaledb_information.chunks
-WHERE hypertable_name = 'disthyper'
-ORDER BY chunk_name LIMIT 1
-\gset
-\set ON_ERROR_STOP 0
-SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME3');
-ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyper_6_12_chunk"
-SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME3');
-ERROR:  operation not supported on distributed chunk or foreign table "_dist_hyper_6_12_chunk"
-\set ON_ERROR_STOP 1
 -- TEST can create OSM chunk if there are constraints on the hypertable
 \c :TEST_DBNAME :ROLE_4
 CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
@@ -853,7 +815,7 @@ CREATE TABLE hyper_constr  ( id integer, time bigint, temp float, mid integer
 SELECT create_hypertable('hyper_constr', 'time', chunk_time_interval => 10);
      create_hypertable     
 ---------------------------
- (7,public,hyper_constr,t)
+ (6,public,hyper_constr,t)
 (1 row)
 
 INSERT INTO hyper_constr VALUES( 10, 200, 22, 1);
@@ -886,7 +848,7 @@ WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
 ORDER BY table_name;
      table_name     | status | osm_chunk 
 --------------------+--------+-----------
- _hyper_7_13_chunk  |      0 | f
+ _hyper_6_12_chunk  |      0 | f
  child_hyper_constr |      0 | t
 (2 rows)
 
@@ -935,8 +897,8 @@ where hypertable_id = (Select id from _timescaledb_catalog.hypertable where tabl
 ORDER BY id;
  id |     table_name     
 ----+--------------------
- 13 | _hyper_7_13_chunk
- 14 | child_hyper_constr
+ 12 | _hyper_6_12_chunk
+ 13 | child_hyper_constr
 (2 rows)
 
 ROLLBACK;
@@ -968,7 +930,7 @@ CREATE TABLE test1.copy_test (
 SELECT create_hypertable('test1.copy_test', 'time', chunk_time_interval => interval '1 day');
    create_hypertable   
 -----------------------
- (8,test1,copy_test,t)
+ (7,test1,copy_test,t)
 (1 row)
 
 COPY test1.copy_test FROM STDIN DELIMITER ',';
@@ -989,13 +951,13 @@ SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
     table_name     | status 
 -------------------+--------
- _hyper_8_15_chunk |      4
+ _hyper_7_14_chunk |      4
 (1 row)
 
 \set ON_ERROR_STOP 0
 -- Copy should fail because one of che chunks is frozen
 COPY test1.copy_test FROM STDIN DELIMITER ',';
-ERROR:  cannot INSERT into frozen chunk "_hyper_8_15_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_7_14_chunk"
 \set ON_ERROR_STOP 1
 -- Count existing rows
 SELECT COUNT(*) FROM test1.copy_test;
@@ -1009,13 +971,13 @@ SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
     table_name     | status 
 -------------------+--------
- _hyper_8_15_chunk |      4
+ _hyper_7_14_chunk |      4
 (1 row)
 
 \set ON_ERROR_STOP 0
 -- Copy should fail because one of che chunks is frozen
 COPY test1.copy_test FROM STDIN DELIMITER ',';
-ERROR:  cannot INSERT into frozen chunk "_hyper_8_15_chunk"
+ERROR:  cannot INSERT into frozen chunk "_hyper_7_14_chunk"
 \set ON_ERROR_STOP 1
 -- Count existing rows
 SELECT COUNT(*) FROM test1.copy_test;
@@ -1036,7 +998,7 @@ SELECT table_name, status
 FROM _timescaledb_catalog.chunk WHERE table_name = :'COPY_CHUNK_NAME';
     table_name     | status 
 -------------------+--------
- _hyper_8_15_chunk |      0
+ _hyper_7_14_chunk |      0
 (1 row)
 
 -- Copy should work now
@@ -1131,12 +1093,12 @@ WHERE ht.table_name LIKE 'osm%'
 ORDER BY 2,3;
  table_name | id | dimension_id |     range_start     |      range_end      
 ------------+----+--------------+---------------------+---------------------
- osm_int2   | 17 |            9 | 9223372036854775806 | 9223372036854775807
- osm_int4   | 18 |           10 | 9223372036854775806 | 9223372036854775807
- osm_int8   | 19 |           11 | 9223372036854775806 | 9223372036854775807
- osm_date   | 20 |           12 | 9223372036854775806 | 9223372036854775807
- osm_ts     | 21 |           13 | 9223372036854775806 | 9223372036854775807
- osm_tstz   | 22 |           14 | 9223372036854775806 | 9223372036854775807
+ osm_int2   | 15 |            7 | 9223372036854775806 | 9223372036854775807
+ osm_int4   | 16 |            8 | 9223372036854775806 | 9223372036854775807
+ osm_int8   | 17 |            9 | 9223372036854775806 | 9223372036854775807
+ osm_date   | 18 |           10 | 9223372036854775806 | 9223372036854775807
+ osm_ts     | 19 |           11 | 9223372036854775806 | 9223372036854775807
+ osm_tstz   | 20 |           12 | 9223372036854775806 | 9223372036854775807
 (6 rows)
 
 -- test that correct slice is found and updated for table with multiple chunk constraints
@@ -1149,8 +1111,8 @@ _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc WHERE c.h
 AND c.id = cc.chunk_id;
  id | hypertable_id |      schema_name      |     table_name     | compressed_chunk_id | dropped | status | osm_chunk | chunk_id | dimension_slice_id |       constraint_name       | hypertable_constraint_name 
 ----+---------------+-----------------------+--------------------+---------------------+---------+--------+-----------+----------+--------------------+-----------------------------+----------------------------
- 23 |            15 | _timescaledb_internal | _hyper_15_23_chunk |                     | f       |      0 | f         |       23 |                    | 23_3_test_multicon_time_key | test_multicon_time_key
- 23 |            15 | _timescaledb_internal | _hyper_15_23_chunk |                     | f       |      0 | f         |       23 |                 23 | constraint_23               | 
+ 22 |            14 | _timescaledb_internal | _hyper_14_22_chunk |                     | f       |      0 | f         |       22 |                    | 22_3_test_multicon_time_key | test_multicon_time_key
+ 22 |            14 | _timescaledb_internal | _hyper_14_22_chunk |                     | f       |      0 | f         |       22 |                 21 | constraint_21               | 
 (2 rows)
 
 \c :TEST_DBNAME :ROLE_SUPERUSER ;
@@ -1168,7 +1130,7 @@ FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _ti
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id;
  chunk_id |     table_name     | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
 ----------+--------------------+--------+-----------+--------------------+------------------+------------------
-       23 | _hyper_15_23_chunk |      0 | t         |                 23 | 1577955600000000 | 1578128400000000
+       22 | _hyper_14_22_chunk |      0 | t         |                 21 | 1577955600000000 | 1578128400000000
 (1 row)
 
 -- check that range was reset to default - infinity
@@ -1196,7 +1158,7 @@ FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _ti
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
  chunk_id |     table_name     | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
 ----------+--------------------+--------+-----------+--------------------+---------------------+---------------------
-       23 | _hyper_15_23_chunk |      0 | t         |                 23 | 9223372036854775806 | 9223372036854775807
+       22 | _hyper_14_22_chunk |      0 | t         |                 21 | 9223372036854775806 | 9223372036854775807
 (1 row)
 
 -- test further with ordered append
@@ -1220,9 +1182,9 @@ FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _ti
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
  chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
 ----------+-------------------------+--------+-----------+--------------------+---------------------+---------------------
-       24 | _hyper_16_24_chunk      |      0 | f         |                 24 |    1577836800000000 |    1577923200000000
-       25 | _hyper_16_25_chunk      |      0 | f         |                 25 |    1577923200000000 |    1578009600000000
-       26 | test_chunkapp_fdw_child |      0 | t         |                 26 | 9223372036854775806 | 9223372036854775807
+       23 | _hyper_15_23_chunk      |      0 | f         |                 22 |    1577836800000000 |    1577923200000000
+       24 | _hyper_15_24_chunk      |      0 | f         |                 23 |    1577923200000000 |    1578009600000000
+       25 | test_chunkapp_fdw_child |      0 | t         |                 24 | 9223372036854775806 | 9223372036854775807
 (3 rows)
 
 -- attempt to update overlapping range, should fail
@@ -1243,9 +1205,9 @@ FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _ti
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
  chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
 ----------+-------------------------+--------+-----------+--------------------+------------------+------------------
-       24 | _hyper_16_24_chunk      |      0 | f         |                 24 | 1577836800000000 | 1577923200000000
-       25 | _hyper_16_25_chunk      |      0 | f         |                 25 | 1577923200000000 | 1578009600000000
-       26 | test_chunkapp_fdw_child |      0 | t         |                 26 | 1578038400000000 | 1578124800000000
+       23 | _hyper_15_23_chunk      |      0 | f         |                 22 | 1577836800000000 | 1577923200000000
+       24 | _hyper_15_24_chunk      |      0 | f         |                 23 | 1577923200000000 | 1578009600000000
+       25 | test_chunkapp_fdw_child |      0 | t         |                 24 | 1578038400000000 | 1578124800000000
 (3 rows)
 
 -- ordered append should be possible as ranges do not overlap
@@ -1254,8 +1216,8 @@ EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 ----------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_chunkapp  (cost=0.15..270.31 rows=6355 width=12)
    Order: test_chunkapp."time"
-   ->  Index Scan Backward using _hyper_16_24_chunk_test_chunkapp_time_idx on _hyper_16_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Index Scan Backward using _hyper_16_25_chunk_test_chunkapp_time_idx on _hyper_16_25_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_15_23_chunk_test_chunkapp_time_idx on _hyper_15_23_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_15_24_chunk_test_chunkapp_time_idx on _hyper_15_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
    ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
 (5 rows)
 
@@ -1296,9 +1258,9 @@ EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
                                                                QUERY PLAN                                                               
 ----------------------------------------------------------------------------------------------------------------------------------------
  Merge Append  (cost=100.33..352.47 rows=6355 width=12)
-   Sort Key: _hyper_16_24_chunk."time"
-   ->  Index Scan Backward using _hyper_16_24_chunk_test_chunkapp_time_idx on _hyper_16_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Index Scan Backward using _hyper_16_25_chunk_test_chunkapp_time_idx on _hyper_16_25_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   Sort Key: _hyper_15_23_chunk."time"
+   ->  Index Scan Backward using _hyper_15_23_chunk_test_chunkapp_time_idx on _hyper_15_23_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_15_24_chunk_test_chunkapp_time_idx on _hyper_15_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
    ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
 (5 rows)
 
@@ -1315,9 +1277,9 @@ FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _ti
 WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
  chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
 ----------+-------------------------+--------+-----------+--------------------+---------------------+---------------------
-       24 | _hyper_16_24_chunk      |      0 | f         |                 24 |    1577836800000000 |    1577923200000000
-       25 | _hyper_16_25_chunk      |      0 | f         |                 25 |    1577923200000000 |    1578009600000000
-       26 | test_chunkapp_fdw_child |      0 | t         |                 26 | 9223372036854775806 | 9223372036854775807
+       23 | _hyper_15_23_chunk      |      0 | f         |                 22 |    1577836800000000 |    1577923200000000
+       24 | _hyper_15_24_chunk      |      0 | f         |                 23 |    1577923200000000 |    1578009600000000
+       25 | test_chunkapp_fdw_child |      0 | t         |                 24 | 9223372036854775806 | 9223372036854775807
 (3 rows)
 
 -- now set empty to true, should ordered append
@@ -1335,8 +1297,8 @@ EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 ----------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_chunkapp  (cost=0.15..270.31 rows=6355 width=12)
    Order: test_chunkapp."time"
-   ->  Index Scan Backward using _hyper_16_24_chunk_test_chunkapp_time_idx on _hyper_16_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
-   ->  Index Scan Backward using _hyper_16_25_chunk_test_chunkapp_time_idx on _hyper_16_25_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_15_23_chunk_test_chunkapp_time_idx on _hyper_15_23_chunk  (cost=0.15..42.75 rows=2040 width=12)
+   ->  Index Scan Backward using _hyper_15_24_chunk_test_chunkapp_time_idx on _hyper_15_24_chunk  (cost=0.15..42.75 rows=2040 width=12)
    ->  Foreign Scan on test_chunkapp_fdw_child  (cost=100.00..184.80 rows=2275 width=12)
 (5 rows)
 
@@ -1352,7 +1314,7 @@ CREATE TABLE test2(time timestamptz not null, a int);
 SELECT create_hypertable('test2', 'time');
   create_hypertable  
 ---------------------
- (17,public,test2,t)
+ (16,public,test2,t)
 (1 row)
 
 INSERT INTO test2 VALUES ('2020-01-01'::timestamptz, 1);
@@ -1360,7 +1322,7 @@ ALTER TABLE test2 SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks('test2'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_17_27_chunk
+ _timescaledb_internal._hyper_16_26_chunk
 (1 row)
 
 -- find internal compression table, call API function on it
@@ -1369,7 +1331,7 @@ FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
 WHERE ht.table_name = 'test2' and cht.id = ht.compressed_hypertable_id \gset
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update(:'COMPRESSION_TBLNM'::regclass, '2020-01-01'::timestamptz);
-ERROR:  could not find time dimension for hypertable _timescaledb_internal._compressed_hypertable_18
+ERROR:  could not find time dimension for hypertable _timescaledb_internal._compressed_hypertable_17
 \set ON_ERROR_STOP 1
 -- test wrong/incompatible data types with hypertable time dimension
 -- update range of int2 with int4
@@ -1422,5 +1384,3 @@ ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attem
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db WITH (FORCE);
-DROP DATABASE :DATA_NODE_1 WITH (FORCE);
-DROP DATABASE :DATA_NODE_2 WITH (FORCE);

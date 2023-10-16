@@ -17,6 +17,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
      node_name     |     database      | node_created | database_created | extension_created 
 -------------------+-------------------+--------------+------------------+-------------------
  db_data_fetcher_1 | db_data_fetcher_1 | t            | t                | t
@@ -26,6 +29,7 @@ FROM (
 
 CREATE TABLE disttable(time timestamptz NOT NULL, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | disttable  | t
@@ -45,6 +49,7 @@ FROM generate_series('2019-01-01'::timestamptz, '2019-01-02'::timestamptz, '1 se
 -- copy batch is the file trailer (#5323).
 CREATE table one_batch(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
 SELECT create_distributed_hypertable('one_batch', 'ts');
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (2,public,one_batch,t)
@@ -54,6 +59,7 @@ INSERT INTO one_batch SELECT '2023-01-01'::timestamptz AS time, sensor_id, rando
 -- Same but for the DEFAULT_FDW_FETCH_SIZE (10000)
 CREATE table one_batch_default(ts timestamptz NOT NULL, sensor_id int NOT NULL, value float NOT NULL);
 SELECT create_distributed_hypertable('one_batch_default', 'ts');
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable  
 --------------------------------
  (3,public,one_batch_default,t)

@@ -26,10 +26,8 @@ set(TEST_FILES
     generated_as_identity.sql
     grant_hypertable.sql
     hash.sql
-    histogram_test.sql
     index.sql
     information_views.sql
-    insert.sql
     insert_many.sql
     insert_single.sql
     insert_returning.sql
@@ -38,12 +36,10 @@ set(TEST_FILES
     partition.sql
     partitioning.sql
     partitionwise.sql
-    plan_expand_hypertable.sql
     pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
     plan_hypertable_inline.sql
-    plan_ordered_append.sql
     relocate_extension.sql
     reloptions.sql
     size_utils.sql
@@ -51,7 +47,6 @@ set(TEST_FILES
     sql_query.sql
     tableam.sql
     tablespace.sql
-    timestamp.sql
     triggers.sql
     truncate.sql
     upsert.sql
@@ -66,11 +61,16 @@ set(TEST_TEMPLATES
     cursor.sql.in
     ddl.sql.in
     delete.sql.in
+    histogram_test.sql.in
+    insert.sql.in
     plan_hashagg.sql.in
     rowsecurity.sql.in
     update.sql.in
     parallel.sql.in
-    query.sql.in)
+    plan_expand_hypertable.sql.in
+    plan_ordered_append.sql.in
+    query.sql.in
+    timestamp.sql.in)
 
 # Loader test must distinguish between Apache and TSL builds so we parametrize
 # this here
@@ -122,7 +122,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
-  list(APPEND TEST_FILES merge.sql ts_merge.sql)
+  list(APPEND TEST_FILES merge.sql)
+  list(APPEND TEST_TEMPLATES ts_merge.sql.in)
 endif()
 
 # only test custom type if we are in 64-bit architecture

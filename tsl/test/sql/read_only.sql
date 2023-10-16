@@ -8,9 +8,6 @@
 -- properly recognize read-only transaction state
 --
 
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-
 -- create_hypertable()
 --
 CREATE TABLE test_table(time bigint NOT NULL, device int);
@@ -95,76 +92,6 @@ DROP TABLE test_table;
 \set ON_ERROR_STOP 1
 SET default_transaction_read_only TO off;
 DROP TABLE test_table;
-
--- data nodes
---
-CREATE TABLE disttable(time timestamptz NOT NULL, device int);
-
--- add_data_node()
---
-SET default_transaction_read_only TO on;
-\set ON_ERROR_STOP 0
-SELECT * FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
-\set ON_ERROR_STOP 1
-
-SET default_transaction_read_only TO off;
-SELECT node_name, database, node_created, database_created, extension_created
-FROM add_data_node(:'DATA_NODE_1', host => 'localhost', database => :'DATA_NODE_1');
-SELECT node_name, database, node_created, database_created, extension_created
-FROM add_data_node(:'DATA_NODE_2', host => 'localhost', database => :'DATA_NODE_2');
-
--- create_distributed_hypertable()
---
-SET default_transaction_read_only TO on;
-
-\set ON_ERROR_STOP 0
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => ARRAY[:'DATA_NODE_1']);
-\set ON_ERROR_STOP 1
-
-SET default_transaction_read_only TO off;
-SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', data_nodes => ARRAY[:'DATA_NODE_1']);
-
--- attach_data_node()
---
-SET default_transaction_read_only TO on;
-\set ON_ERROR_STOP 0
-SELECT * FROM attach_data_node(:'DATA_NODE_2', 'disttable');
-\set ON_ERROR_STOP 1
-SET default_transaction_read_only TO off;
-SELECT * FROM attach_data_node(:'DATA_NODE_2', 'disttable');
-
--- detach_data_node()
---
-SET default_transaction_read_only TO on;
-\set ON_ERROR_STOP 0
-SELECT * FROM detach_data_node(:'DATA_NODE_2', 'disttable');
-\set ON_ERROR_STOP 1
-SET default_transaction_read_only TO off;
-SELECT * FROM detach_data_node(:'DATA_NODE_2', 'disttable');
-
--- delete_data_node()
---
-SET default_transaction_read_only TO on;
-\set ON_ERROR_STOP 0
-SELECT * FROM delete_data_node(:'DATA_NODE_2');
-\set ON_ERROR_STOP 1
-SET default_transaction_read_only TO off;
-SELECT * FROM delete_data_node(:'DATA_NODE_2');
-
--- set_replication_factor()
---
-SET default_transaction_read_only TO on;
-\set ON_ERROR_STOP 0
-SELECT * FROM set_replication_factor('disttable', 2);
-\set ON_ERROR_STOP 1
-
--- drop distributed hypertable
---
-\set ON_ERROR_STOP 0
-DROP TABLE disttable;
-\set ON_ERROR_STOP 1
-SET default_transaction_read_only TO off;
-DROP TABLE disttable;
 
 -- Test some read-only cases of DDL operations
 --
@@ -286,8 +213,3 @@ SELECT remove_retention_policy('test_table');
 SELECT add_job('now','12h');
 SELECT alter_job(1,scheduled:=false);
 SELECT delete_job(1);
-
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE :DATA_NODE_1 WITH (FORCE);
-DROP DATABASE :DATA_NODE_2 WITH (FORCE);
-

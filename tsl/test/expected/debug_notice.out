@@ -18,6 +18,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
      node_name     |     database      | node_created | database_created | extension_created 
 -------------------+-------------------+--------------+------------------+-------------------
  db_debug_notice_1 | db_debug_notice_1 | t            | t                | t
@@ -28,6 +31,7 @@ FROM (
 GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
 CREATE TABLE hyper (time timestamptz, device int, location int, temp float);
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------

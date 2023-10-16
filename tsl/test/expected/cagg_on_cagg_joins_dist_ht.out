@@ -26,6 +26,9 @@ AS :TSL_MODULE_PATHNAME, 'ts_remote_exec_get_result_strings'
 LANGUAGE C;
 SELECT (add_data_node (name, host => 'localhost', DATABASE => name)).*
 FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
             node_name            |   host    | port  |            database             | node_created | database_created | extension_created 
 ---------------------------------+-----------+-------+---------------------------------+--------------+------------------+-------------------
  db_cagg_on_cagg_joins_dist_ht_1 | localhost | 55432 | db_cagg_on_cagg_joins_dist_ht_1 | t            | t                | t
@@ -96,6 +99,7 @@ psql:include/cagg_on_cagg_setup.sql:30: NOTICE:  table "devices" does not exist,
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
+psql:include/cagg_on_cagg_setup.sql:39: WARNING:  distributed hypertable is deprecated
  table_name 
 ------------
  conditions
@@ -523,6 +527,7 @@ DROP TABLE IF EXISTS conditions CASCADE;
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
   \else
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
+psql:include/cagg_on_cagg_setup.sql:39: WARNING:  distributed hypertable is deprecated
  table_name 
 ------------
  conditions
@@ -1281,6 +1286,7 @@ psql:include/cagg_on_cagg_setup.sql:14: NOTICE:  table "conditions" does not exi
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
+psql:include/cagg_on_cagg_setup.sql:37: WARNING:  distributed hypertable is deprecated
 psql:include/cagg_on_cagg_setup.sql:37: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  table_name 
 ------------
@@ -1704,6 +1710,7 @@ DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
+psql:include/cagg_on_cagg_setup.sql:37: WARNING:  distributed hypertable is deprecated
 psql:include/cagg_on_cagg_setup.sql:37: WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  table_name 
 ------------
@@ -2558,6 +2565,7 @@ DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
+psql:include/cagg_on_cagg_setup.sql:37: WARNING:  distributed hypertable is deprecated
  table_name 
 ------------
  conditions
@@ -2980,6 +2988,7 @@ DROP TABLE IF EXISTS conditions CASCADE;
 \if :IS_DISTRIBUTED
   \if :IS_TIME_DIMENSION
     SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
+psql:include/cagg_on_cagg_setup.sql:37: WARNING:  distributed hypertable is deprecated
  table_name 
 ------------
  conditions

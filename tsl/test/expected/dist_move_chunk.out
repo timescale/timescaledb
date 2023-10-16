@@ -12,6 +12,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
       node_name       |       database       | node_created | database_created | extension_created 
 ----------------------+----------------------+--------------+------------------+-------------------
  db_dist_move_chunk_1 | db_dist_move_chunk_1 | t            | t                | t
@@ -25,6 +28,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_1;
 CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
@@ -42,6 +46,7 @@ SELECT * from show_chunks('dist_test');
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                
@@ -79,6 +84,7 @@ SELECT sum(device) FROM dist_test;
 (1 row)
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_1]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
 NOTICE:  [db_dist_move_chunk_1]:
 sum
@@ -172,6 +178,7 @@ ERROR:  chunk "_dist_hyper_1_2_chunk" does not exist on source data node "db_dis
 -- do actualy copy
 CALL timescaledb_experimental.copy_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_1', destination_node => :'DATA_NODE_2');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                
@@ -204,6 +211,7 @@ _timescaledb_internal._dist_hyper_1_3_chunk
 (1 row)
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_2'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_2]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
 NOTICE:  [db_dist_move_chunk_2]:
 sum
@@ -225,6 +233,7 @@ ERROR:  chunk "_dist_hyper_1_1_chunk" already exists on destination data node "d
 -- now try to move the same chunk from data node 2 to 3
 CALL timescaledb_experimental.move_chunk(chunk=>'_timescaledb_internal._dist_hyper_1_1_chunk', source_node=> :'DATA_NODE_2', destination_node => :'DATA_NODE_3');
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                
@@ -257,6 +266,7 @@ _timescaledb_internal._dist_hyper_1_1_chunk
 (1 row)
 
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'], $$ SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_3]:  SELECT sum(device) FROM _timescaledb_internal._dist_hyper_1_1_chunk
 NOTICE:  [db_dist_move_chunk_3]:
 sum
@@ -322,6 +332,7 @@ DROP TABLE dist_test;
 -- Create a compressed hypertable
 CREATE TABLE dist_test(time timestamp NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3);
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
@@ -348,6 +359,7 @@ SELECT * from show_chunks('dist_test');
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                 
@@ -507,6 +519,7 @@ SELECT * FROM show_chunks('dist_test');
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_move_chunk_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_move_chunk_1]:
 show_chunks                                

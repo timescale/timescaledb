@@ -21,6 +21,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
       node_name       |       database       | node_created | database_created | extension_created 
 ----------------------+----------------------+--------------+------------------+-------------------
  db_dist_hypertable_1 | db_dist_hypertable_1 | t            | t                | t
@@ -62,6 +65,7 @@ ERROR:  operation not supported
 -- constraint to test how those work
 CREATE TABLE disttable(time timestamptz, device int CHECK (device > 0), color int, temp float, PRIMARY KEY (time,device));
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 1);
+WARNING:  distributed hypertable is deprecated
 WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -136,6 +140,7 @@ ERROR:  replication factor too large for hypertable "underreplicated"
 RESET ROLE;
 SELECT node_name, database, node_created, database_created, extension_created
 FROM add_data_node(:'DATA_NODE_4', host => 'localhost', database => :'DATA_NODE_4');
+WARNING:  adding data node is deprecated
       node_name       |       database       | node_created | database_created | extension_created 
 ----------------------+----------------------+--------------+------------------+-------------------
  db_dist_hypertable_4 | db_dist_hypertable_4 | t            | t                | t
@@ -174,6 +179,7 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 (8 rows)
 
 SELECT attach_data_node(:'DATA_NODE_4', 'disttable', repartition => false);
+WARNING:  attaching data node is deprecated
       attach_data_node      
 ----------------------------
  (1,2,db_dist_hypertable_4)
@@ -195,6 +201,7 @@ SELECT * FROM hypertable_partitions WHERE table_name = 'disttable';
 --create new session to clear out connections
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node(:'DATA_NODE_4', force => true, drop_database => true, repartition => false);
+WARNING:  deleting data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "underreplicated"
  delete_data_node 
 ------------------
@@ -516,6 +523,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
@@ -557,6 +565,7 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM disttable;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM disttable
 NOTICE:  [db_dist_hypertable_1]:
@@ -1424,6 +1433,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable')
@@ -1469,6 +1479,7 @@ chunk_id|hypertable_id|schema_name          |table_name           |relkind|slice
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM disttable;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM disttable
 NOTICE:  [db_dist_hypertable_1]:
@@ -1576,6 +1587,7 @@ ERROR:  ON CONFLICT DO UPDATE not supported on distributed hypertables
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
     INSERT INTO disttable VALUES ('2019-01-02 12:34', 1, 2, 9.3)
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     INSERT INTO disttable VALUES ('2019-01-02 12:34', 1, 2, 9.3)
 
@@ -1585,6 +1597,7 @@ ERROR:  [db_dist_hypertable_1]: distributed hypertable member cannot create chun
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
     INSERT INTO disttable VALUES ('2017-09-03 06:09', 1, 2, 9.3)
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     INSERT INTO disttable VALUES ('2017-09-03 06:09', 1, 2, 9.3)
 
@@ -1685,6 +1698,7 @@ SELECT * FROM disttable;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM disttable;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM disttable
 NOTICE:  [db_dist_hypertable_1]:
@@ -1758,6 +1772,7 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
 SELECT * FROM show_chunks('disttable');
 SELECT * FROM disttable;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped, status, osm_chunk FROM _timescaledb_catalog.chunk
 NOTICE:  [db_dist_hypertable_1]:
@@ -1878,6 +1893,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('underreplicated')
@@ -1916,6 +1932,7 @@ chunk_id|hypertable_id|schema_name          |table_name            |relkind|slic
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM underreplicated;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM underreplicated
 NOTICE:  [db_dist_hypertable_1]:
@@ -1970,6 +1987,7 @@ SELECT * FROM underreplicated;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM underreplicated;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM underreplicated
 NOTICE:  [db_dist_hypertable_1]:
@@ -2016,6 +2034,7 @@ RETURNING *;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM underreplicated;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM underreplicated
 NOTICE:  [db_dist_hypertable_1]:
@@ -2053,6 +2072,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_3'], $$
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float);
 SELECT * FROM underreplicated;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_3]: 
 CREATE TABLE remotetable(time timestamptz PRIMARY KEY, id int, cost float)
 NOTICE:  [db_dist_hypertable_3]: 
@@ -2076,6 +2096,7 @@ ERROR:  [db_dist_hypertable_3]: relation "remotetable" already exists
 -- Test distributed_hypertable creation fails with replication factor 0
 CREATE TABLE remotetable2(time timestamptz PRIMARY KEY, device int CHECK (device > 0), color int, temp float);
 SELECT * FROM create_distributed_hypertable('remotetable2', 'time', replication_factor => 0);
+WARNING:  distributed hypertable is deprecated
 ERROR:  invalid replication factor
 \set ON_ERROR_STOP 1
 SELECT * FROM timescaledb_information.hypertables
@@ -2102,6 +2123,7 @@ SELECT * FROM create_distributed_hypertable('"Table\\Schema"."Param_Table"', 'ti
 associated_schema_name => 'T3sTSch', associated_table_prefix => 'test*pre_', chunk_time_interval => interval '1 week',
 create_default_indexes => FALSE, if_not_exists => TRUE, replication_factor => 2,
 data_nodes => ARRAY[:'DATA_NODE_2', :'DATA_NODE_3']);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
  hypertable_id |  schema_name  | table_name  | created 
 ---------------+---------------+-------------+---------
@@ -2110,6 +2132,7 @@ NOTICE:  adding not-null constraint to column "time Col %#^#@$#"
 
 -- Test detach and attach data node
 SELECT * FROM detach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', force => true, drop_remote_data => true);
+WARNING:  detaching data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "Param_Table"
 NOTICE:  the number of partitions in dimension "__region" of hypertable "Param_Table" was decreased to 1
  detach_data_node 
@@ -2143,6 +2166,7 @@ ORDER BY 1, 2;
 (1 row)
 
 SELECT * FROM attach_data_node(:'DATA_NODE_1', '"Table\\Schema"."Param_Table"');
+WARNING:  attaching data node is deprecated
 NOTICE:  the number of partitions in dimension "__region" was increased to 2
  hypertable_id | node_hypertable_id |      node_name       
 ---------------+--------------------+----------------------
@@ -2175,6 +2199,7 @@ ORDER BY 1, 2;
 -- Attach another data node but do not auto-repartition, i.e.,
 -- increase the number of slices.
 SELECT * FROM attach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', repartition => false);
+WARNING:  attaching data node is deprecated
 WARNING:  insufficient number of partitions for dimension "__region"
  hypertable_id | node_hypertable_id |      node_name       
 ---------------+--------------------+----------------------
@@ -2231,6 +2256,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
 SELECT t.tgname, t.tgtype, t.tgfoid::regproc
 FROM pg_trigger t, pg_class c WHERE c.relname = 'Param_Table' AND t.tgrelid = c.oid;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM _timescaledb_catalog.hypertable
 NOTICE:  [db_dist_hypertable_1]:
@@ -2340,6 +2366,7 @@ ts_insert_blocker|     7|_timescaledb_functions.insert_blocker
 
 -- Verify that repartitioning works as expected on detach_data_node
 SELECT * FROM detach_data_node(:'DATA_NODE_1', '"Table\\Schema"."Param_Table"', repartition => true);
+WARNING:  detaching data node is deprecated
 NOTICE:  the number of partitions in dimension "__region" of hypertable "Param_Table" was decreased to 2
  detach_data_node 
 ------------------
@@ -2357,6 +2384,7 @@ AND h.table_name = 'Param_Table';
 (2 rows)
 
 SELECT * FROM detach_data_node(:'DATA_NODE_2', '"Table\\Schema"."Param_Table"', force => true, repartition => false);
+WARNING:  detaching data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "Param_Table"
  detach_data_node 
 ------------------
@@ -2377,6 +2405,7 @@ AND h.table_name = 'Param_Table';
 -- should be propagated to backends.
 CREATE TABLE dimented_table (time timestamptz, column1 int, column2 timestamptz, column3 int);
 SELECT * FROM create_distributed_hypertable('dimented_table', 'time', partitioning_column => 'column1', number_partitions  => 4, replication_factor => 1, data_nodes => ARRAY[:'DATA_NODE_1']);
+WARNING:  distributed hypertable is deprecated
 WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name   | created 
@@ -2455,6 +2484,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
 (9 rows)
 
 SELECT * FROM attach_data_node(:'DATA_NODE_2', 'dimented_table');
+WARNING:  attaching data node is deprecated
  hypertable_id | node_hypertable_id |      node_name       
 ---------------+--------------------+----------------------
              5 |                  5 | db_dist_hypertable_2
@@ -2478,6 +2508,7 @@ SELECT * FROM _timescaledb_catalog.dimension;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT * FROM _timescaledb_catalog.dimension;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM _timescaledb_catalog.dimension
 NOTICE:  [db_dist_hypertable_1]:
@@ -3086,6 +3117,7 @@ SELECT * FROM twodim
 ORDER BY time;
 SELECT count(*) FROM twodim;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT * FROM twodim
 ORDER BY time
@@ -3233,6 +3265,7 @@ SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT time, txn_id, val, substring(info for 20) FROM disttable_with_ct
 NOTICE:  [db_dist_hypertable_1]:
@@ -3270,6 +3303,7 @@ CREATE TABLE "disttable'quote"(time timestamptz, "device'quote" int, val float, 
 SELECT public.create_distributed_hypertable(
     'disttable''quote', 'time', 'device''quote', data_nodes => ARRAY[:'DATA_NODE_1']
 );
+WARNING:  distributed hypertable is deprecated
 WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "time"
     create_distributed_hypertable    
@@ -3280,6 +3314,7 @@ NOTICE:  adding not-null constraint to column "time"
 SET SCHEMA 'public';
 CREATE TABLE disttable_drop_chunks(time timestamptz, device int CHECK (device > 0), color int, PRIMARY KEY (time,device));
 SELECT * FROM create_distributed_hypertable('disttable_drop_chunks', 'time', 'device', number_partitions => 3, replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name |      table_name       | created 
 ---------------+-------------+-----------------------+---------
             10 | public      | disttable_drop_chunks | t
@@ -3312,6 +3347,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks')
@@ -3386,6 +3422,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
 FROM show_chunks('disttable_drop_chunks')
@@ -3440,6 +3477,7 @@ SELECT * FROM disttable_drop_chunks;
 
 CREATE TABLE "weird nAme\\#^."(time bigint, device int CHECK (device > 0), color int, PRIMARY KEY (time,device));
 SELECT * FROM create_distributed_hypertable('"weird nAme\\#^."', 'time', 'device', 3, chunk_time_interval => 100, replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
             11 | public      | weird nAme\\#^. | t
@@ -3476,6 +3514,7 @@ SELECT * FROM "weird nAme\\#^.";
 DROP TABLE disttable CASCADE;
 CREATE TABLE disttable (time bigint, device int, temp float);
 SELECT create_distributed_hypertable('disttable', 'time', chunk_time_interval => 1000000::bigint);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -3487,6 +3526,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
@@ -3537,6 +3577,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
@@ -3603,6 +3644,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 SELECT d.* FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.dimension d
 WHERE h.id = d.hypertable_id AND h.table_name = 'disttable'
@@ -3662,6 +3704,7 @@ SELECT detach_tablespaces('disttable');
 -- Continue to use previously attached tablespace, but block attach/detach
 CREATE TABLE disttable2(time timestamptz, device int, temp float) TABLESPACE :TABLESPACE_1;
 SELECT create_distributed_hypertable('disttable2', 'time', chunk_time_interval => 1000000::bigint);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -3764,6 +3807,7 @@ DROP TABLESPACE :TABLESPACE_2;
 -- Make sure table qualified name is used in chunks_in function. Otherwise having a table name same as a column name might yield an error
 CREATE TABLE dist_device(time timestamptz, dist_device int, temp float);
 SELECT * FROM create_distributed_hypertable('dist_device', 'time');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
@@ -3814,6 +3858,7 @@ SELECT * FROM dist_device;
 -- Test estimating relation size without stats
 CREATE TABLE hyper_estimate(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('hyper_estimate', 'time', 'device', number_partitions => 3, replication_factor => 1, chunk_time_interval => INTERVAL '7 days');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
@@ -3903,6 +3948,7 @@ CREATE TABLE hyper (
 SELECT * FROM create_distributed_hypertable('hyper', 'time', 'device', 3,
        chunk_time_interval => interval '18 hours'
 );
+WARNING:  distributed hypertable is deprecated
 WARNING:  distributed hypertable "hyper" has a foreign key to a non-distributed table
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -3954,6 +4000,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper')
@@ -4023,6 +4070,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper')
@@ -4067,6 +4115,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper')
@@ -4129,6 +4178,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper')
@@ -4185,6 +4235,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
     FROM show_chunks('hyper')
@@ -4250,18 +4301,21 @@ CREATE TABLE disttable_with_relopts_2(time timestamptz NOT NULL, device int) WIT
 CREATE TABLE disttable_with_relopts_3(time timestamptz NOT NULL, device int);
 CREATE INDEX disttable_with_relopts_3_idx ON disttable_with_relopts_3(device) WITH (fillfactor=20);
 SELECT * FROM create_distributed_hypertable('disttable_with_relopts_1', 'time');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name |        table_name        | created 
 ---------------+-------------+--------------------------+---------
             18 | public      | disttable_with_relopts_1 | t
 (1 row)
 
 SELECT * FROM create_distributed_hypertable('disttable_with_relopts_2', 'time');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name |        table_name        | created 
 ---------------+-------------+--------------------------+---------
             19 | public      | disttable_with_relopts_2 | t
 (1 row)
 
 SELECT * FROM create_distributed_hypertable('disttable_with_relopts_3', 'time');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name |        table_name        | created 
 ---------------+-------------+--------------------------+---------
             20 | public      | disttable_with_relopts_3 | t
@@ -4326,6 +4380,7 @@ ORDER BY relname;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_1' ORDER BY relname
 NOTICE:  [db_dist_hypertable_1]:
@@ -4361,6 +4416,7 @@ disttable_with_relopts_1|{fillfactor=10}
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_2' ORDER BY relname
 NOTICE:  [db_dist_hypertable_1]:
@@ -4397,6 +4453,7 @@ disttable_with_relopts_2|{fillfactor=10,parallel_workers=1}
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT relname, reloptions FROM pg_class WHERE relname = 'disttable_with_relopts_3_idx' ORDER BY relname
 NOTICE:  [db_dist_hypertable_1]:
@@ -4435,6 +4492,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
@@ -4477,6 +4535,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
     ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_2'))
@@ -4540,6 +4599,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
@@ -4601,6 +4661,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
     ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
     SELECT relname, reloptions FROM pg_class WHERE relname IN
     (SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name FROM show_chunks('disttable_with_relopts_1'))
@@ -4645,6 +4706,7 @@ DROP TABLE disttable_with_relopts_3;
 --
 CREATE TABLE disttable_serial(time timestamptz NOT NULL, device int, id1 SERIAL, id2 SMALLSERIAL, id3 BIGSERIAL);
 SELECT create_distributed_hypertable('disttable_serial', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable  
 --------------------------------
  (21,public,disttable_serial,t)
@@ -4664,6 +4726,7 @@ SELECT * FROM test.show_columns('disttable_serial');
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 	SELECT * FROM test.show_columns('disttable_serial');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 	SELECT * FROM test.show_columns('disttable_serial')
 NOTICE:  [db_dist_hypertable_1]:
@@ -4726,6 +4789,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE
 	FROM information_schema.columns
 	WHERE table_name  = 'disttable_serial';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 	SELECT column_name, column_default
 	FROM information_schema.columns
@@ -4795,6 +4859,7 @@ SELECT currval('disttable_serial_id1_seq'::regclass),
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	SELECT currval('disttable_serial_id1_seq'::regclass);
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 	SELECT currval('disttable_serial_id1_seq'::regclass)
 ERROR:  [db_dist_hypertable_1]: relation "disttable_serial_id1_seq" does not exist
@@ -4814,6 +4879,7 @@ SELECT * from disttable_serial ORDER BY id1;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 	SELECT * from disttable_serial ORDER BY id1;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 	SELECT * from disttable_serial ORDER BY id1
 NOTICE:  [db_dist_hypertable_1]:
@@ -4932,6 +4998,7 @@ CREATE TABLE test_1702 (
 	dummy71	int
 );
 SELECT create_distributed_hypertable('test_1702', 'time', 'id');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "character varying" used for "id" does not follow best practices
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
@@ -4990,6 +5057,7 @@ CREATE TABLE test_1702 (
 	dummy5	int
 	);
 SELECT create_distributed_hypertable('test_1702', 'time', 'id');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "character varying" used for "id" does not follow best practices
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
@@ -5022,6 +5090,7 @@ CREATE TABLE whatever (
 );
 SELECT * FROM create_distributed_hypertable('whatever', 'timestamp', 'user_id',
                                             if_not_exists => true, chunk_time_interval => INTERVAL '1 day');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             24 | public      | whatever   | t
@@ -5037,6 +5106,7 @@ SELECT last_value FROM _timescaledb_catalog.hypertable_id_seq;
 
 SELECT * FROM create_distributed_hypertable('whatever', 'timestamp', 'user_id',
                                             if_not_exists => true, chunk_time_interval => INTERVAL '1 day');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  table "whatever" is already a hypertable, skipping
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -5065,9 +5135,11 @@ INSERT INTO dist_hypertable_1 VALUES
 \set ON_ERROR_STOP 0
 SELECT * FROM create_distributed_hypertable('dist_hypertable_1', 'time', 'device', 3,
        migrate_data => FALSE);
+WARNING:  distributed hypertable is deprecated
 ERROR:  table "dist_hypertable_1" is not empty
 SELECT * FROM create_distributed_hypertable('dist_hypertable_1', 'time', 'device', 3,
        migrate_data => TRUE);
+WARNING:  distributed hypertable is deprecated
 ERROR:  cannot migrate data for distributed hypertable
 \set ON_ERROR_STOP 1
 -- Test creating index with transaction per chunk on a distributed hypertable
@@ -5079,6 +5151,7 @@ CREATE TABLE disttable(
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             25 | public      | disttable  | t
@@ -5101,6 +5174,7 @@ ERROR:  cannot use timescaledb.transaction_per_chunk with distributed hypertable
 --
 CREATE TABLE dist_syscol(time timestamptz NOT NULL, color int, temp float);
 SELECT * FROM create_distributed_hypertable('dist_syscol', 'time', 'color');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
             26 | public      | dist_syscol | t
@@ -5174,6 +5248,7 @@ CREATE TABLE disttable(
     temp_c float
 );
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             27 | public      | disttable  | t
@@ -5405,6 +5480,7 @@ CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler;
 SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1', :'DATA_NODE_2', :'DATA_NODE_3'], $$
 CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler
 NOTICE:  [db_dist_hypertable_2]: 
@@ -5419,6 +5495,7 @@ CREATE ACCESS METHOD test_am TYPE TABLE HANDLER heap_tableam_handler
 -- Create distributed hypertable using non-default access method
 CREATE TABLE disttable(time timestamptz NOT NULL, device int, temp_c float, temp_f float GENERATED ALWAYS AS (temp_c * 9 / 5 + 32) STORED) USING test_am;
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             28 | public      | disttable  | t
@@ -5433,6 +5510,7 @@ FROM pg_class cl, pg_am am
 WHERE cl.oid = 'disttable'::regclass
 AND cl.relam = am.oid;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_hypertable_1]: 
 
 SELECT amname AS hypertable_amname
@@ -5601,6 +5679,7 @@ SELECT * FROM disttable ORDER BY 1;
 --
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
@@ -5616,6 +5695,7 @@ $$;
 CALL test_drop();
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
@@ -5646,6 +5726,7 @@ SELECT test.tsl_override_current_timestamptz(null);
 CREATE TABLE test_tz (time timestamp, v int);
 SELECT create_distributed_hypertable('test_tz','time',
 	chunk_time_interval => interval '1 hour');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
@@ -5968,6 +6049,7 @@ DROP TABLE test_tz;
 CREATE TABLE test_now (time timestamp, v int);
 SELECT create_distributed_hypertable('test_now','time',
 	chunk_time_interval => interval '1 hour');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
@@ -6038,6 +6120,7 @@ DEALLOCATE test_query;
 --
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
@@ -6061,6 +6144,7 @@ SELECT compress_chunk(show_chunks) FROM show_chunks('test');
 DROP TABLE test;
 CREATE TABLE test (time timestamp, v int);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
@@ -6094,6 +6178,7 @@ DROP TABLE test;
 --
 CREATE TABLE test (time timestamp NOT NULL, my_column int NOT NULL);
 SELECT create_distributed_hypertable('test','time');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
  create_distributed_hypertable 
 -------------------------------
@@ -6116,6 +6201,7 @@ DROP TABLE test;
 -- Test insert into distributed hypertable with pruned chunks
 CREATE TABLE pruned_chunks_1(time TIMESTAMPTZ NOT NULL, sensor_id INTEGER, value FLOAT);
 SELECT table_name FROM create_distributed_hypertable('pruned_chunks_1', 'time', 'sensor_id');
+WARNING:  distributed hypertable is deprecated
    table_name    
 -----------------
  pruned_chunks_1
@@ -6125,6 +6211,7 @@ INSERT INTO pruned_chunks_1 VALUES  ('2020-12-09',1,32.2);
 CREATE TABLE pruned_chunks_2(time TIMESTAMPTZ NOT NULL, sensor_id INTEGER, value FLOAT);
 -- Convert the table to a distributed hypertable
 SELECT table_name FROM create_distributed_hypertable('pruned_chunks_2', 'time', 'sensor_id');
+WARNING:  distributed hypertable is deprecated
    table_name    
 -----------------
  pruned_chunks_2

@@ -13,6 +13,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
     node_name    |    database     | node_created | database_created | extension_created 
 -----------------+-----------------+--------------+------------------+-------------------
  db_dist_views_1 | db_dist_views_1 | t            | t                | t
@@ -32,6 +35,7 @@ SELECT setseed(1);
 
 CREATE TABLE dist_table(time timestamptz NOT NULL, device int, temp float, timedim date NOT NULL);
 SELECT create_distributed_hypertable('dist_table', 'time', 'device', replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (1,public,dist_table,t)
@@ -120,6 +124,7 @@ ORDER BY node_name;;
 ---tables with special characters in the name ----
 CREATE TABLE "quote'tab" ( a timestamp,  b integer);
 SELECT create_distributed_hypertable( '"quote''tab"', 'a', 'b', replication_factor=>2, chunk_time_interval=>INTERVAL '1 day');
+WARNING:  distributed hypertable is deprecated
 WARNING:  column type "timestamp without time zone" used for "a" does not follow best practices
 NOTICE:  adding not-null constraint to column "a"
  create_distributed_hypertable 

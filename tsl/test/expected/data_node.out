@@ -21,12 +21,14 @@ ORDER BY dimension_id, range_start;
 GRANT SELECT ON hypertable_partitions TO :ROLE_1;
 -- Add data nodes using TimescaleDB data_node management API.
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_1 | db_data_node_1 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', 'localhost', database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_2 | db_data_node_2 | t            | t                | t
@@ -35,6 +37,7 @@ SELECT node_name, database, node_created, database_created, extension_created FR
 \set ON_ERROR_STOP 0
 -- Add again
 SELECT * FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
 ERROR:  server "data_node_2" already exists
 -- No host provided
 SELECT * FROM add_data_node('data_node_99');
@@ -43,21 +46,26 @@ SELECT * FROM add_data_node(NULL);
 ERROR:  function add_data_node(unknown) does not exist at character 15
 -- Add NULL data_node
 SELECT * FROM add_data_node(NULL, host => 'localhost');
+WARNING:  adding data node is deprecated
 ERROR:  data node name cannot be NULL
 SELECT * FROM add_data_node(NULL, NULL);
+WARNING:  adding data node is deprecated
 ERROR:  a host needs to be specified
 -- Test invalid port numbers
 SELECT * FROM add_data_node('data_node_3', 'localhost',
                             port => 65536,
                             database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
 ERROR:  invalid port number 65536
 SELECT * FROM add_data_node('data_node_3', 'localhost',
                             port => 0,
                             database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
 ERROR:  invalid port number 0
 SELECT * FROM add_data_node('data_node_3', 'localhost',
                             port => -1,
                             database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
 ERROR:  invalid port number -1
 SELECT inet_server_port() as PGPORT \gset
 -- Adding a data node via ADD SERVER is blocked
@@ -71,6 +79,7 @@ ERROR:  operation not supported on a TimescaleDB data node
 -- Should not generate error with if_not_exists option
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2',
                             if_not_exists => true);
+WARNING:  adding data node is deprecated
 NOTICE:  data node "data_node_2" already exists, skipping
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
@@ -78,6 +87,7 @@ NOTICE:  data node "data_node_2" already exists, skipping
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_3 | db_data_node_3 | t            | t                | t
@@ -122,6 +132,7 @@ SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 (3 rows)
 
 SELECT * FROM delete_data_node('data_node_3');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -138,10 +149,12 @@ SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 \set ON_ERROR_STOP 0
 -- Deleting a non-existing data node generates error
 SELECT * FROM delete_data_node('data_node_3');
+WARNING:  deleting data node is deprecated
 ERROR:  server "data_node_3" does not exist
 \set ON_ERROR_STOP 1
 -- Deleting non-existing data node with "if_exists" set does not generate error
 SELECT * FROM delete_data_node('data_node_3', if_exists => true);
+WARNING:  deleting data node is deprecated
 NOTICE:  data node "data_node_3" does not exist, skipping
  delete_data_node 
 ------------------
@@ -156,12 +169,14 @@ SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 (2 rows)
 
 SELECT * FROM delete_data_node('data_node_1');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_2');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -186,18 +201,21 @@ DROP DATABASE :DN_DBNAME_2 WITH (FORCE);
 DROP DATABASE :DN_DBNAME_3 WITH (FORCE);
 SET client_min_messages TO INFO;
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_1 | db_data_node_1 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_2 | db_data_node_2 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_3 | db_data_node_3 | t            | t                | t
@@ -212,6 +230,8 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
+DETAIL:  Multi-node is deprecated and will be removed in future releases.
 NOTICE:  3 of 3 data nodes not used by this hypertable due to lack of permissions
 HINT:  Grant USAGE on data nodes to attach them to a hypertable.
 ERROR:  no data nodes can be assigned to the hypertable
@@ -258,6 +278,7 @@ SET ROLE :ROLE_1;
 -- slices in the device dimension equals the number of data nodes.
 BEGIN;
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  1 of 3 data nodes not used by this hypertable due to lack of permissions
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
@@ -297,6 +318,7 @@ ROLLBACK;
 \set ON_ERROR_STOP 0
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device',
                                             data_nodes => '{ data_node_1, data_node_2, data_node_3 }');
+WARNING:  distributed hypertable is deprecated
 ERROR:  permission denied for foreign server data_node_3
 \set ON_ERROR_STOP 1
 RESET ROLE;
@@ -310,6 +332,7 @@ SET ROLE :ROLE_1;
 -- Now specify less slices than there are data nodes to generate a
 -- warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
 WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
@@ -337,6 +360,7 @@ SELECT replication_factor FROM _timescaledb_catalog.hypertable WHERE table_name 
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT replication_factor
 FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [data_node_1]:  SELECT replication_factor
 FROM _timescaledb_catalog.hypertable WHERE table_name = 'disttable'
 NOTICE:  [data_node_1]:
@@ -402,25 +426,31 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 -- Attach data node should fail when called on a non-hypertable
 SELECT * FROM attach_data_node('data_node_1', 'disttable');
+WARNING:  attaching data node is deprecated
 ERROR:  table "disttable" is not a hypertable
 -- Test some bad create_hypertable() parameter values for distributed hypertables
 -- Bad replication factor
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 0, data_nodes => '{ "data_node_2", "data_node_4" }');
+WARNING:  distributed hypertable is deprecated
 ERROR:  invalid replication factor
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 32768);
+WARNING:  distributed hypertable is deprecated
 ERROR:  replication factor too large for hypertable "disttable"
 SELECT * FROM create_hypertable('disttable', 'time', replication_factor => -1);
 ERROR:  invalid replication factor
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => -1);
+WARNING:  distributed hypertable is deprecated
 ERROR:  invalid replication factor
 -- Non-existing data node
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 2, data_nodes => '{ "data_node_4" }');
+WARNING:  distributed hypertable is deprecated
 ERROR:  server "data_node_4" does not exist
 \set ON_ERROR_STOP 1
 -- Use a subset of data nodes and a replication factor of two so that
 -- each chunk is associated with more than one data node. Set
 -- number_partitions lower than number of servers to raise a warning
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', number_partitions => 1, replication_factor => 2, data_nodes => '{ "data_node_2", "data_node_3" }');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
 WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
@@ -536,6 +566,7 @@ SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('_timescaledb_i
 -- Will fail because data_node_2 contains chunks
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_2');
+WARNING:  deleting data node is deprecated
 ERROR:  data node "data_node_2" still holds data for distributed hypertable "disttable"
 -- non-existing chunk
 SELECT * FROM _timescaledb_functions.set_chunk_default_data_node('x_chunk', 'data_node_3');
@@ -565,6 +596,7 @@ SELECT * FROM hypertable_partitions;
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_2', force => true);
+WARNING:  deleting data node is deprecated
 WARNING:  distributed hypertable "disttable" is under-replicated
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
  delete_data_node 
@@ -617,12 +649,14 @@ SELECT * FROM _timescaledb_catalog.chunk_data_node;
 \set ON_ERROR_STOP 0
 -- can't delete b/c it's last data replica
 SELECT * FROM delete_data_node('data_node_3', force => true);
+WARNING:  deleting data node is deprecated
 ERROR:  insufficient number of data nodes
 \set ON_ERROR_STOP 1
 -- Removing all data allows us to delete the data node by force, but
 -- with WARNING that new data will be under-replicated
 TRUNCATE disttable;
 SELECT * FROM delete_data_node('data_node_3', force => true);
+WARNING:  deleting data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
  delete_data_node 
 ------------------
@@ -652,6 +686,7 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
 -- Attach data node should now succeed
 SET client_min_messages TO NOTICE;
 SELECT * FROM attach_data_node('data_node_1', 'disttable');
+WARNING:  attaching data node is deprecated
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
              3 |                  3 | data_node_1
@@ -718,6 +753,7 @@ SELECT * FROM _timescaledb_functions.ping_data_node('pg_data_node_1');
 ERROR:  server "pg_data_node_1" does not exist
 -- ERROR on attaching to non-distributed hypertable
 SELECT * FROM attach_data_node('data_node_1', 'standalone');
+WARNING:  attaching data node is deprecated
 ERROR:  hypertable "standalone" is not distributed
 \set ON_ERROR_STOP 1
 DROP TABLE standalone;
@@ -725,24 +761,30 @@ DROP TABLE standalone;
 \set ON_ERROR_STOP 0
 -- Invalid arguments
 SELECT * FROM attach_data_node('data_node_1', NULL, true);
+WARNING:  attaching data node is deprecated
 ERROR:  hypertable cannot be NULL
 SELECT * FROM attach_data_node(NULL, 'disttable', true);
+WARNING:  attaching data node is deprecated
 ERROR:  data node name cannot be NULL
 -- Deleted data node
 SELECT * FROM attach_data_node('data_node_2', 'disttable');
+WARNING:  attaching data node is deprecated
 ERROR:  server "data_node_2" does not exist
 -- Attaching to an already attached data node without 'if_not_exists'
 SELECT * FROM attach_data_node('data_node_1', 'disttable', false);
+WARNING:  attaching data node is deprecated
 ERROR:  data node "data_node_1" is already attached to hypertable "disttable"
 -- Attaching a data node to another data node
 \c :DN_DBNAME_1
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
+WARNING:  attaching data node is deprecated
 ERROR:  hypertable "disttable" is not distributed
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SET ROLE :ROLE_1;
 \set ON_ERROR_STOP 1
 -- Attach if not exists
 SELECT * FROM attach_data_node('data_node_1', 'disttable', true);
+WARNING:  attaching data node is deprecated
 NOTICE:  data node "data_node_1" is already attached to hypertable "disttable", skipping
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
@@ -763,6 +805,7 @@ AND column_name = 'device';
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4',
                             if_not_exists => true);
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_4 | db_data_node_4 | t            | t                | t
@@ -775,6 +818,7 @@ GRANT USAGE
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
 GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SELECT * FROM attach_data_node('data_node_4', 'disttable');
+WARNING:  attaching data node is deprecated
 NOTICE:  the number of partitions in dimension "device" was increased to 2
  hypertable_id | node_hypertable_id |  node_name  
 ---------------+--------------------+-------------
@@ -783,6 +827,7 @@ NOTICE:  the number of partitions in dimension "device" was increased to 2
 
 -- Recheck that ownership on data_node_4 is proper
 SELECT * FROM test.remote_exec(NULL, $$ SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [data_node_1]:  SELECT tablename, tableowner from pg_catalog.pg_tables where tablename = 'disttable'
 NOTICE:  [data_node_1]:
 tablename|tableowner 
@@ -817,6 +862,7 @@ AND column_name = 'device';
 -- Clean up
 DROP TABLE disttable;
 SELECT * FROM delete_data_node('data_node_4');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -828,10 +874,12 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 -- Creating a distributed hypertable without any data nodes should fail
 SELECT * FROM create_distributed_hypertable('disttable', 'time', data_nodes => '{ }');
+WARNING:  distributed hypertable is deprecated
 ERROR:  no data nodes can be assigned to the hypertable
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -865,6 +913,7 @@ SELECT id, hypertable_id, schema_name, table_name, compressed_chunk_id, dropped,
 \set ON_ERROR_STOP 0
 -- No data nodes remain, so should fail
 SELECT * FROM create_distributed_hypertable('disttable', 'time');
+WARNING:  distributed hypertable is deprecated
 ERROR:  no data nodes can be assigned to the hypertable
 \set ON_ERROR_STOP 1
 -- These data nodes have been deleted, so safe to remove their databases.
@@ -880,18 +929,21 @@ SELECT node_name FROM timescaledb_information.data_nodes ORDER BY node_name;
 
 -- let's add some
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_1 | db_data_node_1 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_2 | db_data_node_2 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_3 | db_data_node_3 | t            | t                | t
@@ -906,6 +958,7 @@ CREATE TABLE disttable(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 2,
                                             replication_factor => 2,
                                             data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
 WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
@@ -963,6 +1016,7 @@ SELECT * FROM hypertable_partitions;
 -- Add additional hypertable
 CREATE TABLE disttable_2(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_2', 'time', 'device', 2, replication_factor => 2, data_nodes => '{"data_node_1", "data_node_2", "data_node_3"}');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
 WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name  | created 
@@ -1195,6 +1249,7 @@ ORDER BY table_name;
 -- Detach should work b/c disttable_2 has no data and more data nodes
 -- than replication factor
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
+WARNING:  detaching data node is deprecated
  detach_data_node 
 ------------------
                 1
@@ -1203,27 +1258,35 @@ SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
 \set ON_ERROR_STOP 0
 -- can't detach non-existing data node
 SELECT * FROM detach_data_node('data_node_12345', 'disttable');
+WARNING:  detaching data node is deprecated
 ERROR:  server "data_node_12345" does not exist
 -- NULL data node
 SELECT * FROM detach_data_node(NULL, 'disttable');
+WARNING:  detaching data node is deprecated
 ERROR:  data node name cannot be NULL
 -- Can't detach data node_1 b/c it contains data for disttable
 SELECT * FROM detach_data_node('data_node_1');
+WARNING:  detaching data node is deprecated
 ERROR:  data node "data_node_1" still holds data for distributed hypertable "disttable"
 -- can't detach already detached data node
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2');
+WARNING:  detaching data node is deprecated
 ERROR:  data node "data_node_2" is not attached to hypertable "disttable_2"
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => false);
+WARNING:  detaching data node is deprecated
 ERROR:  data node "data_node_2" is not attached to hypertable "disttable_2"
 -- can't detach b/c of replication factor for disttable_2
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2');
+WARNING:  detaching data node is deprecated
 ERROR:  insufficient number of data nodes for distributed hypertable "disttable_2"
 -- can't detach non hypertable
 SELECT * FROM detach_data_node('data_node_3', 'devices');
+WARNING:  detaching data node is deprecated
 ERROR:  table "devices" is not a hypertable
 \set ON_ERROR_STOP 1
 -- do nothing if node is not attached
 SELECT * FROM detach_data_node('data_node_2', 'disttable_2', if_attached => true);
+WARNING:  detaching data node is deprecated
 NOTICE:  data node "data_node_2" is not attached to hypertable "disttable_2", skipping
  detach_data_node 
 ------------------
@@ -1241,6 +1304,7 @@ SELECT * FROM hypertable_partitions;
 (4 rows)
 
 SELECT * FROM detach_data_node('data_node_3', 'disttable_2', force => true);
+WARNING:  detaching data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable_2"
 NOTICE:  the number of partitions in dimension "device" of hypertable "disttable_2" was decreased to 1
  detach_data_node 
@@ -1273,6 +1337,7 @@ ORDER BY foreign_table_name;
 
 -- force detach data node with data
 SELECT * FROM detach_data_node('data_node_3', 'disttable', force => true);
+WARNING:  detaching data node is deprecated
 WARNING:  distributed hypertable "disttable" is under-replicated
  detach_data_node 
 ------------------
@@ -1322,6 +1387,7 @@ ORDER BY foreign_table_name;
 \set ON_ERROR_STOP 0
 -- detaching data node with last data replica should ERROR even when forcing
 SELECT * FROM detach_data_node('server_2', 'disttable', force => true);
+WARNING:  detaching data node is deprecated
 ERROR:  server "server_2" does not exist
 \set ON_ERROR_STOP 1
 -- drop all chunks
@@ -1344,6 +1410,7 @@ ORDER BY foreign_table_name;
 (0 rows)
 
 SELECT * FROM detach_data_node('data_node_2', 'disttable', force => true);
+WARNING:  detaching data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
 NOTICE:  the number of partitions in dimension "device" of hypertable "disttable" was decreased to 1
  detach_data_node 
@@ -1354,12 +1421,14 @@ NOTICE:  the number of partitions in dimension "device" of hypertable "disttable
 -- Let's add more data nodes
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_4', host => 'localhost', database => :'DN_DBNAME_4');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_4 | db_data_node_4 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_5', host => 'localhost', database => :'DN_DBNAME_5');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_5 | db_data_node_5 | t            | t                | t
@@ -1372,6 +1441,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_1;
 SET ROLE :ROLE_SUPERUSER;
 CREATE TABLE disttable_3(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_3', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5"}');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
@@ -1381,6 +1451,7 @@ NOTICE:  adding not-null constraint to column "time"
 SET ROLE :ROLE_1;
 CREATE TABLE disttable_4(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_4', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5"}');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
@@ -1390,6 +1461,7 @@ NOTICE:  adding not-null constraint to column "time"
 \set ON_ERROR_STOP 0
 -- error due to missing permissions
 SELECT * FROM detach_data_node('data_node_4', 'disttable_3');
+WARNING:  detaching data node is deprecated
 ERROR:  must be owner of hypertable "disttable_3"
 SELECT * FROM timescaledb_experimental.block_new_chunks('data_node_4', 'disttable_3');
 ERROR:  must be owner of hypertable "disttable_3"
@@ -1402,6 +1474,7 @@ ERROR:  must be owner of hypertable "disttable_3"
 -- non-existing hypertables.
 CREATE TABLE disttable_5(time timestamptz, device int, temp float);
 SELECT * FROM create_distributed_hypertable('disttable_5', 'time', replication_factor => 1, data_nodes => '{"data_node_4", "data_node_5" }');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name  | created 
 ---------------+-------------+-------------+---------
@@ -1409,6 +1482,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM test.remote_exec('{ data_node_4 }', $$ SELECT hypertable_name, owner FROM timescaledb_information.hypertables; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [data_node_4]:  SELECT hypertable_name, owner FROM timescaledb_information.hypertables
 NOTICE:  [data_node_4]:
 hypertable_name|owner      
@@ -1431,6 +1505,7 @@ SET ROLE :ROLE_1;
 -- test first detach without permission to drop the remote data
 \set ON_ERROR_STOP 0
 SELECT * FROM detach_data_node('data_node_4', drop_remote_data => true);
+WARNING:  detaching data node is deprecated
 NOTICE:  skipping hypertable "disttable_3" due to missing permissions
 ERROR:  [data_node_4]: must be owner of table disttable_5
 \set ON_ERROR_STOP 1
@@ -1439,6 +1514,7 @@ RESET ROLE;
 CALL distributed_exec(format('ALTER TABLE disttable_5 OWNER TO %s', :'ROLE_1'), '{ data_node_4 }');
 SET ROLE :ROLE_1;
 SELECT * FROM detach_data_node('data_node_4', drop_remote_data => true);
+WARNING:  detaching data node is deprecated
 NOTICE:  skipping hypertable "disttable_3" due to missing permissions
  detach_data_node 
 ------------------
@@ -1447,6 +1523,7 @@ NOTICE:  skipping hypertable "disttable_3" due to missing permissions
 
 -- Hypertables user had permissions for should be dropped on data nodes
 SELECT * FROM test.remote_exec('{ data_node_4 }', $$ SELECT hypertable_name, owner FROM timescaledb_information.hypertables; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [data_node_4]:  SELECT hypertable_name, owner FROM timescaledb_information.hypertables
 NOTICE:  [data_node_4]:
 hypertable_name|owner     
@@ -1463,6 +1540,7 @@ disttable_3    |super_user
 -- Cleanup
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM delete_data_node('data_node_1', force =>true);
+WARNING:  deleting data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable"
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable_2"
  delete_data_node 
@@ -1471,12 +1549,14 @@ WARNING:  insufficient number of data nodes for distributed hypertable "disttabl
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_2', force =>true);
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_3', force =>true);
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -1487,20 +1567,24 @@ SET ROLE :ROLE_1;
 -- Cannot delete a data node which is attached to a table that we don't
 -- have owner permissions on
 SELECT * FROM delete_data_node('data_node_4', force =>true);
+WARNING:  deleting data node is deprecated
 ERROR:  permission denied for hypertable "disttable_3"
 SELECT * FROM delete_data_node('data_node_5', force =>true);
+WARNING:  deleting data node is deprecated
 ERROR:  permission denied for hypertable "disttable_3"
 \set ON_ERROR_STOP 1
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 DROP TABLE disttable_3;
 -- Now we should be able to delete the data nodes
 SELECT * FROM delete_data_node('data_node_4', force =>true);
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_5', force =>true);
+WARNING:  deleting data node is deprecated
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable_4"
 WARNING:  insufficient number of data nodes for distributed hypertable "disttable_5"
  delete_data_node 
@@ -1552,6 +1636,7 @@ CREATE EXTENSION timescaledb VERSION '0.0.0';
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('data_node_1', 'localhost', database => :'DN_DBNAME_1',
                             bootstrap => false);
+WARNING:  adding data node is deprecated
 ERROR:  remote PostgreSQL instance has an incompatible timescaledb extension version
 -- Testing that it is not possible to use oneself as a data node. This
 -- is not allowed since it would create a cycle.
@@ -1562,6 +1647,7 @@ ERROR:  remote PostgreSQL instance has an incompatible timescaledb extension ver
 -- We cannot use default verbosity here for debugging since the
 -- version number is printed in some of the notices.
 SELECT * FROM add_data_node('data_node_99', host => 'localhost');
+WARNING:  adding data node is deprecated
 NOTICE:  database "db_data_node" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
 ERROR:  [data_node_99]: cannot add the current database as a data node to itself
@@ -1580,6 +1666,7 @@ SET ROLE :ROLE_3;
 -- foreign data wrapper will fail.
 \set ON_ERROR_STOP 0
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6');
+WARNING:  adding data node is deprecated
 ERROR:  permission denied for foreign-data wrapper timescaledb_fdw
 \set ON_ERROR_STOP 1
 RESET ROLE;
@@ -1589,10 +1676,12 @@ SET ROLE :ROLE_3;
 -- ROLE_3 doesn't have a password in the passfile and has not way to
 -- authenticate so adding a data node will still fail.
 SELECT * FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6');
+WARNING:  adding data node is deprecated
 ERROR:  could not connect to "data_node_6"
 \set ON_ERROR_STOP 1
 -- Providing the password on the command line should work
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_6', host => 'localhost', database => :'DN_DBNAME_6', password => :'ROLE_3_PASS');
+WARNING:  adding data node is deprecated
 NOTICE:  database "db_data_node_6" already exists on data node, skipping
 NOTICE:  extension "timescaledb" already exists on data node, skipping
   node_name  |    database    | node_created | database_created | extension_created 
@@ -1601,6 +1690,7 @@ NOTICE:  extension "timescaledb" already exists on data node, skipping
 (1 row)
 
 SELECT * FROM delete_data_node('data_node_6');
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
@@ -1617,18 +1707,21 @@ DROP DATABASE :DN_DBNAME_6 WITH (FORCE);
 -- Test alter_data_node()
 -----------------------------------------------
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_1', host => 'localhost', database => :'DN_DBNAME_1');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_1 | db_data_node_1 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_2', host => 'localhost', database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_2 | db_data_node_2 | t            | t                | t
 (1 row)
 
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data_node_3', host => 'localhost', database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
   node_name  |    database    | node_created | database_created | extension_created 
 -------------+----------------+--------------+------------------+-------------------
  data_node_3 | db_data_node_3 | t            | t                | t
@@ -1642,6 +1735,7 @@ CREATE TABLE hyper2 (LIKE hyper1);
 CREATE TABLE hyper3 (LIKE hyper1);
 CREATE TABLE hyper_1dim (LIKE hyper1);
 SELECT create_distributed_hypertable('hyper1', 'time', 'location', replication_factor=>1);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -1649,6 +1743,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT create_distributed_hypertable('hyper2', 'time', 'location', replication_factor=>2);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -1656,6 +1751,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT create_distributed_hypertable('hyper3', 'time', 'location', replication_factor=>3);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -1663,6 +1759,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT create_distributed_hypertable('hyper_1dim', 'time', chunk_time_interval=>interval '2 days', replication_factor=>3);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -1710,8 +1807,10 @@ SELECT * FROM chunk_query_data_node;
 \set ON_ERROR_STOP 0
 -- must be owner to alter a data node
 SELECT * FROM alter_data_node('data_node_1', available=>false);
+WARNING:  altering data node is deprecated
 ERROR:  must be owner of foreign server data_node_1
 SELECT * FROM alter_data_node('data_node_1', port=>8989);
+WARNING:  altering data node is deprecated
 ERROR:  must be owner of foreign server data_node_1
 \set ON_ERROR_STOP 1
 -- query some data from all hypertables to show its working before
@@ -1758,6 +1857,7 @@ ERROR:  could not connect to "data_node_1"
 \set ON_ERROR_STOP 1
 -- alter the node as not available
 SELECT * FROM alter_data_node('data_node_1', available=>false);
+WARNING:  altering data node is deprecated
 WARNING:  could not switch data node on 1 chunks
   node_name  |   host    | port  |    database    | available 
 -------------+-----------+-------+----------------+-----------
@@ -1909,6 +2009,7 @@ SELECT * FROM hyper_1dim WHERE time = '2022-01-03 00:00:05';
 INSERT INTO _timescaledb_internal._dist_hyper_12_24_chunk VALUES ('2022-01-11 00:00:00', 1, 1);
 INSERT INTO _timescaledb_internal._dist_hyper_13_25_chunk VALUES ('2022-01-11 00:00:00', 1, 1);
 SELECT * FROM test.remote_exec(ARRAY['data_node_2', 'data_node_3'], $$ SELECT * FROM _timescaledb_internal._dist_hyper_12_24_chunk WHERE time = '2022-01-11 00:00:00'; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [data_node_2]:  SELECT * FROM _timescaledb_internal._dist_hyper_12_24_chunk WHERE time = '2022-01-11 00:00:00'
 NOTICE:  [data_node_2]:
 time                        |location|temp
@@ -1931,6 +2032,7 @@ Tue Jan 11 00:00:00 2022 PST|       1|   1
 (1 row)
 
 SELECT * FROM test.remote_exec(ARRAY['data_node_2', 'data_node_3'], $$ SELECT * FROM _timescaledb_internal._dist_hyper_13_25_chunk WHERE time = '2022-01-11 00:00:00'; $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [data_node_2]:  SELECT * FROM _timescaledb_internal._dist_hyper_13_25_chunk WHERE time = '2022-01-11 00:00:00'
 NOTICE:  [data_node_2]:
 time                        |location|temp
@@ -1986,6 +2088,7 @@ ERROR:  some data nodes are not available for DDL commands
 -- Mark all DNs unavailable. Metadata should still retain last DN but all
 -- activity should fail
 SELECT * FROM alter_data_node('data_node_2', available=>false);
+WARNING:  altering data node is deprecated
 WARNING:  could not switch data node on 2 chunks
   node_name  |   host    | port  |    database    | available 
 -------------+-----------+-------+----------------+-----------
@@ -1993,6 +2096,7 @@ WARNING:  could not switch data node on 2 chunks
 (1 row)
 
 SELECT * FROM alter_data_node('data_node_3', available=>false);
+WARNING:  altering data node is deprecated
 WARNING:  could not switch data node on 11 chunks
   node_name  |   host    | port  |    database    | available 
 -------------+-----------+-------+----------------+-----------
@@ -2027,6 +2131,7 @@ ERROR:  some data nodes are not available for DDL commands
 ALTER DATABASE data_node_1_unavailable RENAME TO :DN_DBNAME_1;
 WARNING:  you need to manually restart any running background workers after this command
 SELECT * FROM alter_data_node('data_node_1', available=>true);
+WARNING:  altering data node is deprecated
 WARNING:  insufficient number of data nodes
 WARNING:  insufficient number of data nodes
   node_name  |   host    | port  |    database    | available 
@@ -2035,6 +2140,7 @@ WARNING:  insufficient number of data nodes
 (1 row)
 
 SELECT * FROM alter_data_node('data_node_2', available=>true);
+WARNING:  altering data node is deprecated
 WARNING:  insufficient number of data nodes
 WARNING:  insufficient number of data nodes
 WARNING:  insufficient number of data nodes
@@ -2045,6 +2151,7 @@ WARNING:  insufficient number of data nodes
 (1 row)
 
 SELECT * FROM alter_data_node('data_node_3', available=>true);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |    database    | available 
 -------------+-----------+-------+----------------+-----------
  data_node_3 | localhost | 55432 | db_data_node_3 | t
@@ -2116,6 +2223,7 @@ SELECT node_name, options FROM timescaledb_information.data_nodes order by node_
 (3 rows)
 
 SELECT * FROM alter_data_node('data_node_1', available=>true, host=>'foo.bar', port=>8989, database=>'new_db');
+WARNING:  altering data node is deprecated
   node_name  |  host   | port | database | available 
 -------------+---------+------+----------+-----------
  data_node_1 | foo.bar | 8989 | new_db   | t
@@ -2131,6 +2239,7 @@ SELECT node_name, options FROM timescaledb_information.data_nodes order by node_
 
 -- just show current options:
 SELECT * FROM alter_data_node('data_node_1');
+WARNING:  altering data node is deprecated
   node_name  |  host   | port | database | available 
 -------------+---------+------+----------+-----------
  data_node_1 | foo.bar | 8989 | new_db   | t
@@ -2143,17 +2252,22 @@ DROP TABLE hyper_1dim;
 \set ON_ERROR_STOP 0
 -- test some error cases
 SELECT * FROM alter_data_node(NULL);
+WARNING:  altering data node is deprecated
 ERROR:  data node name cannot be NULL
 SELECT * FROM alter_data_node('does_not_exist');
+WARNING:  altering data node is deprecated
 ERROR:  server "does_not_exist" does not exist
 SELECT * FROM alter_data_node('data_node_1', port=>89000);
+WARNING:  altering data node is deprecated
 ERROR:  invalid port number 89000
 -- cannot delete data node with "drop_database" since configuration is wrong
 SELECT delete_data_node('data_node_1', drop_database=>true);
+WARNING:  deleting data node is deprecated
 ERROR:  could not connect to data node "data_node_1"
 \set ON_ERROR_STOP 1
 -- restore configuration for data_node_1
 SELECT * FROM alter_data_node('data_node_1', host=>'localhost', port=>:old_port, database=>:'DN_DBNAME_1');
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |    database    | available 
 -------------+-----------+-------+----------------+-----------
  data_node_1 | localhost | 55432 | db_data_node_1 | t
@@ -2171,18 +2285,21 @@ DROP VIEW chunk_query_data_node;
 -- create new session to clear out connection cache
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 SELECT delete_data_node('data_node_1', drop_database=>true);
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT delete_data_node('data_node_2', drop_database=>true);
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t
 (1 row)
 
 SELECT delete_data_node('data_node_3', drop_database=>true);
+WARNING:  deleting data node is deprecated
  delete_data_node 
 ------------------
  t

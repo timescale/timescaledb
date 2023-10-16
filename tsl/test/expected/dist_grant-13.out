@@ -14,6 +14,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
     node_name    |    database     | node_created | database_created | extension_created 
 -----------------+-----------------+--------------+------------------+-------------------
  db_dist_grant_1 | db_dist_grant_1 | t            | t                | t
@@ -31,6 +34,7 @@ SELECT relname, relacl FROM pg_class WHERE relname = 'conditions';
 (1 row)
 
 SELECT * FROM create_distributed_hypertable('conditions', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | conditions | t
@@ -49,6 +53,7 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT";
 $$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_1', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'conditions', 'DELETE') AS "DELETE"
@@ -100,6 +105,7 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'conditions', 'INSERT') AS "INSERT";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
@@ -172,6 +178,7 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
@@ -219,6 +226,7 @@ f     |t     |t     |t     |f
 -- Add another data node and check that grants are propagated when the
 -- data node is attached to an existing table.
 SELECT node_name, database, node_created, database_created, extension_created FROM add_data_node('data4', host => 'localhost', database => :'DATA_NODE_4');
+WARNING:  adding data node is deprecated
  node_name |    database     | node_created | database_created | extension_created 
 -----------+-----------------+--------------+------------------+-------------------
  data4     | db_dist_grant_4 | t            | t                | t
@@ -232,6 +240,7 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
@@ -280,6 +289,7 @@ NOTICE:  [data4]:
 ERROR:  [data4]: relation "conditions" does not exist
 \set ON_ERROR_STOP 1
 SELECT * FROM attach_data_node('data4', 'conditions');
+WARNING:  attaching data node is deprecated
 NOTICE:  the number of partitions in dimension "device" was increased to 4
  hypertable_id | node_hypertable_id | node_name 
 ---------------+--------------------+-----------
@@ -296,6 +306,7 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'conditions', 'UPDATE') AS "UPDATE"
        , has_table_privilege('%s', 'conditions', 'TRUNCATE') AS "TRUNCATE";
 $$, :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2', :'ROLE_2'));
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_2', 'conditions', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_2', 'conditions', 'DELETE') AS "DELETE"
@@ -360,6 +371,7 @@ CREATE TABLE no_grants(time TIMESTAMPTZ NOT NULL, device INTEGER, temperature FL
 GRANT SELECT ON no_grants TO :ROLE_1;
 -- First case is when table is created. Grants should not be propagated.
 SELECT * FROM create_distributed_hypertable('no_grants', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              2 | public      | no_grants  | t
@@ -378,6 +390,7 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
 $$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
@@ -443,6 +456,7 @@ SELECT * FROM test.remote_exec(NULL, format($$
        , has_table_privilege('%s', 'no_grants', 'DELETE') AS "DELETE"
        , has_table_privilege('%s', 'no_grants', 'INSERT') AS "INSERT";
 $$, :'ROLE_1', :'ROLE_1', :'ROLE_1'));
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
   SELECT has_table_privilege('test_role_1', 'no_grants', 'SELECT') AS "SELECT"
        , has_table_privilege('test_role_1', 'no_grants', 'DELETE') AS "DELETE"
@@ -675,6 +689,7 @@ CREATE TABLE conditions(
        PRIMARY KEY (time,device)
 );
 SELECT * FROM create_distributed_hypertable('conditions', 'time', 'device', 3);
+WARNING:  distributed hypertable is deprecated
 WARNING:  insufficient number of partitions for dimension "device"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -900,6 +915,7 @@ CREATE TABLE measurements(
 );
 -- Create a distributed hypertable with chunks in the same schema
 SELECT * FROM create_distributed_hypertable('public.measurements', 'time', chunk_time_interval => '5 days'::interval, associated_schema_name => 'public');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name |  table_name  | created 
 ---------------+-------------+--------------+---------
              5 | public      | measurements | t
@@ -1160,6 +1176,7 @@ CREATE TABLE disttable_role_3(time timestamptz, device int, temp float);
 \set ON_ERROR_STOP 0
 -- Can't create distributed hypertable without GRANTs on foreign servers (data nodes)
 SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+WARNING:  distributed hypertable is deprecated
 ERROR:  permission denied for foreign server db_dist_grant_1
 \set ON_ERROR_STOP 1
 -- Grant USAGE on DATA_NODE_1 (but it is not enough)
@@ -1169,6 +1186,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_3;
 SET ROLE :ROLE_3;
 \set ON_ERROR_STOP 0
 SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+WARNING:  distributed hypertable is deprecated
 ERROR:  permission denied for foreign server db_dist_grant_2
 \set ON_ERROR_STOP 1
 -- Creating the hypertable should work with GRANTs on both servers.
@@ -1180,6 +1198,7 @@ SET ROLE :ROLE_3;
 -- Still cannot connect since there is no password in the passfile and
 -- no user mapping.
 SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  could not connect to "db_dist_grant_1"
 \set ON_ERROR_STOP 1
@@ -1190,6 +1209,7 @@ SET ROLE :ROLE_3;
 -- Still cannot connect since there is only a user mapping for data
 -- node DATA_NODE_1.
 SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
 ERROR:  could not connect to "db_dist_grant_2"
 \set ON_ERROR_STOP 1
@@ -1201,6 +1221,7 @@ SET ROLE :ROLE_3;
 -- User should be able to connect and create the distributed
 -- hypertable at this point.
 SELECT * FROM create_distributed_hypertable('disttable_role_3', 'time', data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |    table_name    | created 
 ---------------+-------------+------------------+---------
@@ -1241,6 +1262,7 @@ ALTER DEFAULT PRIVILEGES GRANT INSERT ON TABLES TO :ROLE_1;
 SELECT FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 
@@ -1265,6 +1287,7 @@ ALTER DEFAULT PRIVILEGES REVOKE INSERT ON TABLES FROM :ROLE_1;
 SELECT FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_grant_1]: 
 	   SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl
 
