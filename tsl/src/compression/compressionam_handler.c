@@ -144,6 +144,7 @@ typedef struct CompressionScanDescData
 	TableScanDesc heap_scan;
 	Relation compressed_rel;
 	TupleTableSlot *compressed_slot;
+	TupleTableSlot *uncompressed_slot;
 	TableScanDesc compressed_scan_desc;
 	uint16 compressed_tuple_index;
 	int64 returned_row_count;
@@ -191,6 +192,9 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->compressed_rel = table_open(c_chunk->table_id, AccessShareLock);
 	scan->compressed_tuple_index = 1;
 	scan->compressed_slot = table_slot_create(scan->compressed_rel, NULL);
+	scan->uncompressed_slot =
+		MakeSingleTupleTableSlot(RelationGetDescr(relation), &TTSOpsBufferHeapTuple);
+
 	scan->returned_row_count = 0;
 	scan->compressed_row_count = 0;
 
@@ -238,6 +242,7 @@ compressionam_endscan(TableScanDesc sscan)
 
 	RelationDecrementReferenceCount(sscan->rs_rd);
 	ExecDropSingleTupleTableSlot(scan->compressed_slot);
+	ExecDropSingleTupleTableSlot(scan->uncompressed_slot);
 	table_endscan(scan->compressed_scan_desc);
 	table_close(scan->compressed_rel, AccessShareLock);
 	heapam->scan_end(scan->heap_scan);
@@ -257,7 +262,14 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 	if (scan->compressed_read_done)
 	{
 		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-		return heapam->scan_getnextslot(scan->heap_scan, direction, slot);
+		bool result = heapam->scan_getnextslot(scan->heap_scan, direction, scan->uncompressed_slot);
+
+		if (result)
+		{
+			ExecStoreArrowTuple(slot, scan->uncompressed_slot, InvalidTupleIndex);
+		}
+
+		return result;
 	}
 
 	Assert(scan->compressed_tuple_index == 1 ||
@@ -658,7 +670,7 @@ compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXm
 
 	if (result)
 	{
-		ExecStoreArrowTuple(slot, cscan->compressed_slot, 0);
+		ExecStoreArrowTuple(slot, cscan->compressed_slot, 1);
 	}
 	else
 	{
