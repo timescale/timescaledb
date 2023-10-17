@@ -1764,10 +1764,10 @@ tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS)
 	;
 }
 
-TS_FUNCTION_INFO_V1(tsl_compressed_data_info);
+TS_FUNCTION_INFO_V1(ts_compressed_data_info);
 
 Datum
-tsl_compressed_data_info(PG_FUNCTION_ARGS)
+ts_compressed_data_info(PG_FUNCTION_ARGS)
 {
 	StringInfoData buf = { 0 };
 	initStringInfo(&buf);
