@@ -94,7 +94,7 @@ bool ts_guc_enable_async_append = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
-TSDLLEXPORT int ts_guc_bgw_log_level;
+TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
