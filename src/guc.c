@@ -727,7 +727,7 @@ _guc_init(void)
 							 "Log level for the scheduler and workers of the background worker "
 							 "subsystem. Requires configuration reload to change.",
 							 /* valueAddr= */ &ts_guc_bgw_log_level,
-							 /* bootValue= */ log_min_messages,
+							 /* bootValue= */ WARNING,
 							 /* options= */ loglevel_options,
 							 /* context= */ PGC_SIGHUP,
 							 0,
