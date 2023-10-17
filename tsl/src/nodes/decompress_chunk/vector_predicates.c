@@ -43,15 +43,8 @@ vector_const_texteq_nodict(const ArrowArray *arrow, const Datum constdatum, uint
 #define INNER_LOOP                                                                                 \
 	const uint32 start = offsets[row];                                                             \
 	const uint32 end = offsets[row + 1];                                                           \
-	bool valid = false;                                                                            \
-	if (end - start == textlen)                                                                    \
-	{                                                                                              \
-		valid = true;                                                                              \
-		for (size_t character_index = 0; character_index < textlen; character_index++)             \
-		{                                                                                          \
-			valid &= cstring[character_index] == values[start + character_index];                  \
-		}                                                                                          \
-	}                                                                                              \
+	const uint32 veclen = end - start; \
+	bool valid = veclen != textlen ? false : (strncmp((char *) &values[start], (char *) cstring, textlen) == 0);                                                                            \
 	word |= ((uint64) valid) << bit_index;                                                         \
 	//	fprintf(stderr, "plain row %ld: valid %d\n", row, valid);
 
@@ -114,7 +107,7 @@ vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 			INNER_LOOP
 
 			//			fprintf(stderr, "dict-coded row %ld: index %d, valid %d\n", row, index,
-			//valid);
+			// valid);
 		}
 		result[outer] &= word;
 	}

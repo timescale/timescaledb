@@ -17,6 +17,7 @@
 #include "compression/array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
+#include "compression/simple8b_rle_bitmap.h"
 #include "datum_serialize.h"
 
 #include "compression/arrow_c_data_interface.h"
@@ -492,24 +493,24 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	Simple8bRleSerialized *nulls_serialized = NULL;
 	if (has_nulls)
 	{
-		Assert(false);
 		nulls_serialized = bytes_deserialize_simple8b_and_advance(si);
 	}
-	(void) nulls_serialized;
 
 	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(si);
 
 	uint16 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION];
-	const uint16 n = simple8brle_decompress_all_buf_uint16(sizes_serialized,
-														   sizes,
-														   sizeof(sizes) / sizeof(sizes[0]));
+	const uint16 n_notnull =
+		simple8brle_decompress_all_buf_uint16(sizes_serialized,
+											  sizes,
+											  sizeof(sizes) / sizeof(sizes[0]));
+	const int n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
 
 	uint32 *offsets =
-		(uint32 *) MemoryContextAllocZero(dest_mctx, pad64(sizeof(*offsets) * (n + 1)));
+		(uint32 *) MemoryContextAllocZero(dest_mctx, pad64(sizeof(*offsets) * (n_total + 1)));
 	uint8 *arrow_bodies = (uint8 *) MemoryContextAllocZero(dest_mctx, pad64(si->len - si->cursor));
 
 	int offset = 0;
-	for (int i = 0; i < n; i++)
+	for (int i = 0; i < n_notnull; i++)
 	{
 		void *vardata = consumeCompressedData(si, sizes[i]);
 		// CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
@@ -524,11 +525,57 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		offsets[i] = offset;
 		offset += textlen;
 	}
-	offsets[n] = offset;
+	offsets[n_notnull] = offset;
 
-	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n);
+	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n_total);
 	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+
+	if (has_nulls)
+	{
+		/*
+		 * We have decompressed the data with nulls skipped, reshuffle it
+		 * according to the nulls bitmap.
+		 */
+		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
+		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+
+		int current_notnull_element = n_notnull - 1;
+		for (int i = n_total - 1; i >= 0; i--)
+		{
+			Assert(i >= current_notnull_element);
+
+			if (simple8brle_bitmap_get_at(&nulls, i))
+			{
+				arrow_set_row_validity(validity_bitmap, i, false);
+			}
+			else
+			{
+				Assert(current_notnull_element >= 0);
+				/*
+				 * The index of the corresponding offset is higher by one than
+				 * the index of the element. The offset[0] is never affected by
+				 * this shuffling and is always 0.
+				 */
+				offsets[i + 1] = offsets[current_notnull_element + 1];
+				current_notnull_element--;
+			}
+		}
+
+		Assert(current_notnull_element == -1);
+	}
+	else
+	{
+		/*
+		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
+		 * with zeros, because the corresponding elements are not valid.
+		 */
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+	}
 
 	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 3);
 	const void **buffers = (const void **) &result[1];
@@ -537,8 +584,8 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	buffers[2] = arrow_bodies;
 	result->n_buffers = 3;
 	result->buffers = buffers;
-	result->length = n;
-	result->null_count = 0;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
 	return result;
 }
 

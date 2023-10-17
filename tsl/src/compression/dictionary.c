@@ -22,6 +22,7 @@
 #include "compression/compression.h"
 #include "compression/dictionary.h"
 #include "compression/simple8b_rle.h"
+#include "compression/simple8b_rle_bitmap.h"
 #include "compression/array.h"
 #include "compression/dictionary_hash.h"
 #include "compression/datum_serialize.h"
@@ -429,24 +430,70 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	CheckCompressedData(header->element_type == TEXTOID);
 
 	Simple8bRleSerialized *indices_serialized = bytes_deserialize_simple8b_and_advance(&si);
-	const uint16 n_padded = indices_serialized->num_elements + 63;
-	int16 *indices = MemoryContextAlloc(dest_mctx, sizeof(int16) * n_padded);
-	const uint16 n = simple8brle_decompress_all_buf_int16(indices_serialized, indices, n_padded);
 
+	Simple8bRleSerialized *nulls_serialized = NULL;
 	if (header->has_nulls)
 	{
-		Assert(false);
-		Simple8bRleSerialized *nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
-		(void) nulls_serialized;
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
 	}
 
-	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n);
-	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
-	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+	const uint16 n_notnull = indices_serialized->num_elements;
+	const uint16 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	const uint16 n_padded = n_total + 63;
+	int16 *indices = MemoryContextAlloc(dest_mctx, sizeof(int16) * n_padded);
+
+	const uint16 n_decompressed =
+		simple8brle_decompress_all_buf_int16(indices_serialized, indices, n_padded);
+	CheckCompressedData(n_decompressed == n_notnull);
 
 	ArrowArray *dict =
 		text_array_decompress_all_serialized_no_header(&si, /* has_nulls = */ false, dest_mctx);
 	CheckCompressedData(header->num_distinct == dict->length);
+
+	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n_total);
+	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+
+	if (header->has_nulls)
+	{
+		/*
+		 * We have decompressed the data with nulls skipped, reshuffle it
+		 * according to the nulls bitmap.
+		 */
+		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
+		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+
+		int current_notnull_element = n_notnull - 1;
+		for (int i = n_total - 1; i >= 0; i--)
+		{
+			Assert(i >= current_notnull_element);
+
+			if (simple8brle_bitmap_get_at(&nulls, i))
+			{
+				arrow_set_row_validity(validity_bitmap, i, false);
+			}
+			else
+			{
+				Assert(current_notnull_element >= 0);
+				indices[i] = indices[current_notnull_element];
+				current_notnull_element--;
+			}
+		}
+
+		Assert(current_notnull_element == -1);
+	}
+	else
+	{
+		/*
+		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
+		 * with zeros, because the corresponding elements are not valid.
+		 */
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+	}
 
 	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
 	const void **buffers = (const void **) &result[1];
@@ -454,8 +501,8 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	buffers[1] = indices;
 	result->n_buffers = 2;
 	result->buffers = buffers;
-	result->length = n;
-	result->null_count = 0;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
 	result->dictionary = dict;
 	return result;
 }
