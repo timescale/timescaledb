@@ -965,3 +965,14 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 INSERT INTO space_part VALUES
 ('2022-01-01 00:02', 1, 1, 1);
 EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
+
+-- test creation of unique expression index does not interfere with enabling compression
+-- github issue 6205
+create table mytab (col1 varchar(100) not null, col2 integer not null,
+value double precision not null default 0, arrival_ts timestamptz not null, departure_ts timestamptz not null
+default current_timestamp);
+
+select create_hypertable('mytab', 'departure_ts');
+create unique index myidx_unique ON
+mytab (lower(col1::text), col2, departure_ts, arrival_ts);
+alter table mytab set (timescaledb.compress);

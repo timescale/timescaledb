@@ -2392,3 +2392,20 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
                      ->  Seq Scan on _hyper_36_135_chunk
 (35 rows)
 
+-- test creation of unique expression index does not interfere with enabling compression
+-- github issue 6205
+create table mytab (col1 varchar(100) not null, col2 integer not null,
+value double precision not null default 0, arrival_ts timestamptz not null, departure_ts timestamptz not null
+default current_timestamp);
+select create_hypertable('mytab', 'departure_ts');
+WARNING:  column type "character varying" used for "col1" does not follow best practices
+  create_hypertable  
+---------------------
+ (38,public,mytab,t)
+(1 row)
+
+create unique index myidx_unique ON
+mytab (lower(col1::text), col2, departure_ts, arrival_ts);
+alter table mytab set (timescaledb.compress);
+WARNING:  column "col2" should be used for segmenting or ordering
+WARNING:  column "arrival_ts" should be used for segmenting or ordering
