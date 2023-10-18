@@ -39,6 +39,7 @@
 #include "compression/arrow_tts.h"
 #include "compressionam_handler.h"
 #include "create.h"
+#include "guc.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
@@ -199,6 +200,12 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->returned_row_count = 0;
 	scan->compressed_row_count = 0;
 
+	/* Disable reading of compressed data if transparent decompression is
+	 * enabled, since that that scan node reads compressed data directly form
+	 * the compressed chunk. If we also read the compressed data via this TAM,
+	 * then the compressed data will be returned twice. */
+	scan->compressed_read_done = ts_guc_enable_transparent_decompression;
+
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
 
@@ -262,13 +269,13 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 
 	if (scan->compressed_read_done)
 	{
+		/* All the compressed data has been returned, so now return tuples
+		 * from the non-compressed data */
 		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 		bool result = heapam->scan_getnextslot(scan->heap_scan, direction, scan->uncompressed_slot);
 
 		if (result)
-		{
 			ExecStoreArrowTuple(slot, scan->uncompressed_slot, InvalidTupleIndex);
-		}
 
 		return result;
 	}
@@ -381,6 +388,9 @@ compressionam_index_fetch_end(IndexFetchTableData *scan)
 	pfree(cscan);
 }
 
+/*
+ * Return tuple for given TID via index scan.
+ */
 static bool
 compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid,
 								Snapshot snapshot, TupleTableSlot *slot, bool *call_again,
@@ -408,6 +418,12 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 		return result;
 	}
 
+	/* Compressed tuples not visible through this TAM when scanned by
+	 * transparent decompression enabled since DecompressChunk already scanned
+	 * that data. */
+	if (ts_guc_enable_transparent_decompression)
+		return false;
+
 	/* Recreate the original TID for the compressed table */
 	uint16 tuple_index = compressed_tid_to_tid(&orig_tid, tid);
 
@@ -424,25 +440,16 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 	 * possible to optimize that case further by retaining a window/cache of
 	 * decompressed tuples, keyed on TID.
 	 */
-	if (!TTS_EMPTY(slot) && ItemPointerEquals(&cscan->tid, &orig_tid))
+	if (!TTS_EMPTY(slot) && ItemPointerIsValid(&cscan->tid) &&
+		ItemPointerEquals(&cscan->tid, &orig_tid))
 	{
 		/* Still in the same compressed tuple, so just update tuple index and
 		 * return the same Arrow slot */
 		ExecStoreArrowTupleExisting(slot, tuple_index);
 		ItemPointerCopy(tid, &slot->tts_tid);
-		/* elog(NOTICE,
-			 "### old tuple at block %u offset %u tuple index %u",
-			 ItemPointerGetBlockNumber(&orig_tid),
-			 ItemPointerGetOffsetNumber(&orig_tid),
-			 tuple_index); */
 		return true;
 	}
 
-	/* elog(NOTICE,
-		 "Get tuple at block %u offset %u tuple index %u",
-		 ItemPointerGetBlockNumber(&orig_tid),
-		 ItemPointerGetOffsetNumber(&orig_tid),
-		 tuple_index); */
 	bool result = crel->rd_tableam->index_fetch_tuple(cscan->compr_hscan,
 													  &orig_tid,
 													  snapshot,
@@ -470,7 +477,25 @@ static bool
 compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapshot,
 								TupleTableSlot *slot)
 {
+	if (is_compressed_tid(tid))
+	{
+		/* Just pass this on to regular heap AM */
+		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+		return heapam->tuple_fetch_row_version(relation, tid, snapshot, slot);
+	}
+
 	FEATURE_NOT_SUPPORTED;
+	/*
+	ItemPointerData decoded_tid;
+
+	uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+	Oid compr_relid = get_compressed_chunk_relid(RelationGetRelid(relation));
+	Relation compr_rel = table_open(compr_relid, AccessShareLock);
+	TupleTableSlot *compr_slot = table_slot_create(compr_rel, NULL);
+
+	compr_rel->rd_tableam->tuple_fetch_row_version(compr_rel, &decoded_tid, snapshot, compr_slot);
+	table_close(compr_rel, NoLock);
+	*/
 	return false;
 }
 
@@ -556,6 +581,23 @@ compressionam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *
 						   LockTupleMode *lockmode, TU_UpdateIndexes *update_indexes)
 {
 	FEATURE_NOT_SUPPORTED;
+
+	if (is_compressed_tid(otid))
+	{
+		/* Just pass this on to regular heap AM */
+		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+		return heapam->tuple_update(relation,
+									otid,
+									slot,
+									cid,
+									snapshot,
+									crosscheck,
+									wait,
+									tmfd,
+									lockmode,
+									update_indexes);
+	}
+
 	return TM_Ok;
 }
 
@@ -815,6 +857,13 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 	}
 }
 
+/*
+ * Build index.
+ *
+ * TODO: Explore potential to reduce index size by only having one TID for
+ * each compressed tuple (instead of a TID per value) and use the call_again
+ * functionality in the index scan callbacks to return all values.
+ */
 static double
 compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 									 IndexInfo *indexInfo, bool allow_sync, bool anyvisible,
