@@ -78,23 +78,6 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	return arrow;
 }
 
-static int
-get_max_element_bytes(ArrowArray *text_array)
-{
-	int maxbytes = 0;
-	uint32 *offsets = (uint32 *) text_array->buffers[1];
-	for (int i = 0; i < text_array->length; i++)
-	{
-		const int curbytes = offsets[i + 1] - offsets[i];
-		if (curbytes > maxbytes)
-		{
-			maxbytes = curbytes;
-		}
-	}
-
-	return maxbytes;
-}
-
 static void
 decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch_state, int i)
 {
@@ -102,7 +85,6 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->iterator = NULL;
 	column_values->arrow = NULL;
-	column_values->value_bytes = -1;
 	column_values->arrow_values = NULL;
 	column_values->arrow_validity = NULL;
 	column_values->output_attno = column_description->output_attno;
@@ -175,18 +157,6 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 		column_values->arrow = arrow;
 		column_values->arrow_values = arrow->buffers[1];
 		column_values->arrow_validity = arrow->buffers[0];
-
-		if (column_values->value_bytes == -1)
-		{
-			const int maxbytes =
-				VARHDRSZ + (column_values->arrow->dictionary ?
-								get_max_element_bytes(column_values->arrow->dictionary) :
-								get_max_element_bytes(column_values->arrow));
-
-			const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
-			batch_state->decompressed_scan_slot->tts_values[attr] =
-				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
-		}
 
 		return;
 	}
