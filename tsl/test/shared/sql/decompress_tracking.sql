@@ -19,10 +19,17 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('decompress_tracking') ch;
 :EXPLAIN UPDATE decompress_tracking SET value = value + 3;
 
 BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3; ROLLBACK;
+BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd2'; ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
+BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d2',random(); ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d4',random(); ROLLBACK;
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:30','d1',random()),('2020-01-01 1:30','d2',random())); ROLLBACK;
+
+-- test prepared statements EXPLAIN still works after execution
+SET plan_cache_mode TO force_generic_plan;
+PREPARE p1 AS UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd1';
+BEGIN; EXPLAIN EXECUTE p1; EXECUTE p1; EXPLAIN EXECUTE p1; ROLLBACK;
 
 DROP TABLE decompress_tracking;
