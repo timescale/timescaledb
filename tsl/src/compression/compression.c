@@ -1392,6 +1392,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 		.per_compressed_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
 														"decompress chunk per-compressed row",
 														ALLOCSET_DEFAULT_SIZES),
+		.estate = CreateExecutorState(),
 	};
 
 	/*
@@ -1445,6 +1446,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	FreeBulkInsertState(decompressor.bistate);
 	MemoryContextDelete(decompressor.per_compressed_row_ctx);
 	ts_catalog_close_indexes(decompressor.indexstate);
+	FreeExecutorState(decompressor.estate);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -1576,24 +1578,48 @@ row_decompressor_decompress_row(RowDecompressor *decompressor, Tuplesortstate *t
 		 */
 		if (!is_done || !wrote_data)
 		{
-			HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
-														   decompressor->decompressed_datums,
-														   decompressor->decompressed_is_nulls);
-			TupleTableSlot *slot = MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsVirtual);
 			decompressor->tuples_decompressed++;
 
 			if (tuplesortstate == NULL)
 			{
+				HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
+															   decompressor->decompressed_datums,
+															   decompressor->decompressed_is_nulls);
+
 				heap_insert(decompressor->out_rel,
 							decompressed_tuple,
 							decompressor->mycid,
 							0 /*=options*/,
 							decompressor->bistate);
 
-				ts_catalog_index_insert(decompressor->indexstate, decompressed_tuple);
+				EState *estate = decompressor->estate;
+				ExprContext *econtext = GetPerTupleExprContext(estate);
+
+				TupleTableSlot *tts_slot =
+					MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsHeapTuple);
+				ExecStoreHeapTuple(decompressed_tuple, tts_slot, false);
+
+				/* Arrange for econtext's scan tuple to be the tuple under test */
+				econtext->ecxt_scantuple = tts_slot;
+#if PG14_LT
+				estate->es_result_relation_info = decompressor->indexstate;
+#endif
+				ExecInsertIndexTuplesCompat(decompressor->indexstate,
+											tts_slot,
+											estate,
+											false,
+											false,
+											NULL,
+											NIL,
+											false);
+
+				ExecDropSingleTupleTableSlot(tts_slot);
+				heap_freetuple(decompressed_tuple);
 			}
 			else
 			{
+				TupleTableSlot *slot =
+					MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsVirtual);
 				/* create the virtual tuple slot */
 				ExecClearTuple(slot);
 				for (int i = 0; i < decompressor->out_desc->natts; i++)
@@ -1607,10 +1633,8 @@ row_decompressor_decompress_row(RowDecompressor *decompressor, Tuplesortstate *t
 				slot_getallattrs(slot);
 
 				tuplesort_puttupleslot(tuplesortstate, slot);
+				ExecDropSingleTupleTableSlot(slot);
 			}
-
-			ExecDropSingleTupleTableSlot(slot);
-			heap_freetuple(decompressed_tuple);
 			wrote_data = true;
 		}
 	} while (!is_done);
@@ -2107,6 +2131,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	table_endscan(heapScan);
 
 	ts_catalog_close_indexes(decompressor.indexstate);
+	FreeExecutorState(decompressor.estate);
 	FreeBulkInsertState(decompressor.bistate);
 
 	CommandCounterIncrement();
@@ -3286,6 +3311,7 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 		ts_chunk_set_partial(chunk);
 
 	ts_catalog_close_indexes(decompressor.indexstate);
+	FreeExecutorState(decompressor.estate);
 	FreeBulkInsertState(decompressor.bistate);
 
 	table_close(chunk_rel, NoLock);

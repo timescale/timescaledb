@@ -1,0 +1,1 @@
+Fixes: #6222 Allow enabling compression on hypertable with unique expression index

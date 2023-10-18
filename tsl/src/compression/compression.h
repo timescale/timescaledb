@@ -139,6 +139,7 @@ typedef struct RowDecompressor
 	TupleDesc out_desc;
 	Relation out_rel;
 	ResultRelInfo *indexstate;
+	EState *estate;
 
 	CommandId mycid;
 	BulkInsertState bistate;
