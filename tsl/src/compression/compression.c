@@ -2751,9 +2751,7 @@ fill_predicate_context(Chunk *ch, List *predicates, List **filters, List **index
 	ListCell *lc;
 	foreach (lc, predicates)
 	{
-		Node *node = lfirst(lc);
-		if (node == NULL)
-			continue;
+		Node *node = copyObject(lfirst(lc));
 
 		Var *var;
 		char *column_name;
@@ -3346,7 +3344,6 @@ decompress_chunk_walker(PlanState *ps, List *relids)
 		case T_TidScanState:
 		case T_TidRangeScanState:
 		{
-			/* We copy so we can always just free the predicates */
 			predicates = list_copy(ps->plan->qual);
 			needs_decompression = true;
 			break;
