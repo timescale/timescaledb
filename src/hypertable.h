@@ -45,7 +45,7 @@ enum
 	((ht)->fd.compression_state == HypertableCompressionEnabled)
 
 #define TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht)                                            \
-	((ht)->fd.compression_state == HypertableInternalCompressionTable)
+	((ht) && (ht)->fd.compression_state == HypertableInternalCompressionTable)
 typedef struct Hypertable
 {
 	FormData_hypertable fd;
