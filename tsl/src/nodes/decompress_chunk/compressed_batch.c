@@ -713,18 +713,17 @@ compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
 	 * pass for the entire batch. Have to decompress them anyway if we're asked
 	 * to save the first tuple. This doesn't actually happen yet, because the
 	 * vectorized decompression is disabled with sorted merge, but we might want
-	 * to enable it for some queries.
+	 * to enable it for some queries. For now, just assert that it doesn't
+	 * happen.
 	 */
+#ifdef USE_ASSERT_CHECKING
 	const int num_compressed_columns = chunk_state->num_compressed_columns;
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-		if (column_values->value_bytes == 0)
-		{
-			decompress_column(chunk_state, batch_state, i);
-			Assert(column_values->value_bytes != 0);
-		}
+		Assert(column_values->value_bytes != 0);
 	}
+#endif
 
 	/* Make the first tuple and save it. */
 	make_next_tuple(chunk_state, batch_state);
