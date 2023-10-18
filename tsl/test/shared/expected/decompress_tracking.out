@@ -45,6 +45,22 @@ QUERY PLAN
                      ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=20 loops=1)
 (10 rows)
 
+BEGIN; :EXPLAIN_ANALYZE UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd2'; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 20
+   ->  Update on decompress_tracking (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk decompress_tracking_1
+         Update on _hyper_X_X_chunk decompress_tracking_2
+         ->  Result (actual rows=20 loops=1)
+               ->  Append (actual rows=20 loops=1)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1 (actual rows=15 loops=1)
+                           Filter: (device = 'd2'::text)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=5 loops=1)
+                           Filter: (device = 'd2'::text)
+(12 rows)
+
 BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
@@ -57,6 +73,21 @@ QUERY PLAN
                ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1 (actual rows=40 loops=1)
                ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=20 loops=1)
 (9 rows)
+
+BEGIN; :EXPLAIN_ANALYZE DELETE FROM decompress_tracking WHERE device = 'd3'; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 30
+   ->  Delete on decompress_tracking (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk decompress_tracking_1
+         Delete on _hyper_X_X_chunk decompress_tracking_2
+         ->  Append (actual rows=30 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1 (actual rows=15 loops=1)
+                     Filter: (device = 'd3'::text)
+               ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2 (actual rows=15 loops=1)
+                     Filter: (device = 'd3'::text)
+(11 rows)
 
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
 QUERY PLAN
@@ -96,5 +127,35 @@ QUERY PLAN
          ->  Custom Scan (ChunkDispatch) (actual rows=2 loops=1)
                ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
 (6 rows)
+
+-- test prepared statements EXPLAIN still works after execution
+SET plan_cache_mode TO force_generic_plan;
+PREPARE p1 AS UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd1';
+BEGIN; EXPLAIN EXECUTE p1; EXECUTE p1; EXPLAIN EXECUTE p1; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify)  (cost=0.00..70.83 rows=433 width=18)
+   ->  Update on decompress_tracking  (cost=0.00..70.83 rows=433 width=18)
+         Update on _hyper_X_X_chunk decompress_tracking_1
+         Update on _hyper_X_X_chunk decompress_tracking_2
+         ->  Result  (cost=0.00..70.83 rows=433 width=18)
+               ->  Append  (cost=0.00..65.42 rows=433 width=18)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1  (cost=0.00..31.62 rows=432 width=18)
+                           Filter: (device = 'd1'::text)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2  (cost=0.00..31.62 rows=1 width=18)
+                           Filter: (device = 'd1'::text)
+(10 rows)
+
+QUERY PLAN
+ Custom Scan (HypertableModify)  (cost=0.00..70.83 rows=433 width=18)
+   ->  Update on decompress_tracking  (cost=0.00..70.83 rows=433 width=18)
+         Update on _hyper_X_X_chunk decompress_tracking_1
+         Update on _hyper_X_X_chunk decompress_tracking_2
+         ->  Result  (cost=0.00..70.83 rows=433 width=18)
+               ->  Append  (cost=0.00..65.42 rows=433 width=18)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1  (cost=0.00..31.62 rows=432 width=18)
+                           Filter: (device = 'd1'::text)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2  (cost=0.00..31.62 rows=1 width=18)
+                           Filter: (device = 'd1'::text)
+(10 rows)
 
 DROP TABLE decompress_tracking;
