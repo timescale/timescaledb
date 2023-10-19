@@ -4,6 +4,16 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.12.2 (2023-10-19)
+
+This release contains bug fixes since the 2.12.1 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #6155 Align gapfill bucket generation with time_bucket
+* #6181 Ensure fixed_schedule field is populated
+* #6210 Fix EXPLAIN ANALYZE for compressed DML
+
 ## 2.12.1 (2023-10-12)
 
 This release contains bug fixes since the 2.12.0 release.
