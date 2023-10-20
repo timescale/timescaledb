@@ -1590,7 +1590,26 @@ row_decompressor_decompress_row(RowDecompressor *decompressor, Tuplesortstate *t
 							0 /*=options*/,
 							decompressor->bistate);
 
-				ts_catalog_index_insert(decompressor->indexstate, decompressed_tuple);
+				// what if instead we use the function ExecInsertIndexTuples
+				EState *estate = CreateExecutorState();
+				ExprContext *econtext = GetPerTupleExprContext(estate);
+				TupleTableSlot *tts_slot = MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsHeapTuple);
+				ExecStoreHeapTuple(decompressed_tuple, tts_slot, false);
+
+				/* Arrange for econtext's scan tuple to be the tuple under test */
+				econtext->ecxt_scantuple = tts_slot;
+				ExecInsertIndexTuples(decompressor->indexstate, tts_slot, estate, false, false, NULL, NIL);
+				FreeExecutorState(estate);
+				ExecDropSingleTupleTableSlot(tts_slot);
+				/* These may have been pointing to the now-gone estate, so for all indexes, do: */
+				for (int i = 0; i < decompressor->indexstate->ri_NumIndices; i++)
+				{
+					decompressor->indexstate->ri_IndexRelationInfo[i]->ii_ExpressionsState = NIL;
+					decompressor->indexstate->ri_IndexRelationInfo[i]->ii_PredicateState = NULL;
+				}
+				// indexInfo->ii_ExpressionsState = NIL;
+				// indexInfo->ii_PredicateState = NULL;
+				// ts_catalog_index_insert(decompressor->indexstate, decompressed_tuple);
 			}
 			else
 			{
