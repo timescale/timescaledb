@@ -976,3 +976,61 @@ select create_hypertable('mytab', 'departure_ts');
 create unique index myidx_unique ON
 mytab (lower(col1::text), col2, departure_ts, arrival_ts);
 alter table mytab set (timescaledb.compress);
+
+-- github issue 6186
+-- verify inserting into index works as expected during decompression
+insert into mytab (col1, col2, value, arrival_ts, departure_ts)
+values ('meter1', 1, 2.3, '2022-01-01'::timestamptz, '2022-01-01'::timestamptz),
+('meTEr1', 2, 2.5, '2022-01-01'::timestamptz, '2022-01-01'::timestamptz),
+('METEr1', 1, 2.9, '2022-01-01'::timestamptz, '2022-01-01 01:00'::timestamptz);
+select compress_chunk(show_chunks('mytab'));
+REINDEX TABLE mytab; -- should update index
+select decompress_chunk(show_chunks('mytab'));
+\set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
+\set EXPLAIN_ANALYZE 'EXPLAIN (analyze,costs off,timing off,summary off)'
+-- do index scan on uncompressed, should give correct results
+set enable_seqscan = off;
+set enable_indexscan = on;
+:EXPLAIN_ANALYZE select * from mytab where lower(col1::text) = 'meter1';
+select * from mytab where lower(col1::text) = 'meter1';
+
+-- check predicate index
+CREATE INDEX myidx_partial ON mytab (value)
+WHERE (value > 2.4 AND value < 3);
+select compress_chunk(show_chunks('mytab'));
+select decompress_chunk(show_chunks('mytab'));
+:EXPLAIN_ANALYZE SELECT * FROM mytab WHERE value BETWEEN 2.4 AND 2.8;
+
+-- check exclusion constraint with index - should not be supported
+CREATE TABLE hyper_ex (
+    time timestamptz,
+    device_id TEXT NOT NULL,
+    sensor_1 NUMERIC NULL DEFAULT 1,
+    canceled boolean DEFAULT false,
+    EXCLUDE USING btree (
+        time WITH =, device_id WITH =
+    ) WHERE (not canceled)
+);
+
+SELECT * FROM create_hypertable('hyper_ex', 'time', chunk_time_interval=> interval '1 month');
+INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
+('2022-01-01', 'dev2', 11),
+('2022-01-01 01:00', 'dev2', 12);
+\set ON_ERROR_STOP 0
+ALTER TABLE hyper_ex SET (timescaledb.compress, timescaledb.compress_segmentby='device_id');
+\set ON_ERROR_STOP 1
+
+-- check deferred uniqueness - should it or should it not be supported?
+CREATE TABLE hyper_unique_deferred (
+  time BIGINT UNIQUE DEFERRABLE INITIALLY DEFERRED,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+SELECT * FROM create_hypertable('hyper_unique_deferred', 'time', chunk_time_interval => 10);
+INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
+alter table hyper_unique_deferred set (timescaledb.compress);
+select compress_chunk(show_chunks('hyper_unique_deferred')); -- works fine for 2.10.3
+select decompress_chunk(show_chunks('hyper_unique_deferred'));
+begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
+select compress_chunk(show_chunks('hyper_unique_deferred'));
+begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
