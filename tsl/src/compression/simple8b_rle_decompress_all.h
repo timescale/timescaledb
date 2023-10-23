@@ -155,10 +155,11 @@ FUNCTION_NAME(simple8brle_decompress_all, ELEMENT_TYPE)(Simple8bRleSerialized *c
 	Assert(n_total_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	/*
-	 * We need a significant padding of 64 elements, not bytes, here, because we
-	 * work in Simple8B blocks which can contain up to 64 elements.
+	 * We need a quite significant padding of 63 elements, not bytes, after the
+	 * last element, because we work in Simple8B blocks which can contain up to
+	 * 64 elements.
 	 */
-	const uint16 n_buffer_elements = ((n_total_values + 63) / 64 + 1) * 64;
+	const uint16 n_buffer_elements = n_total_values + 63;
 
 	ELEMENT_TYPE *restrict decompressed_values = palloc(sizeof(ELEMENT_TYPE) * n_buffer_elements);
 
