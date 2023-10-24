@@ -100,7 +100,7 @@ CALL _timescaledb_internal.cagg_migrate_execute_override_cagg(NULL,NULL);
 CALL _timescaledb_internal.cagg_migrate_execute_plan(NULL);
 CALL _timescaledb_internal.cagg_migrate_execute_refresh_new_cagg(NULL,NULL);
 CALL _timescaledb_internal.policy_compression(0,NULL);
-CALL _timescaledb_internal.policy_compression_execute(0,0,NULL::interval,0,true,true);
+CALL _timescaledb_internal.policy_compression_execute(0,0,NULL::interval,0,true,true,true);
 CALL _timescaledb_internal.policy_recompression(0,NULL);
 CALL _timescaledb_internal.policy_refresh_continuous_aggregate(0,NULL);
 CALL _timescaledb_internal.policy_reorder(0,NULL);
