@@ -96,6 +96,21 @@ policy_compression_get_compress_after_interval(const Jsonb *config)
 	return interval;
 }
 
+Interval *
+policy_compression_get_compress_created_before_interval(const Jsonb *config)
+{
+	Interval *interval =
+		ts_jsonb_get_interval_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE);
+
+	if (interval == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find %s in config for job",
+						POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE)));
+
+	return interval;
+}
+
 int64
 policy_recompression_get_recompress_after_int(const Jsonb *config)
 {
@@ -184,7 +199,8 @@ policy_compression_check(PG_FUNCTION_ARGS)
 /* compression policies are added to hypertables or continuous aggregates */
 Datum
 policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
-								Oid compress_after_type, Interval *default_schedule_interval,
+								Oid compress_after_type, Interval *created_before,
+								Interval *default_schedule_interval,
 								bool user_defined_schedule_interval, bool if_not_exists,
 								bool fixed_schedule, TimestampTz initial_start,
 								const char *timezone)
@@ -201,6 +217,13 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	hcache = ts_hypertable_cache_pin();
 	hypertable = validate_compress_chunks_hypertable(hcache, user_rel_oid, &is_cagg);
 
+	/* creation time usage not supported with caggs yet */
+	if (is_cagg && created_before != NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot use \"compress_created_before\" with continuous aggregate \"%s\" ",
+						get_rel_name(user_rel_oid))));
+
 	owner_id = ts_hypertable_permissions_check(user_rel_oid, GetUserId());
 	ts_bgw_job_validate_job_owner(owner_id);
 
@@ -214,6 +237,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 
 	if (jobs != NIL)
 	{
+		bool is_equal = false;
+
 		if (!if_not_exists)
 		{
 			ts_cache_release(hcache);
@@ -227,11 +252,25 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
 
-		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
-														partitioning_type,
-														compress_after_type,
-														compress_after_datum))
+		if (OidIsValid(compress_after_type))
+			is_equal =
+				policy_config_check_hypertable_lag_equality(existing->fd.config,
+															POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+															partitioning_type,
+															compress_after_type,
+															compress_after_datum);
+		else
+		{
+			Assert(created_before != NULL);
+			is_equal = policy_config_check_hypertable_lag_equality(
+				existing->fd.config,
+				POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE,
+				partitioning_type,
+				INTERVALOID,
+				IntervalPGetDatum(created_before));
+		}
+
+		if (is_equal)
 		{
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
@@ -251,6 +290,22 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 			PG_RETURN_INT32(-1);
 		}
 	}
+
+	if (created_before)
+	{
+		Assert(!OidIsValid(compress_after_type));
+		compress_after_type = INTERVALOID;
+	}
+
+	if (!is_cagg && IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(compress_after_type) &&
+		created_before == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid value for parameter %s", POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER),
+				 errhint("Integer duration in \"compress_after\" or interval time duration"
+						 " in \"compress_created_before\" is required for hypertables with integer "
+						 "time dimension.")));
+
 	if (dim && IS_TIMESTAMP_TYPE(ts_dimension_get_partition_type(dim)) &&
 		!user_defined_schedule_interval)
 	{
@@ -286,9 +341,14 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	switch (compress_after_type)
 	{
 		case INTERVALOID:
-			ts_jsonb_add_interval(parse_state,
-								  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
-								  DatumGetIntervalP(compress_after_datum));
+			if (created_before)
+				ts_jsonb_add_interval(parse_state,
+									  POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE,
+									  created_before);
+			else
+				ts_jsonb_add_interval(parse_state,
+									  POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
+									  DatumGetIntervalP(compress_after_datum));
 			break;
 		case INT2OID:
 			ts_jsonb_add_int64(parse_state,
@@ -360,7 +420,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	 * The function is not STRICT but we can't allow required args to be NULL
 	 * so we need to act like a strict function in those cases
 	 */
-	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(2))
 	{
 		ts_feature_flag_check(FEATURE_POLICY);
 		PG_RETURN_NULL();
@@ -368,7 +428,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 
 	Oid user_rel_oid = PG_GETARG_OID(0);
 	Datum compress_after_datum = PG_GETARG_DATUM(1);
-	Oid compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 1);
+	Oid compress_after_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	bool if_not_exists = PG_GETARG_BOOL(2);
 	bool user_defined_schedule_interval = !(PG_ARGISNULL(3));
 	Interval *default_schedule_interval =
@@ -378,9 +438,17 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	bool fixed_schedule = !PG_ARGISNULL(4);
 	text *timezone = PG_ARGISNULL(5) ? NULL : PG_GETARG_TEXT_PP(5);
 	char *valid_timezone = NULL;
+	Interval *created_before = PG_GETARG_INTERVAL_P(6);
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
+	/* compress_after and created_before cannot be specified [or omitted] together */
+	if ((PG_ARGISNULL(1) && PG_ARGISNULL(6)) || (!PG_ARGISNULL(1) && !PG_ARGISNULL(6)))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg(
+					 "need to specify one of \"compress_after\" or \"compress_created_before\"")));
 
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
 	if (fixed_schedule)
@@ -397,6 +465,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	retval = policy_compression_add_internal(user_rel_oid,
 											 compress_after_datum,
 											 compress_after_type,
+											 created_before,
 											 default_schedule_interval,
 											 user_defined_schedule_interval,
 											 if_not_exists,

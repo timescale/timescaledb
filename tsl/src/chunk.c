@@ -308,7 +308,7 @@ chunk_set_default_data_node(PG_FUNCTION_ARGS)
  * Returns the number of dropped chunks.
  */
 int
-chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
+chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type, bool use_creation_time)
 {
 	EState *estate;
 	ExprContext *econtext;
@@ -318,27 +318,26 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 	SetExprState *state;
 	Oid restype;
 	Oid func_oid;
-	Const *argarr[DROP_CHUNKS_NARGS] = {
-		makeConst(REGCLASSOID,
-				  -1,
-				  InvalidOid,
-				  sizeof(relid),
-				  ObjectIdGetDatum(relid),
-				  false,
-				  false),
-		makeConst(older_than_type,
-				  -1,
-				  InvalidOid,
-				  get_typlen(older_than_type),
-				  older_than,
-				  false,
-				  get_typbyval(older_than_type)),
-		makeNullConst(older_than_type, -1, InvalidOid),
-		castNode(Const, makeBoolConst(false, true)),
-		/* For now, till we actually support created_before/created_after later */
-		makeNullConst(older_than_type, -1, InvalidOid),
-		makeNullConst(older_than_type, -1, InvalidOid),
-	};
+	Const *TypeNullCons = makeNullConst(older_than_type, -1, InvalidOid);
+	Const *IntervalVal = makeConst(older_than_type,
+								   -1,
+								   InvalidOid,
+								   get_typlen(older_than_type),
+								   older_than,
+								   false,
+								   get_typbyval(older_than_type));
+	Const *argarr[DROP_CHUNKS_NARGS] = { makeConst(REGCLASSOID,
+												   -1,
+												   InvalidOid,
+												   sizeof(relid),
+												   ObjectIdGetDatum(relid),
+												   false,
+												   false),
+										 TypeNullCons,
+										 TypeNullCons,
+										 castNode(Const, makeBoolConst(false, true)),
+										 TypeNullCons,
+										 TypeNullCons };
 	Oid type_id[DROP_CHUNKS_NARGS] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID, ANYOID, ANYOID };
 	char *const schema_name = ts_extension_schema_name();
 	List *const fqn = list_make2(makeString(schema_name), makeString(DROP_CHUNKS_FUNCNAME));
@@ -348,6 +347,12 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 
 	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
 	Assert(func_oid); /* LookupFuncName should not return an invalid OID */
+
+	/* decide whether to use "older_than" or "drop_created_before" */
+	if (use_creation_time)
+		argarr[4] = IntervalVal;
+	else
+		argarr[1] = IntervalVal;
 
 	/* Prepare the function expr with argument list */
 	get_func_result_type(func_oid, &restype, NULL);

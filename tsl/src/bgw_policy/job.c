@@ -73,9 +73,10 @@ log_retention_boundary(int elevel, PolicyRetentionData *policy_data, const char 
 
 	if (OidIsValid(outfuncid))
 		elog(elevel,
-			 "%s \"%s\": dropping data older than %s",
+			 "%s \"%s\": dropping data %s %s",
 			 message,
 			 relname,
+			 policy_data->use_creation_time ? "created before" : "older than",
 			 DatumGetCString(OidFunctionCall1(outfuncid, boundary)));
 }
 
@@ -294,7 +295,8 @@ policy_retention_execute(int32 job_id, Jsonb *config)
 
 	chunk_invoke_drop_chunks(policy_data.object_relid,
 							 policy_data.boundary,
-							 policy_data.boundary_type);
+							 policy_data.boundary_type,
+							 policy_data.use_creation_time);
 
 	return true;
 }
@@ -309,6 +311,9 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	Datum boundary;
 	Datum boundary_type;
 	ContinuousAgg *cagg;
+	Interval *(*interval_getter)(const Jsonb *);
+	interval_getter = policy_retention_get_drop_after_interval;
+	bool use_creation_time = false;
 
 	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config), false);
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
@@ -329,14 +334,14 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 
 		/* if there's no int_now function the boundary is considered as an INTERVAL */
 		boundary_type = INTERVALOID;
+		interval_getter = policy_retention_get_drop_created_before_interval;
+		use_creation_time = true;
 	}
 	else
 		boundary_type = ts_dimension_get_partition_type(open_dim);
 
-	boundary = get_window_boundary(open_dim,
-								   config,
-								   policy_retention_get_drop_after_int,
-								   policy_retention_get_drop_after_interval);
+	boundary =
+		get_window_boundary(open_dim, config, policy_retention_get_drop_after_int, interval_getter);
 
 	/* We need to do a reverse lookup here since the given hypertable might be
 	   a materialized hypertable, and thus need to call drop_chunks on the
@@ -356,6 +361,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 		policy_data->object_relid = object_relid;
 		policy_data->boundary = boundary;
 		policy_data->boundary_type = boundary_type;
+		policy_data->use_creation_time = use_creation_time;
 	}
 }
 
