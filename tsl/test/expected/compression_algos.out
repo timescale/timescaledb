@@ -1560,8 +1560,8 @@ from ts_read_compressed_data_directory('deltadelta', 'int8', (:'TEST_INPUT_DIR' 
 group by 2 order by 1 desc;
  count | result 
 -------+--------
-   157 | XX001
-    80 | true
+   168 | XX001
+    69 | true
     13 | 08P01
      1 | false
 (4 rows)
