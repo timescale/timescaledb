@@ -992,7 +992,7 @@ select * from tenk1 a join tenk1 b on
 select * from tenk1 t1 left join
   (tenk1 t2 join tenk1 t3 on t2.thousand = t3.unique2)
   on t1.hundred = t2.hundred and t1.ten = t3.ten
-where t1.unique1 = 1;
+where t1.unique1 = 1 ORDER BY t1,t2,t3;
 
 :PREFIX
 select * from tenk1 t1 left join
