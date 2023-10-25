@@ -160,15 +160,12 @@ def macos_config(overrides):
 
 
 # common ignored tests for all scheduled pg15 tests
-# partialize_finalize is ignored due to #4937
-ignored_tests = {"partialize_finalize"}
+ignored_tests = {}
 
 # common ignored tests for all non-scheduled pg15 tests (e.g. PRs)
-# partialize_finalize is ignored due to #4937
 # dist_move_chunk, dist_param, dist_insert, and remote_txn ignored due to flakiness
 if pull_request:
     ignored_tests = {
-        "partialize_finalize",
         "telemetry",
     }
 
