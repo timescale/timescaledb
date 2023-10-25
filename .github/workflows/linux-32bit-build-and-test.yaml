@@ -42,7 +42,7 @@ jobs:
         CXX: clang++-14
         DEBIAN_FRONTEND: noninteractive
         IGNORES: "append-* debug_notice transparent_decompression-*
-          transparent_decompress_chunk-* pg_dump partialize_finalize
+          transparent_decompress_chunk-* pg_dump
           dist_move_chunk dist_param dist_insert remote_txn telemetry"
         SKIPS: chunk_adaptive histogram_test-*
     strategy:

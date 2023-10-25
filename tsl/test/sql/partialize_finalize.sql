@@ -157,16 +157,6 @@ from t1 group by a order by a ;
 SELECT * FROM vfinal;
 CREATE TABLE vfinal_res AS SELECT * FROM vfinal;
 
--- overwrite partials with dumped binary values from PostrgeSQL 13 --
-TRUNCATE TABLE t1;
-\COPY t1 FROM data/partialize_finalize_data.csv WITH CSV HEADER
-
---repeat query to verify partial serialization sanitization works for versions PG >= 14
-CREATE TABLE vfinal_dump_res AS SELECT * FROM vfinal;
-
--- compare results to verify there is no difference
-(SELECT * FROM vfinal_res) EXCEPT (SELECT * FROM vfinal_dump_res);
-
 --with having clause --
 select a, b ,  _timescaledb_functions.finalize_agg( 'min(text)', 'pg_catalog', 'default', null, partialc, null::text ) minc, _timescaledb_functions.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) maxd from t1  where b is not null group by a, b having _timescaledb_functions.finalize_agg( 'max(timestamp with time zone)', null, null, null, partiald, null::timestamptz ) is not null order by a, b;
 

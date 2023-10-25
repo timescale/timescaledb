@@ -76,8 +76,6 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         include:
           - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
-            # partialize_finalize is ignored in PG15 due to #4937
-            ignores_version: partialize_finalize
             skips_version: 002_replication_telemetry 003_connections_privs 004_multinode_rdwr_1pc
     steps:
     - name: Install Linux Dependencies
