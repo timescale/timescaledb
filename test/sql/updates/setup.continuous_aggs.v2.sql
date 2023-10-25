@@ -78,7 +78,6 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
 \else
     GROUP BY bucket, location
     WITH NO DATA;
-    SELECT add_continuous_aggregate_policy('rename_cols', NULL, '14 days'::interval, '336 h');
 \endif
 
 \if :has_refresh_mat_view
@@ -141,7 +140,6 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
 \else
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    SELECT add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
 
     ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket TO "time";
 \endif
@@ -218,7 +216,6 @@ CREATE SCHEMA cagg;
 \else
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-    SELECT add_continuous_aggregate_policy('cagg.realtime_mat', NULL, '-30 days'::interval, '336 h');
 \endif
 \if :WITH_SUPERUSER
 GRANT SELECT ON cagg.realtime_mat TO cagg_user;
