@@ -89,7 +89,6 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
 \else
       GROUP BY bucket, location
       HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-	SELECT add_continuous_aggregate_policy('mat_before', NULL, '-30 days'::interval, '336 h');
     ALTER MATERIALIZED VIEW mat_before SET (timescaledb.materialized_only=true);
 \endif
 

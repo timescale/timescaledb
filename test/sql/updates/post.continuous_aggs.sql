@@ -2,6 +2,17 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
+SELECT
+	extversion < '2.0.0' AS has_refresh_mat_view
+  FROM pg_extension
+ WHERE extname = 'timescaledb' \gset
+
+\if :has_refresh_mat_view
+REFRESH MATERIALIZED VIEW mat_before;
+\else
+CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
+\endif
+
 \x on
 SELECT * FROM mat_before ORDER BY bucket, location;
 \x off
