@@ -29,7 +29,7 @@ set(TEST_FILES
     size_utils_tsl.sql)
 
 if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-  list(APPEND TEST_FILES dist_param.sql dist_views.sql)
+  list(APPEND TEST_FILES dist_param.sql)
 endif()
 
 if(USE_TELEMETRY)
@@ -99,13 +99,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       debug_notice.sql
       dist_api_calls.sql
       dist_commands.sql
-      dist_compression.sql
       dist_copy_available_dns.sql
       dist_copy_format_long.sql
       dist_copy_long.sql
       dist_ddl.sql
       dist_cagg.sql
-      dist_move_chunk.sql
       dist_policy.sql
       dist_util.sql
       dist_triggers.sql
@@ -213,9 +211,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       dist_ref_table_join.sql.in
       dist_remote_error.sql.in
       dist_partial_agg.sql.in
-      dist_query.sql.in)
+      dist_query.sql.in
+      dist_compression.sql.in
+      dist_move_chunk.sql.in)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
+if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
+  list(APPEND TEST_TEMPLATES dist_views.sql.in)
+endif()
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")
