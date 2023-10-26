@@ -12,6 +12,9 @@ if(UNIX)
 endif()
 
 if(APPLE)
+  if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+    set(CMAKE_SHARED_MODULE_SUFFIX ".dylib")
+  endif()
   set(CMAKE_SHARED_LINKER_FLAGS
       "${CMAKE_SHARED_LINKER_FLAGS} -multiply_defined suppress")
   set(CMAKE_MODULE_LINKER_FLAGS
