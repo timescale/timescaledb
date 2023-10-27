@@ -1,4 +1,4 @@
-name: Add bugs to bugs project
+name: Process issue workflows
 
 "on":
   issues:
@@ -8,20 +8,27 @@ name: Add bugs to bugs project
 
 jobs:
   add-to-project:
-    name: Add issue to project
+    name: Add issue to projects
     # issue_comment is triggered when commenting on both issues and
     # pull requests. To avoid adding pull requests to the bug board,
     # filter out pull requests
     if: ${{ !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/add-to-project@v0.4.0
+      - name: Add to bugs board
+        uses: actions/add-to-project@v0.5.0
         with:
           project-url: https://github.com/orgs/timescale/projects/55
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           labeled: bug, needs-triage, flaky-test
           label-operator: OR
-
+      - name: Add to CAggs board
+        uses: actions/add-to-project@v0.5.0
+        with:
+          project-url: https://github.com/orgs/timescale/projects/128
+          github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          labeled: continuous_aggregate
+  
   waiting-for-author:
     name: Waiting for Author
     runs-on: ubuntu-latest
