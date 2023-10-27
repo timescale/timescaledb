@@ -3952,7 +3952,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 
 	Assert(IsA(stmt, AlterTableStmt));
 
-	relid = AlterTableLookupRelation(stmt, NoLock);
+	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	if (!OidIsValid(relid))
 		return;
