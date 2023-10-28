@@ -563,9 +563,6 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 	if (!IsA(child_path, Path))
 		return;
 
-	DecompressChunkPath *dcpath =
-		copy_decompress_chunk_path((DecompressChunkPath *) decompress_chunk_path);
-
 	/* Iterate over the sort_pathkeys and generate all possible useful sortings */
 	List *useful_pathkeys = NIL;
 	ListCell *lc;
@@ -595,7 +592,7 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 			Path *sorted_path =
 				(Path *) create_sort_path(root,
 										  chunk_rel,
-										  &dcpath->custom_path.path,
+										  decompress_chunk_path,
 										  list_copy(useful_pathkeys), /* useful_pathkeys is modified
 																		 in each iteration */
 										  root->limit_tuples);
