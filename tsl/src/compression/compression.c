@@ -1889,7 +1889,7 @@ compression_get_toast_storage(CompressionAlgorithms algorithm)
  * columns of the uncompressed chunk.
  */
 static ScanKeyData *
-build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decompressor,
+build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor *decompressor,
 			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
 			   int *num_scankeys)
 {
@@ -1903,7 +1903,7 @@ build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decomp
 		while ((i = bms_next_member(key_columns, i)) > 0)
 		{
 			AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
-			char *attname = get_attname(decompressor.out_rel->rd_id, attno, false);
+			char *attname = get_attname(decompressor->out_rel->rd_id, attno, false);
 			FormData_hypertable_compression *fd =
 				ts_hypertable_compression_get_by_pkey(hypertable_id, attname);
 			bool isnull;
@@ -1927,7 +1927,7 @@ build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decomp
 			 */
 			if (COMPRESSIONCOL_IS_SEGMENT_BY(fd))
 			{
-				key_index = create_segment_filter_scankey(&decompressor,
+				key_index = create_segment_filter_scankey(decompressor,
 														  attname,
 														  BTEqualStrategyNumber,
 														  scankeys,
@@ -1944,7 +1944,7 @@ build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decomp
 				if (isnull)
 					continue;
 
-				key_index = create_segment_filter_scankey(&decompressor,
+				key_index = create_segment_filter_scankey(decompressor,
 														  compression_column_segment_min_name(fd),
 														  BTLessEqualStrategyNumber,
 														  scankeys,
@@ -1952,7 +1952,7 @@ build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor decomp
 														  null_columns,
 														  value,
 														  false); /* is_null_check */
-				key_index = create_segment_filter_scankey(&decompressor,
+				key_index = create_segment_filter_scankey(decompressor,
 														  compression_column_segment_max_name(fd),
 														  BTGreaterEqualStrategyNumber,
 														  scankeys,
@@ -2074,7 +2074,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	int num_scankeys;
 	ScanKeyData *scankeys = build_scankeys(chunk->fd.hypertable_id,
 										   chunk->hypertable_relid,
-										   decompressor,
+										   &decompressor,
 										   key_columns,
 										   &null_columns,
 										   slot,
