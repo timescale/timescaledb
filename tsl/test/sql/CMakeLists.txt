@@ -105,7 +105,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       dist_ddl.sql
       dist_cagg.sql
       dist_policy.sql
-      dist_util.sql
       dist_triggers.sql
       dist_backup.sql
       remote_connection_cache.sql
@@ -213,7 +212,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       dist_partial_agg.sql.in
       dist_query.sql.in
       dist_compression.sql.in
-      dist_move_chunk.sql.in)
+      dist_move_chunk.sql.in
+      dist_util.sql.in)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 

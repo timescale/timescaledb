@@ -27,6 +27,7 @@
 /dist_views-*.sql
 /dist_compression-*.sql
 /dist_move_chunk-*.sql
+/dist_util-*.sql
 /hypertable_distributed-*.sql
 /jit-*.sql
 /modify_exclusion-*.sql
