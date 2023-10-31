@@ -4,27 +4,43 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#define FUNCTION_NAME_HELPER(X, Y) decompress_##X##_##Y
-#define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
+static void
+arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str, size_t *len)
+{
+	if (!arrow->dictionary)
+	{
+		const uint32 *offsets = (uint32 *) arrow->buffers[1];
+		const char *values = (char *) arrow->buffers[2];
 
-#define TOSTRING_HELPER(x) #x
-#define TOSTRING(x) TOSTRING_HELPER(x)
+		const uint32 start = offsets[arrow_row];
+		const uint32 end = offsets[arrow_row + 1];
+		const uint32 arrow_len = end - start;
+
+		*len = arrow_len;
+		*str = &values[start];
+		return;
+	}
+
+	const int16 dict_row = ((int16 *) arrow->buffers[1])[arrow_row];
+	arrow_get_str(arrow->dictionary, dict_row, str, len);
+}
 
 /*
  * Try to decompress the given compressed data. Used for fuzzing and for checking
  * the examples found by fuzzing. For fuzzing we do less checks to keep it
- * faster and the coverage space smaller.
+ * faster and the coverage space smaller. This is a generic implementation
+ * for arithmetic types.
  */
 static int
-FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
+decompress_generic_text(const uint8 *Data, size_t Size, bool extra_checks, int requested_algo)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
-	const int algo = pq_getmsgbyte(&si);
+	const int data_algo = pq_getmsgbyte(&si);
 
-	CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
+	CheckCompressedData(data_algo > 0 && data_algo < _END_COMPRESSION_ALGORITHMS);
 
-	if (algo != get_compression_algorithm(TOSTRING(ALGO)))
+	if (data_algo != requested_algo)
 	{
 		/*
 		 * It's convenient to fuzz only one algorithm at a time. We specialize
@@ -34,7 +50,7 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 		return -1;
 	}
 
-	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
+	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
 
 	if (!extra_checks)
 	{
@@ -42,8 +58,8 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 		 * For routine fuzzing, we only run bulk decompression to make it faster
 		 * and the coverage space smaller.
 		 */
-		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
-		decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
+		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, TEXTOID);
+		decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
 		return 0;
 	}
 
@@ -53,16 +69,17 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 	 * the row-by-row is old and stable.
 	 */
 	ArrowArray *arrow = NULL;
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
+	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, TEXTOID);
 	if (decompress_all)
 	{
-		arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
+		arrow = decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
 	}
 
 	/*
 	 * Test row-by-row decompression.
 	 */
-	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, PGTYPE);
+	DecompressionIterator *iter =
+		definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
@@ -102,14 +119,19 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 
 			if (!results[i].is_null)
 			{
-				const CTYPE arrow_value = ((CTYPE *) arrow->buffers[1])[i];
-				const CTYPE rowbyrow_value = DATUM_TO_CTYPE(results[i].val);
+				const char *arrow_cstring;
+				size_t arrow_len;
+				arrow_get_str(arrow, i, &arrow_cstring, &arrow_len);
 
-				/*
-				 * Floats can also be NaN/infinite and the comparison doesn't
-				 * work in that case.
-				 */
-				if (isfinite((double) arrow_value) != isfinite((double) rowbyrow_value))
+				const Datum rowbyrow_varlena = results[i].val;
+				const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(rowbyrow_varlena);
+				const char *rowbyrow_cstring = VARDATA_ANY(rowbyrow_varlena);
+
+				//				fprintf(stderr, "arrow: '%.*s'(%ld), rbr: '%.*s'(%ld)\n",
+				//					(int) arrow_len, arrow_cstring, arrow_len,
+				//					(int) rowbyrow_len, rowbyrow_cstring, rowbyrow_len);
+
+				if (rowbyrow_len != arrow_len)
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_INTERNAL_ERROR),
@@ -117,7 +139,7 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 							 errdetail("At row %d\n", i)));
 				}
 
-				if (isfinite((double) arrow_value) && arrow_value != rowbyrow_value)
+				if (strncmp(arrow_cstring, rowbyrow_cstring, rowbyrow_len))
 				{
 					ereport(ERROR,
 							(errcode(ERRCODE_INTERNAL_ERROR),
@@ -134,7 +156,7 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 	 *
 	 * 1) Compress.
 	 */
-	Compressor *compressor = definitions[algo].compressor_for_type(PGTYPE);
+	Compressor *compressor = definitions[data_algo].compressor_for_type(TEXTOID);
 
 	for (int i = 0; i < n; i++)
 	{
@@ -158,7 +180,7 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 	/*
 	 * 2) Decompress and check that it's the same.
 	 */
-	iter = definitions[algo].iterator_init_forward(compressed_data, PGTYPE);
+	iter = definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
 	int nn = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
@@ -169,18 +191,21 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 
 		if (!r.is_null)
 		{
-			CTYPE old_value = DATUM_TO_CTYPE(results[nn].val);
-			CTYPE new_value = DATUM_TO_CTYPE(r.val);
+			const Datum old_value = results[nn].val;
+			const Datum new_value = r.val;
+
 			/*
 			 * Floats can also be NaN/infinite and the comparison doesn't
 			 * work in that case.
 			 */
-			if (isfinite((double) old_value) != isfinite((double) new_value))
+			if (VARSIZE_ANY_EXHDR(old_value) != VARSIZE_ANY_EXHDR(new_value))
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}
 
-			if (isfinite((double) old_value) && old_value != new_value)
+			if (strncmp(VARDATA_ANY(old_value),
+						VARDATA_ANY(new_value),
+						VARSIZE_ANY_EXHDR(new_value)))
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}
@@ -197,8 +222,14 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 	return n;
 }
 
-#undef TOSTRING
-#undef TOSTRING_HELPER
+static int
+decompress_array_text(const uint8 *Data, size_t Size, bool extra_checks)
+{
+	return decompress_generic_text(Data, Size, extra_checks, COMPRESSION_ALGORITHM_ARRAY);
+}
 
-#undef FUNCTION_NAME
-#undef FUNCTION_NAME_HELPER
+static int
+decompress_dictionary_text(const uint8 *Data, size_t Size, bool extra_checks)
+{
+	return decompress_generic_text(Data, Size, extra_checks, COMPRESSION_ALGORITHM_DICTIONARY);
+}

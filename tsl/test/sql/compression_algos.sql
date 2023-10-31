@@ -391,4 +391,14 @@ group by 2 order by 1 desc;
 create or replace function ts_read_compressed_data_file(cstring, regtype, cstring) returns int
 as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_file' language c;
 
+\set ON_ERROR_STOP 0
 select ts_read_compressed_data_file('gorilla', 'float8', '--nonexistent');
+\set ON_ERROR_STOP 1
+
+select count(*), coalesce((rows >= 0)::text, sqlstate) result
+from ts_read_compressed_data_directory('array', 'text', (:'TEST_INPUT_DIR' || '/fuzzing/compression/array-text')::cstring)
+group by 2 order by 1 desc;
+
+select count(*), coalesce((rows >= 0)::text, sqlstate) result
+from ts_read_compressed_data_directory('dictionary', 'text', (:'TEST_INPUT_DIR' || '/fuzzing/compression/dictionary-text')::cstring)
+group by 2 order by 1 desc;

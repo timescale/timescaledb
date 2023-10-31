@@ -2185,6 +2185,14 @@ get_compression_algorithm(char *name)
 	{
 		return COMPRESSION_ALGORITHM_GORILLA;
 	}
+	else if (pg_strcasecmp(name, "array") == 0)
+	{
+		return COMPRESSION_ALGORITHM_ARRAY;
+	}
+	else if (pg_strcasecmp(name, "dictionary") == 0)
+	{
+		return COMPRESSION_ALGORITHM_DICTIONARY;
+	}
 
 	ereport(ERROR, (errmsg("unknown comrpession algorithm %s", name)));
 	return _INVALID_COMPRESSION_ALGORITHM;
@@ -2194,7 +2202,7 @@ get_compression_algorithm(char *name)
 #define CTYPE float8
 #define PGTYPE FLOAT8OID
 #define DATUM_TO_CTYPE DatumGetFloat8
-#include "decompress_test_impl.c"
+#include "decompress_arithmetic_test_impl.c"
 #undef ALGO
 #undef CTYPE
 #undef PGTYPE
@@ -2204,11 +2212,13 @@ get_compression_algorithm(char *name)
 #define CTYPE int64
 #define PGTYPE INT8OID
 #define DATUM_TO_CTYPE DatumGetInt64
-#include "decompress_test_impl.c"
+#include "decompress_arithmetic_test_impl.c"
 #undef ALGO
 #undef CTYPE
 #undef PGTYPE
 #undef DATUM_TO_CTYPE
+
+#include "decompress_text_test_impl.c"
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size,
 													bool extra_checks)
@@ -2220,6 +2230,14 @@ static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Si
 	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA && type == INT8OID)
 	{
 		return decompress_deltadelta_int64;
+	}
+	else if (algo == COMPRESSION_ALGORITHM_ARRAY && type == TEXTOID)
+	{
+		return decompress_array_text;
+	}
+	else if (algo == COMPRESSION_ALGORITHM_DICTIONARY && type == TEXTOID)
+	{
+		return decompress_dictionary_text;
 	}
 
 	elog(ERROR,
@@ -2242,7 +2260,8 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, volatile in
 
 	if (!f)
 	{
-		elog(ERROR, "could not open the file '%s'", path);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FILE), errmsg("could not open the file '%s'", path)));
 	}
 
 	fseek(f, 0, SEEK_END);
@@ -2266,7 +2285,7 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, volatile in
 
 	if (elements_read != 1)
 	{
-		elog(ERROR, "failed to read file '%s'", path);
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_FILE), errmsg("failed to read file '%s'", path)));
 	}
 
 	fclose(f);

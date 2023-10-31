@@ -336,13 +336,13 @@ dictionary_compressor_finish(DictionaryCompressor *compressor)
 	average_element_size = sizes.dictionary_size / sizes.num_distinct;
 	expected_array_size = average_element_size * sizes.dictionary_compressed_indexes->num_elements;
 	compressed = dictionary_compressed_from_serialization_info(sizes, compressor->type);
-//	fprintf(stderr,
-//			"dict size %ld, distinct %ld, avg element size %ld, easize %ld, totalsize %ld\n",
-//			sizes.dictionary_size,
-//			(uint64) sizes.num_distinct,
-//			average_element_size,
-//			expected_array_size,
-//			sizes.total_size);
+	//	fprintf(stderr,
+	//			"dict size %ld, distinct %ld, avg element size %ld, easize %ld, totalsize %ld\n",
+	//			sizes.dictionary_size,
+	//			(uint64) sizes.num_distinct,
+	//			average_element_size,
+	//			expected_array_size,
+	//			sizes.total_size);
 	if (expected_array_size < sizes.total_size)
 		return dictionary_compressed_to_array_compressed(compressed);
 
