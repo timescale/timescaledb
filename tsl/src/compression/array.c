@@ -514,8 +514,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	for (int i = 0; i < n_notnull; i++)
 	{
 		void *vardata = consumeCompressedData(si, sizes[i]);
-		// CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
-		// CheckCompressedData(sizes[i] > VARHDRSZ);
+		CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
 		const int textlen = VARSIZE_ANY_EXHDR(vardata);
 		memcpy(&arrow_bodies[offset], VARDATA_ANY(vardata), textlen);
 
