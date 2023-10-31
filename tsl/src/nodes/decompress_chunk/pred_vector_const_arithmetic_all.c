@@ -84,3 +84,11 @@
 #define PG_PREDICATE(X) F_FLOAT4##X
 
 #include "pred_vector_const_arithmetic_type_pair.c"
+
+/* date functions. */
+#define VECTOR_CTYPE DateADT
+#define CONST_CTYPE DateADT
+#define CONST_CONVERSION(X) DatumGetDateADT(X)
+#define PG_PREDICATE(X) F_DATE_##X
+
+#include "pred_vector_const_arithmetic_type_pair.c"
