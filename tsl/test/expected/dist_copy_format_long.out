@@ -9,6 +9,7 @@
 \set DN_DBNAME_3 :TEST_DBNAME _3
 SELECT 1 FROM add_data_node('data_node_1', host => 'localhost',
                             database => :'DN_DBNAME_1');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -16,6 +17,7 @@ SELECT 1 FROM add_data_node('data_node_1', host => 'localhost',
 
 SELECT 1 FROM add_data_node('data_node_2', host => 'localhost',
                             database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -23,6 +25,7 @@ SELECT 1 FROM add_data_node('data_node_2', host => 'localhost',
 
 SELECT 1 FROM add_data_node('data_node_3', host => 'localhost',
                             database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -38,6 +41,7 @@ SET ROLE :ROLE_1;
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
 select create_distributed_hypertable('uk_price_paid', 'date', 'postcode2',
     chunk_time_interval => interval '270 day');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "date"
  create_distributed_hypertable 
 -------------------------------
@@ -66,6 +70,7 @@ set timescaledb.dist_copy_transfer_format = 'binary';
 create table uk_price_paid_bin(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_bin', 'date', 'postcode2',
     chunk_time_interval => interval '90 day', replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable  
 --------------------------------
  (2,public,uk_price_paid_bin,t)

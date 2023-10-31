@@ -1,7 +1,7 @@
 /*.pgbinary
+/bgw_custom-*.sql
 /cagg_bgw-*.sql
 /cagg_ddl-*.sql
-/cagg_ddl_dist_ht-*.sql
 /cagg_errors_deprecated-*.sql
 /cagg_invalidation_dist_ht-*.sql
 /cagg_permissions-*.sql
@@ -9,6 +9,7 @@
 /cagg_repair-*.sql
 /cagg_union_view-*.sql
 /cagg_usage-*.sql
+/compression_bgw-*.sql
 /compression_errors-*.sql
 /compression_sorted_merge-*.sql
 /compression_permissions-*.sql
@@ -23,12 +24,15 @@
 /dist_ref_table_join-*.sql
 /dist_remote_error-*.sql
 /dist_remote_error.text
+/dist_views-*.sql
+/dist_compression-*.sql
+/dist_move_chunk-*.sql
 /hypertable_distributed-*.sql
 /jit-*.sql
 /modify_exclusion-*.sql
 /plan_skip_scan-*.sql
 /remote-copy-*sv
-/telemetry_stats-*.sql
 /transparent_decompression-*.sql
 /transparent_decompression_ordered_index-*.sql
+/telemetry_stats-*.sql
 /merge_append_partially_compressed-*.sql

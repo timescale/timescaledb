@@ -870,6 +870,22 @@ process_vacuum(ProcessUtilityArgs *args)
 
 	is_vacuumcmd = stmt->is_vacuumcmd;
 
+#if PG16_GE
+	if (is_vacuumcmd)
+	{
+		/* Look for new option ONLY_DATABASE_STATS */
+		foreach (lc, stmt->options)
+		{
+			DefElem *opt = (DefElem *) lfirst(lc);
+
+			/* if "only_database_stats" is defined then don't execute our custom code and return to
+			 * the postgres execution for the proper validations */
+			if (strcmp(opt->defname, "only_database_stats") == 0)
+				return DDL_CONTINUE;
+		}
+	}
+#endif
+
 	if (stmt->rels == NIL)
 		vacuum_rels = ts_get_all_vacuum_rels(is_vacuumcmd);
 	else
@@ -3936,7 +3952,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 
 	Assert(IsA(stmt, AlterTableStmt));
 
-	relid = AlterTableLookupRelation(stmt, NoLock);
+	relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	if (!OidIsValid(relid))
 		return;

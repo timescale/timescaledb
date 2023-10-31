@@ -1,0 +1,139 @@
+name: Process issue workflows
+
+"on":
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created, edited]
+
+jobs:
+  add-to-project:
+    name: Add issue to projects
+    # issue_comment is triggered when commenting on both issues and
+    # pull requests. To avoid adding pull requests to the bug board,
+    # filter out pull requests
+    if: ${{ !github.event.issue.pull_request }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add to bugs board
+        uses: actions/add-to-project@v0.5.0
+        with:
+          project-url: https://github.com/orgs/timescale/projects/55
+          github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          labeled: bug, needs-triage, flaky-test
+          label-operator: OR
+      - name: Add to CAggs board
+        uses: actions/add-to-project@v0.5.0
+        with:
+          project-url: https://github.com/orgs/timescale/projects/128
+          github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          labeled: continuous_aggregate
+  
+  waiting-for-author:
+    name: Waiting for Author
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'labeled'
+      && github.event.label.name == 'waiting-for-author'
+    steps:
+      - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
+        with:
+          gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          organization: timescale
+          project_id: 55
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: 'Waiting for Author'
+
+  waiting-for-engineering:
+    name: Waiting for Engineering
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
+    steps:
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install jq
+      - name: Get board column of issue
+        id: extract_board_column
+        continue-on-error: true
+        run: |
+          # The following GraphQL query requests all issues from a project. It uses the repository
+          # to locate the issue and get the reference to the project. Then, a filter is applied
+          # (number: $project) to get the reference to the desired project (i.e., the bug board).
+          # Now, all issues from this project are requested. The reason for fetching all issues is
+          # because the current implementation of the GitHub GraphQL API for projects does not
+          # support server-side filters for issues and we can not restrict the query to our issue.
+          # Therefore, we fetch all issues and apply a filter on the client side in the next step.
+          gh api graphql --paginate -F issue=$ISSUE -F project=$PROJECT -F owner=$OWNER -F repo=$REPO -f query='
+            query board_column($issue: Int!, $project: Int!, $owner: String!, $repo: String!, $endCursor: String) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $issue) {
+                  projectV2(number: $project) {
+                    items(first: 100, after: $endCursor) {
+                      nodes {
+                        fieldValueByName(name: "Status") {
+                          ... on ProjectV2ItemFieldSingleSelectValue {
+                            name
+                          }
+                        }
+                        content {
+                          ... on Issue {
+                           id
+                           title
+                           number
+                           repository {
+                             name
+                             owner {
+                               login
+                              }
+                            }
+                          }
+                        }
+                      }
+                      pageInfo {
+                         hasNextPage
+                         endCursor
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            ' > api_result
+            # Get board column for issue
+            board_column=$(jq -r ".data.repository.issue.projectV2.items.nodes[] |
+                select (.content.number == $ISSUE and .content.repository.name == \"$REPO\" and .content.repository.owner.login == \"$OWNER\") |
+                .fieldValueByName.name" api_result)
+            echo "Issue is in column: $board_column"
+            echo "issue_board_column=$board_column" >> "$GITHUB_OUTPUT"
+        env:
+          OWNER: timescale
+          REPO: ${{ github.event.repository.name }}
+          PROJECT: 55
+          ISSUE: ${{ github.event.issue.number }}
+          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+
+      - name: Check if organization member
+        uses: tspascoal/get-user-teams-membership@v2
+        id: checkUserMember
+        with:
+         username: ${{ github.actor }}
+         organization: timescale
+         team: 'database-eng'
+         GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+      - name: Remove waiting-for-author label
+        if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false'
+          && steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author' }}
+        uses: andymckay/labeler@3a4296e9dcdf9576b0456050db78cfd34853f260
+        with:
+          remove-labels: 'waiting-for-author, no-activity'
+          repo-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+      - name: Move to waiting for engineering column
+        if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false'
+          && steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author' }}
+        uses: leonsteinhaeuser/project-beta-automations@v2.0.0
+        with:
+          gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          organization: timescale
+          project_id: 55
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: 'Waiting for Engineering'

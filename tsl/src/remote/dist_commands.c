@@ -523,6 +523,13 @@ ts_dist_cmd_close_prepared_command(PreparedDistCmd *command)
 Datum
 ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("distributed command execution is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#endif
+
 	const char *query = PG_ARGISNULL(0) ? NULL : TextDatumGetCString(PG_GETARG_DATUM(0));
 	ArrayType *data_nodes = PG_ARGISNULL(1) ? NULL : PG_GETARG_ARRAYTYPE_P(1);
 	bool transactional = PG_ARGISNULL(2) ? true : PG_GETARG_BOOL(2);

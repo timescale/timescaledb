@@ -715,7 +715,8 @@ ts_compress_table(PG_FUNCTION_ARGS)
 	compress_chunk(in_table,
 				   out_table,
 				   (const ColumnCompressionInfo **) compression_info->data,
-				   compression_info->num_elements);
+				   compression_info->num_elements,
+				   0 /*insert options*/);
 
 	PG_RETURN_VOID();
 }

@@ -29,6 +29,7 @@ IGNORES=${IGNORES:-}
 SKIPS=${SKIPS:-}
 PSQL=${PSQL:-psql}
 PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
+PG_VERSION_MAJOR=$(${PSQL} --version | awk '{print $3}' | sed -e 's![.].*!!')
 
 # check if test matches any of the patterns in a list
 # $1 list of patterns or test names
@@ -50,8 +51,25 @@ if [[ -z ${TEST_SCHEDULE} ]];  then
   exit 1;
 fi
 
+# PG16 removed the `ignore` feature from `pg_regress`
+# so as an wraparound if we have any IGNORES entry then
+# we merge it together with SKIPS and cleanup the IGNORES
+# https://github.com/postgres/postgres/commit/bd8d453e9b5f8b632a400a9e796fc041aed76d82
+if [[ ${PG_VERSION_MAJOR} -ge 16 ]]; then
+  if [[ -n ${IGNORES} ]]; then
+    if [[ -n ${SKIPS} ]]; then
+      SKIPS="${SKIPS} ${IGNORES}"
+    else
+      SKIPS="${IGNORES}"
+    fi
+    IGNORES=""
+  fi
+fi
+
 echo "TESTS ${TESTS}"
-echo "IGNORES ${IGNORES}"
+if [[ ${PG_VERSION_MAJOR} -lt 16 ]]; then
+  echo "IGNORES ${IGNORES}"
+fi
 echo "SKIPS ${SKIPS}"
 
 if [[ -z ${TESTS} ]] && [[ -z ${SKIPS} ]] && [[ -z ${IGNORES} ]]; then

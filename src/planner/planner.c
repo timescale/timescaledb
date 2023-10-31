@@ -1019,7 +1019,7 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 	{
 		RangeTblEntry *in_rte = root->simple_rte_array[i];
 
-		if (rte_should_expand(in_rte))
+		if (rte_should_expand(in_rte) && root->simple_rel_array[i])
 		{
 			RelOptInfo *in_rel = root->simple_rel_array[i];
 			Hypertable *ht = ts_planner_get_hypertable(in_rte->relid, CACHE_FLAG_NOCREATE);

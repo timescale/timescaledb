@@ -28,6 +28,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
            node_name            |            database            | node_created | database_created | extension_created 
 --------------------------------+--------------------------------+--------------+------------------+-------------------
  db_cagg_invalidation_dist_ht_1 | db_cagg_invalidation_dist_ht_1 | t            | t                | t
@@ -56,6 +59,7 @@ SET timezone TO 'UTC';
 CREATE TABLE conditions (time bigint NOT NULL, device int, temp float);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
+psql:include/cagg_invalidation_common.sql:14: WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (1,public,conditions,t)
@@ -67,6 +71,7 @@ SELECT create_hypertable('conditions', 'time', chunk_time_interval => 10);
 CREATE TABLE measurements (time int NOT NULL, device int, temp float);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('measurements', 'time', chunk_time_interval => 10, replication_factor => 2);
+psql:include/cagg_invalidation_common.sql:21: WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (2,public,measurements,t)
@@ -273,6 +278,16 @@ ORDER BY 1,2;
 -- There should be only "infinite" invalidations in the cagg
 -- invalidation log:
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:192: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 | 9223372036854775807
@@ -292,6 +307,19 @@ ORDER BY 1,2;
 
 -- Invalidations should be cleared inside the refresh window:
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:200: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                   9
@@ -303,6 +331,19 @@ SELECT * FROM cagg_invals;
 -- Refresh up to 50 from the beginning
 CALL refresh_continuous_aggregate('cond_10', 0, 50);
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:204: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -325,6 +366,19 @@ ORDER BY 1,2;
 -- Nothing changes with invalidations either since the region was
 -- already refreshed and no new invalidations have been generated:
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:213: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -344,6 +398,22 @@ ORDER BY 1,2;
 (2 rows)
 
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:219: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -365,6 +435,25 @@ ORDER BY 1,2;
 (2 rows)
 
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:226: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -377,11 +466,31 @@ SELECT * FROM cagg_invals;
 
 -- There should be no hypertable invalidations initially:
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:229: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
 (0 rows)
 
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:230: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -402,6 +511,14 @@ INSERT INTO conditions VALUES (10, 5, 23.8), (19, 3, 23.6);
 INSERT INTO conditions VALUES (60, 3, 23.7), (70, 4, 23.7);
 -- Should see some invaliations in the hypertable invalidation log:
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:243: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         1 |    10 |  10
@@ -416,6 +533,18 @@ INSERT INTO measurements VALUES (20, 4, 23.7);
 INSERT INTO measurements VALUES (30, 5, 23.8), (80, 3, 23.6);
 -- Should now see invalidations for both hypertables
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:250: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         1 |    10 |  10
@@ -444,6 +573,11 @@ ORDER BY 1,2;
 -- to the continuous aggregate log, but only for the hypertable that
 -- the refreshed aggregate belongs to:
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:263: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:263: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:263: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:263: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:263: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
@@ -451,6 +585,32 @@ SELECT * FROM hyper_invals;
 (2 rows)
 
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:264: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -482,6 +642,33 @@ INSERT INTO conditions VALUES (60, 3, 23.6), (90, 3, 23.6);
 INSERT INTO conditions VALUES (20, 5, 23.8), (100, 3, 23.6);
 -- New invalidations in the hypertable invalidation log:
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:284: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         1 |     1 |   1
@@ -507,6 +694,32 @@ SELECT * FROM hyper_invals;
 
 -- But nothing has yet changed in the cagg invalidation log:
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:287: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -525,6 +738,11 @@ CALL refresh_continuous_aggregate('cond_10', 20, 60);
 -- Invalidations should be moved from the hypertable invalidation log
 -- to the continuous aggregate log.
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:294: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:294: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:294: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:294: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:294: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
@@ -533,6 +751,34 @@ SELECT * FROM hyper_invals;
 
 -- Only the cond_10 cagg should have its entries cut:
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:297: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -553,6 +799,26 @@ SELECT * FROM cagg_invals;
 CALL refresh_continuous_aggregate('cond_20', 20, 60);
 -- The cond_20 cagg should also have its entries cut:
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:303: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -569,6 +835,25 @@ SELECT * FROM cagg_invals;
 CALL refresh_continuous_aggregate('cond_10', 0, 20);
 -- The 1-19 invalidation should be deleted:
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:309: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -587,6 +872,30 @@ INSERT INTO conditions VALUES (20, 1, 23.4), (25, 1, 23.4);
 INSERT INTO conditions VALUES (30, 1, 23.4), (46, 1, 23.4);
 CALL refresh_continuous_aggregate('cond_10', 1, 40);
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:321: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -606,6 +915,32 @@ INSERT INTO conditions VALUES (15, 1, 23.4), (42, 1, 23.4);
 CALL refresh_continuous_aggregate('cond_10', 90, 100);
 psql:include/cagg_invalidation_common.sql:327: NOTICE:  continuous aggregate "cond_10" is already up-to-date
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:329: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                  -1
@@ -623,6 +958,27 @@ SELECT * FROM cagg_invals;
 -- Test max refresh window
 CALL refresh_continuous_aggregate('cond_10', NULL, NULL);
 SELECT * FROM cagg_invals;
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:334: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 |                  110 | 9223372036854775807
@@ -636,6 +992,11 @@ SELECT * FROM cagg_invals;
 (8 rows)
 
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:335: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:335: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:335: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:335: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:335: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
@@ -678,6 +1039,11 @@ psql:include/cagg_invalidation_common.sql:352: ERROR:  "_dist_hyper_1_1_chunk" i
 \endif
 -- Should see new invalidation entries for conditions for the non-distributed case
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:358: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:358: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:358: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:358: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:358: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         2 |    20 |  20
@@ -694,6 +1060,14 @@ SELECT * FROM conditions;
 
 -- Should see an infinite invalidation entry for conditions
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:367: WARNING:  getting results from remote command execution is deprecated
  hyper_id |        start         |         end         
 ----------+----------------------+---------------------
         1 | -9223372036854775808 | 9223372036854775807
@@ -859,6 +1233,13 @@ SELECT _timescaledb_functions.invalidation_cagg_log_add_entry(:cond_1_id, 1, 0);
 -- Test invalidations with bucket size 1
 INSERT INTO conditions VALUES (0, 1, 1.0);
 SELECT * FROM hyper_invals;
+psql:include/cagg_invalidation_common.sql:463: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:463: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:463: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:463: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:463: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:463: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:463: WARNING:  getting results from remote command execution is deprecated
  hyper_id | start | end 
 ----------+-------+-----
         1 |     0 |   0
@@ -885,6 +1266,32 @@ ORDER BY 1,2;
 CALL refresh_continuous_aggregate('cond_1', 0, 1);
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_1_id;
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:477: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        6 | -9223372036854775808 |                  -2
@@ -980,6 +1387,75 @@ ORDER BY 1,2;
 -- Should leave one invalidation on each side of the refresh window
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_1_id;
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:538: WARNING:  getting results from remote command execution is deprecated
  cagg_id | start |         end         
 ---------+-------+---------------------
        6 |     0 |                   0
@@ -1029,6 +1505,7 @@ ORDER BY 1,2;
 CREATE table threshold_test (time int, value int);
 \if :IS_DISTRIBUTED
 SELECT create_distributed_hypertable('threshold_test', 'time', chunk_time_interval => 4, replication_factor => 2);
+psql:include/cagg_invalidation_common.sql:565: WARNING:  distributed hypertable is deprecated
 psql:include/cagg_invalidation_common.sql:565: NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -1122,6 +1599,85 @@ ORDER BY 1,2;
 -- threshold.
 SELECT * FROM cagg_invals
 WHERE cagg_id = :thresh_cagg_id;
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:639: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        8 | -9223372036854775808 |                  -1
@@ -1229,6 +1785,85 @@ ORDER BY 1,2;
 -- The aggregate remains invalid beyond the invalidation threshold
 SELECT * FROM cagg_invals
 WHERE cagg_id = :thresh_cagg_id;
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:695: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        8 | -9223372036854775808 |                  -1
@@ -1311,6 +1946,99 @@ CALL refresh_continuous_aggregate('cond_1', 10, NULL);
 psql:include/cagg_invalidation_common.sql:748: NOTICE:  continuous aggregate "cond_1" is already up-to-date
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_1_id;
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:750: WARNING:  getting results from remote command execution is deprecated
  cagg_id | start |         end         
 ---------+-------+---------------------
        6 |     1 |                   4
@@ -1340,6 +2068,88 @@ FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_10' \gset
 SELECT * FROM cagg_invals
 WHERE cagg_id = :cond_10_id;
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
+psql:include/cagg_invalidation_common.sql:776: WARNING:  getting results from remote command execution is deprecated
  cagg_id |        start         |         end         
 ---------+----------------------+---------------------
        3 | -9223372036854775808 |                 -21

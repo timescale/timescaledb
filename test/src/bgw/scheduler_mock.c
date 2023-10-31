@@ -222,6 +222,13 @@ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(PG_FUNCTION_ARGS)
 	worker_handle = start_test_scheduler(PG_GETARG_INT32(0), GetUserId());
 	TestAssertTrue(worker_handle != NULL);
 
+	/*
+	 * If RegisterDynamicbackgroundworker fails, worker_handle will be
+	 * NULL. Since messages have already been printed in, just exit.
+	 */
+	if (!worker_handle)
+		PG_RETURN_VOID();
+
 	BgwHandleStatus status = WaitForBackgroundWorkerStartup(worker_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);
 	if (status != BGWH_STARTED)
@@ -247,6 +254,13 @@ ts_bgw_db_scheduler_test_run(PG_FUNCTION_ARGS)
 	old_ctx = MemoryContextSwitchTo(TopMemoryContext);
 	current_handle = start_test_scheduler(PG_GETARG_INT32(0), GetUserId());
 	MemoryContextSwitchTo(old_ctx);
+
+	/*
+	 * If RegisterDynamicbackgroundworker fails, current_handle will be
+	 * NULL. Since messages have already been printed in, just exit.
+	 */
+	if (!current_handle)
+		PG_RETURN_VOID();
 
 	status = WaitForBackgroundWorkerStartup(current_handle, &pid);
 	TestAssertTrue(BGWH_STARTED == status);

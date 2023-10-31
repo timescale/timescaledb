@@ -38,7 +38,9 @@ set(MOD_FILES
     updates/2.10.3--2.11.0.sql
     updates/2.11.0--2.11.1.sql
     updates/2.11.1--2.11.2.sql
-    updates/2.11.2--2.12.0.sql)
+    updates/2.11.2--2.12.0.sql
+    updates/2.12.0--2.12.1.sql
+    updates/2.12.1--2.12.2.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
@@ -72,7 +74,9 @@ set(OLD_REV_FILES
     2.11.0--2.10.3.sql
     2.11.1--2.11.0.sql
     2.11.2--2.11.1.sql
-    2.12.0--2.11.2.sql)
+    2.12.0--2.11.2.sql
+    2.12.1--2.12.0.sql
+    2.12.2--2.12.1.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")
@@ -128,6 +132,23 @@ function(version_files SRC_FILE_LIST OUTPUT_FILE_LIST)
   set(result "")
   foreach(unversioned_file ${SRC_FILE_LIST})
     set(versioned_file ${unversioned_file})
+    list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/${versioned_file})
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${unversioned_file})
+      configure_file(${unversioned_file} ${versioned_file} @ONLY)
+    endif()
+  endforeach(unversioned_file)
+  set(${OUTPUT_FILE_LIST}
+      "${result}"
+      PARENT_SCOPE)
+endfunction()
+
+# Function to replace @VARIABLE@ in source files, producing an output file in
+# the build dir.  Unlike the previous function we need to build a versioned file
+# for every version we create an update script for.
+function(version_check_file SRC_FILE_LIST OUTPUT_FILE_LIST)
+  set(result "")
+  foreach(unversioned_file ${SRC_FILE_LIST})
+    set(versioned_file ${unversioned_file}-${START_VERSION})
     list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/${versioned_file})
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${unversioned_file})
       configure_file(${unversioned_file} ${versioned_file} @ONLY)
@@ -248,6 +269,9 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
     list(APPEND PRE_FILES ${ORIGIN_MOD_FILE})
   endif()
 
+  version_check_file("updates/version_check.sql" VERSION_CHECK_VERSIONED)
+  list(PREPEND PRE_FILES ${VERSION_CHECK_VERSIONED})
+
   # There might not have been any changes in the modfile, in which case the
   # modfile need not be present
   if(EXISTS ${transition_mod_file})
@@ -269,6 +293,7 @@ foreach(transition_mod_file ${MOD_FILES_LIST})
       "${PRE_FILES};${PRE_INSTALL_FUNCTION_FILES_VERSIONED};${SOURCE_FILES_VERSIONED};${POST_FILES_PROCESSED}"
       ${UPDATE_SCRIPT})
   endif()
+
 endforeach(transition_mod_file)
 
 add_custom_target(sqlupdatescripts ALL DEPENDS ${UPDATE_SCRIPTS})

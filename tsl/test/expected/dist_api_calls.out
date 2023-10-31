@@ -16,6 +16,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
       node_name      |      database       | node_created | database_created | extension_created 
 ---------------------+---------------------+--------------+------------------+-------------------
  db_dist_api_calls_1 | db_dist_api_calls_1 | t            | t                | t
@@ -34,6 +37,7 @@ CREATE TABLE disttable(
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', 3);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
              1 | public      | disttable  | t
@@ -62,6 +66,7 @@ SELECT * FROM disttable ORDER BY time;
 (8 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable')
 NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                
@@ -114,6 +119,7 @@ SELECT * FROM disttable ORDER BY time;
 (4 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable')
 NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                
@@ -174,6 +180,7 @@ SELECT * FROM show_chunks('disttable');
 (6 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable')
 NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                
@@ -249,6 +256,7 @@ SELECT approximate_row_count('disttable');
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT approximate_row_count('disttable'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_api_calls_1]:  SELECT approximate_row_count('disttable')
 NOTICE:  [db_dist_api_calls_1]:
 approximate_row_count
@@ -286,6 +294,7 @@ CREATE TABLE disttable_repl(
     value float
 );
 SELECT * FROM create_distributed_hypertable('disttable_repl', 'time', 'device', 3, replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name |   table_name   | created 
 ---------------+-------------+----------------+---------
              2 | public      | disttable_repl | t
@@ -325,6 +334,7 @@ SELECT * FROM show_chunks('disttable_repl');
 (6 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT show_chunks('disttable_repl'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_api_calls_1]:  SELECT show_chunks('disttable_repl')
 NOTICE:  [db_dist_api_calls_1]:
 show_chunks                                 

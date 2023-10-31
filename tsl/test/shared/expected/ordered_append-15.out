@@ -2136,17 +2136,22 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time"
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(16 rows)
 
 -- test DESC for ordered chunks
 :PREFIX
@@ -2156,17 +2161,22 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time" DESC
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-(11 rows)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(16 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX
@@ -2177,18 +2187,23 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=68370 loops=1)
-               ->  Append (actual rows=68370 loops=1)
+   ->  Result (actual rows=1 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+               Order: metrics_compressed."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(12 rows)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(17 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX
@@ -2249,18 +2264,23 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=68370 loops=1)
-               ->  Append (actual rows=68370 loops=1)
+   ->  Result (actual rows=1 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+               Order: metrics_compressed."time" DESC
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-(12 rows)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(17 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX
@@ -2359,23 +2379,30 @@ FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
 QUERY PLAN
- Sort (actual rows=27348 loops=1)
-   Sort Key: _hyper_X_X_chunk."time"
-   Sort Method: quicksort 
-   ->  Append (actual rows=27348 loops=1)
+ Custom Scan (ChunkAppend) on metrics_compressed (actual rows=27348 loops=1)
+   Order: metrics_compressed."time"
+   ->  Sort (actual rows=7196 loops=1)
+         Sort Key: _hyper_X_X_chunk."time"
+         Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
                      Filter: (device_id = ANY ('{1,2}'::integer[]))
                      Rows Removed by Filter: 12
+   ->  Sort (actual rows=10076 loops=1)
+         Sort Key: _hyper_X_X_chunk."time"
+         Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
                      Filter: (device_id = ANY ('{1,2}'::integer[]))
                      Rows Removed by Filter: 18
+   ->  Sort (actual rows=10076 loops=1)
+         Sort Key: _hyper_X_X_chunk."time"
+         Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
                      Filter: (device_id = ANY ('{1,2}'::integer[]))
                      Rows Removed by Filter: 18
-(16 rows)
+(23 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 :PREFIX
@@ -2403,21 +2430,24 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=45575 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time"
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=20385 loops=1)
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      Rows Removed by Filter: 4615
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25 loops=1)
                            Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                            Rows Removed by Filter: 5
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(15 rows)
+(18 rows)
 
 :PREFIX
 SELECT time
@@ -2427,21 +2457,22 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=45575 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time" DESC
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
                            Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=20385 loops=1)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 4615
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=25 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 5
-(15 rows)
+(16 rows)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -2452,22 +2483,25 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=41975 loops=1)
-               Chunks excluded during startup: 1
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time"
+         Chunks excluded during startup: 1
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=16785 loops=1)
                      Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                      Rows Removed by Filter: 3215
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
                            Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 10
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
-(16 rows)
+(19 rows)
 
 :PREFIX
 SELECT time
@@ -2477,22 +2511,23 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=26390 loops=1)
-               Chunks excluded during startup: 1
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time"
+         Chunks excluded during startup: 1
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
                            Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=8400 loops=1)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                     Rows Removed by Filter: 1790
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                            Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 15
-(16 rows)
+(17 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -2504,11 +2539,12 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=7195 loops=1)
-               Chunks excluded during startup: 1
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time"
+         Chunks excluded during startup: 1
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7195 loops=1)
                      Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                      Rows Removed by Filter: 7805
@@ -2516,7 +2552,7 @@ QUERY PLAN
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
                            Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 15
-(13 rows)
+(14 rows)
 
 :PREFIX
 SELECT time
@@ -2527,11 +2563,12 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=3595 loops=1)
-               Chunks excluded during startup: 1
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time"
+         Chunks excluded during startup: 1
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3595 loops=1)
                      Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                      Rows Removed by Filter: 6405
@@ -2539,7 +2576,7 @@ QUERY PLAN
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=1)
                            Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
                            Rows Removed by Filter: 20
-(13 rows)
+(14 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -2548,70 +2585,112 @@ SET enable_hashagg = OFF;
 SELECT max(time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+                 Order: metrics_compressed."time" DESC
+                 ->  Sort (actual rows=1 loops=1)
+                       Sort Key: _hyper_X_X_chunk."time" DESC
+                       Sort Method: top-N heapsort 
+                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+                             Filter: ("time" IS NOT NULL)
+                             ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                 ->  Sort (never executed)
+                       Sort Key: _hyper_X_X_chunk."time" DESC
+                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                             Filter: ("time" IS NOT NULL)
+                             ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                 ->  Sort (never executed)
+                       Sort Key: _hyper_X_X_chunk."time" DESC
+                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                             Filter: ("time" IS NOT NULL)
+                             ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(21 rows)
 
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+                 Order: metrics_compressed."time"
+                 ->  Sort (actual rows=1 loops=1)
+                       Sort Key: _hyper_X_X_chunk."time"
+                       Sort Method: top-N heapsort 
+                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                             Filter: ("time" IS NOT NULL)
+                             ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                 ->  Sort (never executed)
+                       Sort Key: _hyper_X_X_chunk."time"
+                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                             Filter: ("time" IS NOT NULL)
+                             ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                 ->  Sort (never executed)
+                       Sort Key: _hyper_X_X_chunk."time"
+                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                             Filter: ("time" IS NOT NULL)
+                             ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(21 rows)
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Result (actual rows=1 loops=1)
+                 ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+                       Order: metrics_compressed."time"
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(22 rows)
 
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Result (actual rows=1 loops=1)
+                 ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+                       Order: metrics_compressed."time" DESC
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(22 rows)
 
 -- test query with time_bucket
 :PREFIX
@@ -2621,18 +2700,23 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=68370 loops=1)
-               ->  Append (actual rows=68370 loops=1)
+   ->  Result (actual rows=1 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+               Order: metrics_compressed."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(12 rows)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(17 rows)
 
 -- test query with ORDER BY time_bucket
 :PREFIX
@@ -2770,21 +2854,26 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_compressed."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=68370 loops=1)
-               Chunks excluded during startup: 0
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
+         Order: metrics_compressed."time" DESC
+         Chunks excluded during startup: 0
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      Filter: ("time" < (now() + '@ 1 mon'::interval))
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Filter: ("time" < (now() + '@ 1 mon'::interval))
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Filter: ("time" < (now() + '@ 1 mon'::interval))
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-(15 rows)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(20 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -2798,21 +2887,26 @@ SELECT *
 FROM i;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
-   ->  Sort (actual rows=100 loops=1)
-         Sort Key: metrics_compressed."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=68370 loops=1)
-               Chunks excluded during startup: 0
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=100 loops=1)
+         Order: metrics_compressed."time" DESC
+         Chunks excluded during startup: 0
+         ->  Sort (actual rows=100 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      Filter: ("time" < now())
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Filter: ("time" < now())
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                      Filter: ("time" < now())
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-(15 rows)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(20 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -2857,33 +2951,43 @@ ORDER BY time;
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=5 loops=1)
    Chunks excluded during runtime: 2
-   InitPlan 1 (returns $0)
-     ->  Finalize Aggregate (actual rows=1 loops=1)
-           ->  Append (actual rows=3 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=17990 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=20 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=25190 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=25190 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
+   InitPlan 2 (returns $1)
+     ->  Result (actual rows=1 loops=1)
+           InitPlan 1 (returns $0)
+             ->  Limit (actual rows=1 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics_compressed metrics_compressed_1 (actual rows=1 loops=1)
+                         Order: metrics_compressed_1."time" DESC
+                         ->  Sort (actual rows=1 loops=1)
+                               Sort Key: _hyper_X_X_chunk_1."time" DESC
+                               Sort Method: top-N heapsort 
+                               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=25190 loops=1)
+                                     Filter: ("time" IS NOT NULL)
+                                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
+                         ->  Sort (never executed)
+                               Sort Key: _hyper_X_X_chunk_1."time" DESC
+                               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                     Filter: ("time" IS NOT NULL)
+                                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
+                         ->  Sort (never executed)
+                               Sort Key: _hyper_X_X_chunk_1."time" DESC
+                               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                     Filter: ("time" IS NOT NULL)
+                                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-         Filter: ("time" = $0)
+         Filter: ("time" = $1)
          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-               Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-         Filter: ("time" = $0)
+         Filter: ("time" = $1)
          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-               Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5 loops=1)
-         Filter: ("time" = $0)
+         Filter: ("time" = $1)
          Rows Removed by Filter: 4995
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-               Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+               Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                Rows Removed by Filter: 25
-(28 rows)
+(38 rows)
 
 -- test ordered append with limit expression
 :PREFIX
@@ -2896,17 +3000,22 @@ QUERY PLAN
  Limit (actual rows=4 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1 loops=1)
-   ->  Sort (actual rows=4 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=4 loops=1)
+         Order: metrics_compressed."time"
+         ->  Sort (actual rows=4 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: quicksort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(13 rows)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(18 rows)
 
 -- test with ordered guc disabled
 SET timescaledb.enable_ordered_append TO OFF;
@@ -2917,17 +3026,24 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+(18 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -2937,17 +3053,22 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=3 loops=1)
+         Order: metrics_compressed."time"
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(16 rows)
 
 -- test with chunk append disabled
 SET timescaledb.enable_chunk_append TO OFF;
@@ -2958,17 +3079,24 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+(18 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -2978,17 +3106,22 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=3 loops=1)
+         Order: metrics_compressed."time"
+         ->  Sort (actual rows=3 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(11 rows)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Sort (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(16 rows)
 
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
@@ -3010,29 +3143,54 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(23 rows)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(48 rows)
 
 -- test DESC for ordered chunks
 :PREFIX
@@ -3042,29 +3200,54 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-(23 rows)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time" DESC
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(48 rows)
 
 -- test query with ORDER BY column not in targetlist
 :PREFIX
@@ -3075,30 +3258,55 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=68370 loops=1)
-               ->  Append (actual rows=68370 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(24 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+               Order: metrics_space_compressed."time"
+               ->  Merge Append (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Merge Append (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Merge Append (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(49 rows)
 
 -- ORDER BY may include other columns after time column
 :PREFIX
@@ -3173,30 +3381,55 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=68370 loops=1)
-               ->  Append (actual rows=68370 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-(24 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+               Order: metrics_space_compressed."time" DESC
+               ->  Merge Append (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+               ->  Merge Append (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Merge Append (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time" DESC
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(49 rows)
 
 -- queries with ORDER BY non-time column shouldn't use ordered append
 :PREFIX
@@ -3343,32 +3576,54 @@ FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
 QUERY PLAN
- Sort (actual rows=27348 loops=1)
-   Sort Key: _hyper_X_X_chunk."time"
-   Sort Method: quicksort 
-   ->  Append (actual rows=27348 loops=1)
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-                     Rows Removed by Filter: 8
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-                     Rows Removed by Filter: 12
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-                     Rows Removed by Filter: 12
-(25 rows)
+ Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=27348 loops=1)
+   Order: metrics_space_compressed."time"
+   ->  Merge Append (actual rows=7196 loops=1)
+         Sort Key: _hyper_X_X_chunk."time"
+         ->  Sort (actual rows=3598 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Sort (actual rows=3598 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           Rows Removed by Filter: 8
+   ->  Merge Append (actual rows=10076 loops=1)
+         Sort Key: _hyper_X_X_chunk."time"
+         ->  Sort (actual rows=5038 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Sort (actual rows=5038 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           Rows Removed by Filter: 12
+   ->  Merge Append (actual rows=10076 loops=1)
+         Sort Key: _hyper_X_X_chunk."time"
+         ->  Sort (actual rows=5038 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Sort (actual rows=5038 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: quicksort 
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           Rows Removed by Filter: 12
+(47 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 :PREFIX
@@ -3408,41 +3663,58 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=45575 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4077 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 923
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 1
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=12231 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 2769
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 3
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4077 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 923
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 1
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-(35 rows)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4077 loops=1)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           Rows Removed by Filter: 923
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Rows Removed by Filter: 1
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=12231 loops=1)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           Rows Removed by Filter: 2769
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Rows Removed by Filter: 3
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4077 loops=1)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           Rows Removed by Filter: 923
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                                 Rows Removed by Filter: 1
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+(52 rows)
 
 :PREFIX
 SELECT time
@@ -3452,41 +3724,52 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=45575 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4077 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 923
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 1
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=12231 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 2769
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=15 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 3
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4077 loops=1)
-                     Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                     Rows Removed by Filter: 923
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=5 loops=1)
-                           Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           Rows Removed by Filter: 1
-(35 rows)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time" DESC
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                                 Filter: (_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
+(46 rows)
 
 -- test interaction with runtime exclusion
 :PREFIX
@@ -3497,59 +3780,84 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_space_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=41975 loops=1)
-               ->  Merge Append (actual rows=0 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=0 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 4
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 12
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 4
-               ->  Merge Append (actual rows=16785 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3357 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 643
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 2
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10071 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 1929
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 6
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3357 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 643
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
                                  Rows Removed by Filter: 2
-               ->  Merge Append (actual rows=25190 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone)
-(53 rows)
+(78 rows)
 
 :PREFIX
 SELECT time
@@ -3559,59 +3867,72 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_space_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=26390 loops=1)
-               ->  Merge Append (actual rows=17990 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-               ->  Merge Append (actual rows=8400 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1680 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 358
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-                                 Rows Removed by Filter: 3
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5040 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 1074
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-                                 Rows Removed by Filter: 9
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1680 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           Rows Removed by Filter: 358
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-                                 Rows Removed by Filter: 3
-               ->  Merge Append (actual rows=0 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-                                 Rows Removed by Filter: 6
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-                                 Rows Removed by Filter: 18
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone)
-                                 Rows Removed by Filter: 6
-(53 rows)
+(66 rows)
 
 -- test constraint exclusion
 :PREFIX
@@ -3623,30 +3944,42 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_space_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=7195 loops=1)
-               ->  Merge Append (actual rows=0 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=0 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Vectorized Filter: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
                                  Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 4
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Vectorized Filter: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
                                  Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 12
+               ->  Sort (actual rows=0 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Vectorized Filter: ("time" < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone)
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
                                  Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 4
-               ->  Merge Append (actual rows=7195 loops=1)
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1439 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 1561
@@ -3654,6 +3987,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 3
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=4317 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 4683
@@ -3661,6 +3997,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
                                  Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 9
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1439 loops=1)
                            Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 1561
@@ -3668,7 +4007,7 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
                                  Filter: ((_ts_meta_min_1 < 'Mon Jan 10 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_max_1 > ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 3
-(46 rows)
+(64 rows)
 
 :PREFIX
 SELECT time
@@ -3679,11 +4018,13 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_space_compressed."time"
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=3595 loops=1)
-               ->  Merge Append (actual rows=3595 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=719 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 1281
@@ -3691,6 +4032,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 4
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=2157 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 3843
@@ -3698,6 +4042,9 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                  Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 12
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=719 loops=1)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            Rows Removed by Filter: 1281
@@ -3705,26 +4052,30 @@ QUERY PLAN
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=2 loops=1)
                                  Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
                                  Rows Removed by Filter: 4
-               ->  Merge Append (actual rows=0 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
-                                 Rows Removed by Filter: 6
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
-                                 Rows Removed by Filter: 18
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < ('2000-01-08'::cstring)::timestamp with time zone)
                            Vectorized Filter: ("time" > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                  Filter: ((_ts_meta_max_1 > 'Fri Jan 07 00:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-08'::cstring)::timestamp with time zone))
-                                 Rows Removed by Filter: 6
-(46 rows)
+(58 rows)
 
 -- Disable hash aggregation to get a deterministic test output
 SET enable_hashagg = OFF;
@@ -3733,142 +4084,264 @@ SET enable_hashagg = OFF;
 SELECT max(time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(29 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+                 Order: metrics_space_compressed."time" DESC
+                 ->  Merge Append (actual rows=1 loops=1)
+                       Sort Key: _hyper_X_X_chunk."time" DESC
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_X_X_chunk."time" DESC
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_X_X_chunk."time" DESC
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(59 rows)
 
 :PREFIX
 SELECT min(time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(29 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+                 Order: metrics_space_compressed."time"
+                 ->  Merge Append (actual rows=1 loops=1)
+                       Sort Key: _hyper_X_X_chunk."time"
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                       ->  Sort (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             Sort Method: top-N heapsort 
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_X_X_chunk."time"
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                 ->  Merge Append (never executed)
+                       Sort Key: _hyper_X_X_chunk."time"
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Sort (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                   Filter: ("time" IS NOT NULL)
+                                   ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(59 rows)
 
 -- test first/last (doesn't use ordered append yet)
 :PREFIX
 SELECT first(time, time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(29 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Result (actual rows=1 loops=1)
+                 ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+                       Order: metrics_space_compressed."time"
+                       ->  Merge Append (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Sort (actual rows=1 loops=1)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   Sort Method: top-N heapsort 
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                             ->  Sort (actual rows=1 loops=1)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   Sort Method: top-N heapsort 
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                             ->  Sort (actual rows=1 loops=1)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   Sort Method: top-N heapsort 
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                       ->  Merge Append (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Merge Append (never executed)
+                             Sort Key: _hyper_X_X_chunk."time"
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time"
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(60 rows)
 
 :PREFIX
 SELECT last(time, time)
 FROM :TEST_TABLE;
 QUERY PLAN
- Finalize Aggregate (actual rows=1 loops=1)
-   ->  Append (actual rows=9 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(29 rows)
+ Result (actual rows=1 loops=1)
+   InitPlan 1 (returns $0)
+     ->  Limit (actual rows=1 loops=1)
+           ->  Result (actual rows=1 loops=1)
+                 ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+                       Order: metrics_space_compressed."time" DESC
+                       ->  Merge Append (actual rows=1 loops=1)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Sort (actual rows=1 loops=1)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Method: top-N heapsort 
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                             ->  Sort (actual rows=1 loops=1)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Method: top-N heapsort 
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+                             ->  Sort (actual rows=1 loops=1)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   Sort Method: top-N heapsort 
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                       ->  Merge Append (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                       ->  Merge Append (never executed)
+                             Sort Key: _hyper_X_X_chunk."time" DESC
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                             ->  Sort (never executed)
+                                   Sort Key: _hyper_X_X_chunk."time" DESC
+                                   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                         Filter: ("time" IS NOT NULL)
+                                         ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(60 rows)
 
 -- test query with time_bucket
 :PREFIX
@@ -3878,30 +4351,55 @@ ORDER BY time ASC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Result (actual rows=68370 loops=1)
-               ->  Append (actual rows=68370 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(24 rows)
+   ->  Result (actual rows=1 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+               Order: metrics_space_compressed."time"
+               ->  Merge Append (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           Sort Method: top-N heapsort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Merge Append (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Merge Append (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+                     ->  Sort (never executed)
+                           Sort Key: _hyper_X_X_chunk."time"
+                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                                 ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(49 rows)
 
 -- test query with ORDER BY time_bucket
 :PREFIX
@@ -4093,41 +4591,63 @@ ORDER BY time DESC
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Sort (actual rows=1 loops=1)
-         Sort Key: metrics_space_compressed."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=68370 loops=1)
-               ->  Merge Append (actual rows=25190 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
+         Order: metrics_space_compressed."time" DESC
+         ->  Merge Append (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Merge Append (actual rows=25190 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Merge Append (actual rows=17990 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < (now() + '@ 1 mon'::interval))
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-(35 rows)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(57 rows)
 
 -- test CTE
 :PREFIX WITH i AS (
@@ -4141,41 +4661,63 @@ SELECT *
 FROM i;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
-   ->  Sort (actual rows=100 loops=1)
-         Sort Key: metrics_space_compressed."time" DESC
-         Sort Method: top-N heapsort 
-         ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=68370 loops=1)
-               ->  Merge Append (actual rows=25190 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=100 loops=1)
+         Order: metrics_space_compressed."time" DESC
+         ->  Merge Append (actual rows=100 loops=1)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (actual rows=21 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+               ->  Sort (actual rows=60 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                            Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+               ->  Sort (actual rows=21 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                            Filter: ("time" < now())
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Merge Append (actual rows=25190 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < now())
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < now())
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < now())
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Merge Append (actual rows=17990 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time" DESC
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < now())
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < now())
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time" DESC
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
                            Filter: ("time" < now())
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-(35 rows)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(57 rows)
 
 -- test CTE
 -- no chunk exclusion for CTE because cte query is not pulled up
@@ -4219,88 +4761,118 @@ WHERE time = (
 ORDER BY time;
 QUERY PLAN
  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=5 loops=1)
-   InitPlan 1 (returns $0)
-     ->  Finalize Aggregate (actual rows=1 loops=1)
-           ->  Append (actual rows=9 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=3598 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=10794 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=12 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=3598 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=4 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=5038 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=15114 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=18 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=5038 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=5038 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=15114 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=18 loops=1)
-                 ->  Partial Aggregate (actual rows=1 loops=1)
-                       ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=5038 loops=1)
-                             ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
+   InitPlan 2 (returns $1)
+     ->  Result (actual rows=1 loops=1)
+           InitPlan 1 (returns $0)
+             ->  Limit (actual rows=1 loops=1)
+                   ->  Custom Scan (ChunkAppend) on metrics_space_compressed metrics_space_compressed_1 (actual rows=1 loops=1)
+                         Order: metrics_space_compressed_1."time" DESC
+                         ->  Merge Append (actual rows=1 loops=1)
+                               Sort Key: _hyper_X_X_chunk_1."time" DESC
+                               ->  Sort (actual rows=1 loops=1)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     Sort Method: top-N heapsort 
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=5038 loops=1)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
+                               ->  Sort (actual rows=1 loops=1)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     Sort Method: top-N heapsort 
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=15114 loops=1)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=18 loops=1)
+                               ->  Sort (actual rows=1 loops=1)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     Sort Method: top-N heapsort 
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (actual rows=5038 loops=1)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
+                         ->  Merge Append (never executed)
+                               Sort Key: _hyper_X_X_chunk_1."time" DESC
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
+                         ->  Merge Append (never executed)
+                               Sort Key: _hyper_X_X_chunk_1."time" DESC
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
+                               ->  Sort (never executed)
+                                     Sort Key: _hyper_X_X_chunk_1."time" DESC
+                                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk _hyper_X_X_chunk_1 (never executed)
+                                           Filter: ("time" IS NOT NULL)
+                                           ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
    ->  Merge Append (actual rows=0 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 4
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 12
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 4
    ->  Merge Append (actual rows=0 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 6
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 18
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=0 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 6
    ->  Merge Append (actual rows=5 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                Rows Removed by Filter: 999
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 5
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                Rows Removed by Filter: 2997
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=3 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 15
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               Filter: ("time" = $0)
+               Filter: ("time" = $1)
                Rows Removed by Filter: 999
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-                     Filter: ((_ts_meta_min_1 <= $0) AND (_ts_meta_max_1 >= $0))
+                     Filter: ((_ts_meta_min_1 <= $1) AND (_ts_meta_max_1 >= $1))
                      Rows Removed by Filter: 5
-(82 rows)
+(112 rows)
 
 -- test ordered append with limit expression
 :PREFIX
@@ -4313,29 +4885,54 @@ QUERY PLAN
  Limit (actual rows=4 loops=1)
    InitPlan 1 (returns $0)
      ->  Result (actual rows=1 loops=1)
-   ->  Sort (actual rows=4 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(25 rows)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=4 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=4 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=2 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Sort (actual rows=3 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: quicksort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(50 rows)
 
 -- test with ordered guc disabled
 SET timescaledb.enable_ordered_append TO OFF;
@@ -4346,29 +4943,54 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(23 rows)
+(48 rows)
 
 RESET timescaledb.enable_ordered_append;
 :PREFIX
@@ -4378,29 +5000,54 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(23 rows)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=3 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=3 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=2 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Sort (actual rows=2 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(48 rows)
 
 -- test with chunk append disabled
 SET timescaledb.enable_chunk_append TO OFF;
@@ -4411,29 +5058,54 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
+   ->  Merge Append (actual rows=3 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=2 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
                      ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(23 rows)
+(48 rows)
 
 RESET timescaledb.enable_chunk_append;
 :PREFIX
@@ -4443,29 +5115,54 @@ ORDER BY time
 LIMIT 3;
 QUERY PLAN
  Limit (actual rows=3 loops=1)
-   ->  Sort (actual rows=3 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: top-N heapsort 
-         ->  Append (actual rows=68370 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(23 rows)
+   ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=3 loops=1)
+         Order: metrics_space_compressed."time"
+         ->  Merge Append (actual rows=3 loops=1)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (actual rows=2 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Sort (actual rows=2 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+               ->  Sort (actual rows=1 loops=1)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     Sort Method: top-N heapsort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+         ->  Merge Append (never executed)
+               Sort Key: _hyper_X_X_chunk."time"
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+               ->  Sort (never executed)
+                     Sort Key: _hyper_X_X_chunk."time"
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
+(48 rows)
 
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result

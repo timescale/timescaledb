@@ -439,34 +439,6 @@ WHERE hypertable_id IN (SELECT id from _timescaledb_catalog.hypertable
                         WHERE table_name = 'ht_try')
 ORDER BY table_name;
 
--- TEST error try freeze/unfreeze on dist hypertable
--- Add distributed hypertables
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-\c :TEST_DBNAME :ROLE_SUPERUSER
-
-SELECT node_name, database, node_created, database_created, extension_created
-FROM (
-  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
-  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2')) v(name)
-) a;
-
-CREATE TABLE disthyper (timec timestamp, device integer);
-SELECT create_distributed_hypertable('disthyper', 'timec', 'device');
-INSERT into disthyper VALUES ('2020-01-01', 10);
-
---freeze one of the chunks
-SELECT chunk_schema || '.' ||  chunk_name as "CHNAME3"
-FROM timescaledb_information.chunks
-WHERE hypertable_name = 'disthyper'
-ORDER BY chunk_name LIMIT 1
-\gset
-
-\set ON_ERROR_STOP 0
-SELECT  _timescaledb_functions.freeze_chunk( :'CHNAME3');
-SELECT  _timescaledb_functions.unfreeze_chunk( :'CHNAME3');
-\set ON_ERROR_STOP 1
-
 -- TEST can create OSM chunk if there are constraints on the hypertable
 \c :TEST_DBNAME :ROLE_4
 CREATE TABLE measure( id integer PRIMARY KEY, mname varchar(10));
@@ -767,6 +739,3 @@ INSERT INTO osm_slice_update VALUES (1);
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db WITH (FORCE);
-DROP DATABASE :DATA_NODE_1 WITH (FORCE);
-DROP DATABASE :DATA_NODE_2 WITH (FORCE);
-

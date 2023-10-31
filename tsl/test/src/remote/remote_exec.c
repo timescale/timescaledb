@@ -164,6 +164,18 @@ extern List *hypertable_data_node_array_to_list(ArrayType *serverarr);
 Datum
 ts_remote_exec(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("executing remote command is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("executing remote command is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
+
 	ArrayType *data_nodes = PG_ARGISNULL(0) ? NULL : PG_GETARG_ARRAYTYPE_P(0);
 	char *sql = TextDatumGetCString(PG_GETARG_DATUM(1));
 	List *data_node_list;
@@ -202,6 +214,18 @@ ts_remote_exec(PG_FUNCTION_ARGS)
 Datum
 ts_remote_exec_get_result_strings(PG_FUNCTION_ARGS)
 {
+#if PG16_GE
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("getting results from remote command execution is not supported"),
+			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
+#else
+	ereport(WARNING,
+			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
+			 errmsg("getting results from remote command execution is deprecated"),
+			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
+#endif
+
 	ArrayType *data_nodes = PG_ARGISNULL(0) ? NULL : PG_GETARG_ARRAYTYPE_P(0);
 	char *sql = TextDatumGetCString(PG_GETARG_DATUM(1));
 	List *data_node_list = NIL;

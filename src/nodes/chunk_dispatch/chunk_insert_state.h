@@ -15,6 +15,7 @@
 #include "cross_module_fn.h"
 
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;
+typedef struct ChunkDispatchState ChunkDispatchState;
 
 typedef struct ChunkInsertState
 {
@@ -22,6 +23,7 @@ typedef struct ChunkInsertState
 	ResultRelInfo *result_relation_info;
 	/* Per-chunk arbiter indexes for ON CONFLICT handling */
 	List *arbiter_indexes;
+	ChunkDispatchState *cds;
 
 	/* When the tuple descriptors for the main hypertable (root) and a chunk
 	 * differs, it is necessary to convert tuples to chunk format before

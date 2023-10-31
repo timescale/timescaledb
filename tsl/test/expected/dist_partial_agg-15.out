@@ -50,6 +50,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
        node_name       |       database        | node_created | database_created | extension_created 
 -----------------------+-----------------------+--------------+------------------+-------------------
  db_dist_partial_agg_1 | db_dist_partial_agg_1 | t            | t                | t
@@ -62,6 +65,7 @@ SELECT * FROM test.remote_exec('{ db_dist_partial_agg_1, db_dist_partial_agg_2, 
 $$
        CREATE TYPE custom_type AS (high int, low int);
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_partial_agg_1]: 
        CREATE TYPE custom_type AS (high int, low int)
 NOTICE:  [db_dist_partial_agg_2]: 
@@ -84,6 +88,7 @@ ALTER DATABASE :DATA_NODE_2 SET enable_partitionwise_aggregate TO true;
 ALTER DATABASE :DATA_NODE_3 SET enable_partitionwise_aggregate TO true;
 SET ROLE :ROLE_1;
 SELECT table_name FROM create_distributed_hypertable( 'conditions', 'timec', 'location', 3, chunk_time_interval => INTERVAL '1 day');
+WARNING:  distributed hypertable is deprecated
  table_name 
 ------------
  conditions

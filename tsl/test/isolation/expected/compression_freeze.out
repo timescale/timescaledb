@@ -1,0 +1,145 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1_select_count s2_select_count_and_stats
+step s1_select_count: 
+   SELECT count(*) FROM sensor_data;
+
+count
+-----
+16850
+(1 row)
+
+step s2_select_count_and_stats: 
+   SELECT count(*) FROM sensor_data;
+   SELECT chunk_schema, chunk_name, compression_status FROM chunk_compression_stats('sensor_data') ORDER BY 1, 2, 3;
+
+count
+-----
+16850
+(1 row)
+
+chunk_schema         |chunk_name          |compression_status
+---------------------+--------------------+------------------
+_timescaledb_internal|_hyper_X_X_chunk|Uncompressed      
+_timescaledb_internal|_hyper_X_X_chunk|Uncompressed      
+(2 rows)
+
+
+starting permutation: s1_select_count s1_compress s1_select_count s2_select_count_and_stats
+step s1_select_count: 
+   SELECT count(*) FROM sensor_data;
+
+count
+-----
+16850
+(1 row)
+
+step s1_compress: 
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+
+count
+-----
+    2
+(1 row)
+
+step s1_select_count: 
+   SELECT count(*) FROM sensor_data;
+
+count
+-----
+16850
+(1 row)
+
+step s2_select_count_and_stats: 
+   SELECT count(*) FROM sensor_data;
+   SELECT chunk_schema, chunk_name, compression_status FROM chunk_compression_stats('sensor_data') ORDER BY 1, 2, 3;
+
+count
+-----
+16850
+(1 row)
+
+chunk_schema         |chunk_name          |compression_status
+---------------------+--------------------+------------------
+_timescaledb_internal|_hyper_X_X_chunk|Compressed        
+_timescaledb_internal|_hyper_X_X_chunk|Compressed        
+(2 rows)
+
+
+starting permutation: s2_lock_compression s2_select_count_and_stats s1_compress s2_select_count_and_stats s2_unlock_compression s2_select_count_and_stats
+step s2_lock_compression: 
+    SELECT debug_waitpoint_enable('compression_done_before_truncate_uncompressed');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_select_count_and_stats: 
+   SELECT count(*) FROM sensor_data;
+   SELECT chunk_schema, chunk_name, compression_status FROM chunk_compression_stats('sensor_data') ORDER BY 1, 2, 3;
+
+count
+-----
+16850
+(1 row)
+
+chunk_schema         |chunk_name          |compression_status
+---------------------+--------------------+------------------
+_timescaledb_internal|_hyper_X_X_chunk|Uncompressed      
+_timescaledb_internal|_hyper_X_X_chunk|Uncompressed      
+(2 rows)
+
+step s1_compress: 
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+ <waiting ...>
+step s2_select_count_and_stats: 
+   SELECT count(*) FROM sensor_data;
+   SELECT chunk_schema, chunk_name, compression_status FROM chunk_compression_stats('sensor_data') ORDER BY 1, 2, 3;
+
+count
+-----
+16850
+(1 row)
+
+chunk_schema         |chunk_name          |compression_status
+---------------------+--------------------+------------------
+_timescaledb_internal|_hyper_X_X_chunk|Uncompressed      
+_timescaledb_internal|_hyper_X_X_chunk|Uncompressed      
+(2 rows)
+
+step s2_unlock_compression: 
+    SELECT locktype, mode, granted, objid FROM pg_locks WHERE not granted AND (locktype = 'advisory' or relation::regclass::text LIKE '%chunk') ORDER BY relation, locktype, mode, granted;
+    SELECT debug_waitpoint_release('compression_done_before_truncate_uncompressed');
+
+locktype|mode     |granted|    objid
+--------+---------+-------+---------
+advisory|ShareLock|f      |113732026
+(1 row)
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_compress: <... completed>
+count
+-----
+    2
+(1 row)
+
+step s2_select_count_and_stats: 
+   SELECT count(*) FROM sensor_data;
+   SELECT chunk_schema, chunk_name, compression_status FROM chunk_compression_stats('sensor_data') ORDER BY 1, 2, 3;
+
+count
+-----
+16850
+(1 row)
+
+chunk_schema         |chunk_name          |compression_status
+---------------------+--------------------+------------------
+_timescaledb_internal|_hyper_X_X_chunk|Compressed        
+_timescaledb_internal|_hyper_X_X_chunk|Compressed        
+(2 rows)
+

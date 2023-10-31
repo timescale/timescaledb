@@ -14,6 +14,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
     node_name     |     database     | node_created | database_created | extension_created 
 ------------------+------------------+--------------+------------------+-------------------
  db_dist_backup_1 | db_dist_backup_1 | t            | t                | t
@@ -33,12 +36,14 @@ SELECT create_distributed_restore_point(NULL);
 -- test long restore point name (>= 64 chars)
 \set ON_ERROR_STOP 0
 SELECT create_distributed_restore_point('0123456789012345678901234567890123456789012345678901234567890123456789');
+WARNING:  creating distributed restore point is deprecated
 ERROR:  restore point name is too long
 \set ON_ERROR_STOP 1
 -- test super user check
 \set ON_ERROR_STOP 0
 SET ROLE :ROLE_1;
 SELECT create_distributed_restore_point('test');
+WARNING:  creating distributed restore point is deprecated
 ERROR:  must be superuser to create restore point
 RESET ROLE;
 \set ON_ERROR_STOP 1
@@ -46,6 +51,7 @@ RESET ROLE;
 SET timescaledb.enable_2pc = false;
 \set ON_ERROR_STOP 0
 SELECT create_distributed_restore_point('test');
+WARNING:  creating distributed restore point is deprecated
 ERROR:  two-phase commit transactions are not enabled
 \set ON_ERROR_STOP 1
 SET timescaledb.enable_2pc = true;
@@ -84,6 +90,7 @@ DROP DATABASE dist_rp_test WITH (FORCE);
 \c :DATA_NODE_1 :ROLE_CLUSTER_SUPERUSER;
 \set ON_ERROR_STOP 0
 SELECT create_distributed_restore_point('test');
+WARNING:  creating distributed restore point is deprecated
 ERROR:  distributed restore point must be created on the access node
 \set ON_ERROR_STOP 1
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
@@ -96,6 +103,11 @@ ERROR:  [db_dist_backup_x]: distributed restore point must be created on the acc
 \set ON_ERROR_STOP 1
 -- test on access node
 SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('dist_rp') ORDER BY node_name;
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
     node_name     |  node_type  | valid_lsn 
 ------------------+-------------+-----------
  db_dist_backup_1 | data_node   | t
@@ -106,6 +118,11 @@ SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn 
 
 -- restore point can be have duplicates
 SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('dist_rp') ORDER BY node_name;
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
     node_name     |  node_type  | valid_lsn 
 ------------------+-------------+-----------
  db_dist_backup_1 | data_node   | t
@@ -116,7 +133,17 @@ SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn 
 
 -- make sure each new restore point have lsn greater then previous one (access node lsn)
 SELECT restore_point as lsn_1 FROM create_distributed_restore_point('dist_rp_1') WHERE node_type = 'access_node' \gset
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
 SELECT restore_point as lsn_2 FROM create_distributed_restore_point('dist_rp_2') WHERE node_type = 'access_node' \gset
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
 SELECT pg_lsn(:'lsn_2') > pg_lsn(:'lsn_1') as valid_lsn;
  valid_lsn 
 -----------
@@ -133,6 +160,7 @@ SELECT pg_lsn(:'lsn_3') > pg_lsn(:'lsn_2') as valid_lsn;
 
 -- test create_distributed_restore_point() when one of the nodes if unavailable
 SELECT alter_data_node(:'DATA_NODE_1', available => false);
+WARNING:  altering data node is deprecated
                     alter_data_node                    
 -------------------------------------------------------
  (db_dist_backup_1,localhost,55432,db_dist_backup_1,f)
@@ -140,15 +168,22 @@ SELECT alter_data_node(:'DATA_NODE_1', available => false);
 
 \set ON_ERROR_STOP 0
 SELECT create_distributed_restore_point('test');
+WARNING:  creating distributed restore point is deprecated
 ERROR:  some data nodes are not available
 \set ON_ERROR_STOP 1
 SELECT alter_data_node(:'DATA_NODE_1', available => true);
+WARNING:  altering data node is deprecated
                     alter_data_node                    
 -------------------------------------------------------
  (db_dist_backup_1,localhost,55432,db_dist_backup_1,t)
 (1 row)
 
 SELECT node_name, node_type, pg_lsn(restore_point) > pg_lsn('0/0') as valid_lsn FROM create_distributed_restore_point('test') ORDER BY node_name;
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
+WARNING:  creating distributed restore point is deprecated
     node_name     |  node_type  | valid_lsn 
 ------------------+-------------+-----------
  db_dist_backup_1 | data_node   | t

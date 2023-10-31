@@ -4,7 +4,6 @@ include(GenerateTestSchedule)
 # so unless you have a good reason, add new test files here.
 set(TEST_FILES
     agg_partials_pushdown.sql
-    bgw_custom.sql
     bgw_security.sql
     bgw_policy.sql
     cagg_errors.sql
@@ -15,7 +14,6 @@ set(TEST_FILES
     cagg_watermark.sql
     compressed_collation.sql
     compression_create_compressed_table.sql
-    compression_bgw.sql
     compression_conflicts.sql
     compression_insert.sql
     compression_policy.sql
@@ -30,8 +28,8 @@ set(TEST_FILES
     skip_scan.sql
     size_utils_tsl.sql)
 
-if(ENABLE_MULTINODE_TESTS)
-  list(APPEND TEST_FILES dist_param.sql dist_views.sql)
+if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
+  list(APPEND TEST_FILES dist_param.sql)
 endif()
 
 if(USE_TELEMETRY)
@@ -43,6 +41,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_db_scheduler.sql
+    bgw_scheduler_control.sql
+    bgw_scheduler_restart.sql
     job_errors_permissions.sql
     troubleshooting_job_errors.sql
     bgw_db_scheduler_fixed.sql
@@ -70,11 +70,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
     cagg_policy_run.sql
-    data_fetcher.sql
-    data_node_bootstrap.sql
-    data_node.sql
     ddl_hook.sql
-    debug_notice.sql
     decompress_vector_qual.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
@@ -88,23 +84,26 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     transparent_decompression_join_index.sql
     feature_flags.sql)
 
-  if(ENABLE_MULTINODE_TESTS)
+  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
     list(
       APPEND
       TEST_FILES
       cagg_bgw_dist_ht.sql
+      cagg_ddl_dist_ht.sql
       cagg_migrate_dist_ht.sql
       cagg_on_cagg_dist_ht.sql
       cagg_on_cagg_joins_dist_ht.sql
+      data_fetcher.sql
+      data_node_bootstrap.sql
+      data_node.sql
+      debug_notice.sql
       dist_api_calls.sql
       dist_commands.sql
-      dist_compression.sql
       dist_copy_available_dns.sql
       dist_copy_format_long.sql
       dist_copy_long.sql
       dist_ddl.sql
       dist_cagg.sql
-      dist_move_chunk.sql
       dist_policy.sql
       dist_util.sql
       dist_triggers.sql
@@ -135,6 +134,10 @@ endif()
 set(SOLO_TESTS
     # dist_hypertable needs a lot of memory when the Sanitizer is active
     dist_hypertable-${PG_VERSION_MAJOR}
+    # This interferes with other tests since it reloads the config to increase
+    # log level.
+    bgw_scheduler_control
+    bgw_scheduler_restart
     bgw_db_scheduler
     job_errors_permissions
     troubleshooting_job_errors
@@ -144,11 +147,8 @@ set(SOLO_TESTS
     compress_bgw_reorder_drop_chunks
     compression_ddl
     cagg_bgw
-    cagg_bgw_dist_ht
-    cagg_ddl
-    cagg_ddl_dist_ht
+    cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    data_fetcher
     dist_util
     move
     remote_connection_cache
@@ -159,11 +159,19 @@ set(SOLO_TESTS
     telemetry_stats-${PG_VERSION_MAJOR})
 # In PG versions 15.0 to 15.2, dist_move_chunk can cause a deadlock when run in
 # parallel with other tests as mentioned in #4972.
-if(${PG_VERSION_MAJOR} EQUAL "15" AND ${PG_VERSION_MINOR} LESS "3")
+if(ENABLE_MULTINODE_TESTS
+   AND ${PG_VERSION_MAJOR} EQUAL "15"
+   AND ${PG_VERSION_MINOR} LESS "3")
   list(APPEND SOLO_TESTS dist_move_chunk)
 endif()
 
+if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
+  list(APPEND SOLO_TESTS cagg_bgw_dist_ht data_fetcher)
+endif()
+
 set(TEST_TEMPLATES
+    bgw_custom.sql.in
+    compression_bgw.sql.in
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
@@ -190,23 +198,28 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     continuous_aggs.sql.in
     continuous_aggs_deprecated.sql.in
     deparse.sql.in)
-  if(ENABLE_MULTINODE_TESTS)
+  if(USE_TELEMETRY)
+    list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
+  endif()
+  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
     list(
       APPEND
       TEST_TEMPLATES
-      cagg_ddl_dist_ht.sql.in
       cagg_invalidation_dist_ht.sql.in
       dist_hypertable.sql.in
       dist_grant.sql.in
       dist_ref_table_join.sql.in
       dist_remote_error.sql.in
       dist_partial_agg.sql.in
-      dist_query.sql.in)
-  endif()
-  if(USE_TELEMETRY)
-    list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
+      dist_query.sql.in
+      dist_compression.sql.in
+      dist_move_chunk.sql.in)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
+
+if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
+  list(APPEND TEST_TEMPLATES dist_views.sql.in)
+endif()
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

@@ -64,12 +64,10 @@ jobs:
             pg: 15
             builder: ${{ fromJson(needs.config.outputs.pg15_latest) }}
             tester: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
-            ignores: partialize_finalize
           - test: 15forward
             pg: 15
             builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
             tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}
-            ignores: partialize_finalize
 
     steps:
 
