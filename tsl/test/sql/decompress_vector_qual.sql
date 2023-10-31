@@ -87,3 +87,19 @@ select count(*) from vectorqual where metric4 > 4;
 set timescaledb.debug_require_vector_qual to 'only';
 select count(*) from vectorqual where metric4 is null;
 \set ON_ERROR_STOP 1
+
+
+-- Date columns
+create table date_table(ts date);
+select create_hypertable('date_table', 'ts');
+alter table date_table set (timescaledb.compress);
+insert into date_table values ('2021-01-01'), ('2021-01-02'),
+    ('2021-01-03');
+select count(compress_chunk(x, true)) from show_chunks('date_table') x;
+
+set timescaledb.debug_require_vector_qual to 'only';
+select * from date_table where ts >  '2021-01-02';
+select * from date_table where ts >= '2021-01-02';
+select * from date_table where ts =  '2021-01-02';
+select * from date_table where ts <= '2021-01-02';
+select * from date_table where ts <  '2021-01-02';
