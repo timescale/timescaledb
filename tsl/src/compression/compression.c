@@ -2483,6 +2483,16 @@ llvm_fuzz_target_deltadelta_int64(const uint8_t *Data, size_t Size)
 {
 	return llvm_fuzz_target_generic(decompress_deltadelta_int64, Data, Size);
 }
+static int
+llvm_fuzz_target_array_text(const uint8_t *Data, size_t Size)
+{
+	return llvm_fuzz_target_generic(decompress_array_text, Data, Size);
+}
+static int
+llvm_fuzz_target_dictionary_text(const uint8_t *Data, size_t Size)
+{
+	return llvm_fuzz_target_generic(decompress_dictionary_text, Data, Size);
+}
 
 /*
  * libfuzzer fuzzing driver that we import from LLVM libraries. It will run our
@@ -2536,6 +2546,14 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA && type == INT8OID)
 	{
 		target = llvm_fuzz_target_deltadelta_int64;
+	}
+	else if (algo == COMPRESSION_ALGORITHM_ARRAY && type == TEXTOID)
+	{
+		target = llvm_fuzz_target_array_text;
+	}
+	else if (algo == COMPRESSION_ALGORITHM_DICTIONARY && type == TEXTOID)
+	{
+		target = llvm_fuzz_target_dictionary_text;
 	}
 	else
 	{

@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [ { algo: gorilla, type: float8 }, { algo: deltadelta, type: int8 } ]
+        case: [ { algo: gorilla, type: float8 }, { algo: deltadelta, type: int8 },
+            { algo: array, type: text }, { algo: dictionary, type: text } ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.type }}
     runs-on: ubuntu-22.04
