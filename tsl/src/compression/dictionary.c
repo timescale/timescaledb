@@ -708,7 +708,7 @@ dictionary_compressed_send(CompressedDataHeader *header, StringInfo buffer)
 Datum
 dictionary_compressed_recv(StringInfo buffer)
 {
-	DictionaryCompressorSerializationInfo data = { 0 };
+	DictionaryCompressorSerializationInfo info = { 0 };
 	uint8 has_nulls;
 	Oid element_type;
 
@@ -716,27 +716,30 @@ dictionary_compressed_recv(StringInfo buffer)
 	CheckCompressedData(has_nulls == 0 || has_nulls == 1);
 
 	element_type = binary_string_get_type(buffer);
-	data.dictionary_compressed_indexes = simple8brle_serialized_recv(buffer);
-	data.bitmaps_size = simple8brle_serialized_total_size(data.dictionary_compressed_indexes);
-	data.total_size = MAXALIGN(sizeof(DictionaryCompressed)) + data.bitmaps_size;
+	info.dictionary_compressed_indexes = simple8brle_serialized_recv(buffer);
+	info.bitmaps_size = simple8brle_serialized_total_size(info.dictionary_compressed_indexes);
+	info.total_size = MAXALIGN(sizeof(DictionaryCompressed)) + info.bitmaps_size;
 
 	if (has_nulls)
 	{
-		data.compressed_nulls = simple8brle_serialized_recv(buffer);
-		data.nulls_size = simple8brle_serialized_total_size(data.compressed_nulls);
-		data.total_size += data.nulls_size;
+		info.compressed_nulls = simple8brle_serialized_recv(buffer);
+		info.nulls_size = simple8brle_serialized_total_size(info.compressed_nulls);
+		info.total_size += info.nulls_size;
 	}
 
-	data.dictionary_serialization_info = array_compressed_data_recv(buffer, element_type);
-	data.dictionary_size = array_compression_serialization_size(data.dictionary_serialization_info);
-	data.total_size += data.dictionary_size;
-	data.num_distinct =
-		array_compression_serialization_num_elements(data.dictionary_serialization_info);
+	info.dictionary_serialization_info = array_compressed_data_recv(buffer, element_type);
 
-	if (!AllocSizeIsValid(data.total_size))
+	CheckCompressedData(info.dictionary_serialization_info != NULL);
+
+	info.dictionary_size = array_compression_serialization_size(info.dictionary_serialization_info);
+	info.total_size += info.dictionary_size;
+	info.num_distinct =
+		array_compression_serialization_num_elements(info.dictionary_serialization_info);
+
+	if (!AllocSizeIsValid(info.total_size))
 		ereport(ERROR,
 				(errcode(ERRCODE_PROGRAM_LIMIT_EXCEEDED),
 				 errmsg("compressed size exceeds the maximum allowed (%d)", (int) MaxAllocSize)));
 
-	return PointerGetDatum(dictionary_compressed_from_serialization_info(data, element_type));
+	return PointerGetDatum(dictionary_compressed_from_serialization_info(info, element_type));
 }
