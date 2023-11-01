@@ -97,9 +97,12 @@ typedef struct DecompressChunkState
 	/*
 	 * For some predicates, we have more efficient implementation that work on
 	 * the entire compressed batch in one go. They go to this list, and the rest
-	 * goes into the usual ss.ps.qual.
+	 * goes into the usual ss.ps.qual. Note that we constify stable functions
+	 * in these predicates at execution time, but have to keep the original
+	 * version for EXPLAIN.
 	 */
-	List *vectorized_quals;
+	List *vectorized_quals_original;
+	List *vectorized_quals_constified;
 
 	/*
 	 * Make non-refcounted copies of the tupdesc for reuse across all batch states
