@@ -9,6 +9,12 @@ NOTICE:  adding not-null constraint to column "time"
  (1,public,readings,t)
 (1 row)
 
+SELECT setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
 INSERT INTO readings (time, location, device, temp, humidity)
 SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
 FROM generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
@@ -25,6 +31,39 @@ SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk
 -- We do some basic checks that the compressed data is the same as the
 -- uncompressed. In this case, we just count the rows for each device.
 SELECT device, count(*) INTO orig FROM readings GROUP BY device;
+-- Initially an index on time
+SELECT * FROM test.show_indexes(:'chunk');
+                          Index                           | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+----------------------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk_readings_time_idx | {time}  |      | f      | f       | f         | 
+(1 row)
+
+EXPLAIN (verbose, costs off)
+SELECT count(*) FROM :chunk
+WHERE time = '2022-06-01'::timestamptz;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: count(*)
+   ->  Index Only Scan using _hyper_1_1_chunk_readings_time_idx on _timescaledb_internal._hyper_1_1_chunk
+         Output: "time"
+         Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:00:00 2022 PDT'::timestamp with time zone)
+(5 rows)
+
+SELECT count(*) FROM :chunk
+WHERE time = '2022-06-01'::timestamptz;
+ count 
+-------
+     1
+(1 row)
+
+SELECT count(*) FROM :chunk
+WHERE location = 1;
+ count 
+-------
+  1211
+(1 row)
+
 -- We should be able to set the table access method for a chunk, which
 -- will automatically compress the chunk.
 ALTER TABLE :chunk SET ACCESS METHOD tscompression;
@@ -42,6 +81,57 @@ SELECT device FROM orig JOIN comp USING (device) WHERE orig.count != comp.count;
  device 
 --------
 (0 rows)
+
+EXPLAIN (verbose, costs off)
+SELECT count(*) FROM :chunk
+WHERE time = '2022-06-01'::timestamptz;
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: count(*)
+   ->  Index Only Scan using _hyper_1_1_chunk_readings_time_idx on _timescaledb_internal._hyper_1_1_chunk
+         Output: "time"
+         Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:00:00 2022 PDT'::timestamp with time zone)
+(5 rows)
+
+SELECT count(*) FROM :chunk
+WHERE time = '2022-06-01'::timestamptz;
+ count 
+-------
+     1
+(1 row)
+
+-- Create a new index on a compressed column
+CREATE INDEX ON readings (location);
+-- Index added on location
+SELECT * FROM test.show_indexes(:'chunk');
+                            Index                             |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
+--------------------------------------------------------------+------------+------+--------+---------+-----------+------------
+ _timescaledb_internal._hyper_1_1_chunk_readings_location_idx | {location} |      | f      | f       | f         | 
+ _timescaledb_internal._hyper_1_1_chunk_readings_time_idx     | {time}     |      | f      | f       | f         | 
+(2 rows)
+
+-- Query by location should be an index scan
+EXPLAIN (verbose, costs off)
+SELECT count(*) FROM :chunk
+WHERE location = 1;
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
+ Aggregate
+   Output: count(*)
+   ->  Index Only Scan using _hyper_1_1_chunk_readings_location_idx on _timescaledb_internal._hyper_1_1_chunk
+         Output: location
+         Index Cond: (_hyper_1_1_chunk.location = 1)
+(5 rows)
+
+-- Count by location should be the same as non-index scan before
+-- compression above
+SELECT count(*) FROM :chunk
+WHERE location = 1;
+ count 
+-------
+  1211
+(1 row)
 
 -- We should be able to change it back to heap.
 ALTER TABLE :chunk SET ACCESS METHOD heap;
