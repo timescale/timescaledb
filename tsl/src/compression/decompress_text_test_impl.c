@@ -25,6 +25,65 @@ arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str, size_t *len)
 	arrow_get_str(arrow->dictionary, dict_row, str, len);
 }
 
+static void
+decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, DecompressResult *results, int n)
+{
+	/* Check that both ways of decompression match. */
+	if (n != arrow->length)
+	{
+		ereport(errorlevel,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("the bulk decompression result does not match"),
+				 errdetail("Expected %d elements, got %d.", n, (int) arrow->length)));
+	}
+
+	for (int i = 0; i < n; i++)
+	{
+		const bool arrow_isnull = !arrow_row_is_valid(arrow->buffers[0], i);
+		if (arrow_isnull != results[i].is_null)
+		{
+			ereport(errorlevel,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("the bulk decompression result does not match"),
+					 errdetail("Expected null %d, got %d at row %d.",
+							   results[i].is_null,
+							   arrow_isnull,
+							   i)));
+		}
+
+		if (!results[i].is_null)
+		{
+			const char *arrow_cstring;
+			size_t arrow_len;
+			arrow_get_str(arrow, i, &arrow_cstring, &arrow_len);
+
+			const Datum rowbyrow_varlena = results[i].val;
+			const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(rowbyrow_varlena);
+			const char *rowbyrow_cstring = VARDATA_ANY(rowbyrow_varlena);
+
+			//				fprintf(stderr, "arrow: '%.*s'(%ld), rbr: '%.*s'(%ld)\n",
+			//					(int) arrow_len, arrow_cstring, arrow_len,
+			//					(int) rowbyrow_len, rowbyrow_cstring, rowbyrow_len);
+
+			if (rowbyrow_len != arrow_len)
+			{
+				ereport(errorlevel,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("the bulk decompression result does not match"),
+						 errdetail("At row %d\n", i)));
+			}
+
+			if (strncmp(arrow_cstring, rowbyrow_cstring, rowbyrow_len))
+			{
+				ereport(errorlevel,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("the bulk decompression result does not match"),
+						 errdetail("At row %d\n", i)));
+			}
+		}
+	}
+}
+
 /*
  * Try to decompress the given compressed data. Used for fuzzing and for checking
  * the examples found by fuzzing. For fuzzing we do less checks to keep it
@@ -32,7 +91,7 @@ arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str, size_t *len)
  * for arithmetic types.
  */
 static int
-decompress_generic_text(const uint8 *Data, size_t Size, bool extra_checks, int requested_algo)
+decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType test_type, int requested_algo)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -52,26 +111,25 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool extra_checks, int r
 
 	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
 
-	if (!extra_checks)
+	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, TEXTOID);
+
+	if (test_type == DTT_Fuzzing)
 	{
 		/*
 		 * For routine fuzzing, we only run bulk decompression to make it faster
 		 * and the coverage space smaller.
 		 */
-		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, TEXTOID);
 		decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
 		return 0;
 	}
 
-	/*
-	 * Test bulk decompression. This might hide some errors in the row-by-row
-	 * decompression, but testing both is significantly more complicated, and
-	 * the row-by-row is old and stable.
-	 */
-	ArrowArray *arrow = NULL;
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, TEXTOID);
-	if (decompress_all)
+	ArrowArray * arrow = NULL;
+	if (test_type == DTT_Bulk)
 	{
+		/*
+		 * Check that the arrow decompression works. Have to do this before the
+		 * row-by-row decompression so that it doesn't hide the possible errors.
+		 */
 		arrow = decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
 	}
 
@@ -92,68 +150,26 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool extra_checks, int r
 		results[n++] = r;
 	}
 
-	/* Check that both ways of decompression match. */
-	if (arrow)
+	if (test_type == DTT_Bulk)
 	{
-		if (n != arrow->length)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
-					 errmsg("the bulk decompression result does not match"),
-					 errdetail("Expected %d elements, got %d.", n, (int) arrow->length)));
-		}
-
-		for (int i = 0; i < n; i++)
-		{
-			const bool arrow_isnull = !arrow_row_is_valid(arrow->buffers[0], i);
-			if (arrow_isnull != results[i].is_null)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
-						 errmsg("the bulk decompression result does not match"),
-						 errdetail("Expected null %d, got %d at row %d.",
-								   results[i].is_null,
-								   arrow_isnull,
-								   i)));
-			}
-
-			if (!results[i].is_null)
-			{
-				const char *arrow_cstring;
-				size_t arrow_len;
-				arrow_get_str(arrow, i, &arrow_cstring, &arrow_len);
-
-				const Datum rowbyrow_varlena = results[i].val;
-				const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(rowbyrow_varlena);
-				const char *rowbyrow_cstring = VARDATA_ANY(rowbyrow_varlena);
-
-				//				fprintf(stderr, "arrow: '%.*s'(%ld), rbr: '%.*s'(%ld)\n",
-				//					(int) arrow_len, arrow_cstring, arrow_len,
-				//					(int) rowbyrow_len, rowbyrow_cstring, rowbyrow_len);
-
-				if (rowbyrow_len != arrow_len)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_INTERNAL_ERROR),
-							 errmsg("the bulk decompression result does not match"),
-							 errdetail("At row %d\n", i)));
-				}
-
-				if (strncmp(arrow_cstring, rowbyrow_cstring, rowbyrow_len))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_INTERNAL_ERROR),
-							 errmsg("the bulk decompression result does not match"),
-							 errdetail("At row %d\n", i)));
-				}
-			}
-		}
+		/*
+		 * Check that the arrow decompression result matches.
+		 */
+		decompress_generic_text_check_arrow(arrow, ERROR, results, n);
+		return n;
 	}
 
 	/*
-	 * Check that the result is still the same after we compress and decompress
-	 * back.
-	 *
+	 * For row-by-row decompression, check that the result is still the same
+	 * after we compress and decompress back.
+	 * Don't perform this check for other types of tests.
+	 */
+	if (test_type != DTT_RowByRow)
+	{
+		return n;
+	}
+
+	 /*
 	 * 1) Compress.
 	 */
 	Compressor *compressor = definitions[data_algo].compressor_for_type(TEXTOID);
@@ -219,17 +235,24 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool extra_checks, int r
 		}
 	}
 
+	/*
+	 * 3) The bulk decompression must absolutely work on the correct compressed
+	 * data we've just generated.
+	 */
+	arrow = decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
+	decompress_generic_text_check_arrow(arrow, PANIC, results, n);
+
 	return n;
 }
 
 static int
-decompress_array_text(const uint8 *Data, size_t Size, bool extra_checks)
+decompress_array_text(const uint8 *Data, size_t Size, DecompressionTestType test_type)
 {
-	return decompress_generic_text(Data, Size, extra_checks, COMPRESSION_ALGORITHM_ARRAY);
+	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_ARRAY);
 }
 
 static int
-decompress_dictionary_text(const uint8 *Data, size_t Size, bool extra_checks)
+decompress_dictionary_text(const uint8 *Data, size_t Size, DecompressionTestType test_type)
 {
-	return decompress_generic_text(Data, Size, extra_checks, COMPRESSION_ALGORITHM_DICTIONARY);
+	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_DICTIONARY);
 }

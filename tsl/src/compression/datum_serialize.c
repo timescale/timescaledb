@@ -20,6 +20,8 @@
 #include "datum_serialize.h"
 #include "compat/compat.h"
 
+#include "compression.h"
+
 typedef struct DatumSerializer
 {
 	Oid type_oid;
@@ -305,6 +307,8 @@ bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 
 	*ptr =
 		(Pointer) att_align_pointer(*ptr, deserializer->type_align, deserializer->type_len, *ptr);
+//	CheckCompressedData(!VARATT_IS_EXTERNAL(*ptr));
+//	CheckCompressedData(!VARATT_IS_COMPRESSED(*ptr));
 	res = fetch_att(*ptr, deserializer->type_by_val, deserializer->type_len);
 	*ptr = att_addlength_pointer(*ptr, deserializer->type_len, *ptr);
 	return res;

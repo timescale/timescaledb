@@ -4,11 +4,67 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#define FUNCTION_NAME_HELPER(X, Y) decompress_##X##_##Y
-#define FUNCTION_NAME(X, Y) FUNCTION_NAME_HELPER(X, Y)
+#define FUNCTION_NAME_HELPER3(X, Y, Z) X##_##Y##_##Z
+#define FUNCTION_NAME3(X, Y, Z) FUNCTION_NAME_HELPER3(X, Y, Z)
+#define FUNCTION_NAME_HELPER2(X, Y) X##_##Y
+#define FUNCTION_NAME2(X, Y) FUNCTION_NAME_HELPER2(X, Y)
 
 #define TOSTRING_HELPER(x) #x
 #define TOSTRING(x) TOSTRING_HELPER(x)
+
+
+static void
+FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, DecompressResult *results, int n)
+{
+	if (n != arrow->length)
+	{
+		ereport(error_type,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("the bulk decompression result does not match"),
+				 errdetail("Expected %d elements, got %d.", n, (int) arrow->length)));
+	}
+
+	for (int i = 0; i < n; i++)
+	{
+		const bool arrow_isnull = !arrow_row_is_valid(arrow->buffers[0], i);
+		if (arrow_isnull != results[i].is_null)
+		{
+			ereport(error_type,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("the bulk decompression result does not match"),
+					 errdetail("Expected null %d, got %d at row %d.",
+							   results[i].is_null,
+							   arrow_isnull,
+							   i)));
+		}
+
+		if (!results[i].is_null)
+		{
+			const CTYPE arrow_value = ((CTYPE *) arrow->buffers[1])[i];
+			const CTYPE rowbyrow_value = DATUM_TO_CTYPE(results[i].val);
+
+			/*
+				 * Floats can also be NaN/infinite and the comparison doesn't
+				 * work in that case.
+				 */
+			if (isfinite((double) arrow_value) != isfinite((double) rowbyrow_value))
+			{
+				ereport(error_type,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("the bulk decompression result does not match"),
+						 errdetail("At row %d\n", i)));
+			}
+
+			if (isfinite((double) arrow_value) && arrow_value != rowbyrow_value)
+			{
+				ereport(error_type,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("the bulk decompression result does not match"),
+						 errdetail("At row %d\n", i)));
+			}
+		}
+	}
+}
 
 /*
  * Try to decompress the given compressed data. Used for fuzzing and for checking
@@ -17,7 +73,7 @@
  * for arithmetic types.
  */
 static int
-FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
+FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size, DecompressionTestType test_type)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -37,26 +93,25 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 
 	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
 
-	if (!extra_checks)
+	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
+
+	if (test_type == DTT_Fuzzing)
 	{
 		/*
 		 * For routine fuzzing, we only run bulk decompression to make it faster
 		 * and the coverage space smaller.
 		 */
-		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
 		decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
 		return 0;
 	}
 
-	/*
-	 * Test bulk decompression. This might hide some errors in the row-by-row
-	 * decompression, but testing both is significantly more complicated, and
-	 * the row-by-row is old and stable.
-	 */
 	ArrowArray *arrow = NULL;
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
-	if (decompress_all)
+	if (test_type == DTT_Bulk)
 	{
+		/*
+		 * Test bulk decompression. Have to do this before row-by-row decompression
+		 * so that the latter doesn't hide the errors.
+		 */
 		arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
 	}
 
@@ -77,61 +132,15 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 	}
 
 	/* Check that both ways of decompression match. */
-	if (arrow)
+	if (test_type == DTT_Bulk)
 	{
-		if (n != arrow->length)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INTERNAL_ERROR),
-					 errmsg("the bulk decompression result does not match"),
-					 errdetail("Expected %d elements, got %d.", n, (int) arrow->length)));
-		}
-
-		for (int i = 0; i < n; i++)
-		{
-			const bool arrow_isnull = !arrow_row_is_valid(arrow->buffers[0], i);
-			if (arrow_isnull != results[i].is_null)
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INTERNAL_ERROR),
-						 errmsg("the bulk decompression result does not match"),
-						 errdetail("Expected null %d, got %d at row %d.",
-								   results[i].is_null,
-								   arrow_isnull,
-								   i)));
-			}
-
-			if (!results[i].is_null)
-			{
-				const CTYPE arrow_value = ((CTYPE *) arrow->buffers[1])[i];
-				const CTYPE rowbyrow_value = DATUM_TO_CTYPE(results[i].val);
-
-				/*
-				 * Floats can also be NaN/infinite and the comparison doesn't
-				 * work in that case.
-				 */
-				if (isfinite((double) arrow_value) != isfinite((double) rowbyrow_value))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_INTERNAL_ERROR),
-							 errmsg("the bulk decompression result does not match"),
-							 errdetail("At row %d\n", i)));
-				}
-
-				if (isfinite((double) arrow_value) && arrow_value != rowbyrow_value)
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_INTERNAL_ERROR),
-							 errmsg("the bulk decompression result does not match"),
-							 errdetail("At row %d\n", i)));
-				}
-			}
-		}
+		FUNCTION_NAME2(check_arrow, CTYPE)(arrow, ERROR, results, n);
+		return n;
 	}
 
 	/*
-	 * Check that the result is still the same after we compress and decompress
-	 * back.
+	 * For row-by-row decompression, check that the result is still the same
+	 * after we compress and decompress back.
 	 *
 	 * 1) Compress.
 	 */
@@ -195,11 +204,20 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 		}
 	}
 
+	/*
+	 * 3) The bulk decompression must absolutely work on the correct compressed
+	 * data we've just generated.
+	 */
+	arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
+	FUNCTION_NAME2(check_arrow, CTYPE)(arrow, PANIC, results, n);
+
 	return n;
 }
 
 #undef TOSTRING
 #undef TOSTRING_HELPER
 
-#undef FUNCTION_NAME
-#undef FUNCTION_NAME_HELPER
+#undef FUNCTION_NAME3
+#undef FUNCTION_NAME_HELPER3
+#undef FUNCTION_NAME2
+#undef FUNCTION_NAME_HELPER2

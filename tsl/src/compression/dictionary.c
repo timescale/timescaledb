@@ -562,7 +562,7 @@ dictionary_decompression_iterator_try_next_forward(DecompressionIterator *iter_b
 			.is_done = true,
 		};
 
-	Assert(result.val < iter->compressed->num_distinct);
+	CheckCompressedData(result.val < iter->compressed->num_distinct);
 	return (DecompressResult){
 		.val = iter->values[result.val],
 		.is_null = false,

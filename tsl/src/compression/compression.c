@@ -2198,6 +2198,8 @@ get_compression_algorithm(char *name)
 	return _INVALID_COMPRESSION_ALGORITHM;
 }
 
+typedef enum { DTT_Fuzzing, DTT_RowByRow, DTT_Bulk } DecompressionTestType;
+
 #define ALGO gorilla
 #define CTYPE float8
 #define PGTYPE FLOAT8OID
@@ -2221,7 +2223,7 @@ get_compression_algorithm(char *name)
 #include "decompress_text_test_impl.c"
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size,
-													bool extra_checks)
+													DecompressionTestType test_type)
 {
 	if (algo == COMPRESSION_ALGORITHM_GORILLA && type == FLOAT8OID)
 	{
@@ -2254,7 +2256,7 @@ static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Si
  * if we error out later.
  */
 static void
-read_compressed_data_file_impl(int algo, Oid type, const char *path, volatile int *bytes, int *rows)
+read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, volatile int *bytes, int *rows)
 {
 	FILE *f = fopen(path, "r");
 
@@ -2292,7 +2294,7 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, volatile in
 
 	string[fsize] = 0;
 
-	*rows = get_decompress_fn(algo, type)((const uint8 *) string, fsize, /* extra_checks = */ true);
+	*rows = get_decompress_fn(algo, type)((const uint8 *) string, fsize, /* test_type = */ bulk ? DTT_Bulk : DTT_RowByRow);
 }
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
@@ -2306,6 +2308,7 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 	read_compressed_data_file_impl(get_compression_algorithm(PG_GETARG_CSTRING(0)),
 								   PG_GETARG_OID(1),
 								   PG_GETARG_CSTRING(2),
+								   PG_GETARG_BOOL(3),
 								   &bytes,
 								   &rows);
 	PG_RETURN_INT32(rows);
@@ -2407,7 +2410,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 		volatile int bytes = 0;
 		PG_TRY();
 		{
-			read_compressed_data_file_impl(algo, PG_GETARG_OID(1), path, &bytes, &rows);
+			read_compressed_data_file_impl(algo, PG_GETARG_OID(1), path, PG_GETARG_BOOL(3), &bytes, &rows);
 			values[out_rows] = Int32GetDatum(rows);
 			nulls[out_rows] = false;
 		}
@@ -2453,7 +2456,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
  * has to catch the postgres exceptions normally produced for corrupt data.
  */
 static int
-llvm_fuzz_target_generic(int (*target)(const uint8_t *Data, size_t Size, bool extra_checks),
+llvm_fuzz_target_generic(int (*target)(const uint8_t *Data, size_t Size, DecompressionTestType test_type),
 						 const uint8_t *Data, size_t Size)
 {
 	MemoryContextReset(CurrentMemoryContext);
@@ -2461,7 +2464,7 @@ llvm_fuzz_target_generic(int (*target)(const uint8_t *Data, size_t Size, bool ex
 	PG_TRY();
 	{
 		CHECK_FOR_INTERRUPTS();
-		target(Data, Size, /* extra_checks = */ false);
+		target(Data, Size, /* test_type = */ DTT_Fuzzing);
 	}
 	PG_CATCH();
 	{
