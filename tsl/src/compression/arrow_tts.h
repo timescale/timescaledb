@@ -12,6 +12,7 @@
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
 #include <utils/builtins.h>
+#include <utils/palloc.h>
 
 #include "arrow_c_data_interface.h"
 #include "compression/create.h"
@@ -19,16 +20,45 @@
 
 #include <limits.h>
 
+/*
+ * An Arrow tuple slot is a meta-slot representing a compressed and columnar
+ * relation that stores data in two separate child relations: one for
+ * non-compressed data and one for compressed data.
+ *
+ * The Arrow tuple slot also gives an abstraction for vectorized data in arrow
+ * format (in case of compressed reads), where value-by-value reads of
+ * compressed data simply reads from the same compressed child slot until it
+ * is completely consumed. Thus, when consuming a compressed child tuple, the
+ * child is decompressed on the first read, while subsequent reads of values
+ * in the same compressed tuple just increments the index into the
+ * decompressed arrow array.
+ *
+ * Since an Arrow slot contains a reference to the whole decompressed arrow
+ * array, it is possible to consume all the Arrow slot's values (rows) in one
+ * vectorized read.
+ *
+ * To enable the abstraction of a single slot and relation, two child slots
+ * are needed that match the expected slot type (BufferHeapTupletableslot) and
+ * tuple descriptor of the corresponding child relations.
+ *
+ */
 typedef struct ArrowTupleTableSlot
 {
 	VirtualTupleTableSlot base;
+	/* child slot: points to either noncompressed_slot or compressed_slot,
+	 * depending on which slot is currently the "active" child */
 	TupleTableSlot *child_slot;
+	/* non-compressed slot: used when reading from the non-compressed child relation */
+	TupleTableSlot *noncompressed_slot;
+	/* compressed slot: used when reading from the compressed child relation */
+	TupleTableSlot *compressed_slot;
 	TupleDesc compressed_tupdesc;
 	ArrowArray **arrow_columns;
 	uint16 tuple_index; /* Index of this particular tuple in the compressed
 						 * (columnar data) child tuple. Note that the first
 						 * value has index 1. If the index is 0 it means the
 						 * child slot points to a non-compressed tuple. */
+	MemoryContext arrowdata_mcxt;
 	MemoryContext decompression_mcxt;
 	Bitmapset *segmentby_columns;
 	int16 *attrs_offset_map;
@@ -92,9 +122,8 @@ build_attribute_offset_map(const TupleDesc tupdesc, const TupleDesc ctupdesc,
 
 	return attrs_offset_map;
 }
-extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, TupleTableSlot *child_slot,
-										   uint16 tuple_index);
-extern TupleTableSlot *ExecStoreArrowTupleExisting(TupleTableSlot *slot, uint16 tuple_index);
+
+extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_index);
 
 #define TTS_IS_ARROWTUPLE(slot) ((slot)->tts_ops == &TTSOpsArrowTuple)
 
@@ -169,6 +198,39 @@ static inline bool
 is_compressed_tid(ItemPointer itemptr)
 {
 	return (ItemPointerGetBlockNumber(itemptr) & COMPRESSED_FLAG) != 0;
+}
+
+static inline TupleTableSlot *
+arrow_slot_get_compressed_slot(TupleTableSlot *slot, const TupleDesc tupdesc)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	if (NULL == aslot->compressed_slot)
+	{
+		MemoryContext oldmctx;
+
+		if (NULL == tupdesc)
+			elog(ERROR, "cannot make compressed table slot without tuple descriptor");
+
+		oldmctx = MemoryContextSwitchTo(slot->tts_mcxt);
+		aslot->compressed_slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsBufferHeapTuple);
+		MemoryContextSwitchTo(oldmctx);
+	}
+
+	return aslot->compressed_slot;
+}
+
+static inline TupleTableSlot *
+arrow_slot_get_noncompressed_slot(TupleTableSlot *slot)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	Assert(aslot->noncompressed_slot);
+
+	return aslot->noncompressed_slot;
 }
 
 #endif /* PG_ARROW_TUPTABLE_H */
