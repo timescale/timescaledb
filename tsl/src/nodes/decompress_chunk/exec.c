@@ -623,7 +623,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			ArrowArray *arrow = NULL;
 
 			DecompressAllFunction decompress_all =
-				tsl_get_decompress_all_function(header->compression_algorithm);
+				tsl_get_decompress_all_function(header->compression_algorithm, column_description->typid);
 			Assert(decompress_all != NULL);
 
 			MemoryContext context_before_decompression =

@@ -123,7 +123,7 @@ is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
 		if (ci->segmentby_column_index > 0)
 			continue;
 
-		bool bulk_decompression_possible = (tsl_get_decompress_all_function(ci->algo_id) != NULL);
+		bool bulk_decompression_possible = (tsl_get_decompress_all_function(ci->algo_id, var->vartype) != NULL);
 
 		if (!bulk_decompression_possible)
 			return false;
