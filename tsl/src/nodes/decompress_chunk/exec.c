@@ -11,6 +11,7 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/datum.h>
@@ -160,7 +161,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
-	chunk_state->vectorized_quals = linitial(cscan->custom_exprs);
+	chunk_state->vectorized_quals_original = linitial(cscan->custom_exprs);
 
 	return (Node *) chunk_state;
 }
@@ -475,6 +476,51 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		elog(ERROR, "debug: batch sorted merge is required but not used");
 	}
+
+	/* Constify stable expressions in vectorized predicates. */
+	chunk_state->have_constant_false_vectorized_qual = false;
+	PlannerGlobal glob = {
+		.boundParams = node->ss.ps.state->es_param_list_info,
+	};
+	PlannerInfo root = {
+		.glob = &glob,
+	};
+	ListCell *lc;
+	foreach (lc, chunk_state->vectorized_quals_original)
+	{
+		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
+
+		/*
+		 * Note that some expressions are evaluated to a null Const, like a
+		 * strict comparison with stable expression that evaluates to null. If
+		 * we have such filter, no rows can pass, so we set a special flag to
+		 * return early.
+		 */
+		if (IsA(constified, Const))
+		{
+			Const *c = castNode(Const, constified);
+			if (c->constisnull || !DatumGetBool(c))
+			{
+				chunk_state->have_constant_false_vectorized_qual = true;
+				break;
+			}
+			else
+			{
+				/*
+				 * This is a constant true qual, every row passes and we can
+				 * just ignore it. No idea how it can happen though.
+				 */
+				Assert(false);
+				continue;
+			}
+		}
+
+		OpExpr *opexpr = castNode(OpExpr, constified);
+		Ensure(IsA(lsecond(opexpr->args), Const),
+			   "failed to evaluate runtime constant in vectorized filter");
+		chunk_state->vectorized_quals_constified =
+			lappend(chunk_state->vectorized_quals_constified, constified);
+	}
 }
 
 /*
@@ -738,6 +784,11 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
 		return perform_vectorized_aggregation(chunk_state);
 	}
 
+	if (chunk_state->have_constant_false_vectorized_qual)
+	{
+		return NULL;
+	}
+
 	queue->pop(chunk_state);
 	while (queue->needs_next_batch(chunk_state))
 	{
@@ -806,13 +857,13 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
 
-	ts_show_scan_qual(chunk_state->vectorized_quals,
+	ts_show_scan_qual(chunk_state->vectorized_quals_original,
 					  "Vectorized Filter",
 					  &node->ss.ps,
 					  ancestors,
 					  es);
 
-	if (!node->ss.ps.plan->qual && chunk_state->vectorized_quals)
+	if (!node->ss.ps.plan->qual && chunk_state->vectorized_quals_original)
 	{
 		/*
 		 * The normal explain won't show this if there are no normal quals but
