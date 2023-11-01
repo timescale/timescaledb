@@ -8,6 +8,7 @@ set(SOURCES
     dist_backup.c
     hypertable.c
     init.c
+    partialize_agg.c
     partialize_finalize.c
     planner.c
     process_utility.c

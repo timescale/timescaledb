@@ -26,7 +26,8 @@ set(TEST_FILES
     partialize_finalize.sql
     reorder.sql
     skip_scan.sql
-    size_utils_tsl.sql)
+    size_utils_tsl.sql
+    vectorized_aggregation.sql)
 
 if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
   list(APPEND TEST_FILES dist_param.sql)
@@ -105,7 +106,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       dist_ddl.sql
       dist_cagg.sql
       dist_policy.sql
-      dist_util.sql
       dist_triggers.sql
       dist_backup.sql
       remote_connection_cache.sql
@@ -213,7 +213,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
       dist_partial_agg.sql.in
       dist_query.sql.in
       dist_compression.sql.in
-      dist_move_chunk.sql.in)
+      dist_move_chunk.sql.in
+      dist_util.sql.in)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
