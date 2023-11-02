@@ -28,9 +28,6 @@
 #include "utils.h"
 #include "debug_assert.h"
 
-#define is_restricted_path(path)                                                                   \
-	(list_length(path->parent->baserestrictinfo) > 0 || path->parent->joininfo != NULL)
-
 /*
  * Are we able to optimize the path by applying vectorized aggregation?
  */
@@ -52,14 +49,12 @@ is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
 	DecompressChunkPath *decompress_path = (DecompressChunkPath *) path;
 	Assert(decompress_path->custom_path.custom_paths != NIL);
 
-	Path *compressed_path = linitial(decompress_path->custom_path.custom_paths);
-
 	/* Hypertable compression info is already fetched from the catalog */
 	Assert(decompress_path->info != NULL);
 	Assert(decompress_path->info->hypertable_compression_info != NULL);
 
-	/* No filters are supported at the moment */
-	if (is_restricted_path(path) || is_restricted_path(compressed_path))
+	/* No filters on the compressed attributes are supported at the moment */
+	if ((list_length(path->parent->baserestrictinfo) > 0 || path->parent->joininfo != NULL))
 		return false;
 
 	/* We currently handle only one agg function per node */

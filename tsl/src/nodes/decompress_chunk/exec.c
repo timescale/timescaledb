@@ -520,6 +520,12 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	TupleTableSlot *decompressed_scan_slot = chunk_state->csstate.ss.ss_ScanTupleSlot;
 	Assert(decompressed_scan_slot->tts_tupleDescriptor->natts == 1);
 
+	/* Set all attributes of the result tuple to NULL. So, we return NULL if no data is processed
+	 * by our implementation. In addition, the call marks the slot as beeing used (i.e., no
+	 * ExecStoreVirtualTuple call is required). */
+	ExecStoreAllNullTuple(decompressed_scan_slot);
+	Assert(!TupIsNull(decompressed_scan_slot));
+
 	int64 result_sum = 0;
 
 	if (column_description->type == SEGMENTBY_COLUMN)
@@ -675,7 +681,6 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	 * systems */
 	decompressed_scan_slot->tts_values[0] = Int64GetDatum(result_sum);
 
-	ExecStoreVirtualTuple(decompressed_scan_slot);
 	return decompressed_scan_slot;
 }
 
