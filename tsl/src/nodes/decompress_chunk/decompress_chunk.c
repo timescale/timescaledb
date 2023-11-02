@@ -290,12 +290,14 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 	{
 		appinfo = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		info->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
+		info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
 	}
 	else
 	{
 		Assert(chunk_rel->reloptkind == RELOPT_BASEREL);
 		info->single_chunk = true;
 		info->ht_rte = info->chunk_rte;
+		info->ht_rel = info->chunk_rel;
 	}
 
 	info->hypertable_id = ht->fd.id;

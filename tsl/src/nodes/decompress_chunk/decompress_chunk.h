@@ -17,6 +17,7 @@ typedef struct CompressionInfo
 {
 	RelOptInfo *chunk_rel;
 	RelOptInfo *compressed_rel;
+	RelOptInfo *ht_rel;
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
 	RangeTblEntry *ht_rte;
