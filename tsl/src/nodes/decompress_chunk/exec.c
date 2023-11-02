@@ -11,6 +11,7 @@
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/datum.h>
@@ -160,7 +161,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
-	chunk_state->vectorized_quals = linitial(cscan->custom_exprs);
+	chunk_state->vectorized_quals_original = linitial(cscan->custom_exprs);
 
 	return (Node *) chunk_state;
 }
@@ -480,6 +481,24 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	if (ts_guc_debug_require_batch_sorted_merge && !chunk_state->batch_sorted_merge)
 	{
 		elog(ERROR, "debug: batch sorted merge is required but not used");
+	}
+
+	/* Constify stable expressions in vectorized predicates. */
+	PlannerGlobal glob = {
+		.boundParams = node->ss.ps.state->es_param_list_info,
+	};
+	PlannerInfo root = {
+		.glob = &glob,
+	};
+	ListCell *lc;
+	foreach (lc, chunk_state->vectorized_quals_original)
+	{
+		OpExpr *constified =
+			castNode(OpExpr, estimate_expression_value(&root, (Node *) lfirst(lc)));
+		Ensure(IsA(lsecond(constified->args), Const),
+			   "failed to evaluate runtime constant in vectorized filter");
+		chunk_state->vectorized_quals_constified =
+			lappend(chunk_state->vectorized_quals_constified, constified);
 	}
 }
 
@@ -813,13 +832,13 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
 
-	ts_show_scan_qual(chunk_state->vectorized_quals,
+	ts_show_scan_qual(chunk_state->vectorized_quals_original,
 					  "Vectorized Filter",
 					  &node->ss.ps,
 					  ancestors,
 					  es);
 
-	if (!node->ss.ps.plan->qual && chunk_state->vectorized_quals)
+	if (!node->ss.ps.plan->qual && chunk_state->vectorized_quals_original)
 	{
 		/*
 		 * The normal explain won't show this if there are no normal quals but

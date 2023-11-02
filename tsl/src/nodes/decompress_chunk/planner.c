@@ -392,27 +392,84 @@ find_attr_pos_in_tlist(List *targetlist, AttrNumber pos)
 }
 
 static bool
-qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
+contains_volatile_functions_checker(Oid func_id, void *context)
+{
+	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
+}
+
+static bool
+is_not_runtime_constant_walker(Node *node, void *context)
+{
+	switch (nodeTag(node))
+	{
+		case T_Var:
+		case T_PlaceHolderVar:
+		case T_Param:
+			/*
+			 * We might want to support these nodes to have vectorizable
+			 * join clauses (T_Var), join clauses referencing a variable that is
+			 * above outer join (T_PlaceHolderVar) or initplan parameters and
+			 * prepared statement parameters (T_Param). We don't support them at
+			 * the moment.
+			 */
+			return true;
+		default:
+			if (check_functions_in_node(node,
+										contains_volatile_functions_checker,
+										/* context = */ NULL))
+			{
+				return true;
+			}
+			return expression_tree_walker(node,
+										  is_not_runtime_constant_walker,
+										  /* context = */ NULL);
+	}
+}
+
+/*
+ * Check if the given node is a run-time constant, i.e. it doesn't contain
+ * volatile functions or variables or parameters. This means we can evaluate
+ * it at run time, allowing us to apply the vectorized comparison operators
+ * that have the form "Var op Const". This applies for example to filter
+ * expressions like `time > now() - interval '1 hour'`.
+ * Note that we do the same evaluation when doing run time chunk exclusion, but
+ * there is no good way to pass the evaluated clauses to the underlying nodes
+ * like this DecompressChunk node.
+ */
+static bool
+is_not_runtime_constant(Node *node)
+{
+	bool result = is_not_runtime_constant_walker(node, /* context = */ NULL);
+	return result;
+}
+
+/*
+ * Try to check if the current qual is vectorizable, and if needed make a
+ * commuted copy. If not, return NULL.
+ */
+static Node *
+make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
 	/* Only simple "Var op Const" binary predicates for now. */
 	if (!IsA(qual, OpExpr))
 	{
-		return false;
+		return NULL;
 	}
 
 	OpExpr *o = castNode(OpExpr, qual);
 
 	if (list_length(o->args) != 2)
 	{
-		return false;
+		return NULL;
 	}
 
-	if (IsA(lsecond(o->args), Var) && IsA(linitial(o->args), Const))
+	if (IsA(lsecond(o->args), Var))
 	{
 		/* Try to commute the operator if the constant is on the right. */
 		Oid commutator_opno = get_commutator(o->opno);
 		if (OidIsValid(commutator_opno))
 		{
+			o = (OpExpr *) copyObject(o);
 			o->opno = commutator_opno;
 			/*
 			 * opfuncid is a cache, we can set it to InvalidOid like the
@@ -423,9 +480,14 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 		}
 	}
 
-	if (!IsA(linitial(o->args), Var) || !IsA(lsecond(o->args), Const))
+	/*
+	 * We can vectorize the operation where the left side is a Var and the right
+	 * side is a constant or can be evaluated to a constant at run time (e.g.
+	 * contains stable functions).
+	 */
+	if (!IsA(linitial(o->args), Var) || is_not_runtime_constant(lsecond(o->args)))
 	{
-		return false;
+		return NULL;
 	}
 
 	Var *var = castNode(Var, linitial(o->args));
@@ -439,16 +501,16 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
 			 .bulk_decompression_possible)
 	{
 		/* This column doesn't support bulk decompression. */
-		return false;
+		return NULL;
 	}
 
 	Oid opcode = get_opcode(o->opno);
 	if (get_vector_const_predicate(opcode))
 	{
-		return true;
+		return (Node *) o;
 	}
 
-	return false;
+	return NULL;
 }
 
 /*
@@ -456,15 +518,22 @@ qual_is_vectorizable(DecompressChunkPath *path, Node *qual)
  * list.
  */
 static void
-find_vectorized_quals(DecompressChunkPath *path, List *qual, List **vectorized,
+find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectorized,
 					  List **nonvectorized)
 {
 	ListCell *lc;
-	foreach (lc, qual)
+	foreach (lc, qual_list)
 	{
-		Node *node = lfirst(lc);
-		List **dest = qual_is_vectorizable(path, node) ? vectorized : nonvectorized;
-		*dest = lappend(*dest, node);
+		Node *source_qual = lfirst(lc);
+		Node *vectorized_qual = make_vectorized_qual(path, source_qual);
+		if (vectorized_qual)
+		{
+			*vectorized = lappend(*vectorized, vectorized_qual);
+		}
+		else
+		{
+			*nonvectorized = lappend(*nonvectorized, source_qual);
+		}
 	}
 }
 
