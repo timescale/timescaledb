@@ -450,34 +450,54 @@ is_not_runtime_constant(Node *node)
 static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
+	//my_print(qual);
+
 	/* Only simple "Var op Const" binary predicates for now. */
-	if (!IsA(qual, OpExpr))
+	if (!IsA(qual, OpExpr) && !IsA(qual, ScalarArrayOpExpr))
 	{
 		return NULL;
 	}
 
-	OpExpr *o = castNode(OpExpr, qual);
+	List *args = NIL;
+	OpExpr *opexpr = NULL;
+	Oid opno = InvalidOid;
+	ScalarArrayOpExpr *saop = NULL;
+	if (IsA(qual, OpExpr))
+	{
+		opexpr = castNode(OpExpr, qual);
+		args = opexpr->args;
+		opno = opexpr->opno;
+	}
+	else
+	{
+		saop = castNode(ScalarArrayOpExpr, qual);
+		args = saop->args;
+		opno = saop->opno;
+	}
 
-	if (list_length(o->args) != 2)
+	if (list_length(args) != 2)
 	{
 		return NULL;
 	}
 
-	if (IsA(lsecond(o->args), Var))
+	if (opexpr && IsA(lsecond(args), Var))
 	{
 		/* Try to commute the operator if the constant is on the right. */
-		Oid commutator_opno = get_commutator(o->opno);
-		if (OidIsValid(commutator_opno))
+		opno = get_commutator(opno);
+		if (!OidIsValid(opno))
 		{
-			o = (OpExpr *) copyObject(o);
-			o->opno = commutator_opno;
-			/*
-			 * opfuncid is a cache, we can set it to InvalidOid like the
-			 * CommuteOpExpr() does.
-			 */
-			o->opfuncid = InvalidOid;
-			o->args = list_make2(lsecond(o->args), linitial(o->args));
+			return NULL;
 		}
+
+		opexpr = (OpExpr *) copyObject(opexpr);
+		opexpr->opno = opno;
+		/*
+		 * opfuncid is a cache, we can set it to InvalidOid like the
+		 * CommuteOpExpr() does.
+		 */
+		opexpr->opfuncid = InvalidOid;
+		args = list_make2(lsecond(args), linitial(args));
+		opexpr->args = args;
 	}
 
 	/*
@@ -485,12 +505,12 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	 * side is a constant or can be evaluated to a constant at run time (e.g.
 	 * contains stable functions).
 	 */
-	if (!IsA(linitial(o->args), Var) || is_not_runtime_constant(lsecond(o->args)))
+	if (!IsA(linitial(args), Var) || is_not_runtime_constant(lsecond(args)))
 	{
 		return NULL;
 	}
 
-	Var *var = castNode(Var, linitial(o->args));
+	Var *var = castNode(Var, linitial(args));
 	Assert((Index) var->varno == path->info->chunk_rel->relid);
 
 	/*
@@ -504,13 +524,50 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return NULL;
 	}
 
-	Oid opcode = get_opcode(o->opno);
-	if (get_vector_const_predicate(opcode))
+	Oid opcode = get_opcode(opno);
+	if (!get_vector_const_predicate(opcode))
 	{
-		return (Node *) o;
+		return NULL;
 	}
 
-	return NULL;
+	if (saop)
+	{
+		if (saop->hashfuncid)
+		{
+			/*
+			 * Don't vectorize if the planner decided to build a hash table.
+			 */
+			return NULL;
+		}
+
+		if (!IsA(lsecond(args), Const))
+		{
+			/*
+			 * Vectorizing ScalarArrayOperation requires us to know the type
+			 * of the array elements, and the absence of nulls, at runtime,
+			 * so unfortunately we can't apply it for arrays evaluated at run
+			 * time.
+			 */
+			return NULL;
+		}
+		Const *constnode = castNode(Const, lsecond(args));
+		if (constnode->constisnull)
+		{
+			/*
+			 * FIXME what happens for normal operations in this case?
+			 * And if a stable function evaluates to null at run time?
+			 */
+			return NULL;
+		}
+		ArrayType *arr = DatumGetArrayTypeP(constnode->constvalue);
+		if (ARR_NULLBITMAP(arr) != NULL)
+		{
+			/* We don't have a provision for null elements in arrays yet. */
+			return NULL;
+		}
+	}
+
+	return opexpr ? (Node *) opexpr : (Node *) saop;
 }
 
 /*
