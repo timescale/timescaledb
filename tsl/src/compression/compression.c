@@ -2198,7 +2198,12 @@ get_compression_algorithm(char *name)
 	return _INVALID_COMPRESSION_ALGORITHM;
 }
 
-typedef enum { DTT_Fuzzing, DTT_RowByRow, DTT_Bulk } DecompressionTestType;
+typedef enum
+{
+	DTT_Fuzzing,
+	DTT_RowByRow,
+	DTT_Bulk
+} DecompressionTestType;
 
 #define ALGO gorilla
 #define CTYPE float8
@@ -2256,7 +2261,8 @@ static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Si
  * if we error out later.
  */
 static void
-read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, volatile int *bytes, int *rows)
+read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, volatile int *bytes,
+							   int *rows)
 {
 	FILE *f = fopen(path, "r");
 
@@ -2294,7 +2300,9 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, 
 
 	string[fsize] = 0;
 
-	*rows = get_decompress_fn(algo, type)((const uint8 *) string, fsize, /* test_type = */ bulk ? DTT_Bulk : DTT_RowByRow);
+	*rows = get_decompress_fn(algo, type)((const uint8 *) string,
+										  fsize,
+										  /* test_type = */ bulk ? DTT_Bulk : DTT_RowByRow);
 }
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
@@ -2410,7 +2418,12 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 		volatile int bytes = 0;
 		PG_TRY();
 		{
-			read_compressed_data_file_impl(algo, PG_GETARG_OID(1), path, PG_GETARG_BOOL(3), &bytes, &rows);
+			read_compressed_data_file_impl(algo,
+										   PG_GETARG_OID(1),
+										   path,
+										   PG_GETARG_BOOL(3),
+										   &bytes,
+										   &rows);
 			values[out_rows] = Int32GetDatum(rows);
 			nulls[out_rows] = false;
 		}
@@ -2456,7 +2469,8 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
  * has to catch the postgres exceptions normally produced for corrupt data.
  */
 static int
-llvm_fuzz_target_generic(int (*target)(const uint8_t *Data, size_t Size, DecompressionTestType test_type),
+llvm_fuzz_target_generic(int (*target)(const uint8_t *Data, size_t Size,
+									   DecompressionTestType test_type),
 						 const uint8_t *Data, size_t Size)
 {
 	MemoryContextReset(CurrentMemoryContext);

@@ -12,9 +12,9 @@
 #define TOSTRING_HELPER(x) #x
 #define TOSTRING(x) TOSTRING_HELPER(x)
 
-
 static void
-FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, DecompressResult *results, int n)
+FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, DecompressResult *results,
+								   int n)
 {
 	if (n != arrow->length)
 	{
@@ -44,9 +44,9 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
 			const CTYPE rowbyrow_value = DATUM_TO_CTYPE(results[i].val);
 
 			/*
-				 * Floats can also be NaN/infinite and the comparison doesn't
-				 * work in that case.
-				 */
+			 * Floats can also be NaN/infinite and the comparison doesn't
+			 * work in that case.
+			 */
 			if (isfinite((double) arrow_value) != isfinite((double) rowbyrow_value))
 			{
 				ereport(error_type,
@@ -73,7 +73,8 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
  * for arithmetic types.
  */
 static int
-FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size, DecompressionTestType test_type)
+FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size,
+										DecompressionTestType test_type)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 

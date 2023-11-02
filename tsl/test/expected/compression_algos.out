@@ -1542,49 +1542,74 @@ DROP TABLE base_texts;
 -- Interesting corrupt data found by fuzzing --
 -----------------------------------------------
 \c :TEST_DBNAME :ROLE_SUPERUSER
-create or replace function ts_read_compressed_data_directory(cstring, regtype, cstring)
-returns table(path text, bytes int, rows int, sqlstate text, location text)
-as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_directory' language c;
-select count(*), coalesce((rows >= 0)::text, sqlstate) result
-from ts_read_compressed_data_directory('gorilla', 'float8', (:'TEST_INPUT_DIR' || '/fuzzing/compression/gorilla-float8')::cstring)
-group by 2 order by 1 desc;
- count | result 
--------+--------
-   224 | XX001
-    55 | true
-    23 | 08P01
-(3 rows)
-
-select count(*), coalesce((rows >= 0)::text, sqlstate) result
-from ts_read_compressed_data_directory('deltadelta', 'int8', (:'TEST_INPUT_DIR' || '/fuzzing/compression/deltadelta-int8')::cstring)
-group by 2 order by 1 desc;
- count | result 
--------+--------
-   168 | XX001
-    69 | true
-    13 | 08P01
-     1 | false
-(4 rows)
-
-create or replace function ts_read_compressed_data_file(cstring, regtype, cstring) returns int
+create or replace function ts_read_compressed_data_file(cstring, regtype, cstring, bool = true) returns int
 as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_file' language c;
 \set ON_ERROR_STOP 0
 select ts_read_compressed_data_file('gorilla', 'float8', '--nonexistent');
 ERROR:  could not open the file '--nonexistent'
 \set ON_ERROR_STOP 1
-select count(*), coalesce((rows >= 0)::text, sqlstate) result
-from ts_read_compressed_data_directory('array', 'text', (:'TEST_INPUT_DIR' || '/fuzzing/compression/array-text')::cstring)
-group by 2 order by 1 desc;
- count | result 
--------+--------
-     1 | true
-(1 row)
+create or replace function ts_read_compressed_data_directory(cstring, regtype, cstring, bool)
+returns table(path text, bytes int, rows int, sqlstate text, location text)
+as :TSL_MODULE_PATHNAME, 'ts_read_compressed_data_directory' language c;
+\set fn 'ts_read_compressed_data_directory(:''algo'', :''type'', format(''%s/fuzzing/compression/%s-%s'', :''TEST_INPUT_DIR'', :''algo'', :''type'')::cstring, '
+\set algo gorilla
+\set type float8
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+   142 | XX001       | true
+    82 | XX001       | XX001
+    55 | true        | true
+    23 | 08P01       | 08P01
+(4 rows)
 
-select count(*), coalesce((rows >= 0)::text, sqlstate) result
-from ts_read_compressed_data_directory('dictionary', 'text', (:'TEST_INPUT_DIR' || '/fuzzing/compression/dictionary-text')::cstring)
-group by 2 order by 1 desc;
- count | result 
--------+--------
-     1 | true
-(1 row)
+\set algo deltadelta
+\set type int8
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+   106 | XX001       | XX001
+    69 | true        | true
+    62 | XX001       | true
+    13 | 08P01       | 08P01
+     1 | false       | false
+(5 rows)
+
+\set algo array
+\set type text
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+     2 | XX001       | XX001
+     1 | true        | true
+(2 rows)
+
+\set algo dictionary
+\set type text
+select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
+    , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
+;
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+     4 | XX001       | XX001
+     1 | true        | true
+(2 rows)
 

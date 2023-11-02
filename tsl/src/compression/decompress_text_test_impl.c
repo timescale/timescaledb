@@ -26,7 +26,8 @@ arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str, size_t *len)
 }
 
 static void
-decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, DecompressResult *results, int n)
+decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, DecompressResult *results,
+									int n)
 {
 	/* Check that both ways of decompression match. */
 	if (n != arrow->length)
@@ -91,7 +92,8 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
  * for arithmetic types.
  */
 static int
-decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType test_type, int requested_algo)
+decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType test_type,
+						int requested_algo)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -119,11 +121,22 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 		 * For routine fuzzing, we only run bulk decompression to make it faster
 		 * and the coverage space smaller.
 		 */
+
+		/*
+		DecompressionIterator *iter =
+			definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
+		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+		{
+		}
+		return 0;
+		/*/
+
 		decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
 		return 0;
+		//*/
 	}
 
-	ArrowArray * arrow = NULL;
+	ArrowArray *arrow = NULL;
 	if (test_type == DTT_Bulk)
 	{
 		/*
@@ -169,7 +182,7 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 		return n;
 	}
 
-	 /*
+	/*
 	 * 1) Compress.
 	 */
 	Compressor *compressor = definitions[data_algo].compressor_for_type(TEXTOID);
