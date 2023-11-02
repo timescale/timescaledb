@@ -119,7 +119,8 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 	{
 		if (chunk_state->bulk_decompression_context == NULL)
 		{
-			init_bulk_decompression_mctx(chunk_state, CurrentMemoryContext);
+			init_bulk_decompression_mctx(chunk_state,
+										 MemoryContextGetParent(batch_state->per_batch_context));
 		}
 
 		DecompressAllFunction decompress_all =
