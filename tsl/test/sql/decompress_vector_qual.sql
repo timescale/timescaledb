@@ -73,6 +73,24 @@ select count(*) from vectorqual where metric4 is null;
 select count(*) from vectorqual where metric4 is not null;
 
 
+-- Vectorized filters also work if we have only stable functions on the right
+-- side that can be evaluated to a constant at run time.
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz::timestamp;
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - interval '1 day';
+
+-- This filter is not vectorized because the 'timestamp > timestamptz'
+-- operator is stable, not immutable, because it uses the current session
+-- timezone. We could transform it to something like
+-- 'timestamp > timestamptz::timestamp' to allow our stable function evaluation
+-- to handle this case, but we don't do it at the moment.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz;
+
+-- Can't vectorize comparison with a volatile function.
+select count(*) from vectorqual where metric3 > random()::int - 100;
+
+
 -- Test that the vectorized quals are disabled by disabling the bulk decompression.
 set timescaledb.enable_bulk_decompression to off;
 set timescaledb.debug_require_vector_qual to 'forbid';

@@ -410,7 +410,7 @@ QUERY PLAN
          Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
          Sort Method: top-N heapsort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-               Filter: ("time" < now())
+               Vectorized Filter: ("time" < now())
                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (7 rows)
 

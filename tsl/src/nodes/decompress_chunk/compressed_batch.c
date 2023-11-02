@@ -167,7 +167,7 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 static bool
 apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
-	if (!chunk_state->vectorized_quals)
+	if (!chunk_state->vectorized_quals_constified)
 	{
 		return true;
 	}
@@ -184,7 +184,7 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 	 * Compute the quals.
 	 */
 	ListCell *lc;
-	foreach (lc, chunk_state->vectorized_quals)
+	foreach (lc, chunk_state->vectorized_quals_constified)
 	{
 		/* For now we only support "Var ? Const" predicates. */
 		OpExpr *oe = castNode(OpExpr, lfirst(lc));
