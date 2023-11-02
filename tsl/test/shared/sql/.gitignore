@@ -4,6 +4,7 @@
 /dist_fetcher_type-*.sql
 /dist_remote_error-*.sql
 /dist_remote_error.text
+/gapfill-*.sql
 /generated_columns-*.sql
 /ordered_append-*.sql
 /ordered_append_join-*.sql

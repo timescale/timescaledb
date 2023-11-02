@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- Catalog tables are occationally rewritten as part of updates, so
+-- Catalog tables are occasionally rewritten as part of updates, so
 -- this is to test that privileges are maintained over updates of the
 -- extension. We could verify that other properties (e.g., comments)
 -- are maintained here as well, but this is not something we use right

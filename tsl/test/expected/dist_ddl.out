@@ -16,6 +16,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
    node_name   |   database    | node_created | database_created | extension_created 
 ---------------+---------------+--------------+------------------+-------------------
  db_dist_ddl_1 | db_dist_ddl_1 | t            | t                | t
@@ -35,6 +38,7 @@ CREATE TABLE disttable(time timestamptz, device int, color int CONSTRAINT color_
 CREATE UNIQUE INDEX disttable_pk ON disttable(time, temp);
 -- CREATE TABLE
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'temp', replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
@@ -76,6 +80,7 @@ SELECT * FROM test.show_constraints('disttable');
 SELECT * FROM test.show_indexes('disttable');
 SELECT * FROM test.show_triggers('disttable');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_columns('disttable')
 NOTICE:  [db_dist_ddl_1]:
@@ -214,6 +219,7 @@ SELECT * FROM test.show_constraints('disttable');
 (2 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_constraints('disttable') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_constraints('disttable') 
 NOTICE:  [db_dist_ddl_1]:
 Constraint  |Type|Columns |Index|Expr        |Deferrable|Deferred|Validated
@@ -255,6 +261,7 @@ SELECT * FROM test.show_constraints('disttable');
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_constraints('disttable') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_constraints('disttable') 
 NOTICE:  [db_dist_ddl_1]:
 Constraint |Type|Columns|Index|Expr       |Deferrable|Deferred|Validated
@@ -287,6 +294,7 @@ color_check|c   |{color}|-    |(color > 0)|f         |f       |t
 -- DROP CONSTRAINT pre-created
 ALTER TABLE disttable DROP CONSTRAINT color_check;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_constraints('disttable') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_constraints('disttable') 
 NOTICE:  [db_dist_ddl_1]:
 Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
@@ -316,6 +324,7 @@ Constraint|Type|Columns|Index|Expr|Deferrable|Deferred|Validated
 -- DROP COLUMN
 ALTER TABLE disttable DROP COLUMN color;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_columns('disttable') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_columns('disttable') 
 NOTICE:  [db_dist_ddl_1]:
 Column|Type                    |NotNull
@@ -354,6 +363,7 @@ temp  |double precision        |f
 -- ADD COLUMN
 ALTER TABLE disttable ADD COLUMN description text;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_columns('disttable') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_columns('disttable') 
 NOTICE:  [db_dist_ddl_1]:
 Column     |Type                    |NotNull
@@ -395,6 +405,7 @@ description|text                    |f
 -- CREATE INDEX
 CREATE INDEX disttable_description_idx ON disttable (description);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttable') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_indexes('disttable') 
 NOTICE:  [db_dist_ddl_1]:
 Index                    |Columns      |Expr|Unique|Primary|Exclusion|Tablespace
@@ -503,6 +514,7 @@ SELECT tableowner FROM pg_tables WHERE tablename = 'disttable';
 SELECT * FROM test.remote_exec(NULL, $$
 SELECT tableowner FROM pg_tables WHERE tablename = 'disttable';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT tableowner FROM pg_tables WHERE tablename = 'disttable'
 NOTICE:  [db_dist_ddl_1]:
@@ -602,6 +614,7 @@ $$
     SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname;
     SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
     SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
 NOTICE:  [db_dist_ddl_1]:
@@ -679,6 +692,7 @@ $$
     SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname;
     SELECT relname, relreplident FROM show_chunks('disttable') ch INNER JOIN pg_class c ON (ch = c.oid) ORDER BY relname;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
     SELECT relname, relreplident FROM pg_class WHERE relname = 'disttable' ORDER BY relname
 NOTICE:  [db_dist_ddl_1]:
@@ -764,6 +778,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   		  (SELECT "Column" AS col FROM test.show_columns(chunk.relid) WHERE "Column"='descr')
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 	   SELECT chunk.relid AS chunk_relid,
 	   		  (SELECT "Column" AS col FROM test.show_columns(chunk.relid) WHERE "Column"='descr')
@@ -796,6 +811,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   		  (SELECT "Constraint" AS constr FROM test.show_constraints(chunk.relid) WHERE "Constraint"='device_chk')
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
        SELECT chunk.relid AS chunk_relid,
 	   		  (SELECT "Constraint" AS constr FROM test.show_constraints(chunk.relid) WHERE "Constraint"='device_chk')
@@ -826,6 +842,7 @@ SELECT * FROM test.remote_exec(ARRAY[:'DATA_NODE_1'], $$
 	   SELECT chunk.relid AS chunk_relid, (test.show_indexes(chunk.relid)).*
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 	   SELECT chunk.relid AS chunk_relid, (test.show_indexes(chunk.relid)).*
 	   FROM (SELECT "Child" AS relid FROM test.show_subtables('disttable') LIMIT 1) chunk
@@ -901,6 +918,7 @@ SELECT * FROM test.show_indexes('disttable');
 (2 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('disttable') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_indexes('disttable') 
 NOTICE:  [db_dist_ddl_1]:
 Index                  |Columns    |Expr|Unique|Primary|Exclusion|Tablespace
@@ -936,6 +954,7 @@ disttable_time_idx     |{time}     |    |f     |f      |f        |
 -- DROP TABLE
 DROP TABLE disttable;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT 1 FROM pg_tables WHERE tablename = 'disttable' $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT 1 FROM pg_tables WHERE tablename = 'disttable' 
 NOTICE:  [db_dist_ddl_1]:
 ?column?
@@ -974,6 +993,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1024,6 +1044,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
 NOTICE:  [db_dist_ddl_1]:
 schemaname |tablename      
@@ -1057,6 +1078,7 @@ dist_schema|some_dist_table
 DROP SCHEMA dist_schema CASCADE;
 NOTICE:  drop cascades to table dist_schema.some_dist_table
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
 NOTICE:  [db_dist_ddl_1]:
 schemaname|tablename
@@ -1090,6 +1112,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1136,6 +1159,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema_2';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1184,6 +1208,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema_2';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1232,6 +1257,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema_3';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1282,6 +1308,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema_3';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1332,6 +1359,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 ALTER SCHEMA dist_schema RENAME TO dist_schema_2;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT schemaname, tablename FROM pg_tables WHERE tablename = 'some_dist_table' 
 NOTICE:  [db_dist_ddl_1]:
 schemaname   |tablename      
@@ -1369,6 +1397,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'dist_schema_2';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1423,6 +1452,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 CREATE INDEX some_dist_device_idx ON some_dist_table (device);
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
 NOTICE:  [db_dist_ddl_1]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
@@ -1457,6 +1487,7 @@ some_dist_table_time_idx|{time}  |    |f     |f      |f        |
 
 ALTER TABLE some_dist_table DROP COLUMN device;
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
 NOTICE:  [db_dist_ddl_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
@@ -1522,6 +1553,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'schema_global';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1585,6 +1617,7 @@ FROM pg_catalog.pg_namespace s
 JOIN pg_catalog.pg_user u ON u.usesysid = s.nspowner
 WHERE s.nspname = 'schema_global';
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT s.nspname, u.usename
 FROM pg_catalog.pg_namespace s
@@ -1647,6 +1680,7 @@ SELECT * FROM test.show_indexes('some_dist_table');
 (2 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
 NOTICE:  [db_dist_ddl_1]:
 Index                   |Columns |Expr|Unique|Primary|Exclusion|Tablespace
@@ -1699,6 +1733,7 @@ SELECT * FROM test.show_indexes('some_dist_table');
 (1 row)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * FROM test.show_indexes('some_dist_table') $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * FROM test.show_indexes('some_dist_table') 
 NOTICE:  [db_dist_ddl_1]:
 Index                   |Columns|Expr|Unique|Primary|Exclusion|Tablespace
@@ -1733,6 +1768,7 @@ DROP TABLE some_dist_table;
 BEGIN;
 CREATE TABLE some_dist_table(time timestamptz, device int);
 SELECT * FROM create_distributed_hypertable('some_dist_table', 'time');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  hypertable_id | schema_name |   table_name    | created 
 ---------------+-------------+-----------------+---------
@@ -1779,6 +1815,7 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
 NOTICE:  [db_dist_ddl_1]:
@@ -1870,6 +1907,7 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
 NOTICE:  [db_dist_ddl_1]:
@@ -1960,6 +1998,7 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
 NOTICE:  [db_dist_ddl_1]:
@@ -2055,6 +2094,7 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
 NOTICE:  [db_dist_ddl_1]:
@@ -2146,6 +2186,7 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
 NOTICE:  [db_dist_ddl_1]:
@@ -2235,6 +2276,7 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
 NOTICE:  [db_dist_ddl_1]:
@@ -2328,6 +2370,7 @@ SELECT * FROM test.remote_exec(NULL, $$
 SELECT * FROM test.show_indexes('some_dist_table');
 SELECT * FROM test.show_constraints('some_dist_table');
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT * FROM test.show_indexes('some_dist_table')
 NOTICE:  [db_dist_ddl_1]:
@@ -2435,6 +2478,7 @@ SELECT * FROM test.show_constraints('disttable');
 SELECT (test.show_constraints(chunk)).*
 FROM show_chunks('disttable') AS chunk;
 $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]: 
 SELECT show_chunks('disttable')
 NOTICE:  [db_dist_ddl_1]:
@@ -2667,6 +2711,7 @@ DROP TABLE disttable;
 -- without enabling timescaledb.enable_client_ddl_on_data_nodes guc
 CREATE TABLE disttable(time timestamptz NOT NULL, device int);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device', replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             19 | public      | disttable  | t
@@ -2685,6 +2730,7 @@ DROP TABLE disttable;
 --
 CREATE TABLE hyper(time TIMESTAMPTZ, device INT, temp FLOAT);
 SELECT create_distributed_hypertable('hyper', 'time', 'device', 4, chunk_time_interval => interval '18 hours', replication_factor => 1, data_nodes => ARRAY[:'DATA_NODE_1',:'DATA_NODE_2']);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "time"
  create_distributed_hypertable 
 -------------------------------
@@ -2702,6 +2748,7 @@ DROP TABLE hyper;
 --
 CREATE TABLE disttable(time timestamptz NOT NULL, device int);
 SELECT * FROM create_distributed_hypertable('disttable', 'time', 'device');
+WARNING:  distributed hypertable is deprecated
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
             21 | public      | disttable  | t
@@ -2948,6 +2995,7 @@ SET timescaledb.hypertable_distributed_default TO 'auto';
 SET timescaledb.hypertable_replication_factor_default TO 3;
 CREATE TABLE drf_test(time TIMESTAMPTZ NOT NULL);
 SELECT create_distributed_hypertable('drf_test', 'time');
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (33,public,drf_test,t)
@@ -2965,6 +3013,7 @@ DROP TABLE drf_test;
 -- test directly on a data node first
 CREATE TABLE dist_test(time timestamptz NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3, replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (34,public,dist_test,t)
@@ -2982,6 +3031,7 @@ SELECT * from show_chunks('dist_test');
 (5 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_ddl_1]:
 show_chunks                                  
@@ -3131,6 +3181,7 @@ DROP TABLE dist_test;
 -- test from access node
 CREATE TABLE dist_test(time timestamptz NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3, replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (35,public,dist_test,t)
@@ -3148,6 +3199,7 @@ SELECT * from show_chunks('dist_test');
 (5 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_ddl_1]:
 show_chunks                                  
@@ -3208,6 +3260,7 @@ SELECT * from show_chunks('dist_test');
 (3 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_ddl_1]:
 show_chunks                                  
@@ -3277,6 +3330,7 @@ SELECT * from show_chunks('dist_test');
 (3 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_ddl_1]:
 show_chunks                                  
@@ -3348,6 +3402,7 @@ SELECT * from show_chunks('dist_test');
 (2 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_ddl_1]:
 show_chunks                                  
@@ -3423,6 +3478,7 @@ DROP TABLE dist_test;
 --
 CREATE TABLE dist_test(time timestamptz NOT NULL, device int, temp float);
 SELECT create_distributed_hypertable('dist_test', 'time', 'device', 3, replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (36,public,dist_test,t)
@@ -3440,6 +3496,7 @@ SELECT * from show_chunks('dist_test');
 (5 rows)
 
 SELECT * FROM test.remote_exec(NULL, $$ SELECT * from show_chunks('dist_test'); $$);
+WARNING:  executing remote command is deprecated
 NOTICE:  [db_dist_ddl_1]:  SELECT * from show_chunks('dist_test')
 NOTICE:  [db_dist_ddl_1]:
 show_chunks                                  
@@ -3482,6 +3539,7 @@ _timescaledb_internal._dist_hyper_36_45_chunk
 (1 row)
 
 SELECT alter_data_node(:'DATA_NODE_1', available => false);
+WARNING:  altering data node is deprecated
                  alter_data_node                 
 -------------------------------------------------
  (db_dist_ddl_1,localhost,55432,db_dist_ddl_1,f)
@@ -3514,6 +3572,7 @@ SELECT * from show_chunks('dist_test');
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;
 -- drop stale chunks by making data node available
 SELECT alter_data_node(:'DATA_NODE_1', available => true);
+WARNING:  altering data node is deprecated
                  alter_data_node                 
 -------------------------------------------------
  (db_dist_ddl_1,localhost,55432,db_dist_ddl_1,t)

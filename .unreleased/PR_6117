@@ -1,1 +1,0 @@
-Fixes: #6117 Avoid decompressing batches using an empty slot

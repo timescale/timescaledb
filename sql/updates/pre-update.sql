@@ -16,16 +16,6 @@ SET LOCAL max_parallel_workers = 0;
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_command_end;
 DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_sql_drop;
 
--- These are legacy triggers. They need to be disabled here even
--- though they don't exist in newer versions, because they might still
--- exist when upgrading from older versions. Thus we need to DROP all
--- triggers here that have ever been created.
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.hypertable;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.chunk_constraint;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension_slice;
-DROP TRIGGER IF EXISTS "0_cache_inval" ON _timescaledb_catalog.dimension;
-
 -- Since we want to call the new version of restart_background_workers we
 -- create a function that points to that version. The proper restart_background_workers
 -- may either be in _timescaledb_internal or in _timescaledb_functions
@@ -60,4 +50,36 @@ WHERE
     AND nspname = '_timescaledb_internal'
   )
 ;
+
+-- ERROR if trying to update the extension on PG16 using Multi-Node
+DO $$
+DECLARE
+  data_nodes TEXT;
+  dist_hypertables TEXT;
+BEGIN
+  IF current_setting('server_version_num')::int >= 160000 THEN
+    SELECT string_agg(format('%I.%I', hypertable_schema, hypertable_name), ', ')
+    INTO dist_hypertables
+    FROM timescaledb_information.hypertables
+    WHERE is_distributed IS TRUE;
+
+    IF dist_hypertables IS NOT NULL THEN
+      RAISE USING
+        ERRCODE = 'feature_not_supported',
+        MESSAGE = 'cannot upgrade because multi-node is not supported on PostgreSQL >= 16',
+        DETAIL = 'The following distributed hypertables should be migrated to regular: '||dist_hypertables;
+    END IF;
+
+    SELECT string_agg(format('%I', node_name), ', ')
+    INTO data_nodes
+    FROM timescaledb_information.data_nodes;
+
+    IF data_nodes IS NOT NULL THEN
+      RAISE USING
+        ERRCODE = 'feature_not_supported',
+        MESSAGE = 'cannot upgrade because multi-node is not supported on PostgreSQL >= 16',
+        DETAIL = 'The following data nodes should be removed: '||data_nodes;
+    END IF;
+  END IF;
+END $$;
 

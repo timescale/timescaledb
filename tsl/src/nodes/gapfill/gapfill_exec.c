@@ -640,15 +640,15 @@ gapfill_advance_timestamp(GapFillState *state)
 	{
 		case DATEOID:
 			next = DirectFunctionCall2(date_pl_interval,
-									   DateADTGetDatum(state->next_timestamp),
-									   IntervalPGetDatum(state->gapfill_interval));
+									   DateADTGetDatum(state->gapfill_start),
+									   IntervalPGetDatum(state->next_offset));
 			next = DirectFunctionCall1(timestamp_date, next);
 			state->next_timestamp = DatumGetDateADT(next);
 			break;
 		case TIMESTAMPOID:
 			next = DirectFunctionCall2(timestamp_pl_interval,
-									   TimestampGetDatum(state->next_timestamp),
-									   IntervalPGetDatum(state->gapfill_interval));
+									   TimestampGetDatum(state->gapfill_start),
+									   IntervalPGetDatum(state->next_offset));
 			state->next_timestamp = DatumGetTimestamp(next);
 			break;
 		case TIMESTAMPTZOID:
@@ -658,13 +658,21 @@ gapfill_advance_timestamp(GapFillState *state)
 			 */
 			next = DirectFunctionCall2(state->have_timezone ? timestamptz_pl_interval :
 															  timestamp_pl_interval,
-									   TimestampTzGetDatum(state->next_timestamp),
-									   IntervalPGetDatum(state->gapfill_interval));
+									   TimestampTzGetDatum(state->gapfill_start),
+									   IntervalPGetDatum(state->next_offset));
 			state->next_timestamp = DatumGetTimestampTz(next);
 			break;
 		default:
 			state->next_timestamp += state->gapfill_period;
 			break;
+	}
+	/* Advance the interval offset if necessary */
+	if (state->gapfill_interval)
+	{
+		Datum tspan = DirectFunctionCall2(interval_pl,
+										  IntervalPGetDatum(state->gapfill_interval),
+										  IntervalPGetDatum(state->next_offset));
+		state->next_offset = DatumGetIntervalP(tspan);
 	}
 }
 
@@ -742,6 +750,7 @@ gapfill_begin(CustomScanState *node, EState *estate, int eflags)
 		state->gapfill_start = align_with_time_bucket(state, get_start_arg(state));
 	}
 	state->next_timestamp = state->gapfill_start;
+	state->next_offset = state->gapfill_interval;
 
 	/* gap fill end */
 	if (is_const_null(get_finish_arg(state)))
@@ -938,6 +947,7 @@ gapfill_state_reset_group(GapFillState *state, TupleTableSlot *slot)
 				break;
 		}
 	}
+	state->next_offset = state->gapfill_interval;
 }
 
 /*

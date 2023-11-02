@@ -4,6 +4,8 @@
 
 SET timescaledb.enable_transparent_decompression to OFF;
 
+\set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
+
 \ir include/rand_generator.sql
 
 --test_collation ---
@@ -998,3 +1000,75 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
 RESET enable_indexscan;
 RESET enable_seqscan;
 
+-- When all chunks are compressed and a limit query is performed, only the needed
+-- chunks should be accessed
+
+CREATE TABLE sensor_data_compressed (
+time timestamptz not null,
+sensor_id integer not null,
+cpu double precision null,
+temperature double precision null);
+
+SELECT FROM create_hypertable('sensor_data_compressed', 'time');
+
+INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
+   VALUES
+   ('1980-01-02 00:00:00-00', 1, 3, 12.0),
+   ('1980-01-03 00:00:00-00', 3, 4, 15.0),
+   ('1980-02-04 00:00:00-00', 1, 2, 17.0),
+   ('1980-02-05 00:00:00-00', 3, 6, 11.0),
+   ('1980-03-06 00:00:00-00', 1, 8, 13.0),
+   ('1980-03-07 00:00:00-00', 3, 4, 4.0),
+   ('1980-04-08 00:00:00-00', 1, 2, 1.0),
+   ('1980-04-03 00:00:00-00', 3, 5, 33.0),
+   ('1980-05-02 00:00:00-00', 1, 8, 41.0),
+   ('1980-05-03 00:00:00-00', 3, 4, 22.0),
+   ('1980-06-02 00:00:00-00', 1, 1, 45.0),
+   ('1980-06-03 00:00:00-00', 3, 3, 44.0);
+
+ALTER TABLE sensor_data_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id', timescaledb.compress_orderby = 'time DESC');
+
+-- Compress three of the chunks
+SELECT compress_chunk(ch) FROM show_chunks('sensor_data_compressed') ch LIMIT 3;
+ANALYZE sensor_data_compressed;
+
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+
+-- Only the first chunks should be accessed (sorted merge append is enabled)
+:PREFIX
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+
+-- Only the first chunks should be accessed (sorted merge append is disabled)
+SET timescaledb.enable_decompression_sorted_merge = FALSE;
+:PREFIX
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+RESET timescaledb.enable_decompression_sorted_merge;
+
+-- Compress the remaining chunks
+SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('sensor_data_compressed') ch;
+
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+
+-- Only the first chunks should be accessed (sorted merge append is enabled)
+:PREFIX
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+
+-- Only the first chunks should be accessed (sorted merge append is disabled)
+SET timescaledb.enable_decompression_sorted_merge = FALSE;
+:PREFIX
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+RESET timescaledb.enable_decompression_sorted_merge;
+
+-- Convert the last chunk into a partially compressed chunk
+INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
+   VALUES ('1980-01-02 01:00:00-00', 2, 4, 14.0);
+
+-- Only the first chunks should be accessed (sorted merge append is enabled)
+:PREFIX
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+
+-- Only the first chunks should be accessed (sorted merge append is disabled)
+SET timescaledb.enable_decompression_sorted_merge = FALSE;
+:PREFIX
+SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
+RESET timescaledb.enable_decompression_sorted_merge;

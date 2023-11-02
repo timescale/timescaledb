@@ -25,6 +25,7 @@ create or replace function mix(x float4) returns float4 as $$ select ((hashfloat
 -- distributed hypertable
 create table metric_dist(ts timestamptz, id int, value float);
 select create_distributed_hypertable('metric_dist', 'ts', 'id');
+WARNING:  distributed hypertable is deprecated
 WARNING:  only one data node was assigned to the hypertable
 NOTICE:  adding not-null constraint to column "ts"
  create_distributed_hypertable 

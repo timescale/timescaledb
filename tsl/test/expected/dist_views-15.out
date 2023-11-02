@@ -1,0 +1,227 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+---------------------------------------------------
+-- Test views and size_utils functions on distributed hypertable
+---------------------------------------------------
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set DATA_NODE_1 :TEST_DBNAME _1
+\set DATA_NODE_2 :TEST_DBNAME _2
+\set DATA_NODE_3 :TEST_DBNAME _3
+SELECT node_name, database, node_created, database_created, extension_created
+FROM (
+  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
+  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
+) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+    node_name    |    database     | node_created | database_created | extension_created 
+-----------------+-----------------+--------------+------------------+-------------------
+ db_dist_views_1 | db_dist_views_1 | t            | t                | t
+ db_dist_views_2 | db_dist_views_2 | t            | t                | t
+ db_dist_views_3 | db_dist_views_3 | t            | t                | t
+(3 rows)
+
+GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO :ROLE_1;
+GRANT CREATE ON SCHEMA public TO :ROLE_1;
+SET client_min_messages TO NOTICE;
+SET ROLE :ROLE_1;
+SELECT setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+CREATE TABLE dist_table(time timestamptz NOT NULL, device int, temp float, timedim date NOT NULL);
+SELECT create_distributed_hypertable('dist_table', 'time', 'device', replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
+ create_distributed_hypertable 
+-------------------------------
+ (1,public,dist_table,t)
+(1 row)
+
+SELECT add_dimension('dist_table', 'timedim', chunk_time_interval=>'7 days'::interval);
+          add_dimension          
+---------------------------------
+ (3,public,dist_table,timedim,t)
+(1 row)
+
+INSERT INTO dist_table SELECT t, (abs(timestamp_hash(t::timestamp)) % 10) + 1, 80, '2020-01-01'
+FROM generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-04 1:00', '1 hour') t;
+ALTER TABLE dist_table SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby = 'time DESC');
+-- Test views with compression
+BEGIN;
+SELECT compress_chunk(chunk)
+FROM show_chunks('dist_table') AS chunk
+ORDER BY chunk
+LIMIT 1;
+               compress_chunk                
+---------------------------------------------
+ _timescaledb_internal._dist_hyper_1_1_chunk
+(1 row)
+
+SELECT * FROM timescaledb_information.hypertables
+WHERE hypertable_name = 'dist_table';
+ hypertable_schema | hypertable_name |    owner    | num_dimensions | num_chunks | compression_enabled | is_distributed | replication_factor |                    data_nodes                     | tablespaces 
+-------------------+-----------------+-------------+----------------+------------+---------------------+----------------+--------------------+---------------------------------------------------+-------------
+ public            | dist_table      | test_role_1 |              3 |          3 | t                   | t              |                  2 | {db_dist_views_1,db_dist_views_2,db_dist_views_3} | 
+(1 row)
+
+SELECT hypertable_schema,
+       hypertable_name,
+       chunk_schema,
+       chunk_name,
+       primary_dimension,
+       primary_dimension_type,
+       range_start,
+       range_end,
+       range_start_integer,
+       range_end_integer,
+       is_compressed,
+       chunk_tablespace,
+       data_nodes
+FROM timescaledb_information.chunks
+ORDER BY hypertable_name, chunk_name;
+ hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | primary_dimension |  primary_dimension_type  |         range_start          |          range_end           | range_start_integer | range_end_integer | is_compressed | chunk_tablespace |            data_nodes             
+-------------------+-----------------+-----------------------+-----------------------+-------------------+--------------------------+------------------------------+------------------------------+---------------------+-------------------+---------------+------------------+-----------------------------------
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_1_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   | t             |                  | {db_dist_views_1,db_dist_views_2}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_2_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   | f             |                  | {db_dist_views_2,db_dist_views_3}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_3_chunk | time              | timestamp with time zone | Wed Feb 28 16:00:00 2018 PST | Wed Mar 07 16:00:00 2018 PST |                     |                   | f             |                  | {db_dist_views_1,db_dist_views_3}
+(3 rows)
+
+SELECT * from timescaledb_information.dimensions
+ORDER BY hypertable_name, dimension_number;
+ hypertable_schema | hypertable_name | dimension_number | column_name |       column_type        | dimension_type | time_interval | integer_interval | integer_now_func | num_partitions 
+-------------------+-----------------+------------------+-------------+--------------------------+----------------+---------------+------------------+------------------+----------------
+ public            | dist_table      |                1 | time        | timestamp with time zone | Time           | @ 7 days      |                  |                  |               
+ public            | dist_table      |                2 | device      | integer                  | Space          |               |                  |                  |              3
+ public            | dist_table      |                3 | timedim     | date                     | Time           | @ 7 days      |                  |                  |               
+(3 rows)
+
+SELECT * FROM chunks_detailed_size('dist_table'::regclass)
+ORDER BY chunk_name, node_name;
+     chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |    node_name    
+-----------------------+-----------------------+-------------+-------------+-------------+-------------+-----------------
+ _timescaledb_internal | _dist_hyper_1_1_chunk |       16384 |       32768 |        8192 |       57344 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_1_1_chunk |       16384 |       32768 |        8192 |       57344 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_1_2_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_3
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_1_3_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_3
+(6 rows)
+
+SELECT * FROM hypertable_detailed_size('dist_table'::regclass)
+ORDER BY node_name;;
+ table_bytes | index_bytes | toast_bytes | total_bytes |    node_name    
+-------------+-------------+-------------+-------------+-----------------
+       24576 |       81920 |        8192 |      114688 | db_dist_views_1
+       24576 |       81920 |        8192 |      114688 | db_dist_views_2
+       16384 |       81920 |           0 |       98304 | db_dist_views_3
+           0 |       16384 |           0 |       16384 | 
+(4 rows)
+
+---tables with special characters in the name ----
+CREATE TABLE "quote'tab" ( a timestamp,  b integer);
+SELECT create_distributed_hypertable( '"quote''tab"', 'a', 'b', replication_factor=>2, chunk_time_interval=>INTERVAL '1 day');
+WARNING:  distributed hypertable is deprecated
+WARNING:  column type "timestamp without time zone" used for "a" does not follow best practices
+NOTICE:  adding not-null constraint to column "a"
+ create_distributed_hypertable 
+-------------------------------
+ (2,public,quote'tab,t)
+(1 row)
+
+INSERT into "quote'tab" select generate_series( '2020-02-02 10:00', '2020-02-05 10:00' , '1 day'::interval), 10;
+SELECT * FROM  chunks_detailed_size( '"quote''tab"') ORDER BY chunk_name, node_name;
+     chunk_schema      |      chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |    node_name    
+-----------------------+-----------------------+-------------+-------------+-------------+-------------+-----------------
+ _timescaledb_internal | _dist_hyper_2_4_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_2_4_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_2_5_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_2_5_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_2_6_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_2_6_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_2_7_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_2_7_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+(8 rows)
+
+CREATE TABLE "special#tab" ( a timestamp,  b integer);
+SELECT create_hypertable( 'special#tab', 'a', 'b', replication_factor=>2, chunk_time_interval=>INTERVAL '1 day');
+WARNING:  column type "timestamp without time zone" used for "a" does not follow best practices
+NOTICE:  adding not-null constraint to column "a"
+    create_hypertable     
+--------------------------
+ (3,public,special#tab,t)
+(1 row)
+
+INSERT into "special#tab" select generate_series( '2020-02-02 10:00', '2020-02-05 10:00' , '1 day'::interval), 10;
+SELECT * FROM  chunks_detailed_size( '"special#tab"') ORDER BY chunk_name, node_name;
+     chunk_schema      |       chunk_name       | table_bytes | index_bytes | toast_bytes | total_bytes |    node_name    
+-----------------------+------------------------+-------------+-------------+-------------+-------------+-----------------
+ _timescaledb_internal | _dist_hyper_3_10_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_3_10_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_3_11_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_3_11_chunk |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_3_8_chunk  |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_3_8_chunk  |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+ _timescaledb_internal | _dist_hyper_3_9_chunk  |        8192 |       32768 |           0 |       40960 | db_dist_views_1
+ _timescaledb_internal | _dist_hyper_3_9_chunk  |        8192 |       32768 |           0 |       40960 | db_dist_views_2
+(8 rows)
+
+SELECT * FROM  hypertable_index_size( 'dist_table_time_idx') ;
+ hypertable_index_size 
+-----------------------
+                114688
+(1 row)
+
+-- Test chunk_replication_status view
+SELECT * FROM timescaledb_experimental.chunk_replication_status
+ORDER BY chunk_schema, chunk_name
+LIMIT 4;
+ hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | desired_num_replicas | num_replicas |           replica_nodes           | non_replica_nodes 
+-------------------+-----------------+-----------------------+-----------------------+----------------------+--------------+-----------------------------------+-------------------
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_1_chunk |                    2 |            2 | {db_dist_views_1,db_dist_views_2} | {db_dist_views_3}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_2_chunk |                    2 |            2 | {db_dist_views_2,db_dist_views_3} | {db_dist_views_1}
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_3_chunk |                    2 |            2 | {db_dist_views_3,db_dist_views_1} | {db_dist_views_2}
+ public            | quote'tab       | _timescaledb_internal | _dist_hyper_2_4_chunk |                    2 |            2 | {db_dist_views_1,db_dist_views_2} | {db_dist_views_3}
+(4 rows)
+
+-- drop one chunk replica
+SELECT _timescaledb_functions.chunk_drop_replica(format('%I.%I', chunk_schema, chunk_name)::regclass, replica_nodes[1])
+FROM timescaledb_experimental.chunk_replication_status
+ORDER BY chunk_schema, chunk_name
+LIMIT 1;
+ chunk_drop_replica 
+--------------------
+ 
+(1 row)
+
+SELECT * FROM timescaledb_experimental.chunk_replication_status
+WHERE num_replicas < desired_num_replicas
+ORDER BY chunk_schema, chunk_name;
+ hypertable_schema | hypertable_name |     chunk_schema      |      chunk_name       | desired_num_replicas | num_replicas |   replica_nodes   |         non_replica_nodes         
+-------------------+-----------------+-----------------------+-----------------------+----------------------+--------------+-------------------+-----------------------------------
+ public            | dist_table      | _timescaledb_internal | _dist_hyper_1_1_chunk |                    2 |            1 | {db_dist_views_2} | {db_dist_views_1,db_dist_views_3}
+(1 row)
+
+-- Example usage of finding data nodes to copy/move chunks between
+SELECT
+    format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk,
+    replica_nodes[1] AS copy_from_node,
+    non_replica_nodes[1] AS copy_to_node
+FROM
+    timescaledb_experimental.chunk_replication_status
+WHERE
+    num_replicas < desired_num_replicas
+ORDER BY
+    chunk_schema, chunk_name;
+                    chunk                    | copy_from_node  |  copy_to_node   
+---------------------------------------------+-----------------+-----------------
+ _timescaledb_internal._dist_hyper_1_1_chunk | db_dist_views_2 | db_dist_views_1
+(1 row)
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+DROP DATABASE :DATA_NODE_1 WITH (FORCE);
+DROP DATABASE :DATA_NODE_2 WITH (FORCE);
+DROP DATABASE :DATA_NODE_3 WITH (FORCE);

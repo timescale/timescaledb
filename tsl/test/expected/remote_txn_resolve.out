@@ -27,18 +27,21 @@ CREATE OR REPLACE FUNCTION add_loopback_server(
 AS :TSL_MODULE_PATHNAME, 'ts_unchecked_add_data_node'
 LANGUAGE C;
 SELECT database FROM add_loopback_server('loopback', database => :'TEST_DBNAME', bootstrap => false);
+WARNING:  adding data node is deprecated
        database        
 -----------------------
  db_remote_txn_resolve
 (1 row)
 
 SELECT database FROM add_loopback_server('loopback2', database => :'TEST_DBNAME', bootstrap => false);
+WARNING:  adding data node is deprecated
        database        
 -----------------------
  db_remote_txn_resolve
 (1 row)
 
 SELECT database FROM add_loopback_server('loopback3', database => :'TEST_DBNAME', bootstrap => false);
+WARNING:  adding data node is deprecated
        database        
 -----------------------
  db_remote_txn_resolve

@@ -13,7 +13,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_install_timestamp() RETURN
 SELECT COUNT(*) from _timescaledb_catalog.metadata;
  count 
 -------
-     2
+     3
 (1 row)
 
 SELECT _timescaledb_internal.test_uuid() as uuid_1 \gset
@@ -90,7 +90,7 @@ ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 SELECT COUNT(*) FROM _timescaledb_catalog.metadata;
  count 
 -------
-     3
+     4
 (1 row)
 
 -- Verify that this is the old exported_uuid
@@ -111,5 +111,31 @@ SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as export
  exported_uuids_diff 
 ---------------------
  f
+(1 row)
+
+-- check metadata version matches expected value
+SELECT x.extversion = m.value AS "version match"
+FROM pg_extension x
+JOIN _timescaledb_catalog.metadata m ON m.key='timescaledb_version'
+WHERE x.extname='timescaledb';
+ version match 
+---------------
+ t
+(1 row)
+
+-- test version check in post_restore
+\c :TEST_DBNAME :ROLE_SUPERUSER
+UPDATE _timescaledb_catalog.metadata SET value = '1.2.3' WHERE key = 'timescaledb_version';
+\set ON_ERROR_STOP 0
+-- set verbosity to sqlstate to suppress version dependant error message
+\set VERBOSITY sqlstate
+SELECT timescaledb_post_restore();
+ERROR:  P0001
+\set ON_ERROR_STOP 1
+UPDATE _timescaledb_catalog.metadata m SET value = x.extversion FROM pg_extension x WHERE m.key = 'timescaledb_version' AND x.extname='timescaledb';
+SELECT timescaledb_post_restore();
+ timescaledb_post_restore 
+--------------------------
+ t
 (1 row)
 

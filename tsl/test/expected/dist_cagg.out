@@ -16,6 +16,9 @@ FROM (
   SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
   FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
 ) a;
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
+WARNING:  adding data node is deprecated
    node_name    |    database    | node_created | database_created | extension_created 
 ----------------+----------------+--------------+------------------+-------------------
  db_dist_cagg_1 | db_dist_cagg_1 | t            | t                | t
@@ -30,6 +33,7 @@ GRANT CREATE ON SCHEMA public TO :ROLE_1;
 -- create cagg on distributed hypertable
 CREATE TABLE conditions_dist(day timestamptz NOT NULL, temperature INT NOT NULL);
 SELECT create_distributed_hypertable('conditions_dist', 'day', chunk_time_interval => INTERVAL '1 day', replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (1,public,conditions_dist,t)
@@ -56,12 +60,14 @@ SELECT * FROM conditions_dist_1m ORDER BY bucket;
 
 -- case 1: ensure select works when data node is unavailable
 SELECT alter_data_node(:'DATA_NODE_1');
+WARNING:  altering data node is deprecated
                   alter_data_node                  
 ---------------------------------------------------
  (db_dist_cagg_1,localhost,55432,db_dist_cagg_1,t)
 (1 row)
 
 SELECT alter_data_node(:'DATA_NODE_1', port => 55433, available => false);
+WARNING:  altering data node is deprecated
                   alter_data_node                  
 ---------------------------------------------------
  (db_dist_cagg_1,localhost,55433,db_dist_cagg_1,f)
@@ -109,12 +115,14 @@ ERROR:  could not connect to "db_dist_cagg_1"
 \set ON_ERROR_STOP 1
 -- case 7: ensure data node update works when it becomes available again
 SELECT alter_data_node(:'DATA_NODE_1', port => 55432);
+WARNING:  altering data node is deprecated
                   alter_data_node                  
 ---------------------------------------------------
  (db_dist_cagg_1,localhost,55432,db_dist_cagg_1,f)
 (1 row)
 
 SELECT alter_data_node(:'DATA_NODE_1', available => true);
+WARNING:  altering data node is deprecated
                   alter_data_node                  
 ---------------------------------------------------
  (db_dist_cagg_1,localhost,55432,db_dist_cagg_1,t)

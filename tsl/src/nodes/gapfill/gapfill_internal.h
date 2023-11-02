@@ -104,6 +104,8 @@ typedef struct GapFillState
 	Interval *gapfill_interval;
 
 	int64 next_timestamp;
+	/* interval offset for next_timestamp from gapfill_start */
+	Interval *next_offset;
 	int64 subslot_time; /* time of tuple in subslot */
 
 	int time_index;			 /* position of time column */

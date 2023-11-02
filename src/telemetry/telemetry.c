@@ -604,6 +604,7 @@ format_iso8601(Datum value)
 #define REQ_RELKIND_COMPRESSED_TOAST_SIZE "compressed_toast_size"
 #define REQ_RELKIND_COMPRESSED_INDEXES_SIZE "compressed_indexes_size"
 #define REQ_RELKIND_COMPRESSED_ROWCOUNT "compressed_row_count"
+#define REQ_RELKIND_COMPRESSED_ROWCOUNT_FROZEN_IMMEDIATELY "compressed_row_count_frozen_immediately"
 
 #define REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT "num_caggs_on_distributed_hypertables"
 #define REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT "num_caggs_using_real_time_aggregation"
@@ -639,6 +640,9 @@ add_compression_stats_object(JsonbParseState *parse_state, StatsRelType reltype,
 	ts_jsonb_add_int64(parse_state,
 					   REQ_RELKIND_COMPRESSED_INDEXES_SIZE,
 					   hs->compressed_indexes_size);
+	ts_jsonb_add_int64(parse_state,
+					   REQ_RELKIND_COMPRESSED_ROWCOUNT_FROZEN_IMMEDIATELY,
+					   hs->compressed_row_frozen_immediately_count);
 	ts_jsonb_add_int64(parse_state, REQ_RELKIND_UNCOMPRESSED_ROWCOUNT, hs->uncompressed_row_count);
 	ts_jsonb_add_int64(parse_state, REQ_RELKIND_UNCOMPRESSED_HEAP_SIZE, hs->uncompressed_heap_size);
 	ts_jsonb_add_int64(parse_state,

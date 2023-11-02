@@ -476,6 +476,16 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/* input target list */
 	decompress_plan->custom_scan_tlist = NIL;
 
+	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
+	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
+	 *
+	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
+	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
+	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
+	 */
+	if (dcpath->perform_vectorized_aggregation)
+		decompress_plan->custom_scan_tlist = decompressed_tlist;
+
 	if (IsA(compressed_path, IndexPath))
 	{
 		/*
@@ -793,11 +803,12 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 #endif
 
-	settings = list_make5_int(dcpath->info->hypertable_id,
+	settings = list_make6_int(dcpath->info->hypertable_id,
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse,
 							  dcpath->batch_sorted_merge,
-							  enable_bulk_decompression);
+							  enable_bulk_decompression,
+							  dcpath->perform_vectorized_aggregation);
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see

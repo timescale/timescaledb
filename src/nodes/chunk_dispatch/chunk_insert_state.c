@@ -595,6 +595,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 	CheckValidResultRel(relinfo, chunk_dispatch_get_cmd_type(dispatch));
 
 	state = palloc0(sizeof(ChunkInsertState));
+	state->cds = dispatch->dispatch_state;
 	state->mctx = cis_context;
 	state->rel = rel;
 	state->result_relation_info = relinfo;

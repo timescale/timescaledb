@@ -35,6 +35,7 @@ typedef struct Hypertable Hypertable;
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 typedef struct CopyChunkState CopyChunkState;
+typedef struct HypertableModifyState HypertableModifyState;
 
 typedef struct CrossModuleFunctions
 {
@@ -98,6 +99,9 @@ typedef struct CrossModuleFunctions
 	void (*ddl_command_end)(EventTriggerData *command);
 	void (*sql_drop)(List *dropped_objects);
 
+	/* Vectorized queries */
+	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
+
 	/* Continuous Aggregates */
 	PGFunction partialize_agg;
 	PGFunction finalize_agg_sfunc;
@@ -139,7 +143,7 @@ typedef struct CrossModuleFunctions
 	PGFunction decompress_chunk;
 	void (*decompress_batches_for_insert)(ChunkInsertState *state, Chunk *chunk,
 										  TupleTableSlot *slot);
-	bool (*decompress_target_segments)(ModifyTableState *ps);
+	bool (*decompress_target_segments)(HypertableModifyState *ht_state);
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
 	 *  functions because they may be very useful for debugging customer problems if the sql

@@ -8,6 +8,7 @@
 \set DN_DBNAME_3 :TEST_DBNAME _3
 SELECT 1 FROM add_data_node('data_node_1', host => 'localhost',
                             database => :'DN_DBNAME_1');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -15,6 +16,7 @@ SELECT 1 FROM add_data_node('data_node_1', host => 'localhost',
 
 SELECT 1 FROM add_data_node('data_node_2', host => 'localhost',
                             database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -22,6 +24,7 @@ SELECT 1 FROM add_data_node('data_node_2', host => 'localhost',
 
 SELECT 1 FROM add_data_node('data_node_3', host => 'localhost',
                             database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -40,6 +43,7 @@ SELECT ch.hypertable_name, format('%I.%I', ch.chunk_schema, ch.chunk_name)::regc
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
 select create_distributed_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '270 day', replication_factor=>3);
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "date"
  create_distributed_hypertable 
 -------------------------------
@@ -48,6 +52,7 @@ NOTICE:  adding not-null constraint to column "date"
 
 create table uk_price_paid_space2(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_space2', 'date', 'postcode2', 2, chunk_time_interval => interval '270 day', replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
 WARNING:  insufficient number of partitions for dimension "postcode2"
    create_distributed_hypertable   
 -----------------------------------
@@ -85,6 +90,7 @@ SELECT * FROM chunk_query_data_node WHERE hypertable_name = 'uk_price_paid' LIMI
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_1', available=>false);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |           database           | available 
 -------------+-----------+-------+------------------------------+-----------
  data_node_1 | localhost | 55432 | db_dist_copy_available_dns_1 | f
@@ -114,6 +120,7 @@ set timescaledb.max_open_chunks_per_insert = 1117;
 WARNING:  insert cache size is larger than hypertable chunk cache size
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_1', available=>true);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |           database           | available 
 -------------+-----------+-------+------------------------------+-----------
  data_node_1 | localhost | 55432 | db_dist_copy_available_dns_1 | t
@@ -182,6 +189,7 @@ set timescaledb.dist_copy_transfer_format = 'binary';
 create table uk_price_paid_bin(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_bin', 'date', 'postcode2',
     chunk_time_interval => interval '90 day', replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable  
 --------------------------------
  (3,public,uk_price_paid_bin,t)
@@ -206,6 +214,7 @@ SELECT * FROM chunk_query_data_node WHERE hypertable_name = 'uk_price_paid_bin' 
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_1', available=>false);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |           database           | available 
 -------------+-----------+-------+------------------------------+-----------
  data_node_1 | localhost | 55432 | db_dist_copy_available_dns_1 | f
@@ -251,6 +260,7 @@ SELECT * FROM chunk_query_data_node WHERE hypertable_name = 'uk_price_paid_bin' 
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_1', available=>true);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |           database           | available 
 -------------+-----------+-------+------------------------------+-----------
  data_node_1 | localhost | 55432 | db_dist_copy_available_dns_1 | t
@@ -278,6 +288,7 @@ SELECT * FROM chunk_query_data_node WHERE hypertable_name = 'uk_price_paid' LIMI
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_2', available=>false);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |           database           | available 
 -------------+-----------+-------+------------------------------+-----------
  data_node_2 | localhost | 55432 | db_dist_copy_available_dns_2 | f
@@ -303,6 +314,7 @@ SELECT * FROM chunk_query_data_node WHERE hypertable_name = 'uk_price_paid' LIMI
 
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_2', available=>true);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |           database           | available 
 -------------+-----------+-------+------------------------------+-----------
  data_node_2 | localhost | 55432 | db_dist_copy_available_dns_2 | t
@@ -314,6 +326,7 @@ SET timescaledb.enable_distributed_insert_with_copy=true;
 INSERT INTO uk_price_paid SELECT * FROM uk_price_paid_bin;
 SET ROLE :ROLE_CLUSTER_SUPERUSER;
 SELECT * FROM alter_data_node('data_node_3', available=>false);
+WARNING:  altering data node is deprecated
   node_name  |   host    | port  |           database           | available 
 -------------+-----------+-------+------------------------------+-----------
  data_node_3 | localhost | 55432 | db_dist_copy_available_dns_3 | f

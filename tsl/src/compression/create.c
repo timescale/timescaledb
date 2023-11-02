@@ -956,6 +956,8 @@ validate_existing_indexes(Hypertable *ht, CompressColInfo *colinfo, Bitmapset *i
 		for (int i = 0; i < index->indnkeyatts; i++)
 		{
 			int attno = index->indkey.values[i];
+			if (attno == 0)
+				continue; /* skip check for expression column */
 			Form_hypertable_compression col_def = get_col_info_for_attnum(ht, colinfo, attno);
 			Ensure(col_def, "missing column definition for unique index");
 			if (col_def->segmentby_column_index < 1 && col_def->orderby_column_index < 1)

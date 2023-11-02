@@ -448,6 +448,8 @@ ts_update_scheduled_jobs_list(List *cur_jobs_list, MemoryContext mctx)
 	ListCell *new_ptr = list_head(new_jobs);
 	ListCell *cur_ptr = list_head(cur_jobs_list);
 
+	elog(DEBUG2, "updating scheduled jobs list");
+
 	while (cur_ptr != NULL && new_ptr != NULL)
 	{
 		ScheduledBgwJob *new_sjob = lfirst(new_ptr);
@@ -734,6 +736,8 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	TimestampTz start = ts_timer_get_current_timestamp();
 	TimestampTz quit_time = DT_NOEND;
 
+	log_min_messages = ts_guc_bgw_log_level;
+
 	pgstat_report_activity(STATE_RUNNING, NULL);
 
 	/* txn to read the list of jobs from the DB */
@@ -747,7 +751,7 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 	if (run_for_interval_ms > 0)
 		quit_time = TimestampTzPlusMilliseconds(start, run_for_interval_ms);
 
-	ereport(DEBUG1, (errmsg("database scheduler starting for database %u", MyDatabaseId)));
+	elog(DEBUG1, "database scheduler for database %u starting", MyDatabaseId);
 
 	/*
 	 * on SIGTERM the process will usually die from the CHECK_FOR_INTERRUPTS
@@ -775,6 +779,7 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		{
 			got_SIGHUP = false;
 			ProcessConfigFile(PGC_SIGHUP);
+			log_min_messages = ts_guc_bgw_log_level;
 		}
 
 		/*
@@ -798,6 +803,8 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		MemoryContextReset(scratch_mctx);
 	}
 
+	elog(DEBUG1, "database scheduler for database %u exiting", MyDatabaseId);
+
 #ifdef TS_DEBUG
 	if (ts_shutdown_bgw)
 		elog(WARNING, "bgw scheduler stopped due to shutdown_bgw guc");
@@ -807,6 +814,7 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 	wait_for_all_jobs_to_shutdown();
 	check_for_stopped_and_timed_out_jobs();
+	proc_exit(ts_bgw_scheduler_exit_code);
 }
 
 static void
@@ -863,6 +871,7 @@ ts_bgw_scheduler_register_signal_handlers(void)
 	/* Some SIGHUPS may already have been dropped, so we must load the file here */
 	got_SIGHUP = false;
 	ProcessConfigFile(PGC_SIGHUP);
+	log_min_messages = ts_guc_bgw_log_level;
 }
 
 Datum

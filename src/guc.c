@@ -63,6 +63,14 @@ static const struct config_enum_entry dist_copy_transfer_formats[] = {
 	{ NULL, 0, false }
 };
 
+/* Copied from contrib/auto_explain/auto_explain.c */
+static const struct config_enum_entry loglevel_options[] = {
+	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
+	{ "debug2", DEBUG2, false }, { "debug1", DEBUG1, false }, { "debug", DEBUG2, true },
+	{ "info", INFO, false },	 { "notice", NOTICE, false }, { "warning", WARNING, false },
+	{ "log", LOG, false },		 { NULL, 0, false }
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -84,8 +92,10 @@ bool ts_guc_enable_per_data_node_queries = true;
 bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
+bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
+TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
@@ -112,6 +122,20 @@ TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABL
 TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
+
+/*
+ * Exit code for the scheduler.
+ *
+ * Normally it exits with a zero which means that it will not restart. If an
+ * error is raised, it exits with error code 1, which will trigger a
+ * restart.
+ *
+ * This variable exists to be able to trigger a restart for a normal exit,
+ * which is useful when debugging.
+ *
+ * See backend/postmaster/bgworker.c
+ */
+int ts_bgw_scheduler_exit_code = 0;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -570,6 +594,17 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable("timescaledb.vectorized_aggregation",
+							 "Enable vectorized aggregation",
+							 "Enable vectorized aggregation for compressed data",
+							 &ts_guc_enable_vectorized_aggregation,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomBoolVariable("timescaledb.enable_remote_explain",
 							 "Show explain from remote nodes when using VERBOSE flag",
 							 "Enable getting and showing EXPLAIN output from remote nodes",
@@ -713,6 +748,18 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
+	DefineCustomEnumVariable("timescaledb.bgw_log_level",
+							 "Log level for the background worker subsystem",
+							 "Log level for the scheduler and workers of the background worker "
+							 "subsystem. Requires configuration reload to change.",
+							 /* valueAddr= */ &ts_guc_bgw_log_level,
+							 /* bootValue= */ WARNING,
+							 /* options= */ loglevel_options,
+							 /* context= */ PGC_SIGHUP,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
 #ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
 							   /* short_desc= */ "cloud provider",
@@ -737,6 +784,19 @@ _guc_init(void)
 							 /* check_hook= */ NULL,
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
+
+	DefineCustomIntVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler_exit_code",
+							/* short_desc= */ "exit code to use when shutting down the scheduler",
+							/* long_desc= */ "this is for debugging purposes",
+							/* valueAddr= */ &ts_bgw_scheduler_exit_code,
+							/* bootValue= */ 0,
+							/* minValue= */ 0,
+							/* maxValue= */ 255,
+							/* context= */ PGC_SIGHUP,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.current_timestamp_mock",
 							   /* short_desc= */ "set the current timestamp",

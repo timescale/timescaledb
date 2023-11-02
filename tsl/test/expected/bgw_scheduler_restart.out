@@ -1,0 +1,83 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE VIEW tsdb_bgw AS
+       SELECT datname, application_name FROM pg_stat_activity
+       WHERE application_name LIKE 'TimescaleDB%'
+       ORDER BY datname, application_name;
+SHOW timescaledb.bgw_scheduler_restart_time;
+ timescaledb.bgw_scheduler_restart_time 
+----------------------------------------
+ 30s
+(1 row)
+
+SELECT _timescaledb_functions.start_background_workers();
+ start_background_workers 
+--------------------------
+ t
+(1 row)
+
+SELECT pg_sleep(10);		-- Wait for scheduler to start.
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM tsdb_bgw;
+         datname          |            application_name             
+--------------------------+-----------------------------------------
+ db_bgw_scheduler_restart | TimescaleDB Background Worker Scheduler
+                          | TimescaleDB Background Worker Launcher
+(2 rows)
+
+ALTER SYSTEM SET timescaledb.shutdown_bgw_scheduler TO 'on';
+ALTER SYSTEM SET timescaledb.shutdown_bgw_scheduler_exit_code TO 1;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+SELECT pg_sleep(20);		-- Wait for scheduler to exit.
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM tsdb_bgw;
+ datname |            application_name            
+---------+----------------------------------------
+         | TimescaleDB Background Worker Launcher
+(1 row)
+
+ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
+ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler_exit_code;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+SELECT pg_sleep(30);		-- Wait for scheduler to restart.
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT * FROM tsdb_bgw;
+         datname          |            application_name             
+--------------------------+-----------------------------------------
+ db_bgw_scheduler_restart | TimescaleDB Background Worker Scheduler
+                          | TimescaleDB Background Worker Launcher
+(2 rows)
+
+SELECT pg_terminate_backend(pid)
+  FROM pg_stat_activity
+ WHERE datname = :'TEST_DBNAME'
+   AND application_name LIKE 'TimescaleDB%';
+ pg_terminate_backend 
+----------------------
+ t
+(1 row)
+

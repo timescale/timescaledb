@@ -64,6 +64,7 @@ typedef struct HyperStats
 	int64 compressed_indexes_size;
 	int64 compressed_toast_size;
 	int64 compressed_row_count;
+	int64 compressed_row_frozen_immediately_count;
 	int64 uncompressed_heap_size;
 	int64 uncompressed_indexes_size;
 	int64 uncompressed_toast_size;

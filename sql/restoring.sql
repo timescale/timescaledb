@@ -23,7 +23,17 @@ CREATE OR REPLACE FUNCTION @extschema@.timescaledb_post_restore() RETURNS BOOL A
 $BODY$
 DECLARE
     db text;
+    catalog_version text;
 BEGIN
+    SELECT m.value INTO catalog_version FROM pg_extension x
+    JOIN _timescaledb_catalog.metadata m ON m.key='timescaledb_version'
+    WHERE x.extname='timescaledb' AND x.extversion <> m.value;
+
+    -- check that a loaded dump is compatible with the currently running code
+    IF FOUND THEN
+        RAISE EXCEPTION 'catalog version mismatch, expected "%" seen "%"', '@PROJECT_VERSION_MOD@', catalog_version;
+    END IF;
+
     SELECT current_database() INTO db;
     EXECUTE format($$ALTER DATABASE %I RESET timescaledb.restoring $$, db);
     -- we cannot use reset here because the reset_val might not be off

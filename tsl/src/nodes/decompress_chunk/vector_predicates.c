@@ -10,6 +10,7 @@
 
 #include <postgres.h>
 
+#include <utils/date.h>
 #include <utils/fmgroids.h>
 
 #include "compat/compat.h"

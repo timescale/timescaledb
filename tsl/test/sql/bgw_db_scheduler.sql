@@ -233,7 +233,7 @@ TRUNCATE bgw_log;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 SELECT ts_bgw_params_reset_time();
 DELETE FROM _timescaledb_config.bgw_job;
-SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', INTERVAL '100ms');
+SELECT insert_job('test_job_2', 'bgw_test_job_2_error', INTERVAL '100ms', INTERVAL '100s', INTERVAL '100ms') AS test_job_2_id \gset
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 --Run the first time and error
@@ -270,16 +270,16 @@ SELECT * FROM sorted_bgw_log;
 -- Get status of failing job `test_job_2` to check it reached `max_retries` and
 -- the new `job_status` now is `Paused`
 SELECT job_id, last_run_status, job_status, total_runs, total_successes, total_failures
-FROM timescaledb_information.job_stats WHERE job_id = 1001;
+FROM timescaledb_information.job_stats WHERE job_id = :test_job_2_id;
 
 -- Alter job to be rescheduled and run it again
 \c :TEST_DBNAME :ROLE_SUPERUSER
 TRUNCATE bgw_log;
-SELECT scheduled FROM alter_job(1001, scheduled => true) AS discard;
+SELECT scheduled FROM alter_job(:test_job_2_id, scheduled => true) AS discard;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(525);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes
-FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 1001;
+FROM _timescaledb_internal.bgw_job_stat WHERE job_id = :test_job_2_id;
 SELECT * FROM sorted_bgw_log;
 
 --
@@ -699,4 +699,6 @@ DROP USER renamed_user;
 
 -- clean up jobs
 SELECT _timescaledb_functions.stop_background_workers();
+
+
 

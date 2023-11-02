@@ -377,7 +377,7 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		 * handle them below. We can only use memcpy for the non-nullable fixed
 		 * width starting part of the BgwJob struct.
 		 */
-		memcpy(job, GETSTRUCT(tuple), offsetof(FormData_bgw_job, fixed_schedule));
+		memcpy(job, GETSTRUCT(tuple), offsetof(FormData_bgw_job, initial_start));
 
 		if (should_free)
 			heap_freetuple(tuple);
@@ -390,27 +390,27 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 			continue;
 		}
 #endif
-
 		/* handle NULL columns */
-		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
-		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
-
 		initial_start = slot_getattr(ti->slot, Anum_bgw_job_initial_start, &initial_start_isnull);
 		if (!initial_start_isnull)
 			job->fd.initial_start = DatumGetTimestampTz(initial_start);
 		else
 			job->fd.initial_start = DT_NOBEGIN;
-		timezone = slot_getattr(ti->slot, Anum_bgw_job_timezone, &timezone_isnull);
-		if (!timezone_isnull)
-			job->fd.timezone = DatumGetTextPP(timezone);
-		else
-			job->fd.timezone = NULL;
+
+		value = slot_getattr(ti->slot, Anum_bgw_job_hypertable_id, &isnull);
+		job->fd.hypertable_id = isnull ? 0 : DatumGetInt32(value);
 
 		/* We skip config, check_name, and check_schema since the scheduler
 		 * doesn't need these, it saves us from detoasting, and simplifies
 		 * freeing job lists in the scheduler as otherwise the config field
 		 * would have to be freed separately when freeing a job. */
 		job->fd.config = NULL;
+
+		timezone = slot_getattr(ti->slot, Anum_bgw_job_timezone, &timezone_isnull);
+		if (!timezone_isnull)
+			job->fd.timezone = DatumGetTextPP(timezone);
+		else
+			job->fd.timezone = NULL;
 
 		old_ctx = MemoryContextSwitchTo(mctx);
 		jobs = lappend(jobs, job);
@@ -1197,6 +1197,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	BackgroundWorkerInitializeConnectionByOid(db_oid, params.user_oid, 0);
 
+	log_min_messages = ts_guc_bgw_log_level;
+
+	elog(DEBUG2, "job %d started execution", params.job_id);
+
 	ts_license_enable_module_loading();
 
 	INSTR_TIME_SET_CURRENT(start);
@@ -1215,6 +1219,8 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 
 	if (job == NULL)
 		elog(ERROR, "job %d not found when running the background worker", params.job_id);
+
+	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
@@ -1324,7 +1330,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	INSTR_TIME_SET_CURRENT(duration);
 	INSTR_TIME_SUBTRACT(duration, start);
 
-	elog(LOG,
+	elog(DEBUG1,
 		 "job %d (%s) exiting with %s: execution time %.2f ms",
 		 params.job_id,
 		 NameStr(job->fd.application_name),

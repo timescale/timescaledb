@@ -8,6 +8,7 @@
 \set DN_DBNAME_3 :TEST_DBNAME _3
 SELECT 1 FROM add_data_node('data_node_1', host => 'localhost',
                             database => :'DN_DBNAME_1');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -15,6 +16,7 @@ SELECT 1 FROM add_data_node('data_node_1', host => 'localhost',
 
 SELECT 1 FROM add_data_node('data_node_2', host => 'localhost',
                             database => :'DN_DBNAME_2');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -22,6 +24,7 @@ SELECT 1 FROM add_data_node('data_node_2', host => 'localhost',
 
 SELECT 1 FROM add_data_node('data_node_3', host => 'localhost',
                             database => :'DN_DBNAME_3');
+WARNING:  adding data node is deprecated
  ?column? 
 ----------
         1
@@ -43,6 +46,7 @@ SET ROLE :ROLE_1;
 create table uk_price_paid(price integer, "date" date, postcode1 text, postcode2 text, type smallint, is_new bool, duration smallint, addr1 text, addr2 text, street text, locality text, town text, district text, country text, category smallint);
 -- Aim to about 100 partitions, the data is from 1995 to 2022.
 select create_distributed_hypertable('uk_price_paid', 'date', chunk_time_interval => interval '270 day');
+WARNING:  distributed hypertable is deprecated
 NOTICE:  adding not-null constraint to column "date"
  create_distributed_hypertable 
 -------------------------------
@@ -51,6 +55,7 @@ NOTICE:  adding not-null constraint to column "date"
 
 create table uk_price_paid_space2(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_space2', 'date', 'postcode2', 2, chunk_time_interval => interval '270 day');
+WARNING:  distributed hypertable is deprecated
 WARNING:  insufficient number of partitions for dimension "postcode2"
    create_distributed_hypertable   
 -----------------------------------
@@ -59,6 +64,7 @@ WARNING:  insufficient number of partitions for dimension "postcode2"
 
 create table uk_price_paid_space10(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_space10', 'date', 'postcode2', 10, chunk_time_interval => interval '270 day');
+WARNING:  distributed hypertable is deprecated
    create_distributed_hypertable    
 ------------------------------------
  (3,public,uk_price_paid_space10,t)
@@ -144,6 +150,7 @@ select count(*) from uk_price_paid;
 create table uk_price_paid_r2(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_r2', 'date', 'postcode2',
     chunk_time_interval => interval '90 day', replication_factor => 2);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (4,public,uk_price_paid_r2,t)
@@ -152,6 +159,7 @@ select create_distributed_hypertable('uk_price_paid_r2', 'date', 'postcode2',
 create table uk_price_paid_r3(like uk_price_paid);
 select create_distributed_hypertable('uk_price_paid_r3', 'date', 'postcode2',
     chunk_time_interval => interval '90 day', replication_factor => 3);
+WARNING:  distributed hypertable is deprecated
  create_distributed_hypertable 
 -------------------------------
  (5,public,uk_price_paid_r3,t)

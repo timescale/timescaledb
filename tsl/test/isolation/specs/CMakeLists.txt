@@ -4,7 +4,6 @@ set(TEST_TEMPLATES_MODULE reorder_deadlock.spec.in
 
 set(TEST_TEMPLATES_MODULE_DEBUG
     reorder_vs_insert.spec.in reorder_vs_select.spec.in
-    dist_su_copy_chunk.spec.in dist_cmd_exec.spec.in
     decompression_chunk_and_parallel_query.in)
 
 list(
@@ -18,7 +17,7 @@ list(
   deadlock_drop_chunks_compress.spec
   osm_range_updates_iso.spec)
 
-if(ENABLE_MULTINODE_TESTS)
+if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
   list(APPEND TEST_FILES cagg_concurrent_refresh_dist_ht.spec)
 endif()
 
@@ -28,7 +27,7 @@ endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_TEMPLATES_MODULE ${TEST_TEMPLATES_MODULE_DEBUG})
-  list(APPEND TEST_FILES cagg_drop_chunks_iso.spec compression_chunk_race.spec
+  list(APPEND TEST_FILES compression_chunk_race.spec compression_freeze.spec
        compression_merge_race.spec
        decompression_chunk_and_parallel_query_wo_idx.spec)
   if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
@@ -43,15 +42,18 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES deadlock_recompress_chunk.spec)
   endif()
 
-  if(ENABLE_MULTINODE_TESTS)
+  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
     list(
       APPEND
       TEST_FILES
       cagg_multi_dist_ht.spec
-      dist_ha_chunk_drop.spec
+      cagg_drop_chunks_iso.spec
       dist_ha_chunk_drop.spec
       dist_restore_point.spec
       remote_create_chunk.spec)
+
+    list(APPEND TEST_TEMPLATES_MODULE_DEBUG dist_cmd_exec.spec.in
+         dist_su_copy_chunk.spec.in)
   endif()
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)

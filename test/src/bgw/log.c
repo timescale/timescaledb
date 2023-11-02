@@ -76,10 +76,6 @@ emit_log_hook_callback(ErrorData *edata)
 	if (MyProc == NULL)
 		return;
 
-	/* We are only interested in elevel LOG and above. */
-	if (edata->elevel < LOG)
-		return;
-
 	/*
 	 * Block signals so we don't lose messages generated during signal
 	 * processing if they occur while we are saving this log message (since

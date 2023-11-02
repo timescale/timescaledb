@@ -466,183 +466,6 @@ NOTICE:  drop cascades to 7 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 5 other objects
--- Test caggs with monthly buckets and custom origin on top of distributed hypertable
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-\set DATA_NODE_1 :TEST_DBNAME _1
-\set DATA_NODE_2 :TEST_DBNAME _2
-\set DATA_NODE_3 :TEST_DBNAME _3
-SELECT node_name, database, node_created, database_created, extension_created
-FROM (
-  SELECT (add_data_node(name, host => 'localhost', DATABASE => name)).*
-  FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v(name)
-) a;
-      node_name       |       database       | node_created | database_created | extension_created 
-----------------------+----------------------+--------------+------------------+-------------------
- db_exp_cagg_origin_1 | db_exp_cagg_origin_1 | t            | t                | t
- db_exp_cagg_origin_2 | db_exp_cagg_origin_2 | t            | t                | t
- db_exp_cagg_origin_3 | db_exp_cagg_origin_3 | t            | t                | t
-(3 rows)
-
-GRANT USAGE ON FOREIGN SERVER :DATA_NODE_1, :DATA_NODE_2, :DATA_NODE_3 TO PUBLIC;
--- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
-GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
-SET ROLE :ROLE_DEFAULT_PERM_USER;
-CREATE TABLE conditions_dist(
-  day date NOT NULL,
-  temperature INT NOT NULL);
-SELECT table_name FROM create_distributed_hypertable('conditions_dist', 'day', chunk_time_interval => INTERVAL '1 day');
-   table_name    
------------------
- conditions_dist
-(1 row)
-
-INSERT INTO conditions_dist(day, temperature)
-SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
-FROM generate_series('2010-01-01' :: date, '2010-03-01' :: date - interval '1 day', '1 day') as ts;
-CREATE MATERIALIZED VIEW conditions_dist_1m
-WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
-SELECT
-   timescaledb_experimental.time_bucket_ng('1 month', day, '2010-01-01') AS bucket,
-   MIN(temperature),
-   MAX(temperature)
-FROM conditions_dist
-GROUP BY bucket;
-NOTICE:  refreshing continuous aggregate "conditions_dist_1m"
-SELECT mat_hypertable_id AS cagg_id, raw_hypertable_id AS ht_id
-FROM _timescaledb_catalog.continuous_agg
-WHERE user_view_name = 'conditions_dist_1m'
-\gset
-SELECT bucket_width
-FROM _timescaledb_catalog.continuous_agg
-WHERE mat_hypertable_id = :cagg_id;
- bucket_width 
---------------
-           -1
-(1 row)
-
-SELECT experimental, name, bucket_width, origin, timezone
-FROM _timescaledb_catalog.continuous_aggs_bucket_function
-WHERE mat_hypertable_id = :cagg_id;
- experimental |      name      | bucket_width |          origin          | timezone 
---------------+----------------+--------------+--------------------------+----------
- t            | time_bucket_ng | @ 1 mon      | Fri Jan 01 00:00:00 2010 | 
-(1 row)
-
-SELECT * FROM conditions_dist_1m ORDER BY bucket;
-   bucket   | min | max 
-------------+-----+-----
- 01-01-2010 | 101 | 131
- 02-01-2010 | 201 | 228
-(2 rows)
-
--- Same test but with non-realtime, NO DATA aggregate and manual refresh
-CREATE MATERIALIZED VIEW conditions_dist_1m_manual
-WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
-SELECT
-   timescaledb_experimental.time_bucket_ng('1 month', day, '2005-01-01') AS bucket,
-   MIN(temperature),
-   MAX(temperature)
-FROM conditions_dist
-GROUP BY bucket
-WITH NO DATA;
-SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
- bucket | min | max 
---------+-----+-----
-(0 rows)
-
-CALL refresh_continuous_aggregate('conditions_dist_1m_manual', '2010-01-01', '2010-03-01');
-SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
-   bucket   | min | max 
-------------+-----+-----
- 01-01-2010 | 101 | 131
- 02-01-2010 | 201 | 228
-(2 rows)
-
--- Check invalidation for caggs on top of distributed hypertable
-INSERT INTO conditions_dist(day, temperature)
-VALUES ('2010-01-15', 999), ('2010-02-15', -999), ('2010-03-01', 15);
-SELECT * FROM conditions_dist_1m ORDER BY bucket;
-   bucket   | min | max 
-------------+-----+-----
- 01-01-2010 | 101 | 131
- 02-01-2010 | 201 | 228
- 03-01-2010 |  15 |  15
-(3 rows)
-
-SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
-   bucket   | min | max 
-------------+-----+-----
- 01-01-2010 | 101 | 131
- 02-01-2010 | 201 | 228
-(2 rows)
-
-CALL refresh_continuous_aggregate('conditions_dist_1m', '2010-01-01', '2010-04-01');
-SELECT * FROM conditions_dist_1m ORDER BY bucket;
-   bucket   | min  | max 
-------------+------+-----
- 01-01-2010 |  101 | 999
- 02-01-2010 | -999 | 228
- 03-01-2010 |   15 |  15
-(3 rows)
-
-SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
-   bucket   | min | max 
-------------+-----+-----
- 01-01-2010 | 101 | 131
- 02-01-2010 | 201 | 228
-(2 rows)
-
-CALL refresh_continuous_aggregate('conditions_dist_1m_manual', '2010-01-01', '2010-04-01');
-SELECT * FROM conditions_dist_1m ORDER BY bucket;
-   bucket   | min  | max 
-------------+------+-----
- 01-01-2010 |  101 | 999
- 02-01-2010 | -999 | 228
- 03-01-2010 |   15 |  15
-(3 rows)
-
-SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
-   bucket   | min  | max 
-------------+------+-----
- 01-01-2010 |  101 | 999
- 02-01-2010 | -999 | 228
- 03-01-2010 |   15 |  15
-(3 rows)
-
--- Compression on top of distributed hypertables
-ALTER MATERIALIZED VIEW conditions_dist_1m_manual SET ( timescaledb.compress );
-NOTICE:  defaulting compress_orderby to bucket
-SELECT compress_chunk(ch)
-FROM show_chunks('conditions_dist_1m_manual') ch limit 1;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_8_205_chunk
-(1 row)
-
-SELECT * FROM conditions_dist_1m_manual ORDER BY bucket;
-   bucket   | min  | max 
-------------+------+-----
- 01-01-2010 |  101 | 999
- 02-01-2010 | -999 | 228
- 03-01-2010 |   15 |  15
-(3 rows)
-
--- Clean up
-DROP TABLE conditions_dist CASCADE;
-NOTICE:  drop cascades to 5 other objects
-NOTICE:  drop cascades to 3 other objects
-NOTICE:  drop cascades to 3 other objects
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-SELECT delete_data_node(name)
-FROM (VALUES (:'DATA_NODE_1'), (:'DATA_NODE_2'), (:'DATA_NODE_3')) v (name);
- delete_data_node 
-------------------
- t
- t
- t
-(3 rows)
-
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- Test the specific code path of creating a CAGG on top of empty hypertable.
 CREATE TABLE conditions_empty(
   day DATE NOT NULL,
@@ -652,9 +475,9 @@ SELECT create_hypertable(
   'conditions_empty', 'day',
   chunk_time_interval => INTERVAL '1 day'
 );
-       create_hypertable        
---------------------------------
- (10,public,conditions_empty,t)
+       create_hypertable       
+-------------------------------
+ (6,public,conditions_empty,t)
 (1 row)
 
 CREATE MATERIALIZED VIEW conditions_summary_empty
@@ -703,7 +526,7 @@ ORDER BY month, city;
 -- Clean up
 DROP TABLE conditions_empty CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_225_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_158_chunk
 -- Make sure add_continuous_aggregate_policy() works
 CREATE TABLE conditions_policy(
   day DATE NOT NULL,
@@ -713,9 +536,9 @@ SELECT create_hypertable(
   'conditions_policy', 'day',
   chunk_time_interval => INTERVAL '1 day'
 );
-        create_hypertable        
----------------------------------
- (12,public,conditions_policy,t)
+       create_hypertable        
+--------------------------------
+ (8,public,conditions_policy,t)
 (1 row)
 
 INSERT INTO conditions_policy (day, city, temperature) VALUES
@@ -770,7 +593,7 @@ SELECT add_continuous_aggregate_policy('conditions_summary_policy',
 -- Clean up
 DROP TABLE conditions_policy CASCADE;
 NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_13_240_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_9_173_chunk
 -- Make sure CAGGs with custom origin work for timestamp type
 CREATE TABLE conditions_timestamp(
   tstamp TIMESTAMP NOT NULL,
@@ -783,7 +606,7 @@ SELECT create_hypertable(
 WARNING:  column type "timestamp without time zone" used for "tstamp" does not follow best practices
          create_hypertable          
 ------------------------------------
- (14,public,conditions_timestamp,t)
+ (10,public,conditions_timestamp,t)
 (1 row)
 
 CREATE MATERIALIZED VIEW conditions_summary_timestamp
@@ -845,8 +668,8 @@ ALTER TABLE conditions_timestamp SET (
 SELECT compress_chunk(ch) FROM show_chunks('conditions_timestamp') AS ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_14_241_chunk
- _timescaledb_internal._hyper_14_243_chunk
+ _timescaledb_internal._hyper_10_174_chunk
+ _timescaledb_internal._hyper_10_176_chunk
 (2 rows)
 
 -- New data is seen because the cagg is real-time
@@ -896,7 +719,7 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamp',
 DROP TABLE conditions_timestamp CASCADE;
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 3 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_242_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_175_chunk
 -- Make sure CAGGs with custom origin work for timestamptz type
 CREATE TABLE conditions_timestamptz(
   tstamp TIMESTAMPTZ NOT NULL,
@@ -908,7 +731,7 @@ SELECT create_hypertable(
 );
           create_hypertable           
 --------------------------------------
- (17,public,conditions_timestamptz,t)
+ (13,public,conditions_timestamptz,t)
 (1 row)
 
 -- Add some data to the hypertable and make sure it is visible in the cagg
@@ -1059,9 +882,9 @@ ALTER TABLE conditions_timestamptz SET (
 SELECT compress_chunk(ch) FROM show_chunks('conditions_timestamptz') AS ch;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_17_246_chunk
- _timescaledb_internal._hyper_17_247_chunk
- _timescaledb_internal._hyper_17_249_chunk
+ _timescaledb_internal._hyper_13_179_chunk
+ _timescaledb_internal._hyper_13_180_chunk
+ _timescaledb_internal._hyper_13_182_chunk
 (3 rows)
 
 -- New data is seen because the cagg is real-time
@@ -1111,8 +934,4 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamptz',
 DROP TABLE conditions_timestamptz CASCADE;
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_248_chunk
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
-DROP DATABASE :DATA_NODE_1 WITH (FORCE);
-DROP DATABASE :DATA_NODE_2 WITH (FORCE);
-DROP DATABASE :DATA_NODE_3 WITH (FORCE);
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_181_chunk

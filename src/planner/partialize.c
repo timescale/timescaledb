@@ -21,6 +21,7 @@
 #include <parser/parse_func.h>
 #include <utils/lsyscache.h>
 
+#include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "partialize.h"
 #include "planner.h"
@@ -329,7 +330,7 @@ copy_append_like_path(PlannerInfo *root, Path *path, List *new_subpaths, PathTar
 /*
  * Generate a partially sorted aggregated agg path on top of a path
  */
-static Path *
+static AggPath *
 create_sorted_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target,
 							   double d_num_groups, GroupPathExtraData *extra_data)
 {
@@ -345,16 +346,16 @@ create_sorted_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 		path = (Path *) create_sort_path(root, path->parent, path, root->group_pathkeys, -1.0);
 	}
 
-	Path *sorted_agg_path = (Path *) create_agg_path(root,
-													 path->parent,
-													 path,
-													 target,
-													 parse->groupClause ? AGG_SORTED : AGG_PLAIN,
-													 AGGSPLIT_INITIAL_SERIAL,
-													 parse->groupClause,
-													 NIL,
-													 agg_partial_costs,
-													 d_num_groups);
+	AggPath *sorted_agg_path = create_agg_path(root,
+											   path->parent,
+											   path,
+											   target,
+											   parse->groupClause ? AGG_SORTED : AGG_PLAIN,
+											   AGGSPLIT_INITIAL_SERIAL,
+											   parse->groupClause,
+											   NIL,
+											   agg_partial_costs,
+											   d_num_groups);
 
 	return sorted_agg_path;
 }
@@ -362,7 +363,7 @@ create_sorted_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 /*
  * Generate a partially hashed aggregated add path on top of a path
  */
-static Path *
+static AggPath *
 create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target,
 							   double d_num_groups, GroupPathExtraData *extra_data)
 {
@@ -371,16 +372,16 @@ create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 	/* Determine costs for aggregations */
 	AggClauseCosts *agg_partial_costs = &extra_data->agg_partial_costs;
 
-	Path *hash_path = (Path *) create_agg_path(root,
-											   path->parent,
-											   path,
-											   target,
-											   AGG_HASHED,
-											   AGGSPLIT_INITIAL_SERIAL,
-											   parse->groupClause,
-											   NIL,
-											   agg_partial_costs,
-											   d_num_groups);
+	AggPath *hash_path = create_agg_path(root,
+										 path->parent,
+										 path,
+										 target,
+										 AGG_HASHED,
+										 AGGSPLIT_INITIAL_SERIAL,
+										 parse->groupClause,
+										 NIL,
+										 agg_partial_costs,
+										 d_num_groups);
 	return hash_path;
 }
 
@@ -405,22 +406,32 @@ add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
 
 	if (can_sort)
 	{
-		*sorted_paths = lappend(*sorted_paths,
-								create_sorted_partial_agg_path(root,
-															   subpath,
-															   chunktarget,
-															   d_num_groups,
-															   extra_data));
+		AggPath *agg_path =
+			create_sorted_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
+
+		if (ts_cm_functions->push_down_aggregation(root, agg_path, subpath))
+		{
+			*sorted_paths = lappend(*sorted_paths, subpath);
+		}
+		else
+		{
+			*sorted_paths = lappend(*sorted_paths, (Path *) agg_path);
+		}
 	}
 
 	if (can_hash)
 	{
-		*hashed_paths = lappend(*hashed_paths,
-								create_hashed_partial_agg_path(root,
-															   subpath,
-															   chunktarget,
-															   d_num_groups,
-															   extra_data));
+		AggPath *agg_path =
+			create_hashed_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
+
+		if (ts_cm_functions->push_down_aggregation(root, agg_path, subpath))
+		{
+			*hashed_paths = lappend(*hashed_paths, subpath);
+		}
+		else
+		{
+			*hashed_paths = lappend(*hashed_paths, (Path *) agg_path);
+		}
 	}
 }
 
@@ -647,26 +658,50 @@ get_best_total_path(RelOptInfo *output_rel)
 }
 
 /*
+ Is the provided path a agg path that uses a sorted or plain agg strategy?
+*/
+static bool
+is_path_sorted_or_plain_agg_path(Path *path)
+{
+	AggPath *agg_path = castNode(AggPath, path);
+	Assert(agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN ||
+		   agg_path->aggstrategy == AGG_HASHED);
+	return agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN;
+}
+
+/*
  * Check if this path belongs to a plain or sorted aggregation
  */
 static bool
-is_plain_or_sorted_agg_path(Path *path)
+contains_path_plain_or_sorted_agg(Path *path)
 {
 	List *subpaths = get_subpaths_from_append_path(path, true);
 
 	Ensure(subpaths != NIL, "Unable to determine aggregation type");
 
-	Path *subpath = linitial(subpaths);
-
-	if (IsA(subpath, AggPath))
+	ListCell *lc;
+	foreach (lc, subpaths)
 	{
-		AggPath *agg_path = castNode(AggPath, linitial(subpaths));
-		Assert(agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN ||
-			   agg_path->aggstrategy == AGG_HASHED);
-		return agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN;
+		Path *subpath = lfirst(lc);
+
+		if (IsA(subpath, AggPath))
+			return is_path_sorted_or_plain_agg_path(subpath);
+
+		List *subsubpaths = get_subpaths_from_append_path(path, true);
+
+		ListCell *lc2;
+		foreach (lc2, subsubpaths)
+		{
+			Path *subsubpath = lfirst(lc2);
+
+			if (IsA(subsubpath, AggPath))
+				is_path_sorted_or_plain_agg_path(subsubpath);
+		}
 	}
 
-	return is_plain_or_sorted_agg_path(subpath);
+	/* No dedicated aggregation nodes found (e.g., only vectorized aggregation is used). The sorted
+	 * finalizer is used in that case to finalize the aggregation. */
+	return true;
 }
 
 /*
@@ -832,7 +867,7 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	{
 		Path *append_path = lfirst(lc);
 
-		if (is_plain_or_sorted_agg_path(append_path))
+		if (contains_path_plain_or_sorted_agg(append_path))
 		{
 			bool is_sorted;
 
