@@ -499,14 +499,19 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 		 * The entire batch doesn't pass the vectorized quals, so we might be
 		 * able to avoid reading and decompressing other columns. Scroll it to
 		 * the end.
-		 * Note that this optimization doesn't work with "batch sorted merge",
-		 * because the latter always has to read the first row of the batch for
-		 * its sorting needs, so it always has to read and decompress all
-		 * columns.
 		 */
 		batch_state->next_batch_row = batch_state->total_batch_rows;
 		InstrCountTuples2(chunk_state, 1);
 		InstrCountFiltered1(chunk_state, batch_state->total_batch_rows);
+
+		/*
+		 * Note that this optimization can't work with "batch sorted merge",
+		 * because the latter always has to read the first row of the batch for
+		 * its sorting needs, so it always has to read and decompress all
+		 * columns. This is not a problem at the moment, because for batch
+		 * sorted merge we disable bulk decompression entirely, at planning time.
+		 */
+		Assert(!chunk_state->batch_sorted_merge);
 	}
 	else
 	{
