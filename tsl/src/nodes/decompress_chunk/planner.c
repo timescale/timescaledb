@@ -522,6 +522,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 
 	if (saop)
 	{
+#if PG14_GE
 		if (saop->hashfuncid)
 		{
 			/*
@@ -529,6 +530,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 			 */
 			return NULL;
 		}
+#endif
 
 		if (!IsA(lsecond(args), Const))
 		{
