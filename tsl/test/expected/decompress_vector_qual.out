@@ -100,6 +100,34 @@ select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the q
      1
 (1 row)
 
+-- Scalar array operations.
+select count(*) from vectorqual where metric3 = any(array[777, 888]); /* default value */
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric4 = any(array[44, 55]) /* default null */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 > any(array[-1, -2, -3]) /* any */;
+ count 
+-------
+     4
+(1 row)
+
+select count(*) from vectorqual where metric2 > all(array[-1, -2, -3]) /* all */;
+ count 
+-------
+     4
+(1 row)
+
+-- FIXME have to support this because nulls are impossible to prevent in stable expressions.
+-- select count(*) from vectorqual where metric2 = any(array[22, null]) /* any with null element */;
+-- select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with null element */;
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
  count 
@@ -196,6 +224,19 @@ select count(*) from vectorqual where metric4 is not null;
  count 
 -------
      2
+(1 row)
+
+-- Comparison with other column not vectorized.
+select count(*) from vectorqual where metric3 = metric4;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric3 = any(array[metric4]);
+ count 
+-------
+     0
 (1 row)
 
 -- Vectorized filters also work if we have only stable functions on the right

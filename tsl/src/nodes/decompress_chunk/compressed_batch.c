@@ -78,6 +78,112 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	return arrow;
 }
 
+static inline void
+vector_predicate_saop_impl(VectorPredicate *vector_const_predicate, bool is_or,
+						   const ArrowArray *vector, Datum array, uint64 *restrict final_result)
+{
+	const size_t result_bits = vector->length;
+	const size_t result_words = (result_bits + 63) / 64;
+
+	uint64 *restrict array_result;
+	/*
+	 * For OR, we need an intermediate storage to accumulate the results
+	 * from all elements.
+	 * For AND, we can apply predicate for each element to the final result.
+	 */
+	uint64 array_result_storage[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
+	if (is_or)
+	{
+		array_result = array_result_storage;
+		for (size_t i = 0; i < result_words; i++)
+		{
+			array_result_storage[i] = 0;
+		}
+	}
+	else
+	{
+		array_result = final_result;
+	}
+
+	ArrayType *arr = DatumGetArrayTypeP(array);
+
+	int16 typlen;
+	bool typbyval;
+	char typalign;
+	get_typlenbyvalalign(ARR_ELEMTYPE(arr), &typlen, &typbyval, &typalign);
+
+	const char *s = (const char *) ARR_DATA_PTR(arr);
+	Ensure(ARR_NULLBITMAP(arr) == NULL,
+		   "vectorized scalar array ops do not support nullable arrays");
+
+	const int nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
+
+	for (int i = 0; i < nitems; i++)
+	{
+		Datum constvalue = fetch_att(s, typbyval, typlen);
+		s = att_addlength_pointer(s, typlen, s);
+		s = (char *) att_align_nominal(s, typalign);
+
+		/*
+		 * For OR, we also need an intermediate storage for predicate result
+		 * for each array element, since the predicates AND their result.
+		 *
+		 * For AND, we can and apply predicate for each array element to the
+		 * final result.
+		 */
+		uint64 single_result_storage[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
+		uint64 *restrict single_result;
+		if (is_or)
+		{
+			single_result = single_result_storage;
+			for (size_t outer = 0; outer < result_words; outer++)
+			{
+				single_result[outer] = -1;
+			}
+		}
+		else
+		{
+			single_result = final_result;
+		}
+
+		vector_const_predicate(vector, constvalue, single_result);
+
+		if (is_or)
+		{
+			for (size_t outer = 0; outer < result_words; outer++)
+			{
+				array_result[outer] |= single_result[outer];
+			}
+		}
+	}
+
+	if (is_or)
+	{
+		for (size_t outer = 0; outer < result_words; outer++)
+		{
+			/*
+			 * The tail bits corresponding to past-the-end rows when n % 64 != 0
+			 * should be already zeroed out in the final_result.
+			 */
+			final_result[outer] &= array_result[outer];
+		}
+	}
+}
+
+static void
+vector_predicate_saop_and(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
+						  uint64 *restrict result)
+{
+	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
+}
+
+static void
+vector_predicate_saop_or(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
+						 uint64 *restrict result)
+{
+	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ true, vector, array, result);
+}
+
 static void
 apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
@@ -93,6 +199,16 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
 	batch_state->vector_qual_result = palloc(bitmap_bytes);
 	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
+	if (batch_state->total_batch_rows % 64 != 0)
+	{
+		/*
+		 * We have to zero out the bits for past-the-end elements in the last
+		 * bitmap word. Since all predicates are ANDed to the result bitmap,
+		 * we can do it here once instead of doing it in each predicate.
+		 */
+		const uint64 mask = ((uint64) -1) >> (64 - batch_state->total_batch_rows % 64);
+		batch_state->vector_qual_result[batch_state->total_batch_rows / 64] = mask;
+	}
 
 	/*
 	 * Compute the quals.
@@ -100,14 +216,39 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 	ListCell *lc;
 	foreach (lc, chunk_state->vectorized_quals_constified)
 	{
-		/* For now we only support "Var ? Const" predicates. */
-		OpExpr *oe = castNode(OpExpr, lfirst(lc));
-		Var *var = castNode(Var, linitial(oe->args));
-		Const *constnode = castNode(Const, lsecond(oe->args));
+		/*
+		 * For now we support "Var ? Const" predicates and
+		 * ScalarArrayOperations.
+		 */
+		List *args = NULL;
+		RegProcedure vector_const_opcode = InvalidOid;
+		ScalarArrayOpExpr *saop = NULL;
+		OpExpr *opexpr = NULL;
+		if (IsA(lfirst(lc), ScalarArrayOpExpr))
+		{
+			saop = castNode(ScalarArrayOpExpr, lfirst(lc));
+			args = saop->args;
+			vector_const_opcode = get_opcode(saop->opno);
+		}
+		else
+		{
+			opexpr = castNode(OpExpr, lfirst(lc));
+			args = opexpr->args;
+			vector_const_opcode = get_opcode(opexpr->opno);
+		}
+
+		/*
+		 * Find the vector_const predicate.
+		 */
+		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
+		Ensure(vector_const_predicate != NULL,
+			   "vectorized predicate not found for postgres predicate %d",
+			   vector_const_opcode);
 
 		/*
 		 * Find the compressed column referred to by the Var.
 		 */
+		Var *var = castNode(Var, linitial(args));
 		DecompressChunkColumnDescription *column_description = NULL;
 		int column_index = 0;
 		for (; column_index < chunk_state->num_total_columns; column_index++)
@@ -170,20 +311,46 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 			predicate_result = &default_value_predicate_result;
 		}
 
-		/* Find and compute the predicate. */
-		void (*predicate)(const ArrowArray *, Datum, uint64 *restrict) =
-			get_vector_const_predicate(get_opcode(oe->opno));
-		Ensure(predicate != NULL,
-			   "vectorized predicate not found for postgres predicate %d",
-			   get_opcode(oe->opno));
-
 		/*
 		 * The vectorizable predicates should be STRICT, so we shouldn't see null
 		 * constants here.
 		 */
+		Const *constnode = castNode(Const, lsecond(args));
 		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
 
-		predicate(vector, constnode->constvalue, predicate_result);
+		/*
+		 * At last, compute the predicate.
+		 */
+		if (saop)
+		{
+			if (saop->useOr)
+			{
+				vector_predicate_saop_or(vector_const_predicate,
+										 vector,
+										 constnode->constvalue,
+										 predicate_result);
+			}
+			else
+			{
+				vector_predicate_saop_and(vector_const_predicate,
+										  vector,
+										  constnode->constvalue,
+										  predicate_result);
+			}
+		}
+		else
+		{
+			vector_const_predicate(vector, constnode->constvalue, predicate_result);
+		}
+
+		/* Account for nulls which shouldn't pass the predicate. */
+		const size_t n = vector->length;
+		const size_t n_words = (n + 63) / 64;
+		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
+		for (size_t i = 0; i < n_words; i++)
+		{
+			predicate_result[i] &= validity[i];
+		}
 
 		/* Process the result. */
 		if (column_values->arrow == NULL)

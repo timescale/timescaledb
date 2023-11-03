@@ -515,8 +515,16 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			}
 		}
 
-		OpExpr *opexpr = castNode(OpExpr, constified);
-		Ensure(IsA(lsecond(opexpr->args), Const),
+		List *args;
+		if (IsA(constified, OpExpr))
+		{
+			args = castNode(OpExpr, constified)->args;
+		}
+		else
+		{
+			args = castNode(ScalarArrayOpExpr, constified)->args;
+		}
+		Ensure(IsA(lsecond(args), Const),
 			   "failed to evaluate runtime constant in vectorized filter");
 		chunk_state->vectorized_quals_constified =
 			lappend(chunk_state->vectorized_quals_constified, constified);
