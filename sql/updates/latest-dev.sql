@@ -229,3 +229,24 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chu
 GRANT SELECT ON _timescaledb_catalog.compression_chunk_size TO PUBLIC;
 
 -- End modify `_timescaledb_catalog.compression_chunk_size`
+
+DROP FUNCTION @extschema@.drop_chunks(REGCLASS, "any", "any", BOOL);
+CREATE FUNCTION @extschema@.drop_chunks(
+     relation               REGCLASS,
+     older_than             "any" = NULL,
+     newer_than             "any" = NULL,
+     verbose                BOOLEAN = FALSE,
+     created_before         "any" = NULL,
+     created_after          "any" = NULL
+ ) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
+ LANGUAGE C VOLATILE PARALLEL UNSAFE;
+
+DROP FUNCTION @extschema@.show_chunks(REGCLASS, "any", "any");
+CREATE FUNCTION @extschema@.show_chunks(
+     relation               REGCLASS,
+     older_than             "any" = NULL,
+     newer_than             "any" = NULL,
+     created_before         "any" = NULL,
+     created_after          "any" = NULL
+ ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
+ LANGUAGE C STABLE PARALLEL SAFE;

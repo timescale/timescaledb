@@ -290,12 +290,14 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 	{
 		appinfo = ts_get_appendrelinfo(root, chunk_rel->relid, false);
 		info->ht_rte = planner_rt_fetch(appinfo->parent_relid, root);
+		info->ht_rel = root->simple_rel_array[appinfo->parent_relid];
 	}
 	else
 	{
 		Assert(chunk_rel->reloptkind == RELOPT_BASEREL);
 		info->single_chunk = true;
 		info->ht_rte = info->chunk_rte;
+		info->ht_rel = info->chunk_rel;
 	}
 
 	info->hypertable_id = ht->fd.id;
@@ -1414,10 +1416,26 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	return NULL;
 }
 
+#if PG16_GE
+static EquivalenceMember *
+find_em_for_relid(EquivalenceClass *ec, Index relid)
+{
+	ListCell *lc;
+
+	foreach (lc, ec->ec_members)
+	{
+		EquivalenceMember *em = lfirst_node(EquivalenceMember, lc);
+		if (bms_is_member(relid, em->em_relids) && bms_num_members(em->em_relids) == 1)
+			return em;
+	}
+	return NULL;
+}
+#endif
+
 /* This function is inspired by the Postgres add_child_rel_equivalences. */
 static bool
-add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *info,
-								   EMCreationContext *context)
+add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
+								   CompressionInfo *info, EMCreationContext *context)
 {
 	Relids uncompressed_chunk_relids = info->chunk_rel->relids;
 	ListCell *lc;
@@ -1526,6 +1544,25 @@ add_segmentby_to_equivalence_class(EquivalenceClass *cur_ec, CompressionInfo *in
 			compressed_fdw_private->compressed_ec_em_pairs =
 				lappend(compressed_fdw_private->compressed_ec_em_pairs, list_make2(cur_ec, em));
 
+#if PG16_GE
+			EquivalenceMember *ht_em = find_em_for_relid(cur_ec, info->ht_rel->relid);
+
+			if (ht_em && ht_em->em_jdomain)
+			{
+				int i = -1;
+				while ((i = bms_next_member(ht_em->em_jdomain->jd_relids, i)) >= 0)
+				{
+					RestrictInfo *d = make_simple_restrictinfo_compat(root, em->em_expr);
+					d->parent_ec = cur_ec;
+					d->left_em = find_em_for_relid(cur_ec, i);
+					if (!d->left_em)
+						continue;
+					d->right_em = em;
+					cur_ec->ec_derives = lappend(cur_ec->ec_derives, d);
+				}
+			}
+#endif
+
 			return true;
 		}
 	}
@@ -1570,7 +1607,7 @@ compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *inf
 		if (bms_overlap(cur_ec->ec_relids, info->compressed_rel->relids))
 			continue;
 
-		bool em_added = add_segmentby_to_equivalence_class(cur_ec, info, &context);
+		bool em_added = add_segmentby_to_equivalence_class(root, cur_ec, info, &context);
 		/* Record this EC index for the compressed rel */
 		if (em_added)
 			info->compressed_rel->eclass_indexes =

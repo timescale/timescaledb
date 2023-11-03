@@ -123,7 +123,8 @@ batch_array_get_free_slot(DecompressChunkState *chunk_state)
 	Assert(next_free_batch < chunk_state->n_batch_states);
 	Assert(TupIsNull(batch_array_get_at(chunk_state, next_free_batch)->decompressed_scan_slot));
 
-	bms_del_member(chunk_state->unused_batch_states, next_free_batch);
+	chunk_state->unused_batch_states =
+		bms_del_member(chunk_state->unused_batch_states, next_free_batch);
 
 	return next_free_batch;
 }

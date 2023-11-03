@@ -140,13 +140,24 @@ get_window_boundary(const Dimension *dim, const Jsonb *config, int64 (*int_gette
 
 	if (IS_INTEGER_TYPE(partitioning_type))
 	{
-		int64 res, lag = int_getter(config);
-		Oid now_func = ts_get_integer_now_func(dim);
+		Oid now_func = ts_get_integer_now_func(dim, false);
 
-		Assert(now_func);
-
-		res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
-		return Int64GetDatum(res);
+		/* If "now_func" is provided then we use that for calculating the window. */
+		if (OidIsValid(now_func))
+		{
+			int64 res, lag = int_getter(config);
+			res = ts_sub_integer_from_now(lag, partitioning_type, now_func);
+			return Int64GetDatum(res);
+		}
+		else
+		{
+			/*
+			 * Otherwise, the interval value can be returned without subtracting it
+			 * from now().
+			 */
+			Interval *lag = interval_getter(config);
+			return IntervalPGetDatum(lag);
+		}
 	}
 	else
 	{
@@ -301,13 +312,31 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 
 	object_relid = ts_hypertable_id_to_relid(policy_retention_get_hypertable_id(config), false);
 	hypertable = ts_hypertable_cache_get_cache_and_entry(object_relid, CACHE_FLAG_NONE, &hcache);
-	open_dim = get_open_dimension_for_hypertable(hypertable);
+
+	open_dim = get_open_dimension_for_hypertable(hypertable, false);
+
+	/* if dim is NULL, then it should be an INTEGER partition with no int_now function */
+	if (open_dim == NULL)
+	{
+		Oid partition_type;
+
+		open_dim = hyperspace_get_open_dimension(hypertable->space, 0);
+		partition_type = ts_dimension_get_partition_type(open_dim);
+		if (!IS_INTEGER_TYPE(partition_type))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("incorrect partition type %d.  Expected integer", partition_type)));
+
+		/* if there's no int_now function the boundary is considered as an INTERVAL */
+		boundary_type = INTERVALOID;
+	}
+	else
+		boundary_type = ts_dimension_get_partition_type(open_dim);
 
 	boundary = get_window_boundary(open_dim,
 								   config,
 								   policy_retention_get_drop_after_int,
 								   policy_retention_get_drop_after_interval);
-	boundary_type = ts_dimension_get_partition_type(open_dim);
 
 	/* We need to do a reverse lookup here since the given hypertable might be
 	   a materialized hypertable, and thus need to call drop_chunks on the
@@ -364,7 +393,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 				 errmsg("configuration materialization hypertable id %d not found",
 						materialization_id)));
 
-	open_dim = get_open_dimension_for_hypertable(mat_ht);
+	open_dim = get_open_dimension_for_hypertable(mat_ht, true);
 	dim_type = ts_dimension_get_partition_type(open_dim);
 	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config, &start_isnull);
 	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);

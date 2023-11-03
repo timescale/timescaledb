@@ -400,6 +400,11 @@ contains_volatile_functions_checker(Oid func_id, void *context)
 static bool
 is_not_runtime_constant_walker(Node *node, void *context)
 {
+	if (node == NULL)
+	{
+		return false;
+	}
+
 	switch (nodeTag(node))
 	{
 		case T_Var:

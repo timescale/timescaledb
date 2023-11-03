@@ -99,10 +99,12 @@ typedef struct DecompressChunkState
 	 * the entire compressed batch in one go. They go to this list, and the rest
 	 * goes into the usual ss.ps.qual. Note that we constify stable functions
 	 * in these predicates at execution time, but have to keep the original
-	 * version for EXPLAIN.
+	 * version for EXPLAIN. We also need special handling for quals that
+	 * evaluate to constant false, hence the flag.
 	 */
 	List *vectorized_quals_original;
 	List *vectorized_quals_constified;
+	bool have_constant_false_vectorized_qual;
 
 	/*
 	 * Make non-refcounted copies of the tupdesc for reuse across all batch states

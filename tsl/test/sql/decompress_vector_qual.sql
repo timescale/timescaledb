@@ -78,6 +78,8 @@ select count(*) from vectorqual where metric4 is not null;
 set timescaledb.debug_require_vector_qual to 'only';
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz::timestamp;
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - interval '1 day';
+-- Expression that evaluates to Null.
+select count(*) from vectorqual where ts > case when '2021-01-01'::timestamp < '2022-01-01'::timestamptz then null else '2021-01-01 00:00:00'::timestamp end;
 
 -- This filter is not vectorized because the 'timestamp > timestamptz'
 -- operator is stable, not immutable, because it uses the current session
@@ -89,6 +91,7 @@ select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz;
 
 -- Can't vectorize comparison with a volatile function.
 select count(*) from vectorqual where metric3 > random()::int - 100;
+select count(*) from vectorqual where ts > case when random() < 10 then null else '2021-01-01 00:00:00'::timestamp end;
 
 
 -- Test that the vectorized quals are disabled by disabling the bulk decompression.

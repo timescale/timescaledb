@@ -213,6 +213,13 @@ select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - in
      4
 (1 row)
 
+-- Expression that evaluates to Null.
+select count(*) from vectorqual where ts > case when '2021-01-01'::timestamp < '2022-01-01'::timestamptz then null else '2021-01-01 00:00:00'::timestamp end;
+ count 
+-------
+     0
+(1 row)
+
 -- This filter is not vectorized because the 'timestamp > timestamptz'
 -- operator is stable, not immutable, because it uses the current session
 -- timezone. We could transform it to something like
@@ -230,6 +237,12 @@ select count(*) from vectorqual where metric3 > random()::int - 100;
  count 
 -------
      5
+(1 row)
+
+select count(*) from vectorqual where ts > case when random() < 10 then null else '2021-01-01 00:00:00'::timestamp end;
+ count 
+-------
+     0
 (1 row)
 
 -- Test that the vectorized quals are disabled by disabling the bulk decompression.
