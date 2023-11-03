@@ -62,15 +62,10 @@ jobs:
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 13
-            pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}
             tsl_skips_version: dist_grant-13 dist_partial_agg-13
           - pg: 14
-            # pkg_version: ${{ fromJson(needs.config.outputs.pg14_latest) }}
-            pkg_version: 14.5.1 # hardcoded due to issues with PG14.6 on chocolatey
             tsl_skips_version: dist_partial_agg-14 dist_grant-14
           - pg: 15
-            # pkg_version: ${{ fromJson(needs.config.outputs.pg15_latest) }}
-            pkg_version: 15.0.1 # hardcoded due to issues with PG15.1 on chocolatey
             tsl_skips_version: dist_partial_agg-15 dist_grant-15
     env:
       # PostgreSQL configuration
@@ -134,7 +129,7 @@ jobs:
       run: |
         choco feature disable --name=usePackageExitCodes
         choco feature disable --name=showDownloadProgress
-        choco install postgresql${{ matrix.pg }} --version ${{ matrix.pkg_version }} `
+        choco install postgresql${{ matrix.pg }} `
           --force -y --install-args="'--prefix $HOME\PostgreSQL\${{ matrix.pg }} --extract-only yes'"
 
     - name: Configure TimescaleDB
