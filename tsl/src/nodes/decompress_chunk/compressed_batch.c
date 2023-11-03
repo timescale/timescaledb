@@ -442,6 +442,8 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 				 */
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->value_bytes = 0;
+				column_values->arrow = NULL;
+				column_values->iterator = NULL;
 				break;
 			}
 			case SEGMENTBY_COLUMN:
@@ -494,7 +496,8 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 		}
 	}
 
-	if (apply_vector_quals(chunk_state, batch_state))
+	const bool have_passing_rows = apply_vector_quals(chunk_state, batch_state);
+	if (have_passing_rows || chunk_state->batch_sorted_merge)
 	{
 		/*
 		 * Have rows that actually pass the vector quals, have to decompress the
@@ -513,7 +516,14 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 	}
 	else
 	{
-		// fprintf(stderr, "the entire batch didn't pass!!!\n");
+		/*
+		 * The entire batch doesn't pass the vectorized quals, so we might be
+		 * able to avoid reading some columns.
+		 */
+		InstrCountTuples2(chunk_state, 1);
+		InstrCountFiltered1(chunk_state, batch_state->total_batch_rows);
+		Assert(!chunk_state->batch_sorted_merge);
+		batch_state->next_batch_row = batch_state->total_batch_rows;
 	}
 
 	MemoryContextSwitchTo(old_context);
@@ -672,6 +682,7 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 			for (int i = 0; i < num_compressed_columns; i++)
 			{
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+				Ensure(column_values->value_bytes != 0, "the column is not decompressed");
 				if (column_values->iterator)
 				{
 					column_values->iterator->try_next(column_values->iterator);
@@ -708,6 +719,7 @@ compressed_batch_advance(DecompressChunkState *chunk_state, DecompressBatchState
 		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 		if (column_values->iterator)
 		{
+			Assert(column_values->value_bytes != 0);
 			DecompressResult result = column_values->iterator->try_next(column_values->iterator);
 			if (!result.is_done)
 			{
