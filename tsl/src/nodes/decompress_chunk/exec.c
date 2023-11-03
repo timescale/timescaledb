@@ -499,7 +499,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		if (IsA(constified, Const))
 		{
 			Const *c = castNode(Const, constified);
-			if (c->constisnull || !DatumGetBool(c))
+			if (c->constisnull || !DatumGetBool(c->constvalue))
 			{
 				chunk_state->have_constant_false_vectorized_qual = true;
 				break;
