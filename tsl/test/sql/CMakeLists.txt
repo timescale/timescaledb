@@ -83,7 +83,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     license_tsl.sql
     fixed_schedules.sql
     recompress_chunk_segmentwise.sql
-    transparent_decompression_join_index.sql
     feature_flags.sql)
 
   if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
@@ -177,6 +176,7 @@ set(TEST_TEMPLATES
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
+    transparent_decompression_join_index.sql.in
     transparent_decompression_ordered_index.sql.in
     merge_append_partially_compressed.sql.in)
 

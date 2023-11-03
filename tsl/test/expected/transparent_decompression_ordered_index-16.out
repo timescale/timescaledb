@@ -460,7 +460,7 @@ GROUP BY device_id;
  GroupAggregate (actual rows=1 loops=1)
    Group Key: mt_1.device_id
    ->  Nested Loop (actual rows=48 loops=1)
-         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time) AND (mt_1.device_id = nd.node))
+         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time) AND (nd.node = mt_1.device_id))
          Rows Removed by Join Filter: 1493
          ->  Merge Append (actual rows=1541 loops=1)
                Sort Key: mt_1.device_id
@@ -490,7 +490,7 @@ ORDER BY time;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=48 loops=1)
-   Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (mt.device_id = nd.node))
+   Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time) AND (nd.node = mt.device_id))
    Rows Removed by Join Filter: 1493
    ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1541 loops=1)
          Order: mt."time"
@@ -642,13 +642,13 @@ WHERE met.time > '2000-01-19 19:00:00-05'
                                                                                      QUERY PLAN                                                                                      
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=2 loops=1)
+   Join Filter: ((met.device_id = "*VALUES*".column1) AND (met.v0 = "*VALUES*".column2))
+   Rows Removed by Join Filter: 92
    ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk met (actual rows=1 loops=2)
-         Filter: ("*VALUES*".column2 = v0)
-         Rows Removed by Filter: 47
+   ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk met (actual rows=47 loops=2)
          Vectorized Filter: (("time" > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND ("time" < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone))
+         Rows Removed by Filter: 1
          ->  Index Scan using compress_hyper_2_8_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_8_chunk (actual rows=1 loops=2)
-               Index Cond: (device_id = "*VALUES*".column1)
                Filter: ((_ts_meta_max_1 > 'Wed Jan 19 16:00:00 2000 PST'::timestamp with time zone) AND (_ts_meta_min_1 < 'Thu Jan 20 17:00:00 2000 PST'::timestamp with time zone))
 (9 rows)
 
@@ -709,20 +709,18 @@ ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
                                                                                       QUERY PLAN                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=1 loops=1)
-   Join Filter: (nodetime.node = met.device_id)
+   Join Filter: ((met.device_id = nodetime.node) AND (met.device_id_peer = "*VALUES*".column2) AND (met.v0 = "*VALUES*".column3))
    ->  Nested Loop (actual rows=1 loops=1)
          Join Filter: (nodetime.node = "*VALUES*".column1)
          Rows Removed by Join Filter: 1
          ->  Seq Scan on nodetime (actual rows=1 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk met (actual rows=1 loops=1)
-         Filter: ("*VALUES*".column3 = v0)
-         Rows Removed by Filter: 47
          Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+         Rows Removed by Filter: 47
          ->  Index Scan using compress_hyper_2_9_chunk__compressed_hypertable_2_device_id_dev on compress_hyper_2_9_chunk (actual rows=1 loops=1)
-               Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2))
                Filter: ((_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
-(14 rows)
+(12 rows)
 
 -- filter on compressed attr (v0) with seqscan enabled and indexscan
 -- disabled. filters on compressed attr should be above the seq scan.
@@ -832,23 +830,21 @@ ORDER BY 1,
                ->  Merge Append (actual rows=10 loops=1)
                      Sort Key: _hyper_1_4_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk (actual rows=9 loops=1)
-                           Filter: ("time" < now())
-                           Vectorized Filter: ("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone)
+                           Vectorized Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
                            ->  Sort (actual rows=1 loops=1)
                                  Sort Key: compress_hyper_2_9_chunk._ts_meta_sequence_num DESC
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
                                        Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND (device_id = 4) AND (device_id_peer = 5))
                      ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk (actual rows=1 loops=1)
-                           Filter: ("time" < now())
-                           Vectorized Filter: ("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone)
+                           Vectorized Filter: (("time" > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND ("time" < now()))
                            ->  Sort (actual rows=1 loops=1)
                                  Sort Key: compress_hyper_2_10_chunk._ts_meta_sequence_num DESC
                                  Sort Method: quicksort 
                                  ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=1 loops=1)
                                        Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2002 PST'::timestamp with time zone) AND (device_id = 4) AND (device_id_peer = 5))
                                        Rows Removed by Filter: 4
-(26 rows)
+(24 rows)
 
 :PREFIX
 SELECT m.device_id,
@@ -918,23 +914,23 @@ ORDER BY 1,
                            Chunks excluded during startup: 0
                            ->  Append (actual rows=1541 loops=1)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk d_1 (actual rows=480 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk d_2 (actual rows=960 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk d_3 (actual rows=48 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk d_4 (actual rows=48 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk d_5 (actual rows=5 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                ->  Sort (actual rows=7317 loops=1)
@@ -945,23 +941,23 @@ ORDER BY 1,
                            Chunks excluded during startup: 0
                            ->  Append (actual rows=1541 loops=1)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=480 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_6_chunk compress_hyper_2_6_chunk_1 (actual rows=5 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_2 (actual rows=960 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_7_chunk compress_hyper_2_7_chunk_1 (actual rows=5 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_3 (actual rows=48 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_8_chunk compress_hyper_2_8_chunk_1 (actual rows=1 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_4 (actual rows=48 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_9_chunk compress_hyper_2_9_chunk_1 (actual rows=1 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                  ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_5 (actual rows=5 loops=1)
-                                       Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
+                                       Vectorized Filter: ("time" > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
                                        ->  Seq Scan on compress_hyper_2_10_chunk compress_hyper_2_10_chunk_1 (actual rows=5 loops=1)
                                              Filter: (_ts_meta_max_1 > ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
 (62 rows)
@@ -984,15 +980,14 @@ ORDER BY m.v0;
    ->  Hash Join (actual rows=0 loops=1)
          Hash Cond: (m.device_id = d.device_id)
          ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m (actual rows=0 loops=1)
-               Filter: ("time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
-               Vectorized Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
+               Vectorized Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
                ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=0 loops=1)
                      Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (_ts_meta_min_1 < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 5
          ->  Hash (actual rows=7 loops=1)
                Buckets: 1024  Batches: 1 
                ->  Seq Scan on device_tbl d (actual rows=7 loops=1)
-(14 rows)
+(13 rows)
 
 -- no matches in metrics_ordered_idx but one row in device_tbl
 :PREFIX
@@ -1010,17 +1005,15 @@ ORDER BY m.v0;
    Sort Key: m.v0
    Sort Method: quicksort 
    ->  Nested Loop Left Join (actual rows=1 loops=1)
-         Join Filter: (m.device_id = d.device_id)
          ->  Seq Scan on device_tbl d (actual rows=1 loops=1)
                Filter: (device_id = 8)
                Rows Removed by Filter: 6
          ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m (actual rows=0 loops=1)
-               Filter: ("time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone)
-               Vectorized Filter: ("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone)
+               Vectorized Filter: (("time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND ("time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
                ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=0 loops=1)
                      Filter: ((_ts_meta_max_1 > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (device_id = 8) AND (_ts_meta_min_1 < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
                      Rows Removed by Filter: 5
-(14 rows)
+(12 rows)
 
 -- no matches in device_tbl but 1 row in metrics_ordered_idx
 :PREFIX
@@ -1032,41 +1025,52 @@ FROM device_tbl d
     AND m.time < '2000-01-01 0:00:00+0'::text::timestamptz
 WHERE m.device_id = 7
 ORDER BY m.v0;
-                                                                                  QUERY PLAN                                                                                   
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort (actual rows=1 loops=1)
-   Sort Key: m_1.v0
-   Sort Method: quicksort 
-   ->  Hash Left Join (actual rows=1 loops=1)
-         Hash Cond: (m_1.device_id = d.device_id)
-         Join Filter: ((m_1."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m_1."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
-         ->  Append (actual rows=1 loops=1)
+                                                                               QUERY PLAN                                                                                
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join (actual rows=1 loops=1)
+   Join Filter: ((m_1."time" > 'Tue Jan 01 00:00:00 2019 PST'::timestamp with time zone) AND (m_1."time" < ('2000-01-01 0:00:00+0'::cstring)::timestamp with time zone))
+   ->  Merge Append (actual rows=1 loops=1)
+         Sort Key: m_1.v0
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_1.v0
+               Sort Method: quicksort 
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk m_1 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 5
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_2.v0
+               Sort Method: quicksort 
                ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk m_2 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 5
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_3.v0
+               Sort Method: quicksort 
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk m_3 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 1
+         ->  Sort (actual rows=0 loops=1)
+               Sort Key: m_4.v0
+               Sort Method: quicksort 
                ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk m_4 (actual rows=0 loops=1)
                      ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=0 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 1
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: m_5.v0
+               Sort Method: quicksort 
                ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk m_5 (actual rows=1 loops=1)
                      ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=1 loops=1)
                            Filter: (device_id = 7)
                            Rows Removed by Filter: 4
-         ->  Hash (actual rows=0 loops=1)
-               Buckets: 1024  Batches: 1 
-               ->  Seq Scan on device_tbl d (actual rows=0 loops=1)
-                     Filter: (device_id = 7)
-                     Rows Removed by Filter: 7
-(32 rows)
+   ->  Materialize (actual rows=0 loops=1)
+         ->  Seq Scan on device_tbl d (actual rows=0 loops=1)
+               Filter: (device_id = 7)
+               Rows Removed by Filter: 7
+(43 rows)
 
 SET timescaledb.enable_chunk_append TO TRUE;
 -- github bug 2917 with UNION ALL that references compressed ht
