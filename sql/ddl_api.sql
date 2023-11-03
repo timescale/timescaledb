@@ -127,7 +127,9 @@ CREATE OR REPLACE FUNCTION @extschema@.drop_chunks(
     relation               REGCLASS,
     older_than             "any" = NULL,
     newer_than             "any" = NULL,
-    verbose                BOOLEAN = FALSE
+    verbose                BOOLEAN = FALSE,
+    created_before         "any" = NULL,
+    created_after          "any" = NULL
 ) RETURNS SETOF TEXT AS '@MODULE_PATHNAME@', 'ts_chunk_drop_chunks'
 LANGUAGE C VOLATILE PARALLEL UNSAFE;
 
@@ -136,7 +138,9 @@ LANGUAGE C VOLATILE PARALLEL UNSAFE;
 CREATE OR REPLACE FUNCTION @extschema@.show_chunks(
     relation               REGCLASS,
     older_than             "any" = NULL,
-    newer_than             "any" = NULL
+    newer_than             "any" = NULL,
+    created_before         "any" = NULL,
+    created_after          "any" = NULL
 ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
 LANGUAGE C STABLE PARALLEL SAFE;
 

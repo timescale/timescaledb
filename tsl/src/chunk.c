@@ -335,8 +335,11 @@ chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_than_type)
 				  get_typbyval(older_than_type)),
 		makeNullConst(older_than_type, -1, InvalidOid),
 		castNode(Const, makeBoolConst(false, true)),
+		/* For now, till we actually support created_before/created_after later */
+		makeNullConst(older_than_type, -1, InvalidOid),
+		makeNullConst(older_than_type, -1, InvalidOid),
 	};
-	Oid type_id[DROP_CHUNKS_NARGS] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID };
+	Oid type_id[DROP_CHUNKS_NARGS] = { REGCLASSOID, ANYOID, ANYOID, BOOLOID, ANYOID, ANYOID };
 	char *const schema_name = ts_extension_schema_name();
 	List *const fqn = list_make2(makeString(schema_name), makeString(DROP_CHUNKS_FUNCNAME));
 

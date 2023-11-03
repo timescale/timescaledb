@@ -602,7 +602,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(1))
 		refresh_window.start = ts_time_value_from_arg(PG_GETARG_DATUM(1),
 													  get_fn_expr_argtype(fcinfo->flinfo, 1),
-													  refresh_window.type);
+													  refresh_window.type,
+													  true);
 	else
 		/*
 		 * To determine inscribed/circumscribed refresh window for variable-sized
@@ -624,7 +625,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 	if (!PG_ARGISNULL(2))
 		refresh_window.end = ts_time_value_from_arg(PG_GETARG_DATUM(2),
 													get_fn_expr_argtype(fcinfo->flinfo, 2),
-													refresh_window.type);
+													refresh_window.type,
+													true);
 	else
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 

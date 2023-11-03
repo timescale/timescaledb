@@ -114,20 +114,32 @@ ts_time_datum_convert_arg(Datum arg, Oid *argtype, Oid timetype)
  * string, then there will be an error raised.
  */
 int64
-ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype)
+ts_time_value_from_arg(Datum arg, Oid argtype, Oid timetype, bool need_now_func)
 {
 	/* If no explicit cast was done by the user, try to convert the argument
-	 * to the time type used by the continuous aggregate. */
+	 * to the time type. */
 	arg = ts_time_datum_convert_arg(arg, &argtype, timetype);
+
+	if (IS_INTEGER_TYPE(timetype) && (argtype == INTERVALOID || IS_TIMESTAMP_TYPE(argtype)))
+	{
+		if (need_now_func)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid time argument type \"%s\"", format_type_be(argtype)),
+					 errhint("Try casting the argument to \"%s\".", format_type_be(timetype))));
+		/*
+		 * The argument type is INTERVAL or TIMESTAMP-like for INTEGER column; this signifies that
+		 * chunks are retained based on chunk creation time. Chunk creation time is represented
+		 * as TIMESTAMPTZ, the input argument should be typecast to TIMESTAMPTZ.
+		 */
+		if (argtype == INTERVALOID)
+			arg = subtract_interval_from_now(TIMESTAMPTZOID, DatumGetIntervalP(arg));
+
+		return DatumGetInt64(arg);
+	}
 
 	if (argtype == INTERVALOID)
 	{
-		if (IS_INTEGER_TYPE(timetype))
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg(
-						 "can only use an INTERVAL for TIMESTAMP, TIMESTAMPTZ, and DATE types")));
-
 		arg = subtract_interval_from_now(timetype, DatumGetIntervalP(arg));
 		argtype = timetype;
 	}

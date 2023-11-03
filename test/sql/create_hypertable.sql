@@ -416,7 +416,11 @@ create or replace function my_user_schema.dummy_now4() returns BIGINT LANGUAGE S
 
 select set_integer_now_func('test_table_int', 'dummy_now');
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
+-- show chunks works with "created_before" and errors out with time used in "older_than"
+SELECT SHOW_CHUNKS('test_table_int', older_than => 10);
+SELECT SHOW_CHUNKS('test_table_int', created_before => now());
 \set ON_ERROR_STOP 0
+SELECT SHOW_CHUNKS('test_table_int', older_than => now());
 select set_integer_now_func('test_table_int', 'dummy_now');
 select set_integer_now_func('test_table_int', 'my_schema.dummy_now2', replace_if_exists => TRUE);
 select set_integer_now_func('test_table_int', 'dummy_now3', replace_if_exists => TRUE);

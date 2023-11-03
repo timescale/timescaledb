@@ -59,7 +59,7 @@ get_time_from_interval(const Dimension *dim, Datum interval, Oid type)
 
 	if (IS_INTEGER_TYPE(type))
 	{
-		Oid now_func = ts_get_integer_now_func(dim);
+		Oid now_func = ts_get_integer_now_func(dim, true);
 		int64 value = ts_interval_value_to_internal(interval, type);
 
 		Assert(now_func);
@@ -181,7 +181,7 @@ policy_refresh_cagg_refresh_start_lt(int32 materialization_id, Oid cmp_type, Dat
 	BgwJob *cagg_job = linitial(jobs);
 	Jsonb *cagg_config = cagg_job->fd.config;
 
-	const Dimension *open_dim = get_open_dimension_for_hypertable(mat_ht);
+	const Dimension *open_dim = get_open_dimension_for_hypertable(mat_ht, true);
 	Oid dim_type = ts_dimension_get_partition_type(open_dim);
 	if (IS_INTEGER_TYPE(dim_type))
 	{
