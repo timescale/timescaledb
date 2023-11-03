@@ -42,6 +42,7 @@
 #include "worker.h"
 
 #define START_RETRY_MS (1 * INT64CONST(1000)) /* 1 seconds */
+#define ONE_SECOND_IN_MICROSECONDS 1000000
 
 static TimestampTz
 least_timestamp(TimestampTz left, TimestampTz right)
@@ -571,9 +572,21 @@ start_scheduled_jobs(register_background_worker_callback_type bgw_register)
 	{
 		ScheduledBgwJob *sjob = lfirst(lc);
 
+		int64 job_start_diff = sjob->next_start - ts_timer_get_current_timestamp();
+
 		if (sjob->state == JOB_STATE_SCHEDULED &&
-			sjob->next_start <= ts_timer_get_current_timestamp())
+			(job_start_diff <= 0 || sjob->next_start == DT_NOBEGIN))
+		{
+			elog(DEBUG2, "starting scheduled job %d", sjob->job.fd.id);
 			scheduled_ts_bgw_job_start(sjob, bgw_register);
+		}
+		else
+		{
+			elog(DEBUG5,
+				 "starting scheduled job %d in " INT64_FORMAT " seconds",
+				 sjob->job.fd.id,
+				 job_start_diff / ONE_SECOND_IN_MICROSECONDS);
+		}
 	}
 
 	list_free(ordered_scheduled_jobs);
@@ -765,6 +778,7 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 		Assert(CurrentMemoryContext == scratch_mctx);
 
 		/* start jobs, and then check when to next wake up */
+		elog(DEBUG5, "scheduler wakeup in database %u", MyDatabaseId);
 		start_scheduled_jobs(bgw_register);
 		next_wakeup = least_timestamp(next_wakeup, earliest_wakeup_to_start_next_job());
 		next_wakeup = least_timestamp(next_wakeup, earliest_job_timeout());
