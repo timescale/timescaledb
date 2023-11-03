@@ -141,11 +141,9 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 
 	if (arrow)
 	{
-		if (batch_state->total_batch_rows == 0)
-		{
-			batch_state->total_batch_rows = arrow->length;
-		}
-		else if (batch_state->total_batch_rows != arrow->length)
+		/* Should have been filled from the count metadata column. */
+		Assert(batch_state->total_batch_rows != 0);
+		if (batch_state->total_batch_rows != arrow->length)
 		{
 			elog(ERROR, "compressed column out of sync with batch counter");
 		}
@@ -164,8 +162,13 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 																  column_description->typid);
 }
 
+/*
+ * Compute the vectorized filters. Returns if we have any passing rows. If not,
+ * it means the entire batch is filtered out, and we use this for further
+ * optimizations.
+ */
 static bool
-apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
+compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
 	if (!chunk_state->vectorized_quals_constified)
 	{
@@ -304,8 +307,7 @@ apply_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *batc
 		}
 
 		/*
-		 * If we don't have any passing rows, break out early to avoid
-		 * reading and decompressing other columns.
+		 * Have to return whether we have any passing rows.
 		 */
 		bool have_passing_rows = false;
 		for (int i = 0; i < bitmap_bytes / 8; i++)
@@ -476,14 +478,8 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 									count_value)));
 				}
 
-				if (batch_state->total_batch_rows == 0)
-				{
-					batch_state->total_batch_rows = count_value;
-				}
-				else if (batch_state->total_batch_rows != count_value)
-				{
-					elog(ERROR, "compressed column out of sync with batch counter");
-				}
+				Assert(batch_state->total_batch_rows == 0);
+				batch_state->total_batch_rows = count_value;
 
 				break;
 			}
@@ -496,12 +492,27 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 		}
 	}
 
-	const bool have_passing_rows = apply_vector_quals(chunk_state, batch_state);
-	if (have_passing_rows || chunk_state->batch_sorted_merge)
+	const bool have_passing_rows = compute_vector_quals(chunk_state, batch_state);
+	if (!have_passing_rows && !chunk_state->batch_sorted_merge)
 	{
 		/*
-		 * Have rows that actually pass the vector quals, have to decompress the
-		 * rest of the compressed columns.
+		 * The entire batch doesn't pass the vectorized quals, so we might be
+		 * able to avoid reading and decompressing other columns. Scroll it to
+		 * the end.
+		 * Note that this optimization doesn't work with "batch sorted merge",
+		 * because the latter always has to read the first row of the batch for
+		 * its sorting needs, so it always has to read and decompress all
+		 * columns.
+		 */
+		batch_state->next_batch_row = batch_state->total_batch_rows;
+		InstrCountTuples2(chunk_state, 1);
+		InstrCountFiltered1(chunk_state, batch_state->total_batch_rows);
+	}
+	else
+	{
+		/*
+		 * We have some rows in the batch that pass the vectorized filters, so
+		 * we have to decompress the rest of the compressed columns.
 		 */
 		const int num_compressed_columns = chunk_state->num_compressed_columns;
 		for (int i = 0; i < num_compressed_columns; i++)
@@ -513,17 +524,6 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 				Assert(column_values->value_bytes != 0);
 			}
 		}
-	}
-	else
-	{
-		/*
-		 * The entire batch doesn't pass the vectorized quals, so we might be
-		 * able to avoid reading some columns.
-		 */
-		InstrCountTuples2(chunk_state, 1);
-		InstrCountFiltered1(chunk_state, batch_state->total_batch_rows);
-		Assert(!chunk_state->batch_sorted_merge);
-		batch_state->next_batch_row = batch_state->total_batch_rows;
 	}
 
 	MemoryContextSwitchTo(old_context);
