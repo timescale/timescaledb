@@ -80,7 +80,7 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 
 static void
 translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
-	uint64 *restrict final_result)
+						  uint64 *restrict final_result)
 {
 	Assert(arrow->dictionary != NULL);
 
@@ -122,8 +122,8 @@ translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
 }
 
 static inline void
-vector_predicate_saop_impl(VectorPredicate *vector_const_predicate, bool is_or, const ArrowArray *vector, Datum array,
-						 uint64 *restrict final_result)
+vector_predicate_saop_impl(VectorPredicate *vector_const_predicate, bool is_or,
+						   const ArrowArray *vector, Datum array, uint64 *restrict final_result)
 {
 	const size_t result_bits = vector->length;
 	const size_t result_words = (result_bits + 63) / 64;
@@ -156,7 +156,8 @@ vector_predicate_saop_impl(VectorPredicate *vector_const_predicate, bool is_or, 
 	get_typlenbyvalalign(ARR_ELEMTYPE(arr), &typlen, &typbyval, &typalign);
 
 	const char *s = (const char *) ARR_DATA_PTR(arr);
-	Ensure(ARR_NULLBITMAP(arr) == NULL, "vectorized scalar array ops do not support nullable arrays");
+	Ensure(ARR_NULLBITMAP(arr) == NULL,
+		   "vectorized scalar array ops do not support nullable arrays");
 
 	const int nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
 
@@ -216,16 +217,14 @@ static void
 vector_predicate_saop_and(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
 						  uint64 *restrict result)
 {
-	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ false,
-		vector, array, result);
+	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
 }
 
 static void
 vector_predicate_saop_or(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
-						  uint64 *restrict result)
+						 uint64 *restrict result)
 {
-	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ true,
-		vector, array, result);
+	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ true, vector, array, result);
 }
 
 static int
@@ -291,7 +290,8 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 		}
 
 		DecompressAllFunction decompress_all =
-			tsl_get_decompress_all_function(header->compression_algorithm, column_description->typid);
+			tsl_get_decompress_all_function(header->compression_algorithm,
+											column_description->typid);
 		Assert(decompress_all != NULL);
 
 		MemoryContext context_before_decompression =
@@ -324,18 +324,14 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 		if (column_values->value_bytes == -1)
 		{
 			const int maxbytes =
-					VARHDRSZ +
-					(column_values->arrow->dictionary ?
-						 get_max_element_bytes(column_values->arrow->dictionary) :
-						 get_max_element_bytes(column_values->arrow));
+				VARHDRSZ + (column_values->arrow->dictionary ?
+								get_max_element_bytes(column_values->arrow->dictionary) :
+								get_max_element_bytes(column_values->arrow));
 
-			const AttrNumber attr =
-					AttrNumberGetAttrOffset(column_values->output_attno);
-			batch_state->decompressed_scan_slot->tts_values[attr] = PointerGetDatum(
-						MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+			const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
+			batch_state->decompressed_scan_slot->tts_values[attr] =
+				PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 		}
-
-
 
 		return;
 	}

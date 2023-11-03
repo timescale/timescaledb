@@ -450,7 +450,7 @@ is_not_runtime_constant(Node *node)
 static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
-	//my_print(qual);
+	// my_print(qual);
 
 	/* Only simple "Var op Const" binary predicates for now. */
 	if (!IsA(qual, OpExpr) && !IsA(qual, ScalarArrayOpExpr))
