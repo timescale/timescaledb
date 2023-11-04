@@ -32,6 +32,8 @@ from ci_settings import (
     PG14_LATEST,
     PG15_EARLIEST,
     PG15_LATEST,
+    PG16_EARLIEST,
+    PG16_LATEST,
     PG_LATEST,
 )
 
@@ -42,6 +44,7 @@ pull_request = event_type == "pull_request"
 m = {
     "include": [],
 }
+
 
 # helper functions to generate matrix entries
 # the release and apache config inherit from the
@@ -148,7 +151,7 @@ def macos_config(overrides):
                 "compressed_collation",
             },
             "os": "macos-11",
-            "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include",
+            "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include --without-icu",
             "pginstallcheck": True,
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
         }
@@ -189,15 +192,35 @@ m["include"].append(
     build_debug_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
 )
 
+m["include"].append(
+    build_debug_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
+)
+
 # test timescaledb with release config on latest postgres release in MacOS
 m["include"].append(
     build_release_config(
         macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
     )
 )
+
+m["include"].append(
+    build_release_config(
+        macos_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
+    )
+)
+
 # test latest postgres release without telemetry
 m["include"].append(
     build_without_telemetry({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
+)
+
+m["include"].append(
+    build_without_telemetry(
+        {
+            "pg": PG16_LATEST,
+            "ignored_tests": ignored_tests,
+        }
+    )
 )
 
 # if this is not a pull request e.g. a scheduled run or a push
@@ -235,10 +258,21 @@ if not pull_request:
         build_debug_config({"pg": PG15_EARLIEST, "ignored_tests": ignored_tests})
     )
 
+    # add debug test for first supported PG16 version
+    m["include"].append(
+        build_debug_config({"pg": PG16_EARLIEST, "ignored_tests": ignored_tests})
+    )
+
     # add debug tests for timescaledb on latest postgres release in MacOS
     m["include"].append(
         build_debug_config(
             macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
+        )
+    )
+
+    m["include"].append(
+        build_debug_config(
+            macos_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
         )
     )
 
@@ -247,6 +281,9 @@ if not pull_request:
     m["include"].append(build_release_config({"pg": PG14_LATEST}))
     m["include"].append(
         build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
+    )
+    m["include"].append(
+        build_release_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
     )
 
     # add apache only test for latest pg versions
@@ -269,6 +306,15 @@ if not pull_request:
         build_debug_config(
             {
                 "pg": 15,
+                "snapshot": "snapshot",
+                "ignored_tests": ignored_tests,
+            }
+        )
+    )
+    m["include"].append(
+        build_debug_config(
+            {
+                "pg": 16,
                 "snapshot": "snapshot",
                 "ignored_tests": ignored_tests,
             }
