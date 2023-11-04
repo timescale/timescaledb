@@ -116,8 +116,7 @@ ts_test_status_ssl(PG_FUNCTION_ARGS)
 
 	snprintf(buf, sizeof(buf) - 1, "{\"status\":%d}", status);
 
-	PG_RETURN_JSONB_P(DirectFunctionCall1(jsonb_in, CStringGetDatum(buf)));
-	;
+	PG_RETURN_JSONB_P(DatumGetJsonbP(DirectFunctionCall1(jsonb_in, CStringGetDatum(buf))));
 #endif
 }
 
