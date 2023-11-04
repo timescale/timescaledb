@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-      pg15_latest: ${{ steps.setter.outputs.PG15_LATEST }}
+      pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v3
@@ -39,7 +39,8 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
         include:
-          - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+          - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
+            build_type: Debug
     steps:
       - run: |
           echo "No build required"

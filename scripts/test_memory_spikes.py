@@ -16,6 +16,7 @@ WAIT_TO_STABILIZE = 15  # wait in seconds before considering memory stable
 CHECK_INTERVAL = 15
 DEBUG = False
 
+
 # finds processes with name as argument
 def find_procs_by_name(name):
     # Return a list of processes matching 'name'
