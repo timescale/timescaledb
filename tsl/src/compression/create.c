@@ -802,7 +802,7 @@ get_col_info_for_attnum(Hypertable *ht, CompressColInfo *colinfo, AttrNumber att
  * This is limited to foreign key constraints now
  */
 static List *
-validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo, Bitmapset **indexes)
+validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo, List **indexes)
 {
 	Oid relid = ht->main_table_relid;
 	Relation pg_constr;
@@ -832,7 +832,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo, Bitmapse
 		 * index is a problem at this point. It potentially avoids a second
 		 * check of an index that we have already checked. */
 		if (OidIsValid(form->conindid))
-			*indexes = bms_add_member(*indexes, form->conindid);
+			*indexes = lappend_oid(*indexes, form->conindid);
 
 		/*
 		 * We check primary, unique, and exclusion constraints.  Move foreign
@@ -923,7 +923,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo, Bitmapse
  * by the constraint checking above.
  */
 static void
-validate_existing_indexes(Hypertable *ht, CompressColInfo *colinfo, Bitmapset *ignore)
+validate_existing_indexes(Hypertable *ht, CompressColInfo *colinfo, List *ignore)
 {
 	Relation pg_index;
 	HeapTuple htup;
@@ -948,7 +948,8 @@ validate_existing_indexes(Hypertable *ht, CompressColInfo *colinfo, Bitmapset *i
 		 * checking. We can also skip checks below if the index is not a
 		 * unique index. */
 		if (!index->indislive || !index->indisvalid || index->indisexclusion ||
-			index->indisprimary || !index->indisunique || bms_is_member(index->indexrelid, ignore))
+			index->indisprimary || !index->indisunique ||
+			list_member_oid(ignore, index->indexrelid))
 			continue;
 
 		/* Now we check that all columns of the unique index are part of the
@@ -1224,12 +1225,10 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 
 	/* Check if we can create a compressed hypertable with existing
 	 * constraints and indexes. */
-	{
-		Bitmapset *indexes = NULL;
-		constraint_list = validate_existing_constraints(ht, &compress_cols, &indexes);
-		validate_existing_indexes(ht, &compress_cols, indexes);
-		bms_free(indexes);
-	}
+	List *indexes = NIL;
+	constraint_list = validate_existing_constraints(ht, &compress_cols, &indexes);
+	validate_existing_indexes(ht, &compress_cols, indexes);
+	list_free(indexes);
 
 	/* take explicit locks on catalog tables and keep them till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
