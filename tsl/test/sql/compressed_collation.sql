@@ -24,11 +24,7 @@ alter table compressed_collation_ht set (timescaledb.compress,
 insert into compressed_collation_ht values ('2021-01-01 01:01:01', 'á', '1'),
     ('2021-01-01 01:01:02', 'b', '2'), ('2021-01-01 01:01:03', 'ç', '2');
 
-select 1 from (
-	select compress_chunk(chunk_schema || '.' || chunk_name)
-	from timescaledb_information.chunks
-	where hypertable_name = 'compressed_collation_ht'
-) t;
+SELECT count(compress_chunk(ch)) FROM show_chunks('compressed_collation_ht') ch;
 
 select ht.schema_name || '.' || ht.table_name as "CHUNK"
 from _timescaledb_catalog.hypertable ht

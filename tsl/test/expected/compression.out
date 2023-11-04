@@ -314,8 +314,7 @@ select tableoid::regclass, count(*) from conditions group by tableoid order by t
  _timescaledb_internal._hyper_5_13_chunk |    20
 (2 rows)
 
-select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' ORDER BY ch1.id limit 1;
+SELECT compress_chunk(ch) FROM show_chunks('conditions') ch LIMIT 1;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_12_chunk
@@ -329,8 +328,7 @@ select tableoid::regclass, count(*) from conditions group by tableoid order by t
  _timescaledb_internal._hyper_5_13_chunk |    20
 (1 row)
 
-select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+SELECT compress_chunk(ch, true) FROM show_chunks('conditions') ch ORDER BY ch::text DESC LIMIT 1;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_13_chunk
@@ -484,15 +482,11 @@ data_nodes          |
 tablespaces         | 
 
 \x
-SELECT decompress_chunk(ch1.schema_name|| '.' || ch1.table_name) AS chunk
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id and ht.table_name LIKE 'conditions'
-ORDER BY chunk;
-                  chunk                  
------------------------------------------
- _timescaledb_internal._hyper_5_12_chunk
- _timescaledb_internal._hyper_5_13_chunk
-(2 rows)
+SELECT count(decompress_chunk(ch)) FROM show_chunks('conditions') ch;
+ count 
+-------
+     2
+(1 row)
 
 SELECT count(*), count(*) = :'ORIGINAL_CHUNK_COUNT' from :CHUNK_NAME;
  count | ?column? 
@@ -615,9 +609,7 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 insert into test_collation
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), NULL, 'device_5', gen_rand_minstd(), gen_rand_minstd();
 --compress 2 chunks
-SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
-and ht.table_name like 'test_collation' ORDER BY ch1.id LIMIT 2;
+SELECT compress_chunk(ch) FROM show_chunks('test_collation') ch LIMIT 2;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_19_chunk
@@ -906,12 +898,10 @@ WARNING:  column type "timestamp without time zone" used for "timestamp_column" 
 
 ALTER TABLE datatype_test SET (timescaledb.compress);
 INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-01-01 12:00','2001-01-01 6:00','1 week', 3.41, 4.2, 'text', 'x');
-SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
-and ht.table_name like 'datatype_test' ORDER BY ch1.id;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_31_chunk
+SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
+ count 
+-------
+     1
 (1 row)
 
 SELECT
@@ -995,9 +985,7 @@ SELECT count(*) FROM rescan_test;
 (1 row)
 
 -- compress first chunk
-SELECT compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id
-and ht.table_name like 'rescan_test' ORDER BY ch1.id LIMIT 1;
+SELECT compress_chunk(ch) FROM show_chunks('rescan_test') ch LIMIT 1;
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_16_36_chunk
@@ -1214,17 +1202,11 @@ SELECT table_name FROM create_hypertable ('compressed_ht', 'time');
 ALTER TABLE compressed_ht SET (timescaledb.compress);
 INSERT INTO compressed_ht
   VALUES ('2020-04-20 01:01', 100, 1), ('2020-05-20 01:01', 100, 1);
-SELECT compress_chunk (ch1.schema_name || '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1,
-  _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id
-  AND ht.table_name LIKE 'compressed_ht'
-ORDER BY ch1.id;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_25_51_chunk
- _timescaledb_internal._hyper_25_52_chunk
-(2 rows)
+SELECT count(compress_chunk(ch)) FROM show_chunks('compressed_ht') ch;
+ count 
+-------
+     2
+(1 row)
 
 BEGIN;
 WITH compressed AS (
@@ -1453,10 +1435,7 @@ SELECT create_hypertable('stattest2', 'time', chunk_time_interval=>'1 day'::inte
 ALTER TABLE stattest2 SET (timescaledb.compress, timescaledb.compress_segmentby='c1');
 INSERT INTO stattest2 SELECT '2020/06/20 01:00'::TIMESTAMPTZ ,1 , generate_series(1, 200, 1);
 INSERT INTO stattest2 SELECT '2020/07/20 01:00'::TIMESTAMPTZ ,1 , generate_series(1, 200, 1);
-SELECT  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
-WHERE ch1.hypertable_id = ht.id and ht.table_name like 'stattest2'
- ORDER BY ch1.id limit 1;
+SELECT compress_chunk(ch) FROM show_chunks('stattest2') ch LIMIT 1;
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_29_58_chunk
@@ -1582,8 +1561,7 @@ SELECT approximate_row_count('approx_count');
 DROP TABLE approx_count;
 --TEST drop_chunks from a compressed hypertable (that has caggs defined).
 -- chunk metadata is still retained. verify correct status for chunk
-SELECT count(*)
-FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch ) q;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
  count 
 -------
      2
@@ -1621,8 +1599,7 @@ SELECT "time", cnt  FROM cagg_expr ORDER BY time LIMIT 5;
 --now reload data into the dropped chunks region, then compress
 -- then verify chunk status/dropped column
 INSERT INTO metrics SELECT generate_series('2000-01-01'::timestamptz,'2000-01-10','1m'),1,0.25,0.75;
-SELECT count(*)
-FROM (SELECT compress_chunk(ch) FROM show_chunks('metrics') ch) q;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
  count 
 -------
      2

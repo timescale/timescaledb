@@ -15,15 +15,7 @@ SELECT '2018-03-04 2:00', 100, 200, 'hello' ;
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'bntcol', timescaledb.compress_orderby = '"Time" DESC');
 
-SELECT COUNT(*) AS count_compressed
-FROM
-(
-SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
-)
-AS sub;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 
 -- TEST: ALTER TABLE add column tests --
 ALTER TABLE test1 ADD COLUMN new_coli integer;
@@ -36,16 +28,7 @@ SELECT count(*) from test1 where new_coli is not null;
 SELECT count(*) from test1 where new_colv is null;
 
 --decompress 1 chunk and query again
-SELECT COUNT(*) AS count_compressed
-FROM
-(
-SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NOT NULL ORDER BY chunk.id
-LIMIT 1
-)
-AS sub;
+SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch LIMIT 1;
 
 SELECT count(*) from test1 where new_coli is not null;
 SELECT count(*) from test1 where new_colv is null;
@@ -57,15 +40,7 @@ FROM generate_series('2018-03-08 1:00'::TIMESTAMPTZ, '2018-03-09 1:00', '1 hour'
 SELECT count(*) from test1 where new_coli  = 100;
 SELECT count(*) from test1 where new_colv  = '101t';
 
-SELECT COUNT(*) AS count_compressed
-FROM
-(
-SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
-)
-AS sub;
+SELECT count(compress_chunk(ch, true)) FROM show_chunks('test1') ch;
 SELECT count(*) from test1 where new_coli  = 100;
 SELECT count(*) from test1 where new_colv  = '101t';
 
@@ -96,14 +71,7 @@ SELECT * from test1 WHERE bigintcol = 200;
 -- add a new chunk and compress
 INSERT INTO test1 SELECT '2019-03-04 2:00', 99, 800, 'newchunk' ;
 
-SELECT COUNT(*) AS count_compressed
-FROM
-(
-SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name = 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
-) q;
+SELECT count(compress_chunk(ch, true)) FROM show_chunks('test1') ch;
 
 --check if all chunks have new column names
 --both counts should be equal

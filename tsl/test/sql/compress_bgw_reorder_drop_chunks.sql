@@ -60,10 +60,7 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
 
 --turn on compression and compress all chunks
 ALTER TABLE test_retention_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
-SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_compressed
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test_retention_table' and chunk.compressed_chunk_id IS NULL;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_retention_table') ch;
 
 --make sure same # of compressed and uncompressed chunks before policy
 SELECT count(*) as count_chunks_uncompressed

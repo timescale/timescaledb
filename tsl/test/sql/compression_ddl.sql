@@ -22,15 +22,7 @@ INSERT INTO test1 SELECT t,  gen_rand_minstd(), gen_rand_minstd(), gen_rand_mins
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
 
-SELECT COUNT(*) AS count_compressed
-FROM
-(
-SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
-)
-AS sub;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 
 
 --make sure allowed ddl still work
@@ -373,15 +365,7 @@ SELECT a.rolname from pg_class c INNER JOIN pg_authid a ON(c.relowner = a.oid) W
 -- turn off compression
 --
 
-SELECT COUNT(*) AS count_compressed
-FROM
-(
-SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NOT NULL ORDER BY chunk.id
-)
-AS sub;
+SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch;
 
 select add_compression_policy('test1', interval '1 day');
 \set ON_ERROR_STOP 0
@@ -414,15 +398,7 @@ ALTER TABLESPACE tablespace2 OWNER TO :ROLE_DEFAULT_PERM_USER_2;
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_segmentby = 'b', timescaledb.compress_orderby = '"Time" DESC');
 
-SELECT COUNT(*) AS count_compressed
-FROM
-(
-SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id
-)
-AS sub;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 
 DROP TABLE test1 CASCADE;
 DROP TABLESPACE tablespace1;
@@ -451,19 +427,9 @@ INSERT INTO test1 SELECT '2018-03-02 1:05'::TIMESTAMPTZ, 2;
 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_orderby = '"Time" DESC');
 
-SELECT COUNT(*) AS count_compressed FROM
-(
-SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1' and chunk.compressed_chunk_id IS NULL ORDER BY chunk.id) AS subq;
+SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 
-SELECT COUNT(*) AS count_compressed FROM
-(
-SELECT decompress_chunk(chunk.schema_name|| '.' || chunk.table_name)
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like 'test1'  ORDER BY chunk.id ) as subq;
+SELECT count(decompress_chunk(ch)) FROM show_chunks('test1') ch;
 
 DROP TABLE test1;
 
@@ -642,11 +608,7 @@ INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
 SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-03 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 
-SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
-WHERE c.hypertable_id = ht.id and ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
-ORDER BY c.table_name DESC \gset
+SELECT compress_chunk(ch, true) AS "CHUNK_NAME" FROM show_chunks('compression_insert') ch ORDER BY ch DESC \gset
 
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
 SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
@@ -689,12 +651,10 @@ SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
 FROM generate_series('2000-01-07 0:00:00+0'::timestamptz,'2000-01-09 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 
 ALTER TABLE compression_insert DROP COLUMN filler_1;
-SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
-WHERE c.hypertable_id = ht.id
-AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
-ORDER BY c.table_name DESC \gset
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name)) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compression_insert' AND NOT is_compressed
+ORDER BY chunk_name DESC \gset
 
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
 SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
@@ -731,12 +691,10 @@ INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
 SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
 FROM generate_series('2000-01-15 0:00:00+0'::timestamptz,'2000-01-17 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 
-SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
-WHERE c.hypertable_id = ht.id
-AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
-ORDER BY c.table_name DESC \gset
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name)) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compression_insert' AND NOT is_compressed
+ORDER BY chunk_name DESC \gset
 
 ALTER TABLE compression_insert DROP COLUMN filler_2;
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
@@ -774,12 +732,11 @@ SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
 FROM generate_series('2000-01-22 0:00:00+0'::timestamptz,'2000-01-24 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 
 ALTER TABLE compression_insert ADD COLUMN filler_4 int;
-SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
-WHERE c.hypertable_id = ht.id
-AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
-ORDER BY c.table_name DESC \gset
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name)) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compression_insert' AND NOT is_compressed
+ORDER BY chunk_name DESC \gset
+
 
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
 SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
@@ -814,12 +771,10 @@ SET enable_seqscan = default;
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)
 SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL
 FROM generate_series('2000-01-28 0:00:00+0'::timestamptz,'2000-01-30 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
-SELECT compress_chunk(c.schema_name|| '.' || c.table_name) as "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
-WHERE c.hypertable_id = ht.id
-AND ht.table_name = 'compression_insert'
-AND c.compressed_chunk_id IS NULL
-ORDER BY c.table_name DESC \gset
+SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name)) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'compression_insert' AND NOT is_compressed
+ORDER BY chunk_name DESC \gset
 
 ALTER TABLE compression_insert ADD COLUMN filler_5 int;
 INSERT INTO compression_insert(time,device_id,v0,v1,v2,v3)

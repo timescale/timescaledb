@@ -8118,18 +8118,11 @@ CREATE INDEX ON metrics_ordered(device_id,device_id_peer,time);
 CREATE INDEX ON metrics_ordered(device_id,time);
 CREATE INDEX ON metrics_ordered(device_id_peer,time);
 -- compress all chunks
-SELECT
-  compress_chunk(c.schema_name || '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c
-  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
-WHERE ht.table_name = 'metrics_ordered'
-ORDER BY c.id;
-              compress_chunk              
-------------------------------------------
- _timescaledb_internal._hyper_11_26_chunk
- _timescaledb_internal._hyper_11_27_chunk
- _timescaledb_internal._hyper_11_28_chunk
-(3 rows)
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered') ch;
+ count 
+-------
+     3
+(1 row)
 
 -- reindexing compressed hypertable to update statistics
 DO
@@ -8366,10 +8359,7 @@ psql:include/transparent_decompression_undiffed.sql:12: NOTICE:  adding not-null
 
 ALTER TABLE readings SET (timescaledb.compress, timescaledb.compress_segmentby = 'tags_id', timescaledb.compress_orderby = 'time desc');
 INSERT into readings select g, 1, 1.3 from generate_series('2001-03-01 01:01:01', '2003-02-01 01:01:01', '1 day'::interval) g;
-SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name))
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name = 'readings' and chunk.compressed_chunk_id IS NULL;
+SELECT count(compress_chunk(ch)) FROM show_chunks('readings') ch;
  count 
 -------
    703

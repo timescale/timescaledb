@@ -14,10 +14,7 @@ ALTER TABLE readings SET (timescaledb.compress, timescaledb.compress_segmentby =
 
 INSERT into readings select g, 1, 1.3 from generate_series('2001-03-01 01:01:01', '2003-02-01 01:01:01', '1 day'::interval) g;
 
-SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name))
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name = 'readings' and chunk.compressed_chunk_id IS NULL;
+SELECT count(compress_chunk(ch)) FROM show_chunks('readings') ch;
 
 EXPLAIN (costs off) SELECT t.fleet as fleet, min(r.fuel_consumption) AS avg_fuel_consumption
 FROM tags t
