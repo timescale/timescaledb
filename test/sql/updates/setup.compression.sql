@@ -30,11 +30,7 @@ FROM generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestam
 
 ALTER TABLE compress SET (timescaledb.compress, timescaledb.compress_segmentby='small_cardinality');
 
-SELECT compress_chunk(chunk.schema_name|| '.' || chunk.table_name) as count_compressed
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name = 'compress' and chunk.compressed_chunk_id IS NULL
-ORDER BY chunk.id;
+SELECT count(compress_chunk(ch, true)) FROM show_chunks('compress') ch;
 
 \if :WITH_ROLES
 GRANT SELECT ON compress TO tsdbadmin;

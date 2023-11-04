@@ -118,9 +118,9 @@ psql:include/compression_test_hypertable.sql:7: NOTICE:  table "original_result"
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-               27
+ count 
+-------
+    27
 (1 row)
 
  min_correct | max_correct 
@@ -171,8 +171,8 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: true
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_64_chunk (actual rows=1 loops=1)
-         Output: compress_hyper_2_64_chunk."Time", compress_hyper_2_64_chunk.i, compress_hyper_2_64_chunk.b, compress_hyper_2_64_chunk.t, compress_hyper_2_64_chunk._ts_meta_count, compress_hyper_2_64_chunk._ts_meta_sequence_num, compress_hyper_2_64_chunk._ts_meta_min_1, compress_hyper_2_64_chunk._ts_meta_max_1
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
 (5 rows)
 
 set timescaledb.enable_bulk_decompression to false;
@@ -183,8 +183,8 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_10_chunk (actual rows=24 loops=1)
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: false
-   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_64_chunk (actual rows=1 loops=1)
-         Output: compress_hyper_2_64_chunk."Time", compress_hyper_2_64_chunk.i, compress_hyper_2_64_chunk.b, compress_hyper_2_64_chunk.t, compress_hyper_2_64_chunk._ts_meta_count, compress_hyper_2_64_chunk._ts_meta_sequence_num, compress_hyper_2_64_chunk._ts_meta_min_1, compress_hyper_2_64_chunk._ts_meta_max_1
+   ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
+         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
 (5 rows)
 
 reset timescaledb.enable_bulk_decompression;
@@ -274,9 +274,9 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-                5
+ count 
+-------
+     5
 (1 row)
 
  min_correct | max_correct 
@@ -293,9 +293,14 @@ ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby = ''
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-                0
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_82_chunk" is already compressed
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_83_chunk" is already compressed
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_84_chunk" is already compressed
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_85_chunk" is already compressed
+psql:include/compression_test_hypertable_segment_meta.sql:10: NOTICE:  chunk "_hyper_3_86_chunk" is already compressed
+ count 
+-------
+     5
 (1 row)
 
  min_correct | max_correct 
@@ -386,9 +391,9 @@ group by location ORDER BY location;
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-                1
+ count 
+-------
+     1
 (1 row)
 
  min_correct | max_correct 
@@ -499,9 +504,9 @@ select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timest
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-               10
+ count 
+-------
+    10
 (1 row)
 
  min_correct | max_correct 
@@ -579,9 +584,9 @@ INSERT INTO test6 SELECT t, NULL, customtype_in(t::TEXT::cstring)
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-                5
+ count 
+-------
+     5
 (1 row)
 
  min_correct | max_correct 
@@ -656,9 +661,9 @@ INSERT INTO test7
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-                1
+ count 
+-------
+     1
 (1 row)
 
  min_correct | max_correct 

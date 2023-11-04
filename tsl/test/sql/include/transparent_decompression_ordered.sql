@@ -15,12 +15,8 @@ CREATE INDEX ON metrics_ordered(device_id,time);
 CREATE INDEX ON metrics_ordered(device_id_peer,time);
 
 -- compress all chunks
-SELECT
-  compress_chunk(c.schema_name || '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c
-  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
-WHERE ht.table_name = 'metrics_ordered'
-ORDER BY c.id;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered') ch;
+
 -- reindexing compressed hypertable to update statistics
 DO
 $$

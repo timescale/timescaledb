@@ -38,12 +38,7 @@ INSERT INTO merge_sort SELECT time, 1, 1, extract(epoch from time) * 0.001 FROM 
 ANALYZE merge_sort;
 
 --compress first chunk
-SELECT
-  compress_chunk(c.schema_name || '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c
-  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
-WHERE ht.table_name = 'merge_sort'
-ORDER BY c.id LIMIT 1;
+SELECT compress_chunk(ch) FROM show_chunks('merge_sort') ch LIMIT 1;
 
 -- this should have a MergeAppend with children wrapped in Sort nodes
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT

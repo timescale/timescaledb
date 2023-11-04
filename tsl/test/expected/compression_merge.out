@@ -64,9 +64,9 @@ psql:include/compression_test_merge.sql:7: NOTICE:  table "merge_result" does no
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
- count_decompressed 
---------------------
-                 12
+ count 
+-------
+    12
 (1 row)
 
                                                    ?column?                                                   | count 
@@ -83,9 +83,9 @@ psql:include/compression_test_merge.sql:7: NOTICE:  table "merge_result" does no
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-               12
+ count 
+-------
+    12
 (1 row)
 
  min_correct | max_correct 
@@ -129,9 +129,9 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
- count_decompressed 
---------------------
-                  3
+ count 
+-------
+     3
 (1 row)
 
                                                    ?column?                                                   | count 
@@ -148,9 +148,9 @@ SELECT 'test2' AS "HYPERTABLE_NAME" \gset
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-                3
+ count 
+-------
+     3
 (1 row)
 
  min_correct | max_correct 
@@ -199,9 +199,9 @@ SELECT 'test3' AS "HYPERTABLE_NAME" \gset
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
- count_decompressed 
---------------------
-                 13
+ count 
+-------
+    13
 (1 row)
 
                                                    ?column?                                                   | count 
@@ -218,9 +218,9 @@ SELECT 'test3' AS "HYPERTABLE_NAME" \gset
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO errors
- count_compressed 
-------------------
-               13
+ count 
+-------
+    13
 (1 row)
 
  min_correct | max_correct 
@@ -326,9 +326,9 @@ psql:include/compression_test_merge.sql:12: NOTICE:  chunk "_hyper_9_163_chunk" 
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
- count_decompressed 
---------------------
-                  1
+ count 
+-------
+     1
 (1 row)
 
                                                    ?column?                                                   | count 
@@ -617,9 +617,9 @@ SELECT 'test7' AS "HYPERTABLE_NAME" \gset
  Number of rows different between original and query on compressed data (expect 0) |     0
 (1 row)
 
- count_decompressed 
---------------------
-                 12
+ count 
+-------
+    12
 (1 row)
 
                                                    ?column?                                                   | count 

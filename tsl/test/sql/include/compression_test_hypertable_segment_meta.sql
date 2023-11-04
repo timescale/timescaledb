@@ -7,10 +7,7 @@
 SELECT 'NULL::'||:'TYPE' as "NULLTYPE" \gset
 
 --compress the data
-SELECT count(compress_chunk(chunk.schema_name|| '.' || chunk.table_name)) as count_compressed
-FROM _timescaledb_catalog.chunk chunk
-INNER JOIN _timescaledb_catalog.hypertable hypertable ON (chunk.hypertable_id = hypertable.id)
-WHERE hypertable.table_name like :'HYPERTABLE_NAME' and chunk.compressed_chunk_id IS NULL;
+SELECT count(compress_chunk(ch, true)) FROM show_chunks(:'HYPERTABLE_NAME') ch;
 
 SELECT
     comp_hypertable.schema_name AS "COMP_SCHEMA_NAME",
