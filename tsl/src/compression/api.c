@@ -11,6 +11,7 @@
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
+#include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
 #include <libpq-fe.h>
@@ -59,6 +60,15 @@ typedef struct CompressChunkCxt
 
 static Oid get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk);
 static Oid recompress_chunk_segmentwise_impl(Chunk *chunk);
+
+static Node *
+create_dummy_query()
+{
+	RawStmt *query = NULL;
+	query = makeNode(RawStmt);
+	query->stmt = (Node *) makeNode(SelectStmt);
+	return (Node *) query;
+}
 
 void
 compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
@@ -414,6 +424,14 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	mergable_chunk = find_chunk_to_merge_into(cxt.srcht, cxt.srcht_chunk);
 	if (!mergable_chunk)
 	{
+		/*
+		 * Set up a dummy parsetree since we're calling AlterTableInternal
+		 * inside create_compress_chunk(). We can use anything here because we
+		 * are not calling EventTriggerDDLCommandEnd but we use a parse tree
+		 * type that CreateCommandTag can handle to avoid spurious printouts
+		 * in the event that EventTriggerDDLCommandEnd is called.
+		 */
+		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
 		new_compressed_chunk = true;
@@ -421,6 +439,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 				(errmsg("new compressed chunk \"%s.%s\" created",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
+		EventTriggerAlterTableEnd();
 	}
 	else
 	{
@@ -677,8 +696,16 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	/* Acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
+	/*
+	 * Set up a dummy parsetree since we're calling AlterTableInternal inside
+	 * create_compress_chunk(). We can use anything here because we are not
+	 * calling EventTriggerDDLCommandEnd but we use a parse tree type that
+	 * CreateCommandTag can handle to avoid spurious printouts.
+	 */
+	EventTriggerAlterTableStart(create_dummy_query());
 	/* Create compressed chunk using existing table */
 	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
+	EventTriggerAlterTableEnd();
 
 	/* Copy chunk constraints (including fkey) to compressed chunk */
 	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
