@@ -35,3 +35,9 @@ SELECT * FROM partial_join m1 INNER JOIN partial_join m2 ON m1.device = m2.devic
 
 DROP TABLE partial_join;
 
+-- This resulted in a recursion in the join planner code on PG16
+SELECT * FROM metrics_tstz as m
+INNER JOIN metrics_space as ms on (true)
+INNER JOIN metrics_space_compressed as msc on (true)
+WHERE CASE WHEN m.device_id is not NULL and ms.v2 is not NULL THEN NULL::int2 end = msc.device_id;
+
