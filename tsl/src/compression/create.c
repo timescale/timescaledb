@@ -771,12 +771,12 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 
 	if (!found)
 	{
-		/* Add time DESC NULLS FIRST to order by list */
+		/* Add time to order by list */
 		CompressedParsedCol *col = palloc(sizeof(*col));
 		*col = (CompressedParsedCol){
 			.index = list_length(orderby_cols),
-			.asc = false,
-			.nullsfirst = true,
+			.asc = true,
+            .nullsfirst = false,
 		};
 		namestrcpy(&col->colname, time_col_name);
 		orderby_cols = lappend(orderby_cols, col);
