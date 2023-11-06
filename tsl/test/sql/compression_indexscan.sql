@@ -251,6 +251,14 @@ SELECT compress_chunk(show_chunks('tab1'));
 SELECT decompress_chunk(show_chunks('tab1'));
 DROP INDEX idx_asc_null_first;
 
+-- Can't use partial indexes for compression because they refer only to a subset of the table.
+create index predicate on tab1(id, c1, time nulls first) where c2 = 0;
+select count(*) from tab1;
+select compress_chunk(show_chunks('tab1'));
+select decompress_chunk(show_chunks('tab1'));
+select count(*) from tab1;
+drop index predicate;
+
 --Tear down
 DROP TABLE tab1;
 DROP TABLE tab2;
