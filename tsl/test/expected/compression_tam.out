@@ -28,7 +28,6 @@ SELECT device, count(*) INTO orig FROM readings GROUP BY device;
 -- We should be able to set the table access method for a chunk, which
 -- will automatically compress the chunk.
 ALTER TABLE :chunk SET ACCESS METHOD tscompression;
-WARNING:  unrecognized node type: 1
 -- This should compress the chunk
 SELECT chunk_name FROM chunk_compression_stats('readings') WHERE compression_status='Compressed';
     chunk_name    

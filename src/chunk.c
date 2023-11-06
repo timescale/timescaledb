@@ -661,7 +661,7 @@ set_attoptions(Relation ht_rel, Oid chunk_oid)
 
 	if (alter_cmds != NIL)
 	{
-		ts_alter_table_with_event_trigger(chunk_oid, NULL, alter_cmds, false);
+		AlterTableInternal(chunk_oid, alter_cmds, false);
 		list_free_deep(alter_cmds);
 	}
 }

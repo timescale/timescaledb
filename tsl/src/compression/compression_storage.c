@@ -169,7 +169,8 @@ set_toast_tuple_target_on_chunk(Oid compressed_table_id)
 		.subtype = AT_SetRelOptions,
 		.def = (Node *) list_make1(&def_elem),
 	};
-	ts_alter_table_with_event_trigger(compressed_table_id, NULL, list_make1(&cmd), true);
+
+	AlterTableInternal(compressed_table_id, list_make1(&cmd), true);
 }
 
 static void
@@ -264,7 +265,7 @@ modify_compressed_toast_table_storage(CompressionSettings *settings, List *colde
 
 	if (cmds != NIL)
 	{
-		ts_alter_table_with_event_trigger(compress_relid, NULL, cmds, false);
+		AlterTableInternal(compress_relid, cmds, false);
 	}
 }
 
