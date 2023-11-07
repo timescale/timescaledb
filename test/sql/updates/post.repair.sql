@@ -24,3 +24,7 @@ WHERE extname = 'timescaledb' \gset
     \ir post.repair.hierarchical_cagg.sql
 \endif
 
+\z repair_test_int
+\z repair_test_extra
+
+

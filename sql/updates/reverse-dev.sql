@@ -191,3 +191,6 @@ CREATE FUNCTION @extschema@.show_chunks(
      newer_than             "any" = NULL
  ) RETURNS SETOF REGCLASS AS '@MODULE_PATHNAME@', 'ts_chunk_show_chunks'
  LANGUAGE C STABLE PARALLEL SAFE;
+
+DROP PROCEDURE IF EXISTS _timescaledb_functions.repair_relation_acls();
+DROP FUNCTION IF EXISTS _timescaledb_functions.makeaclitem(regrole, regrole, text, bool);
