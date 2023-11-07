@@ -42,7 +42,14 @@
 #include "utils.h"
 #include "time_utils.h"
 
+typedef struct
+{
+	const char *name;
+	AclMode value;
+} priv_map;
+
 TS_FUNCTION_INFO_V1(ts_pg_timestamp_to_unix_microseconds);
+TS_FUNCTION_INFO_V1(ts_makeaclitem);
 
 /*
  * Convert a Postgres TIMESTAMP to BIGINT microseconds relative the UNIX epoch.
@@ -1377,4 +1384,101 @@ ts_table_has_tuples(Oid table_relid, LOCKMODE lockmode)
 
 	table_close(rel, lockmode);
 	return hastuples;
+}
+
+/*
+ * This is copied from PostgreSQL 16.0 since versions before 16.0 does not
+ * support lists for privileges.
+ */
+static AclMode
+ts_convert_any_priv_string(text *priv_type_text, const priv_map *privileges)
+{
+	AclMode result = 0;
+	char *priv_type = text_to_cstring(priv_type_text);
+	char *chunk;
+	char *next_chunk;
+
+	/* We rely on priv_type being a private, modifiable string */
+	for (chunk = priv_type; chunk; chunk = next_chunk)
+	{
+		int chunk_len;
+		const priv_map *this_priv;
+
+		/* Split string at commas */
+		next_chunk = strchr(chunk, ',');
+		if (next_chunk)
+			*next_chunk++ = '\0';
+
+		/* Drop leading/trailing whitespace in this chunk */
+		while (*chunk && isspace((unsigned char) *chunk))
+			chunk++;
+		chunk_len = strlen(chunk);
+		while (chunk_len > 0 && isspace((unsigned char) chunk[chunk_len - 1]))
+			chunk_len--;
+		chunk[chunk_len] = '\0';
+
+		/* Match to the privileges list */
+		for (this_priv = privileges; this_priv->name; this_priv++)
+		{
+			if (pg_strcasecmp(this_priv->name, chunk) == 0)
+			{
+				result |= this_priv->value;
+				break;
+			}
+		}
+		if (!this_priv->name)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("unrecognized privilege type: \"%s\"", chunk)));
+	}
+
+	pfree(priv_type);
+	return result;
+}
+
+/*
+ * This is copied from PostgreSQL 16.0 since versions before 16.0 does not
+ * support lists for privileges but we need that.
+ */
+Datum
+ts_makeaclitem(PG_FUNCTION_ARGS)
+{
+	Oid grantee = PG_GETARG_OID(0);
+	Oid grantor = PG_GETARG_OID(1);
+	text *privtext = PG_GETARG_TEXT_PP(2);
+	bool goption = PG_GETARG_BOOL(3);
+	AclItem *result;
+	AclMode priv;
+	static const priv_map any_priv_map[] = {
+		{ "SELECT", ACL_SELECT },
+		{ "INSERT", ACL_INSERT },
+		{ "UPDATE", ACL_UPDATE },
+		{ "DELETE", ACL_DELETE },
+		{ "TRUNCATE", ACL_TRUNCATE },
+		{ "REFERENCES", ACL_REFERENCES },
+		{ "TRIGGER", ACL_TRIGGER },
+		{ "EXECUTE", ACL_EXECUTE },
+		{ "USAGE", ACL_USAGE },
+		{ "CREATE", ACL_CREATE },
+		{ "TEMP", ACL_CREATE_TEMP },
+		{ "TEMPORARY", ACL_CREATE_TEMP },
+		{ "CONNECT", ACL_CONNECT },
+#if PG16_GE
+		{ "SET", ACL_SET },
+		{ "ALTER SYSTEM", ACL_ALTER_SYSTEM },
+#endif
+		{ "RULE", 0 }, /* ignore old RULE privileges */
+		{ NULL, 0 }
+	};
+
+	priv = ts_convert_any_priv_string(privtext, any_priv_map);
+
+	result = (AclItem *) palloc(sizeof(AclItem));
+
+	result->ai_grantee = grantee;
+	result->ai_grantor = grantor;
+
+	ACLITEM_SET_PRIVS_GOPTIONS(*result, priv, (goption ? priv : ACL_NO_RIGHTS));
+
+	PG_RETURN_ACLITEM_P(result);
 }
