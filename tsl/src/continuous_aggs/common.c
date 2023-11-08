@@ -319,6 +319,11 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				Const *width = castNode(Const, width_arg);
 				tbinfo->bucket_width_type = width->consttype;
 
+				if (width->constisnull)
+					ereport(ERROR,
+							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+							 errmsg("invalid bucket width for time bucket function")));
+
 				if (width->consttype == INTERVALOID)
 				{
 					tbinfo->interval = DatumGetIntervalP(width->constvalue);
