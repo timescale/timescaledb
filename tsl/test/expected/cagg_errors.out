@@ -256,6 +256,14 @@ SELECT time_bucket('1 week', timec)
 GROUP BY time_bucket('1 week', timec);
 ERROR:  cannot create continuous aggregate with CREATE VIEW
 HINT:  Use CREATE MATERIALIZED VIEW to create a continuous aggregate.
+-- invalid `bucket_width` for `time_bucket` function
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+SELECT time_bucket(NULL, timec), sum(temperature), min(location)
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+ERROR:  invalid bucket width for time bucket function
 -- row security on table
 create table rowsec_tab( a bigint, b integer, c integer);
 select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval=>10);
