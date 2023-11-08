@@ -120,6 +120,7 @@ typedef struct CrossModuleFunctions
 											 int64 start, int64 end);
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
+	PGFunction continuous_agg_validate_query;
 	PGFunction invalidation_cagg_log_add_entry;
 	PGFunction invalidation_hyper_log_add_entry;
 	void (*remote_invalidation_log_delete)(int32 raw_hypertable_id,
