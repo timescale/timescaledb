@@ -11,6 +11,7 @@ set(TEST_FILES
     cagg_permissions.sql
     cagg_policy.sql
     cagg_refresh.sql
+    cagg_utils.sql
     cagg_watermark.sql
     compressed_collation.sql
     compression_create_compressed_table.sql

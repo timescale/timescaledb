@@ -995,4 +995,69 @@ object_ownercheck(Oid classid, Oid objectid, Oid roleid)
 #define F_SUM_INT4 2108
 #endif
 
+/*
+ * PG15 refactored elog.c functions and exposed error_severity
+ * but previous versions don't have it exposed, so imported it
+ * from Postgres source code.
+ *
+ * https://github.com/postgres/postgres/commit/ac7c80758a7
+ */
+#if PG15_LT
+/*
+ * error_severity --- get string representing elevel
+ *
+ * The string is not localized here, but we mark the strings for translation
+ * so that callers can invoke _() on the result.
+ *
+ * Imported from src/backend/utils/error/elog.c
+ */
+static inline const char *
+error_severity(int elevel)
+{
+	const char *prefix;
+
+	switch (elevel)
+	{
+		case DEBUG1:
+		case DEBUG2:
+		case DEBUG3:
+		case DEBUG4:
+		case DEBUG5:
+			prefix = gettext_noop("DEBUG");
+			break;
+		case LOG:
+		case LOG_SERVER_ONLY:
+			prefix = gettext_noop("LOG");
+			break;
+		case INFO:
+			prefix = gettext_noop("INFO");
+			break;
+		case NOTICE:
+			prefix = gettext_noop("NOTICE");
+			break;
+		case WARNING:
+#if PG14_GE
+		/* https://github.com/postgres/postgres/commit/1f9158ba481 */
+		case WARNING_CLIENT_ONLY:
+#endif
+			prefix = gettext_noop("WARNING");
+			break;
+		case ERROR:
+			prefix = gettext_noop("ERROR");
+			break;
+		case FATAL:
+			prefix = gettext_noop("FATAL");
+			break;
+		case PANIC:
+			prefix = gettext_noop("PANIC");
+			break;
+		default:
+			prefix = "???";
+			break;
+	}
+
+	return prefix;
+}
+#endif
+
 #endif /* TIMESCALEDB_COMPAT_H */
