@@ -25,9 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build_type: ${{ steps.build_type.outputs.build_type }}
-      pg13_latest: ${{ steps.config.outputs.pg13_latest }}
-      pg14_latest: ${{ steps.config.outputs.pg14_latest }}
-      pg15_latest: ${{ steps.config.outputs.pg15_latest }}
 
     steps:
     - name: Checkout source code
@@ -52,21 +49,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ 13, 14, 15 ]
+        pg: [ 13, 14, 15, 16 ]
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata telemetry"]
-        tsl_ignores: ["compression_algos remote_connection telemetry_stats dist_move_chunk dist_param dist_insert dist_backup dist_cagg"]
+        tsl_ignores: ["compression_algos remote_connection dist_move_chunk dist_param dist_insert dist_backup dist_cagg"]
         tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht
           data_fetcher dist_compression dist_remote_error remote_txn"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 13
-            tsl_skips_version: dist_grant-13 dist_partial_agg-13
+            tsl_skips_version: dist_grant-13 dist_partial_agg-13 telemetry_stats-13
           - pg: 14
-            tsl_skips_version: dist_partial_agg-14 dist_grant-14
+            tsl_skips_version: dist_partial_agg-14 dist_grant-14 telemetry_stats-14
           - pg: 15
-            tsl_skips_version: dist_partial_agg-15 dist_grant-15
+            tsl_skips_version: dist_partial_agg-15 dist_grant-15 telemetry_stats-15
+          - pg: 16
+            tsl_skips_version: dist_partial_agg-16 dist_grant-16 telemetry_stats-16
     env:
       # PostgreSQL configuration
       PGPORT: 55432
@@ -143,7 +142,7 @@ jobs:
 
     - name: Setup postgres cluster
       run: |
-        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=us --encoding=UTF8
+        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         mkdir -p ${{ env.TABLESPACE1 }}\_default
         mkdir -p ${{ env.TABLESPACE2 }}\_default
         icacls ${{ env.TABLESPACE1 }} /grant runneradmin:F /T
@@ -190,7 +189,7 @@ jobs:
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl stop
         timeout 10
         Remove-Item -Recurse ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=us --encoding=UTF8
+        ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postgres.log"
