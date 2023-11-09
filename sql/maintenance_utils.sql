@@ -126,7 +126,7 @@ $$ LANGUAGE plpgsql;
 -- This is intended for internal usage and interface might change.
 CREATE FUNCTION _timescaledb_functions.makeaclitem(regrole, regrole, text, bool)
 RETURNS AclItem AS '@MODULE_PATHNAME@', 'ts_makeaclitem'
-LANGUAGE C STABLE PARALLEL SAFE;
+LANGUAGE C STABLE PARALLEL SAFE STRICT;
 
 -- Repair relation ACL by removing roles that do not exist in pg_authid.
 CREATE PROCEDURE _timescaledb_functions.repair_relation_acls()
