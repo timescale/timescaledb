@@ -962,8 +962,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 			};
 		}
 		else
-		{
-			if (column_attr->atttypid != compressed_column_attr->atttypid)
+		{ if (column_attr->atttypid != compressed_column_attr->atttypid)
 				elog(ERROR,
 					 "expected segment by column \"%s\" to be same type as uncompressed column",
 					 compression_info->attname.data);
