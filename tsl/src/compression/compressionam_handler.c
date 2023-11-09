@@ -9,6 +9,7 @@
 #include <access/hio.h>
 #include <access/skey.h>
 #include <access/tableam.h>
+#include <access/transam.h>
 #include <catalog/index.h>
 #include <catalog/pg_attribute.h>
 #include <catalog/storage.h>
@@ -26,10 +27,12 @@
 #include <storage/block.h>
 #include <storage/buf.h>
 #include <storage/bufmgr.h>
+#include <storage/itemptr.h>
 #include <storage/lockdefs.h>
 #include <storage/off.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
+#include <utils/hsearch.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/typcache.h>
@@ -49,7 +52,7 @@ static const TableAmRoutine compressionam_methods;
 static void compressionam_handler_end_conversion(Oid relid);
 
 static Oid
-get_compressed_chunk_relid(Oid chunk_relid)
+get_compressed_table_relid(Oid chunk_relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	return ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
@@ -319,7 +322,9 @@ static void
 compressionam_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, CommandId cid,
 						   int options, BulkInsertStateData *bistate)
 {
-	FEATURE_NOT_SUPPORTED;
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	/* Inserts only supported in non-compressed relation, so simply forward to the heap AM */
+	heapam->multi_insert(relation, slots, ntuples, cid, options, bistate);
 }
 
 typedef struct IndexFetchComprData
@@ -341,7 +346,7 @@ compressionam_index_fetch_begin(Relation rel)
 {
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
-	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(rel));
+	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
 	Relation crel = table_open(cchunk_relid, AccessShareLock);
 
 	cscan->h_base.rel = rel;
@@ -402,9 +407,7 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 												all_dead);
 
 		if (result)
-		{
 			ExecStoreArrowTuple(slot, InvalidTupleIndex);
-		}
 
 		return result;
 	}
@@ -469,11 +472,17 @@ static bool
 compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapshot,
 								TupleTableSlot *slot)
 {
-	if (is_compressed_tid(tid))
+	if (!is_compressed_tid(tid))
 	{
 		/* Just pass this on to regular heap AM */
 		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-		return heapam->tuple_fetch_row_version(relation, tid, snapshot, slot);
+		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
+		bool result = heapam->tuple_fetch_row_version(relation, tid, snapshot, child_slot);
+
+		if (result)
+			ExecStoreArrowTuple(slot, InvalidTupleIndex);
+
+		return result;
 	}
 
 	FEATURE_NOT_SUPPORTED;
@@ -481,7 +490,7 @@ compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot sna
 	ItemPointerData decoded_tid;
 
 	uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
-	Oid compr_relid = get_compressed_chunk_relid(RelationGetRelid(relation));
+	Oid compr_relid = get_compressed_table_relid(RelationGetRelid(relation));
 	Relation compr_rel = table_open(compr_relid, AccessShareLock);
 	TupleTableSlot *compr_slot = table_slot_create(compr_rel, NULL);
 
@@ -501,18 +510,246 @@ compressionam_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 static bool
 compressionam_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
 {
-	FEATURE_NOT_SUPPORTED;
 	return false;
 }
 
-#if PG14_GE
+/*
+ * Determine which index tuples are safe to delete.
+ *
+ * The Index AM asks the Table AM about which given index tuples (as
+ * referenced by TID) are safe to delete. Given that the array of TIDs to
+ * delete ("delTIDs") may reference either the compressed or non-compressed
+ * relation within the compression TAM, it is necessary to split the
+ * information in the TM_IndexDeleteOp in two: one for each relation. Then the
+ * operation can be relayed to the standard heapAM method to do the heavy
+ * lifting for each relation.
+ *
+ * In order to call the heapAM method on the compressed relation, it is
+ * necessary to first "decode" the compressed TIDs to "normal" TIDs that
+ * reference compressed tuples. A complication, however, is that multiple
+ * distinct "compressed" TIDs may decode to the same TID, i.e., they reference
+ * the same compressed tuple in the TAM's compressed relation, and the heapAM
+ * method for index_delete_tuples() expects only unique TIDs. Therefore, it is
+ * necesssary to deduplicate TIDs before calling the heapAM method on the
+ * compressed relation and then restore the result array of decoded delTIDs
+ * after the method returns. Note that the returned delTID array might be
+ * smaller than the input delTID array since only the TIDs that are safe to
+ * delete should remain. Thus, if a decoded TID is not safe to delete, then
+ * all compressed TIDs that reference that compressed tuple are also not safe
+ * to delete.
+ */
 static TransactionId
 compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
-	FEATURE_NOT_SUPPORTED;
-	return 0;
-}
+	TM_IndexDeleteOp noncompr_delstate = *delstate;
+	TM_IndexDeleteOp compr_delstate = *delstate;
+	Oid compr_relid = get_compressed_table_relid(RelationGetRelid(rel));
+	/* Hash table setup for TID deduplication */
+	typedef struct TidEntry
+	{
+		ItemPointerData tid;
+		List *tuple_indexes;
+		List *status_indexes;
+	} TidEntry;
+	struct HASHCTL hctl = {
+		.keysize = sizeof(ItemPointerData),
+		.entrysize = sizeof(TidEntry),
+		.hcxt = CurrentMemoryContext,
+	};
+	unsigned int total_knowndeletable_compressed = 0;
+	unsigned int total_knowndeletable_non_compressed = 0;
+
+	/*
+	 * Setup separate TM_IndexDeleteOPs for the compressed and non-compressed
+	 * relations. Note that it is OK to reference the original status array
+	 * because it is accessed via the "id" index in the TM_IndexDelete struct,
+	 * so it doesn't need the same length and order as the deltids array. This
+	 * is because the deltids array is going to be sorted during processing
+	 * anyway so the "same-array-index" mappings for the status and deltids
+	 * arrays will be lost in any case.
+	 */
+	noncompr_delstate.deltids = palloc(sizeof(TM_IndexDelete) * delstate->ndeltids);
+	noncompr_delstate.ndeltids = 0;
+	compr_delstate.deltids = palloc(sizeof(TM_IndexDelete) * delstate->ndeltids);
+	compr_delstate.ndeltids = 0;
+
+	/* Hash table to deduplicate compressed TIDs that point to the same
+	 * compressed tuple */
+	HTAB *tidhash = hash_create("IndexDelete deduplication",
+								delstate->ndeltids,
+								&hctl,
+								HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
+
+	/*
+	 * Stage 1: preparation.
+	 *
+	 * Split the deltids array based on the two relations and deduplicate
+	 * compressed TIDs at the same time. When deduplicating, it is necessary
+	 * to "remember" the lost information when decoding (e.g., index into a
+	 * compressed tuple).
+	 */
+	for (int i = 0; i < delstate->ndeltids; i++)
+	{
+		const TM_IndexDelete *deltid = &delstate->deltids[i];
+		const TM_IndexStatus *status = &delstate->status[deltid->id];
+
+		/* If this is a compressed TID, decode and deduplicate
+		 * first. Otherwise just add to the non-compressed deltids array */
+		if (is_compressed_tid(&deltid->tid))
+		{
+			TM_IndexDelete *deltid_compr = &compr_delstate.deltids[compr_delstate.ndeltids];
+			ItemPointerData decoded_tid;
+			bool found;
+			TidEntry *tidentry;
+			uint16 tuple_index;
+
+			tuple_index = compressed_tid_to_tid(&decoded_tid, &deltid->tid);
+			tidentry = hash_search(tidhash, &decoded_tid, HASH_ENTER, &found);
+
+			if (status->knowndeletable)
+				total_knowndeletable_compressed++;
+
+			if (!found)
+			{
+				/* Add to compressed IndexDelete array */
+				deltid_compr->id = deltid->id;
+				ItemPointerCopy(&decoded_tid, &deltid_compr->tid);
+
+				/* Remember the information for the compressed TID so that the
+				 * deltids array can be restored later */
+				tidentry->tuple_indexes = list_make1_int(tuple_index);
+				tidentry->status_indexes = list_make1_int(deltid->id);
+				compr_delstate.ndeltids++;
+			}
+			else
+			{
+				/* Duplicate TID, so just append info that needs to be remembered */
+				tidentry->tuple_indexes = lappend_int(tidentry->tuple_indexes, tuple_index);
+				tidentry->status_indexes = lappend_int(tidentry->status_indexes, deltid->id);
+			}
+		}
+		else
+		{
+			TM_IndexDelete *deltid_noncompr =
+				&noncompr_delstate.deltids[noncompr_delstate.ndeltids];
+
+			*deltid_noncompr = *deltid;
+			noncompr_delstate.ndeltids++;
+
+			if (status->knowndeletable)
+				total_knowndeletable_non_compressed++;
+		}
+	}
+
+	Assert((total_knowndeletable_non_compressed + total_knowndeletable_compressed) > 0 ||
+		   delstate->bottomup);
+
+	/*
+	 * Stage 2: call heapAM method for each relation and recreate the deltids
+	 * array with the result.
+	 *
+	 * The heapAM method implements various assumptions and asserts around the
+	 * contents of the deltids array depending on whether the index AM is
+	 * doing simple index tuple deletion or bottom up deletion (as indicated
+	 * by delstate->bottomup). For example, in the simple index deletion case,
+	 * it seems the deltids array should have at least have one known
+	 * deletable entry or otherwise the heapAM might prune the array to zero
+	 * length which leads to an assertion failure because it can only be zero
+	 * length in the bottomup case. Since we split the original deltids array
+	 * across the compressed and non-compressed relations, we might end up in
+	 * a situation where we call one relation without any knowndeletable TIDs
+	 * in the simple deletion case, leading to an assertion
+	 * failure. Therefore, only call heapAM if there is at least one
+	 * knowndeletable or we are doing bottomup deletion.
+	 *
+	 * Note, also, that the function should return latestRemovedXid
+	 * transaction ID, so need to remember those for each call and then return
+	 * the latest removed of those.
+	 */
+	TransactionId xid_noncompr = InvalidTransactionId;
+	TransactionId xid_compr = InvalidTransactionId;
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+
+	/* Reset the deltids array before recreating it with the result */
+	delstate->ndeltids = 0;
+
+	if (noncompr_delstate.ndeltids > 0 &&
+		(total_knowndeletable_non_compressed > 0 || delstate->bottomup))
+	{
+		xid_noncompr = heapam->index_delete_tuples(rel, &noncompr_delstate);
+		memcpy(delstate->deltids,
+			   noncompr_delstate.deltids,
+			   noncompr_delstate.ndeltids * sizeof(TM_IndexDelete));
+		delstate->ndeltids = noncompr_delstate.ndeltids;
+	}
+
+	if (compr_delstate.ndeltids > 0 && (total_knowndeletable_compressed > 0 || delstate->bottomup))
+	{
+		/* Assume RowExclusivelock since this involves deleting tuples */
+		Relation compr_rel = table_open(compr_relid, RowExclusiveLock);
+
+		xid_compr = heapam->index_delete_tuples(compr_rel, &compr_delstate);
+
+		for (int i = 0; i < compr_delstate.ndeltids; i++)
+		{
+			const TM_IndexDelete *deltid_compr = &compr_delstate.deltids[i];
+			const TM_IndexStatus *status_compr = &delstate->status[deltid_compr->id];
+			ListCell *lc_id, *lc_tupindex;
+			TidEntry *tidentry;
+			bool found;
+
+			tidentry = hash_search(tidhash, &deltid_compr->tid, HASH_FIND, &found);
+
+			Assert(found);
+
+			forboth (lc_id, tidentry->status_indexes, lc_tupindex, tidentry->tuple_indexes)
+			{
+				int id = lfirst_int(lc_id);
+				uint16 tuple_index = lfirst_int(lc_tupindex);
+				TM_IndexDelete *deltid = &delstate->deltids[delstate->ndeltids];
+				TM_IndexStatus *status = &delstate->status[deltid->id];
+
+				deltid->id = id;
+				/* Assume that all index tuples pointing to the same heap
+				 * compressed tuple are deletable if one is
+				 * deletable. Otherwise leave status as before. */
+				if (status_compr->knowndeletable)
+					status->knowndeletable = true;
+
+				tid_to_compressed_tid(&deltid->tid, &deltid_compr->tid, tuple_index);
+				delstate->ndeltids++;
+			}
+		}
+
+		table_close(compr_rel, NoLock);
+	}
+
+	hash_destroy(tidhash);
+	pfree(compr_delstate.deltids);
+	pfree(noncompr_delstate.deltids);
+
+#ifdef USE_ASSERT_CHECKING
+	do
+	{
+		int ndeletable = 0;
+
+		for (int i = 0; i < delstate->ndeltids; i++)
+		{
+			const TM_IndexDelete *deltid = &delstate->deltids[i];
+			const TM_IndexStatus *status = &delstate->status[deltid->id];
+
+			if (status->knowndeletable)
+				ndeletable++;
+		}
+
+		Assert(ndeletable > 0 || delstate->ndeltids == 0);
+	} while (0);
 #endif
+
+	/* Return the latestremovedXid. TransactionIdFollows can handle
+	 * InvalidTransactionid. */
+	return TransactionIdFollows(xid_noncompr, xid_compr) ? xid_noncompr : xid_compr;
+}
 
 /* ----------------------------------------------------------------------------
  *  Functions for manipulations of physical tuples for compression AM.
@@ -545,21 +782,36 @@ static void
 compressionam_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, CommandId cid,
 									   int options, BulkInsertStateData *bistate, uint32 specToken)
 {
-	FEATURE_NOT_SUPPORTED;
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	heapam->tuple_insert_speculative(relation, slot, cid, options, bistate, specToken);
 }
 
 static void
 compressionam_tuple_complete_speculative(Relation relation, TupleTableSlot *slot, uint32 specToken,
 										 bool succeeded)
 {
-	FEATURE_NOT_SUPPORTED;
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	heapam->tuple_complete_speculative(relation, slot, specToken, succeeded);
 }
 
 static TM_Result
 compressionam_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapshot snapshot,
 						   Snapshot crosscheck, bool wait, TM_FailureData *tmfd, bool changingPart)
 {
-	FEATURE_NOT_SUPPORTED;
+	if (!is_compressed_tid(tid))
+	{
+		/* Just pass this on to regular heap AM */
+		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+		return heapam
+			->tuple_delete(relation, tid, cid, snapshot, crosscheck, wait, tmfd, changingPart);
+	}
+
+	/* This shouldn't happen because hypertable_modify should have
+	 * decompressed the data to be deleted already. It can happen, however, if
+	 * DELETE is run directly on a hypertable chunk, because that case isn't
+	 * handled in the current code for DML on compressed chunks. */
+	elog(ERROR, "cannot delete compressed tuple");
+
 	return TM_Ok;
 }
 
@@ -572,9 +824,7 @@ compressionam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *
 						   Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd,
 						   LockTupleMode *lockmode, TU_UpdateIndexes *update_indexes)
 {
-	FEATURE_NOT_SUPPORTED;
-
-	if (is_compressed_tid(otid))
+	if (!is_compressed_tid(otid))
 	{
 		/* Just pass this on to regular heap AM */
 		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
@@ -590,6 +840,12 @@ compressionam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *
 									update_indexes);
 	}
 
+	/* This shouldn't happen because hypertable_modify should have
+	 * decompressed the data to be deleted already. It can happen, however, if
+	 * UPDATE is run directly on a hypertable chunk, because that case isn't
+	 * handled in the current code for DML on compressed chunks. */
+	elog(ERROR, "cannot update compressed tuple");
+
 	return TM_Ok;
 }
 
@@ -598,8 +854,53 @@ compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
 						 TupleTableSlot *slot, CommandId cid, LockTupleMode mode,
 						 LockWaitPolicy wait_policy, uint8 flags, TM_FailureData *tmfd)
 {
-	FEATURE_NOT_SUPPORTED;
-	return TM_Ok;
+	TM_Result result;
+
+	if (is_compressed_tid(tid))
+	{
+		Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(relation));
+		/* SELECT FOR UPDATE takes RowShareLock, so assume this
+		 * lockmode. Another option to consider is take same lock as currently
+		 * held on the non-compressed relation */
+		Relation crel = table_open(cchunk_relid, RowShareLock);
+		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(crel));
+		ItemPointerData decoded_tid;
+
+		uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+		result = crel->rd_tableam->tuple_lock(crel,
+											  &decoded_tid,
+											  snapshot,
+											  child_slot,
+											  cid,
+											  mode,
+											  wait_policy,
+											  flags,
+											  tmfd);
+
+		if (result == TM_Ok)
+			ExecStoreArrowTuple(slot, tuple_index);
+
+		table_close(crel, NoLock);
+	}
+	else
+	{
+		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
+		result = heapam->tuple_lock(relation,
+									tid,
+									snapshot,
+									child_slot,
+									cid,
+									mode,
+									wait_policy,
+									flags,
+									tmfd);
+
+		if (result == TM_Ok)
+			ExecStoreArrowTuple(slot, InvalidTupleIndex);
+	}
+
+	return result;
 }
 
 static void
@@ -655,7 +956,7 @@ compressionam_relation_copy_for_cluster(Relation OldCompression, Relation NewCom
 static void
 compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
-	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(rel));
+	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
 
@@ -860,7 +1161,7 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 									 BlockNumber numblocks, IndexBuildCallback callback,
 									 void *callback_state, TableScanDesc scan)
 {
-	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(relation));
+	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(relation));
 	Relation crel = table_open(cchunk_relid, AccessShareLock);
 	AttrNumber count_cattno = InvalidAttrNumber;
 	IndexCallbackState icstate = {
@@ -977,8 +1278,9 @@ static uint64
 compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 {
 	uint64 size = table_block_relation_size(rel, forkNumber);
+
 	/*
-	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(rel));
+	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
 	Relation crel = try_relation_open(cchunk_relid, AccessShareLock);
 
 	if (crel == NULL)
@@ -997,7 +1299,7 @@ static void
 compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
 									 double *tuples, double *allvisfrac)
 {
-	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(rel));
+	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
 
 	if (!OidIsValid(cchunk_relid))
 		return;
