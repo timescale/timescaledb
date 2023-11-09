@@ -4,6 +4,8 @@ name: Additional tests
     branches:
       - main
       - prerelease_test
+      - trigger/additional_tests
+
 jobs:
   config:
     runs-on: ubuntu-latest
