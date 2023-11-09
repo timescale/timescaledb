@@ -22,7 +22,7 @@ TS_FUNCTION_INFO_V1(ts_test_adts);
 /* We have to stub this for the unit tests. */
 #ifndef CheckCompressedData
 #define CheckCompressedData(X) Assert(X)
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION 65536
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION 65400
 #endif
 
 #include <adts/bit_array.h>
