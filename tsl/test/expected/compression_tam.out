@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-CREATE TABLE readings(time timestamptz, location int, device int, temp float, humidity float);
+CREATE TABLE readings(time timestamptz UNIQUE, location int, device int, temp float, humidity float);
 SELECT create_hypertable('readings', 'time');
 NOTICE:  adding not-null constraint to column "time"
    create_hypertable   
@@ -23,7 +23,6 @@ ALTER TABLE readings SET (
 	  timescaledb.compress_orderby = 'time',
 	  timescaledb.compress_segmentby = 'device'
 );
-SET timescaledb.enable_transparent_decompression TO false;
 SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk
   FROM timescaledb_information.chunks
  WHERE format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
@@ -33,9 +32,9 @@ SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk
 SELECT device, count(*) INTO orig FROM readings GROUP BY device;
 -- Initially an index on time
 SELECT * FROM test.show_indexes(:'chunk');
-                          Index                           | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
-----------------------------------------------------------+---------+------+--------+---------+-----------+------------
- _timescaledb_internal._hyper_1_1_chunk_readings_time_idx | {time}  |      | f      | f       | f         | 
+                     Index                     | Columns | Expr | Unique | Primary | Exclusion | Tablespace 
+-----------------------------------------------+---------+------+--------+---------+-----------+------------
+ _timescaledb_internal."1_1_readings_time_key" | {time}  |      | t      | f       | f         | 
 (1 row)
 
 EXPLAIN (verbose, costs off)
@@ -45,7 +44,7 @@ WHERE time = '2022-06-01'::timestamptz;
 ----------------------------------------------------------------------------------------------------------
  Aggregate
    Output: count(*)
-   ->  Index Only Scan using _hyper_1_1_chunk_readings_time_idx on _timescaledb_internal._hyper_1_1_chunk
+   ->  Index Only Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
          Output: "time"
          Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:00:00 2022 PDT'::timestamp with time zone)
 (5 rows)
@@ -67,6 +66,16 @@ WHERE location = 1;
 -- We should be able to set the table access method for a chunk, which
 -- will automatically compress the chunk.
 ALTER TABLE :chunk SET ACCESS METHOD tscompression;
+SET timescaledb.enable_transparent_decompression TO false;
+-- Show access method used on chunk
+SELECT c.relname, a.amname FROM pg_class c
+INNER JOIN pg_am a ON (c.relam = a.oid)
+WHERE c.oid = :'chunk'::regclass;
+     relname      |    amname     
+------------------+---------------
+ _hyper_1_1_chunk | tscompression
+(1 row)
+
 -- This should compress the chunk
 SELECT chunk_name FROM chunk_compression_stats('readings') WHERE compression_status='Compressed';
     chunk_name    
@@ -89,7 +98,7 @@ WHERE time = '2022-06-01'::timestamptz;
 ----------------------------------------------------------------------------------------------------------
  Aggregate
    Output: count(*)
-   ->  Index Only Scan using _hyper_1_1_chunk_readings_time_idx on _timescaledb_internal._hyper_1_1_chunk
+   ->  Index Only Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
          Output: "time"
          Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:00:00 2022 PDT'::timestamp with time zone)
 (5 rows)
@@ -107,8 +116,8 @@ CREATE INDEX ON readings (location);
 SELECT * FROM test.show_indexes(:'chunk');
                             Index                             |  Columns   | Expr | Unique | Primary | Exclusion | Tablespace 
 --------------------------------------------------------------+------------+------+--------+---------+-----------+------------
+ _timescaledb_internal."1_1_readings_time_key"                | {time}     |      | t      | f       | f         | 
  _timescaledb_internal._hyper_1_1_chunk_readings_location_idx | {location} |      | f      | f       | f         | 
- _timescaledb_internal._hyper_1_1_chunk_readings_time_idx     | {time}     |      | f      | f       | f         | 
 (2 rows)
 
 -- Query by location should be an index scan
@@ -133,13 +142,122 @@ WHERE location = 1;
   1211
 (1 row)
 
+-- Test that a conflict happens when inserting a value that already exists in the
+-- compressed part of the chunk
+SELECT count(*) FROM :chunk WHERE time  = '2022-06-01'::timestamptz;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+INSERT INTO readings VALUES ('2022-06-01', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
+-- Same result if inserted directly into the compressed chunk
+INSERT INTO :chunk VALUES ('2022-06-01', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
+\set ON_ERROR_STOP 1
+-- Test insert of a non-conflicting value into the compressed chunk,
+-- first directly into chunk and then via hypertable. The value should
+-- end up in the non-compressed part in contrast to the conflicting
+-- value above.
+INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
+INSERT INTO readings VALUES ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0);
+SELECT * FROM readings WHERE time BETWEEN '2022-06-01'::timestamptz AND '2022-06-01 01:00'::timestamptz ORDER BY time ASC LIMIT 10;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:00 2022 PDT |        4 |     23 | 15.5003657696018 | 41.0800937306156
+ Wed Jun 01 00:00:02 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:05 2022 PDT |        6 |     16 | 2.46896653987823 | 82.6510652318869
+ Wed Jun 01 00:00:10 2022 PDT |        6 |     22 | 10.9878665816682 | 79.6729535595605
+ Wed Jun 01 00:00:15 2022 PDT |        8 |     20 | 8.64503534833077 |  22.702832723223
+ Wed Jun 01 00:00:20 2022 PDT |        7 |     21 | 8.91004884877971 | 90.3003536264856
+ Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
+ Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
+ Wed Jun 01 00:00:35 2022 PDT |       10 |     28 | 35.8231509472248 | 13.8241150359667
+(10 rows)
+
+-- Inserting the same values again should lead to conflicts
+\set ON_ERROR_STOP 0
+INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
+INSERT INTO readings VALUES ('2022-06-01 00:00:03'::timestamptz, 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
+\set ON_ERROR_STOP 1
+SELECT device, count(*) FROM readings WHERE device=1 GROUP BY device;
+ device | count 
+--------+-------
+      1 | 17386
+(1 row)
+
+-- Speculative insert when conflicting row is in the non-compressed part
+INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 2, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 11;
+-- Show the updated tuple
+SELECT * FROM readings WHERE time = '2022-06-01 00:00:02'::timestamptz;
+             time             | location | device | temp | humidity 
+------------------------------+----------+--------+------+----------
+ Wed Jun 01 00:00:02 2022 PDT |       11 |      1 |    1 |        1
+(1 row)
+
+INSERT INTO readings VALUES ('2022-06-01 00:00:02', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 12;
+SELECT * FROM readings WHERE time = '2022-06-01 00:00:02'::timestamptz;
+             time             | location | device | temp | humidity 
+------------------------------+----------+--------+------+----------
+ Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |    1 |        1
+(1 row)
+
+-- Speculative insert when conflicting row is in the compressed part
+\set ON_ERROR_STOP 0
+INSERT INTO :chunk VALUES ('2022-06-01', 2, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 13;
+ERROR:  cannot update compressed tuple
+\set ON_ERROR_STOP 1
+SELECT * FROM readings WHERE time = '2022-06-01'::timestamptz;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:00 2022 PDT |        4 |     23 | 15.5003657696018 | 41.0800937306156
+(1 row)
+
+INSERT INTO readings VALUES ('2022-06-01', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 14;
+SELECT * FROM readings WHERE time = '2022-06-01'::timestamptz;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:00 2022 PDT |       14 |     23 | 15.5003657696018 | 41.0800937306156
+(1 row)
+
+-- Speculative insert without a conflicting
+INSERT INTO :chunk VALUES ('2022-06-01 00:00:06', 2, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 15;
+SELECT * FROM readings WHERE time = '2022-06-01 00:00:06';
+             time             | location | device | temp | humidity 
+------------------------------+----------+--------+------+----------
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |    1 |        1
+(1 row)
+
+INSERT INTO readings VALUES ('2022-06-01 00:00:07', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 16;
+SELECT * FROM readings WHERE time = '2022-06-01 00:00:07';
+             time             | location | device | temp | humidity 
+------------------------------+----------+--------+------+----------
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |    1 |        1
+(1 row)
+
 -- We should be able to change it back to heap.
 ALTER TABLE :chunk SET ACCESS METHOD heap;
+-- Show access method used on chunk
+SELECT c.relname, a.amname FROM pg_class c
+INNER JOIN pg_am a ON (c.relam = a.oid)
+WHERE c.oid = :'chunk'::regclass;
+     relname      | amname 
+------------------+--------
+ _hyper_1_1_chunk | heap
+(1 row)
+
 -- Should give the same result as above
 SELECT device, count(*) INTO decomp FROM readings GROUP BY device;
--- Row counts for each device should match, so this should be empty.
-SELECT device FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
- device 
---------
-(0 rows)
+-- Row counts for each device should match, except for the chunk we did inserts on.
+SELECT device, orig.count AS orig_count, decomp.count AS decomp_count, (decomp.count - orig.count) AS diff
+FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
+ device | orig_count | decomp_count | diff 
+--------+------------+--------------+------
+      1 |      17384 |        17388 |    4
+(1 row)
 

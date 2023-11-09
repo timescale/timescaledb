@@ -219,7 +219,7 @@ copy_slot_values(const TupleTableSlot *from, TupleTableSlot *to, int natts)
 	}
 
 	to->tts_flags &= ~TTS_FLAG_EMPTY;
-	to->tts_nvalid = from->tts_tupleDescriptor->natts;
+	to->tts_nvalid = natts;
 }
 
 /*
