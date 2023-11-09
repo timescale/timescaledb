@@ -26,7 +26,7 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         # Should be removed after the first version for PG 16 is released
         exclude:
-          - pg: "16.0"
+          - pg: "16.1"
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
@@ -61,7 +61,7 @@ jobs:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         # Should be removed after the first version for PG 16 is released
         exclude:
-          - pg: "16.0"
+          - pg: "16.1"
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
