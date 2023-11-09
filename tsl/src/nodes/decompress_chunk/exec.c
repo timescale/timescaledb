@@ -879,6 +879,16 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 		ts_show_instrumentation_count("Rows Removed by Filter", 1, &node->ss.ps, es);
 	}
 
+	if (es->analyze && es->verbose &&
+		(node->ss.ps.instrument->ntuples2 > 0 || es->format != EXPLAIN_FORMAT_TEXT))
+	{
+		ExplainPropertyFloat("Batches Removed by Filter",
+							 NULL,
+							 node->ss.ps.instrument->ntuples2,
+							 0,
+							 es);
+	}
+
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
 	{
 		if (chunk_state->batch_sorted_merge)
