@@ -10,12 +10,7 @@ SELECT create_hypertable('metrics_ordered_idx2','time', chunk_time_interval=>'2d
 ALTER TABLE metrics_ordered_idx2 SET (timescaledb.compress, timescaledb.compress_orderby='time ASC, v0 desc',timescaledb.compress_segmentby='device_id,device_id_peer');
 INSERT INTO metrics_ordered_idx2(time,device_id,device_id_peer,v0, v1) SELECT generate_series('2000-01-20 0:00:00+0'::timestamptz,'2000-01-20 11:55:00+0','10s') , 3, 3, generate_series(1,5,1) , generate_series(555,559,1);
 
-SELECT
-  compress_chunk(c.schema_name || '.' || c.table_name)
-FROM _timescaledb_catalog.chunk c
-  INNER JOIN _timescaledb_catalog.hypertable ht ON c.hypertable_id=ht.id
-WHERE ht.table_name = 'metrics_ordered_idx2'
-ORDER BY c.id;
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics_ordered_idx2') ch;
 
 --all queries have only prefix of compress_orderby in ORDER BY clause
 

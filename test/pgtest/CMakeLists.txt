@@ -34,7 +34,18 @@ set(PG_IGNORE_TESTS
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})
-  string(CONCAT PG_TEST_SCHEDULE "ignore: ${IGNORE_TEST}\n" ${PG_TEST_SCHEDULE})
+  # ignored schedules was removed in PG16
+  # https://github.com/postgres/postgres/commit/bd8d453e9b5f8b632a400a9e796fc041aed76d82
+  if(${PG_VERSION_MAJOR} LESS "16")
+    string(CONCAT PG_TEST_SCHEDULE "ignore: ${IGNORE_TEST}\n"
+                  ${PG_TEST_SCHEDULE})
+  else()
+    # remove the ignored test from the schedule
+    string(REPLACE "test: ${IGNORE_TEST}\n" "" PG_TEST_SCHEDULE
+                   "${PG_TEST_SCHEDULE}")
+    string(REPLACE " ${IGNORE_TEST} " " " PG_TEST_SCHEDULE
+                   "${PG_TEST_SCHEDULE}")
+  endif()
 endforeach(IGNORE_TEST)
 
 # Write the final test schedule

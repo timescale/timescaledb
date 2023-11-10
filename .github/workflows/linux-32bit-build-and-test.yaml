@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-      pg15_latest: ${{ steps.setter.outputs.PG15_LATEST }}
+      pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v3
@@ -50,6 +50,9 @@ jobs:
       matrix:
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         build_type: [ Debug ]
+        include:
+          - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
+            build_type: Debug
 
     steps:
 
@@ -65,7 +68,8 @@ jobs:
         echo '/tmp/core.%h.%e.%t' > /proc/sys/kernel/core_pattern
         apt-get install -y gcc make cmake libssl-dev libkrb5-dev libipc-run-perl \
           libtest-most-perl sudo gdb git wget gawk lbzip2 flex bison lcov base-files \
-          locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client
+          locales clang-14 llvm-14 llvm-14-dev llvm-14-tools postgresql-client pkgconf \
+          icu-devtools
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
@@ -99,7 +103,7 @@ jobs:
         # When building on i386 with the clang compiler, Postgres requires -msse2 to be used
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml --enable-cassert \
-          --enable-debug --with-llvm LLVM_CONFIG=llvm-config-14 CFLAGS="-msse2"
+          --enable-debug --with-llvm --without-icu LLVM_CONFIG=llvm-config-14 CFLAGS="-msse2"
         make -j $MAKE_JOBS
         make -j $MAKE_JOBS -C src/test/isolation
         make -j $MAKE_JOBS -C contrib/postgres_fdw
@@ -133,7 +137,7 @@ jobs:
         export LANG=C.UTF-8
         # PostgreSQL cannot be run as root. So, switch to postgres user.
         sudo -u postgres make -k -C build installcheck IGNORES="${IGNORES}" \
-          SKIPS="${SKIPS}" | tee installcheck.log
+          SKIPS="${SKIPS}" PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

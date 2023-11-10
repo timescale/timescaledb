@@ -15,6 +15,9 @@ SELECT extversion >= '2.10.0' AS has_cagg_joins
 FROM pg_extension
 WHERE extname = 'timescaledb' \gset
 
+CREATE USER wizard;
+CREATE USER "Random L User";
+
 CREATE TABLE repair_test_int(time integer not null, temp float8, tag integer, color integer);
 CREATE TABLE repair_test_timestamptz(time timestamptz not null, temp float8, tag integer, color integer);
 CREATE TABLE repair_test_extra(time timestamptz not null, temp float8, tag integer, color integer);
@@ -64,6 +67,16 @@ INSERT INTO repair_test_date VALUES
 -- constraint.
 ALTER TABLE _timescaledb_catalog.chunk_constraint
       DROP CONSTRAINT chunk_constraint_dimension_slice_id_fkey;
+
+-- Grant privileges to some tables above. All should be repaired.
+GRANT ALL ON repair_test_int TO wizard;
+GRANT ALL ON repair_test_extra TO wizard;
+GRANT SELECT, INSERT ON repair_test_int TO "Random L User";
+GRANT INSERT ON repair_test_extra TO "Random L User";
+
+-- Break the relacl of the table by deleting users directly from
+-- pg_authid table.
+DELETE FROM pg_authid WHERE rolname IN ('wizard', 'Random L User');
 
 \if :test_repair_dimension
 

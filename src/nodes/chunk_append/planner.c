@@ -401,10 +401,17 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 			else
 				return NULL;
 			break;
-		case T_MergeAppend:
 		case T_Agg:
+			if (plan->lefttree != NULL && IsA(plan->lefttree, CustomScan))
+			{
+				Assert(plan->righttree == NULL);
+				Assert(castNode(CustomScan, plan->lefttree)->scan.scanrelid > 0);
+				return (Scan *) plan->lefttree;
+			}
 			return NULL;
 			break;
+		case T_MergeAppend:
+			return NULL;
 		default:
 			elog(ERROR, "invalid child of chunk append: %s", ts_get_node_name((Node *) plan));
 	}

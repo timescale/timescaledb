@@ -1636,7 +1636,7 @@ ORDER BY 1, 2, 3;
 ALTER MATERIALIZED VIEW search_query_count_3 SET (timescaledb.compress = 'false');
 ERROR:  cannot change configuration on already compressed chunks
 \set ON_ERROR_STOP 1
-SELECT decompress_chunk(schema_name || '.' || table_name)
+SELECT decompress_chunk(format('%I.%I', schema_name, table_name))
 FROM _timescaledb_catalog.chunk
 WHERE hypertable_id = :'MAT_HTID' and status = 1;
  decompress_chunk 

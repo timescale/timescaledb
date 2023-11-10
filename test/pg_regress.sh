@@ -29,7 +29,7 @@ IGNORES=${IGNORES:-}
 SKIPS=${SKIPS:-}
 PSQL=${PSQL:-psql}
 PSQL="${PSQL} -X" # Prevent any .psqlrc files from being executed during the tests
-PG_VERSION_MAJOR=$(${PSQL} --version | awk '{print $3}' | sed -e 's![.].*!!')
+PG_VERSION_MAJOR=$(${PSQL} --version | awk '{split($3,v,"."); print v[1]}')
 
 # check if test matches any of the patterns in a list
 # $1 list of patterns or test names
@@ -108,8 +108,8 @@ elif [[ -z ${TESTS} ]] && ( [[ -n ${SKIPS} ]] || [[ -n ${IGNORES} ]] ); then
     for test_pattern in ${SKIPS}; do
       for test_name in ${ALL_TESTS}; do
         if [[ $test_name == $test_pattern ]]; then
-          sed -i ${TEMP_SCHEDULE} -e "s!^test:\s*${test_name}\s*\$!!"
-          sed -i ${TEMP_SCHEDULE} -e "s!\b${test_name}\b!!"
+          sed -e "s!^test:\s*${test_name}\s*\$!!" -i.backup ${TEMP_SCHEDULE}
+          sed -e "s!\b${test_name}\b!!" -i.backup ${TEMP_SCHEDULE}
         fi
       done
     done
@@ -201,7 +201,7 @@ TEST_TABLESPACE3_PREFIX=${TEST_TABLESPACE3_PREFIX:-$(mktemp -d 2>/dev/null || mk
 TEST_TABLESPACE1_PATH=${TEST_TABLESPACE1_PATH:-${TEST_TABLESPACE1_PREFIX}_default}
 TEST_TABLESPACE2_PATH=${TEST_TABLESPACE2_PATH:-${TEST_TABLESPACE2_PREFIX}_default}
 TEST_TABLESPACE3_PATH=${TEST_TABLESPACE3_PATH:-${TEST_TABLESPACE3_PREFIX}_default}
-mkdir $TEST_TABLESPACE1_PATH $TEST_TABLESPACE2_PATH $TEST_TABLESPACE3_PATH
+mkdir -p $TEST_TABLESPACE1_PATH $TEST_TABLESPACE2_PATH $TEST_TABLESPACE3_PATH
 
 export TEST_TABLESPACE1_PREFIX TEST_TABLESPACE2_PREFIX TEST_TABLESPACE3_PREFIX
 export TEST_TABLESPACE1_PATH TEST_TABLESPACE2_PATH TEST_TABLESPACE3_PATH

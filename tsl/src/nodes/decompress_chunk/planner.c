@@ -268,6 +268,18 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 				.fd = *compression_info, .bulk_decompression_possible = bulk_decompression_possible
 			};
 		}
+
+		if (path->perform_vectorized_aggregation)
+		{
+			Assert(list_length(path->custom_path.path.parent->reltarget->exprs) == 1);
+			Var *var = linitial(path->custom_path.path.parent->reltarget->exprs);
+			Assert((Index) var->varno == path->custom_path.path.parent->relid);
+			if (var->varattno == destination_attno_in_uncompressed_chunk)
+				path->aggregated_column_type =
+					lappend_int(path->aggregated_column_type, var->vartype);
+			else
+				path->aggregated_column_type = lappend_int(path->aggregated_column_type, -1);
+		}
 	}
 
 	/*
@@ -950,10 +962,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 */
 	decompress_plan->custom_exprs = list_make1(vectorized_quals);
 
-	decompress_plan->custom_private = list_make5(settings,
+	decompress_plan->custom_private = list_make6(settings,
 												 dcpath->decompression_map,
 												 dcpath->is_segmentby_column,
 												 dcpath->bulk_decompression_column,
+												 dcpath->aggregated_column_type,
 												 sort_options);
 
 	return &decompress_plan->scan.plan;

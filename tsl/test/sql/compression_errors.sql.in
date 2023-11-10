@@ -117,15 +117,15 @@ ALTER TABLE foo DROP CONSTRAINT chk_existing;
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
 
-select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1;
+SELECT decompress_chunk(ch) FROM show_chunks('foo') ch limit 1;
 
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
 
-select ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' ORDER BY ch1.id limit 1 \gset
-
+SELECT format('%I.%I',chunk_schema,chunk_name) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'foo'
+ORDER BY chunk_name LIMIT 1\gset
 
 select decompress_chunk(:'CHUNK_NAME');
 select decompress_chunk(:'CHUNK_NAME', if_compressed=>true);
@@ -135,19 +135,16 @@ select compress_chunk(:'CHUNK_NAME');
 select compress_chunk(:'CHUNK_NAME');
 select compress_chunk(:'CHUNK_NAME', if_not_compressed=>true);
 
-select compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' ORDER BY ch1.id limit 1;
+SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'c');
 ALTER TABLE foo set (timescaledb.compress='f');
 ALTER TABLE foo reset (timescaledb.compress);
 
-select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'non_compressed' ORDER BY ch1.id limit 1;
+SELECT decompress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 
 --should succeed
-select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'foo' and ch1.compressed_chunk_id IS NOT NULL;
+SELECT decompress_chunk(ch, true) FROM show_chunks('foo') ch;
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');

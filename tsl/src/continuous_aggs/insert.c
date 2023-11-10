@@ -181,12 +181,17 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 }
 
 static inline void
-cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_id,
+cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chunk_reloid,
 							Relation chunk_relation)
 {
-	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_id, false);
+	Chunk *modified_tuple_chunk = ts_chunk_get_by_relid(chunk_reloid, false);
 	if (modified_tuple_chunk == NULL)
-		elog(ERROR, "continuous agg trigger function must be called on hypertable chunks only");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("continuous agg trigger function must be called on hypertable chunks only"),
+				 errdetail("Called on '%s'.", get_rel_name(chunk_reloid))));
+	}
 
 	cache_entry->previous_chunk_relid = modified_tuple_chunk->table_id;
 	cache_entry->previous_chunk_open_dimension =
@@ -194,7 +199,13 @@ cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry, Oid chun
 				   NameStr(cache_entry->hypertable_open_dimension.fd.column_name));
 
 	if (cache_entry->previous_chunk_open_dimension == InvalidAttrNumber)
-		elog(ERROR, "continuous agg trigger function must be called on hypertable chunks only");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("open dimension '%s' not found in chunk %s",
+						NameStr(cache_entry->hypertable_open_dimension.fd.column_name),
+						get_rel_name(chunk_relation->rd_id))));
+	}
 }
 
 static inline void

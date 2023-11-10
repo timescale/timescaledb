@@ -58,11 +58,9 @@ alter table conditions set (timescaledb.compress, timescaledb.compress_segmentby
 ERROR:  must be owner of table conditions
 --- compress_chunks and decompress_chunks fail without correct perm --
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
-select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL;
+SELECT compress_chunk(show_chunks('conditions'));
 ERROR:  must be owner of hypertable "conditions"
-select decompress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions';
+SELECT decompress_chunk(show_chunks('conditions'));
 ERROR:  must be owner of hypertable "conditions"
 select add_compression_policy('conditions', '1day'::interval);
 ERROR:  must be owner of hypertable "conditions"
@@ -81,9 +79,7 @@ ERROR:  must be owner of hypertable "conditions"
 -- as owner grant select , compress chunk and check SELECT works
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 GRANT SELECT on conditions to :ROLE_DEFAULT_PERM_USER_2;
-select count(*) from
-(select  compress_chunk(ch1.schema_name|| '.' || ch1.table_name)
-FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht where ch1.hypertable_id = ht.id and ht.table_name like 'conditions' and ch1.compressed_chunk_id IS NULL ) as subq;
+SELECT count(compress_chunk(ch)) FROM show_chunks('conditions') ch;
  count 
 -------
      2

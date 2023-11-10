@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-      pg15_latest: ${{ steps.setter.outputs.PG15_LATEST }}
+      pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
       uses: actions/checkout@v3
@@ -75,7 +75,7 @@ jobs:
         os: ["ubuntu-22.04"]
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
         include:
-          - pg: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+          - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
             skips_version: 002_replication_telemetry 003_connections_privs 004_multinode_rdwr_1pc
     steps:
     - name: Install Linux Dependencies
@@ -156,7 +156,8 @@ jobs:
         # postmaster.c is not atomic but read/written across signal handlers
         # and ServerLoop.
         make -k -C build installcheck SKIPS="${SKIPS} ${{matrix.skips_version}}" \
-          IGNORES="${IGNORES} ${{matrix.ignores_version}}" | tee installcheck.log
+          IGNORES="${IGNORES} ${{matrix.ignores_version}}" \
+          PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
 
     - name: Show regression diffs
       if: always()

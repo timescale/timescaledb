@@ -1,0 +1,3 @@
+Fixes: #6275 Fix negative bitmapset member not allowed in compression
+
+Thanks: @torazem for reporting an issue with compression and large oids
