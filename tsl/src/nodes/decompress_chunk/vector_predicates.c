@@ -192,7 +192,6 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
 				}
 				if (any_rows_match == 0)
 				{
-					fprintf(stderr, "early exit at %ld yay!\n", array_index);
 					return;
 				}
 			}
