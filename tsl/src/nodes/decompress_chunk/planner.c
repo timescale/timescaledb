@@ -918,10 +918,16 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	{
 		elog(ERROR, "debug: encountered vector quals when they are disabled");
 	}
-	else if (ts_guc_debug_require_vector_qual == RVQ_Only &&
-			 list_length(decompress_plan->scan.plan.qual) > 0)
+	else if (ts_guc_debug_require_vector_qual == RVQ_Only)
 	{
-		elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+		if (list_length(decompress_plan->scan.plan.qual) > 0)
+		{
+			elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+		}
+		if (list_length(vectorized_quals) == 0)
+		{
+			elog(ERROR, "debug: did not encounter vector quals when they are required");
+		}
 	}
 #endif
 

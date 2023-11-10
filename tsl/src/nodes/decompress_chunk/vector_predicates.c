@@ -55,7 +55,7 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
 	const size_t result_bits = vector->length;
 	const size_t result_words = (result_bits + 63) / 64;
 
-	uint64 *restrict array_result;
+	uint64 *restrict array_result = NULL;
 	/*
 	 * For OR, we need an intermediate storage to accumulate the results
 	 * from all elements.
@@ -69,10 +69,17 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
 		{
 			array_result_storage[i] = 0;
 		}
-	}
-	else
-	{
-		array_result = final_result;
+
+		if (vector->length % 64 != 0)
+		{
+			/*
+			 * Set the bits for past-the-end elements to 1. This way it's more
+			 * convenient to check for early exit, and the final result should
+			 * have them already set to 0 so it doesn't matter.
+			 */
+			const uint64 mask = ((uint64) -1) << (vector->length % 64);
+			array_result[vector->length / 64] = mask;
+		}
 	}
 
 	ArrayType *arr = DatumGetArrayTypeP(array);
@@ -145,6 +152,49 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
 			for (size_t outer = 0; outer < result_words; outer++)
 			{
 				array_result[outer] |= single_result[outer];
+			}
+		}
+
+		/*
+		 * On big arrays, we want to sometimes check if we can exit early,
+		 * to avoid being slower than the non-vectorized version which exits
+		 * at first possibility.
+		 * In debug mode, do this more frequently to simplify testing.
+		 */
+#ifdef NDEBUG
+		if (array_index > 0 && array_index % 16 == 0)
+#else
+		if (array_index > 0 && array_index % 3 == 0)
+#endif
+		{
+			if (is_or)
+			{
+				/*
+				 * Note that we have set the bits for past-the-end rows in
+				 * array_result to 1, so we can use simple AND here.
+				 */
+				uint64 all_rows_match = -1;
+				for (size_t word = 0; word < result_words; word++)
+				{
+					all_rows_match &= array_result[word];
+				}
+				if (all_rows_match == -1ULL)
+				{
+					return;
+				}
+			}
+			else
+			{
+				uint64 any_rows_match = 0;
+				for (size_t word = 0; word < result_words; word++)
+				{
+					any_rows_match |= final_result[word];
+				}
+				if (any_rows_match == 0)
+				{
+					fprintf(stderr, "early exit at %ld yay!\n", array_index);
+					return;
+				}
 			}
 		}
 	}

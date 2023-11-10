@@ -103,6 +103,51 @@ select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with
 select count(*) from vectorqual where metric2 = all(array[null, 32]) /* all with null element */;
 select count(*) from vectorqual where metric2 = all(array[22, null, 32]) /* all with null element */;
 
+-- Check early exit.
+reset timescaledb.debug_require_vector_qual;
+create table singlebatch(like vectorqual);
+select create_hypertable('singlebatch', 'ts');
+alter table singlebatch set (timescaledb.compress);
+insert into singlebatch select '2022-02-02 02:02:02', metric2, device, metric3, metric4, tag from vectorqual;
+select count(compress_chunk(x, true)) from show_chunks('singlebatch') x;
+
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]);
+select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]);
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]);
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]);
+select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]);
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]);
+
+select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 0, 0, 0, 22]);
+select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 22, 0, 0, 0]);
+select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 0, 0, 0, 0]);
+select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 12, 12, 12, 0]);
+select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 0, 12, 12, 12]);
+select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 12, 12, 12, 12]);
+
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]) and metric3 = 777;
+select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]) and metric3 = 777;
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]) and metric3 = 777;
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) and metric3 = 777;
+select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 = 777;
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 = 777;
+
+select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 0, 0, 0, 22]);
+select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 22, 0, 0, 0]);
+select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 0, 0, 0, 0]);
+select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 12, 12, 12, 0]);
+select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 0, 12, 12, 12]);
+select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 12, 12, 12, 12]);
+
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]) and metric3 != 777;
+select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]) and metric3 != 777;
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]) and metric3 != 777;
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) and metric3 != 777;
+select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 != 777;
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 != 777;
+
+
 
 -- Comparison with other column not vectorized.
 set timescaledb.debug_require_vector_qual to 'forbid';
