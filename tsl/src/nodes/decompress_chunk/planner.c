@@ -452,9 +452,10 @@ is_not_runtime_constant(Node *node)
 static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
-	// my_print(qual);
-
-	/* Only simple "Var op Const" binary predicates for now. */
+	/*
+	 * Currently we vectorize some "Var op Const" binary predicates,
+	 * and scalar array operations with these predicates.
+	 */
 	if (!IsA(qual, OpExpr) && !IsA(qual, ScalarArrayOpExpr))
 	{
 		return NULL;
@@ -484,7 +485,9 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 
 	if (opexpr && IsA(lsecond(args), Var))
 	{
-		/* Try to commute the operator if the constant is on the right. */
+		/*
+		 * Try to commute the operator if we have Var on the right.
+		 */
 		opno = get_commutator(opno);
 		if (!OidIsValid(opno))
 		{
@@ -532,9 +535,9 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return NULL;
 	}
 
+#if PG14_GE
 	if (saop)
 	{
-#if PG14_GE
 		if (saop->hashfuncid)
 		{
 			/*
@@ -542,34 +545,8 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 			 */
 			return NULL;
 		}
-#endif
-
-		if (!IsA(lsecond(args), Const))
-		{
-			/*
-			 * Vectorizing ScalarArrayOperation requires us to know the type
-			 * of the array elements, and the absence of nulls, at runtime,
-			 * so unfortunately we can't apply it for arrays evaluated at run
-			 * time.
-			 */
-			return NULL;
-		}
-		Const *constnode = castNode(Const, lsecond(args));
-		if (constnode->constisnull)
-		{
-			/*
-			 * FIXME what happens for normal operations in this case?
-			 * And if a stable function evaluates to null at run time?
-			 */
-			return NULL;
-		}
-		ArrayType *arr = DatumGetArrayTypeP(constnode->constvalue);
-		if (ARR_NULLBITMAP(arr) != NULL)
-		{
-			/* We don't have a provision for null elements in arrays yet. */
-			return NULL;
-		}
 	}
+#endif
 
 	return opexpr ? (Node *) opexpr : (Node *) saop;
 }

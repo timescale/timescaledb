@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
 select create_hypertable('vectorqual', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
@@ -100,34 +101,6 @@ select count(*) from vectorqual where metric4 >= 0 /* nulls shouldn't pass the q
      1
 (1 row)
 
--- Scalar array operations.
-select count(*) from vectorqual where metric3 = any(array[777, 888]); /* default value */
- count 
--------
-     2
-(1 row)
-
-select count(*) from vectorqual where metric4 = any(array[44, 55]) /* default null */;
- count 
--------
-     1
-(1 row)
-
-select count(*) from vectorqual where metric2 > any(array[-1, -2, -3]) /* any */;
- count 
--------
-     4
-(1 row)
-
-select count(*) from vectorqual where metric2 > all(array[-1, -2, -3]) /* all */;
- count 
--------
-     4
-(1 row)
-
--- FIXME have to support this because nulls are impossible to prevent in stable expressions.
--- select count(*) from vectorqual where metric2 = any(array[22, null]) /* any with null element */;
--- select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with null element */;
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
  count 
@@ -212,6 +185,22 @@ select count(*) from vectorqual where !!metric3;
      5
 (1 row)
 
+-- Custom operator on column that supports bulk decompression is not vectorized.
+set timescaledb.debug_require_vector_qual to 'forbid';
+create function int4eqq(int4, int4) returns bool as 'int4eq' language internal;
+create operator === (function = 'int4eqq', rightarg = int4, leftarg = int4);
+select count(*) from vectorqual where metric3 === 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric3 === any(array[777, 888]);
+ count 
+-------
+     2
+(1 row)
+
 -- NullTest is not vectorized.
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric4 is null;
@@ -226,7 +215,85 @@ select count(*) from vectorqual where metric4 is not null;
      2
 (1 row)
 
+-- Scalar array operators are vectorized if the operator is vectorizable.
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where metric3 = any(array[777, 888]); /* default value */
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric4 = any(array[44, 55]) /* default null */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 > any(array[-1, -2, -3]) /* any */;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric2 > all(array[-1, -2, -3]) /* all */;
+ count 
+-------
+     5
+(1 row)
+
+-- Also have to support null array elements, because they are impossible to
+-- prevent in stable expressions.
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where metric2 = any(array[null::int]) /* any with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(array[22, null]) /* any with null element */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(array[null, 32]) /* any with null element */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(array[22, null, 32]) /* any with null element */;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[null::int]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[null, 32]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[22, null, 32]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
 -- Comparison with other column not vectorized.
+set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric3 = metric4;
  count 
 -------
