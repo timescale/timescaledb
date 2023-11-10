@@ -123,10 +123,11 @@ QUERY PLAN
          Output: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id, _hyper_X_X_chunk.v0, _hyper_X_X_chunk.v1, _hyper_X_X_chunk.v2, _hyper_X_X_chunk.v3
          Vectorized Filter: (_hyper_X_X_chunk.v3 > '10'::double precision)
          Rows Removed by Filter: 17990
+         Batches Removed by Filter: 20
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=20 loops=1)
                Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk._ts_meta_sequence_num, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-(11 rows)
+(12 rows)
 
 -- device_id constraint should be pushed down
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time, device_id LIMIT 10;
