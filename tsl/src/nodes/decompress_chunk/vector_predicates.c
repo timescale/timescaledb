@@ -158,11 +158,11 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
 		/*
 		 * On big arrays, we want to sometimes check if we can exit early,
 		 * to avoid being slower than the non-vectorized version which exits
-		 * at first possibility.
+		 * at first possibility. The frequency is chosen by benchmarking.
 		 * In debug mode, do this more frequently to simplify testing.
 		 */
 #ifdef NDEBUG
-		if (array_index > 0 && array_index % 16 == 0)
+		if (array_index > 0 && array_index % 4 == 0)
 #else
 		if (array_index > 0 && array_index % 3 == 0)
 #endif
