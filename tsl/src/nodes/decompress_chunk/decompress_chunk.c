@@ -1416,22 +1416,6 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	return NULL;
 }
 
-#if PG16_GE
-static EquivalenceMember *
-find_em_for_relid(EquivalenceClass *ec, Index relid)
-{
-	ListCell *lc;
-
-	foreach (lc, ec->ec_members)
-	{
-		EquivalenceMember *em = lfirst_node(EquivalenceMember, lc);
-		if (bms_is_member(relid, em->em_relids) && bms_num_members(em->em_relids) == 1)
-			return em;
-	}
-	return NULL;
-}
-#endif
-
 /* This function is inspired by the Postgres add_child_rel_equivalences. */
 static bool
 add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
@@ -1545,22 +1529,24 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 				lappend(compressed_fdw_private->compressed_ec_em_pairs, list_make2(cur_ec, em));
 
 #if PG16_GE
-			EquivalenceMember *ht_em = find_em_for_relid(cur_ec, info->ht_rel->relid);
+			/* Record EquivalenceMember for the compressed chunk as derived to prevent
+			 * infinite recursion.
+			 */
 
-			if (ht_em && ht_em->em_jdomain)
+			foreach (lc, cur_ec->ec_members)
 			{
-				int i = -1;
-				while ((i = bms_next_member(ht_em->em_jdomain->jd_relids, i)) >= 0)
-				{
-					RestrictInfo *d = make_simple_restrictinfo_compat(root, em->em_expr);
-					d->parent_ec = cur_ec;
-					d->left_em = find_em_for_relid(cur_ec, i);
-					if (!d->left_em)
-						continue;
-					d->right_em = em;
-					cur_ec->ec_derives = lappend(cur_ec->ec_derives, d);
-				}
+				EquivalenceMember *p_em = lfirst_node(EquivalenceMember, lc);
+				/* Assume non-child member are at the beginning */
+				if (p_em->em_is_child)
+					break;
+
+				RestrictInfo *d = make_simple_restrictinfo_compat(root, p_em->em_expr);
+				d->parent_ec = cur_ec;
+				d->left_em = p_em;
+				d->right_em = em;
+				cur_ec->ec_derives = lappend(cur_ec->ec_derives, d);
 			}
+
 #endif
 
 			return true;

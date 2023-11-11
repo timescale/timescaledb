@@ -660,7 +660,7 @@ get_best_total_path(RelOptInfo *output_rel)
 /*
  Is the provided path a agg path that uses a sorted or plain agg strategy?
 */
-static bool
+static bool pg_nodiscard
 is_path_sorted_or_plain_agg_path(Path *path)
 {
 	AggPath *agg_path = castNode(AggPath, path);
@@ -686,21 +686,25 @@ contains_path_plain_or_sorted_agg(Path *path)
 
 		if (IsA(subpath, AggPath))
 			return is_path_sorted_or_plain_agg_path(subpath);
-
-		List *subsubpaths = get_subpaths_from_append_path(path, true);
-
-		ListCell *lc2;
-		foreach (lc2, subsubpaths)
-		{
-			Path *subsubpath = lfirst(lc2);
-
-			if (IsA(subsubpath, AggPath))
-				is_path_sorted_or_plain_agg_path(subsubpath);
-		}
 	}
 
-	/* No dedicated aggregation nodes found (e.g., only vectorized aggregation is used). The sorted
-	 * finalizer is used in that case to finalize the aggregation. */
+	/*
+	 * No dedicated aggregation nodes found directly underneath the append node. This could be
+	 * due to two reasons.
+	 *
+	 * (1) Only vectorized aggregation is used and we don't have dedicated Aggregation nods.
+	 * (2) The query plan uses multi-level appends to keep a certain sorting
+	 *     - ChunkAppend
+	 *          - Merge Append
+	 *             - Agg Chunk 1
+	 *             - Agg Chunk 2
+	 *          - Merge Append
+	 *             - Agg Chunk 3
+	 *             - Agg Chunk 4
+	 *
+	 * in both cases, we use a sorted aggregation node to finalize the partial aggregation and
+	 * produce a proper sorting.
+	 */
 	return true;
 }
 

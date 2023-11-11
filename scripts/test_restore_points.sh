@@ -297,6 +297,11 @@ if [ ${PG_VERSION_MAJOR} -lt 13 ]; then
   exit 1
 fi
 
+if [ ${PG_VERSION_MAJOR} -ge 16 ]; then
+  echo "Multi-node is currently not supported on PG >= 16"
+  exit 0
+fi
+
 mkdir -p ${RESULT_DIR}
 
 echo "Running single node tests"

@@ -64,7 +64,7 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install flex bison lcov systemd-coredump gdb libipc-run-perl \
-          libtest-most-perl ${{ matrix.extra_packages }}
+          libtest-most-perl pkgconf icu-devtools ${{ matrix.extra_packages }}
 
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
@@ -162,7 +162,8 @@ jobs:
       run: |
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
-            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} | tee installcheck.log
+            SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
+            PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
 
     - name: pginstallcheck
       if: matrix.pginstallcheck

@@ -194,3 +194,6 @@ BEGIN
 END;
 $$;
 
+-- Repair relations that have relacl entries for users that do not
+-- exist in pg_authid
+CALL _timescaledb_functions.repair_relation_acls();

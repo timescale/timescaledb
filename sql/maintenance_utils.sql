@@ -117,3 +117,43 @@ BEGIN
     END CASE;
 END
 $$ LANGUAGE plpgsql;
+
+-- A version of makeaclitem that accepts a comma-separated list of
+-- privileges rather than just a single privilege. This is copied from
+-- PG16, but since we need to support earlier versions, we provide it
+-- with the extension.
+--
+-- This is intended for internal usage and interface might change.
+CREATE FUNCTION _timescaledb_functions.makeaclitem(regrole, regrole, text, bool)
+RETURNS AclItem AS '@MODULE_PATHNAME@', 'ts_makeaclitem'
+LANGUAGE C STABLE PARALLEL SAFE STRICT;
+
+-- Repair relation ACL by removing roles that do not exist in pg_authid.
+CREATE PROCEDURE _timescaledb_functions.repair_relation_acls()
+LANGUAGE SQL AS $$
+  WITH
+    badrels AS (
+	SELECT oid::regclass
+	  FROM (SELECT oid, (aclexplode(relacl)).* FROM pg_class) AS rels
+	 WHERE rels.grantee != 0
+	   AND rels.grantee NOT IN (SELECT oid FROM pg_authid)
+    ),
+    pickacls AS (
+      SELECT oid::regclass,
+	     _timescaledb_functions.makeaclitem(
+	         b.grantee,
+		 b.grantor,
+		 string_agg(b.privilege_type, ','),
+		 b.is_grantable
+	     ) AS acl
+	FROM (SELECT oid, (aclexplode(relacl)).* AS a FROM pg_class) AS b
+       WHERE b.grantee IN (SELECT oid FROM pg_authid)
+       GROUP BY oid, b.grantee, b.grantor, b.is_grantable
+    ),
+    cleanacls AS (
+      SELECT oid, array_agg(acl) AS acl FROM pickacls GROUP BY oid
+    )
+  UPDATE pg_class c
+     SET relacl = (SELECT acl FROM cleanacls n WHERE c.oid = n.oid)
+   WHERE oid IN (SELECT oid FROM badrels)
+$$ SET search_path TO pg_catalog, pg_temp;

@@ -42,6 +42,7 @@ set(TEST_FILES
     plan_hypertable_inline.sql
     relocate_extension.sql
     reloptions.sql
+    repair.sql
     size_utils.sql
     sort_optimization.sql
     sql_query.sql

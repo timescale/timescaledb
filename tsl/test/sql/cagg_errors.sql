@@ -236,6 +236,14 @@ SELECT time_bucket('1 week', timec)
   FROM conditions
 GROUP BY time_bucket('1 week', timec);
 
+-- invalid `bucket_width` for `time_bucket` function
+CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+SELECT time_bucket(NULL, timec), sum(temperature), min(location)
+FROM conditions
+GROUP BY 1
+WITH NO DATA;
+
 -- row security on table
 create table rowsec_tab( a bigint, b integer, c integer);
 select table_name from create_hypertable( 'rowsec_tab', 'a', chunk_time_interval=>10);

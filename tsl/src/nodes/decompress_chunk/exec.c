@@ -142,12 +142,13 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->csstate.methods = &chunk_state->exec_methods;
 
 	Assert(IsA(cscan->custom_private, List));
-	Assert(list_length(cscan->custom_private) == 5);
+	Assert(list_length(cscan->custom_private) == 6);
 	List *settings = linitial(cscan->custom_private);
 	chunk_state->decompression_map = lsecond(cscan->custom_private);
 	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
 	chunk_state->bulk_decompression_column = lfourth(cscan->custom_private);
-	chunk_state->sortinfo = lfifth(cscan->custom_private);
+	chunk_state->aggregated_column_type = lfifth(cscan->custom_private);
+	chunk_state->sortinfo = lsixth(cscan->custom_private);
 	chunk_state->custom_scan_tlist = cscan->custom_scan_tlist;
 
 	Assert(IsA(settings, IntList));
@@ -162,6 +163,16 @@ decompress_chunk_state_create(CustomScan *cscan)
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
 	chunk_state->vectorized_quals_original = linitial(cscan->custom_exprs);
+	Assert(list_length(chunk_state->decompression_map) ==
+		   list_length(chunk_state->is_segmentby_column));
+
+#ifdef USE_ASSERT_CHECKING
+	if (chunk_state->perform_vectorized_aggregation)
+	{
+		Assert(list_length(chunk_state->decompression_map) ==
+			   list_length(chunk_state->aggregated_column_type));
+	}
+#endif
 
 	return (Node *) chunk_state;
 }
@@ -307,8 +318,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	ListCell *dest_cell;
 	ListCell *is_segmentby_cell;
-	Assert(list_length(chunk_state->decompression_map) ==
-		   list_length(chunk_state->is_segmentby_column));
+
 	forboth (dest_cell,
 			 chunk_state->decompression_map,
 			 is_segmentby_cell,
@@ -364,12 +374,22 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 		if (column.output_attno > 0)
 		{
-			/* normal column that is also present in decompressed chunk */
-			Form_pg_attribute attribute =
-				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
+			if (chunk_state->perform_vectorized_aggregation &&
+				lfirst_int(list_nth_cell(chunk_state->aggregated_column_type, compressed_index)) !=
+					-1)
+			{
+				column.typid = lfirst_int(
+					list_nth_cell(chunk_state->aggregated_column_type, compressed_index));
+			}
+			else
+			{
+				/* normal column that is also present in decompressed chunk */
+				Form_pg_attribute attribute =
+					TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
 
-			column.typid = attribute->atttypid;
-			column.value_bytes = get_typlen(column.typid);
+				column.typid = attribute->atttypid;
+				column.value_bytes = get_typlen(column.typid);
+			}
 
 			if (list_nth_int(chunk_state->is_segmentby_column, compressed_index))
 				column.type = SEGMENTBY_COLUMN;
@@ -505,7 +525,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		if (IsA(constified, Const))
 		{
 			Const *c = castNode(Const, constified);
-			if (c->constisnull || !DatumGetBool(c))
+			if (c->constisnull || !DatumGetBool(c->constvalue))
 			{
 				chunk_state->have_constant_false_vectorized_qual = true;
 				break;
@@ -644,20 +664,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	{
 		Assert(chunk_state->enable_bulk_decompression);
 		Assert(column_description->bulk_decompression_supported);
-
-		/* Due to the needed manipulation of the target list to emit partials (see
-		 * decompress_chunk_plan_create), PostgreSQL is not able to determine the type of the
-		 * compressed column automatically. So, correct the column type to the correct value. */
 		Assert(list_length(aggref->args) == 1);
-
-#ifdef USE_ASSERT_CHECKING
-		TargetEntry *tlentry = (TargetEntry *) linitial(aggref->args);
-		Assert(IsA(tlentry->expr, Var));
-		Var *input_var = castNode(Var, tlentry->expr);
-		Assert(input_var->vartype == INT4OID);
-#endif
-
-		column_description->typid = INT4OID;
 
 		while (true)
 		{

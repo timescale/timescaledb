@@ -14,6 +14,9 @@ name: ABI Test
   push:
     branches:
       - prerelease_test
+      - trigger/abi
+  pull_request:
+    paths: .github/workflows/abi.yaml
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -21,9 +24,11 @@ jobs:
       pg13_abi_min: ${{ steps.config.outputs.pg13_abi_min }}
       pg14_abi_min: ${{ steps.config.outputs.pg14_abi_min }}
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
+      pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
       pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
+      pg16_latest: ${{ steps.config.outputs.pg16_latest }}
 
     steps:
     - name: Checkout source code
@@ -40,7 +45,7 @@ jobs:
       fail-fast: false
       matrix:
         test: [ "13backward", "13forward", "14backward", "14forward",
-          "15backward", "15forward" ]
+          "15backward", "15forward", "16backward", "16forward" ]
         os: [ windows-2019 ]
         include:
           - test: 13backward
@@ -68,6 +73,14 @@ jobs:
             pg: 15
             builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
             tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+          - test: 16backward
+            pg: 16
+            builder: ${{ fromJson(needs.config.outputs.pg16_latest) }}
+            tester: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
+          - test: 16forward
+            pg: 16
+            builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
+            tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}
 
     steps:
 
@@ -78,19 +91,17 @@ jobs:
       run: |
         BUILDER_IMAGE="postgres:${{matrix.builder}}-alpine"
 
-        # Recent versions of alpine have OpenSSL 3 as the
-        # default version which is unfortunately not packaged
-        # for the earliest versions we check against in this
-        # test. So we pin the version we compile against to
-        # OpenSSL 1.1 in the backwards test.
-        if [[ "${{ matrix.test }}" == *backward ]]; then
-          EXTRA_PKGS="openssl1.1-compat-dev"
-        else
-          EXTRA_PKGS="openssl-dev"
-        fi
-
+        docker pull ${BUILDER_IMAGE}
+        docker buildx imagetools inspect ${BUILDER_IMAGE}
         docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${BUILDER_IMAGE} bash <<"EOF"
           apk add cmake gcc make build-base krb5-dev git ${EXTRA_PKGS}
+          # We run the same extension on different docker images, old versions
+          # have OpenSSL 1.1 and the new versions have OpenSSL 3, so we try to
+          # pin the 1.1. Note that depending on PG version, both images might
+          # have 1.1 or 3, so we first try to install the versioned 1.1 package,
+          # and if it's not present, it means the unversioned package is 1.1, so
+          # we install it.
+          apk add openssl1.1-compat-dev || apk add openssl-dev
           git config --global --add safe.directory /mnt
           cd /mnt
           BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap -DENABLE_MULTINODE_TESTS=ON
@@ -104,14 +115,11 @@ jobs:
       run: |
         TEST_IMAGE="postgres:${{ matrix.tester }}-alpine"
 
-        if [[ "${{ matrix.test }}" == *backward ]]; then
-          EXTRA_PKGS="openssl-dev"
-        else
-          EXTRA_PKGS="openssl1.1-compat-dev"
-        fi
-
+        docker pull ${TEST_IMAGE}
+        docker buildx imagetools inspect ${TEST_IMAGE}
         docker run -i --rm -v $(pwd):/mnt -e EXTRA_PKGS="${EXTRA_PKGS}" ${TEST_IMAGE} bash <<"EOF"
           apk add cmake gcc make build-base krb5-dev sudo ${EXTRA_PKGS}
+          apk add openssl1.1-compat-dev || apk add openssl-dev
           cd /mnt
           cp build_abi/install_ext/* `pg_config --sharedir`/extension/
           cp build_abi/install_lib/* `pg_config --pkglibdir`

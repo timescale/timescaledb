@@ -1,0 +1,1 @@
+Fixes: #6297 Fix segfault when creating a cagg using a NULL width in time bucket function

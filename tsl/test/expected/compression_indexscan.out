@@ -912,6 +912,43 @@ SELECT decompress_chunk(show_chunks('tab1'));
 (4 rows)
 
 DROP INDEX idx_asc_null_first;
+-- Can't use partial indexes for compression because they refer only to a subset of the table.
+create index predicate on tab1(id, c1, time nulls first) where c2 = 0;
+select count(*) from tab1;
+ count 
+-------
+ 62400
+(1 row)
+
+select compress_chunk(show_chunks('tab1'));
+INFO:  compress_chunk_tuplesort_start
+INFO:  compress_chunk_tuplesort_start
+INFO:  compress_chunk_tuplesort_start
+INFO:  compress_chunk_tuplesort_start
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+(4 rows)
+
+select decompress_chunk(show_chunks('tab1'));
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+(4 rows)
+
+select count(*) from tab1;
+ count 
+-------
+ 62400
+(1 row)
+
+drop index predicate;
 --Tear down
 DROP TABLE tab1;
 DROP TABLE tab2;

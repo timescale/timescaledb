@@ -273,7 +273,7 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 
 		batch_state->decompressed_scan_slot->tts_values[attr] =
 			getmissingattr(batch_state->decompressed_scan_slot->tts_tupleDescriptor,
-						   attr + 1,
+						   column_description->output_attno,
 						   &batch_state->decompressed_scan_slot->tts_isnull[attr]);
 		return;
 	}
@@ -342,7 +342,7 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 }
 
 /*
- * Compute the vectorized filters. Returns if we have any passing rows. If not,
+ * Compute the vectorized filters. Returns true if we have any passing rows. If not,
  * it means the entire batch is filtered out, and we use this for further
  * optimizations.
  */

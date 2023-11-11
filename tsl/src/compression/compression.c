@@ -297,6 +297,17 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 			Oid index_oid = lfirst_oid(lc);
 			Relation index_rel = index_open(index_oid, AccessShareLock);
 			IndexInfo *index_info = BuildIndexInfo(index_rel);
+
+			if (index_info->ii_Predicate != 0)
+			{
+				/*
+				 * Can't use partial indexes for compression because they refer
+				 * only to a subset of all rows.
+				 */
+				index_close(index_rel, AccessShareLock);
+				continue;
+			}
+
 			int previous_direction = NoMovementScanDirection;
 			int current_direction = NoMovementScanDirection;
 
