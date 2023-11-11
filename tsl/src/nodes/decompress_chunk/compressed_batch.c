@@ -519,33 +519,15 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 		 */
 		if (saop)
 		{
-			if (saop->useOr)
-			{
-				vector_predicate_saop_or(vector_const_predicate,
-										 vector_nodict,
-										 constnode->constvalue,
-										 predicate_result_nodict);
-			}
-			else
-			{
-				vector_predicate_saop_and(vector_const_predicate,
-										  vector_nodict,
-										  constnode->constvalue,
-										  predicate_result_nodict);
-			}
+			vector_array_operator(vector_const_predicate,
+								  saop->useOr,
+								  vector_nodict,
+								  constnode->constvalue,
+								  predicate_result_nodict);
 		}
 		else
 		{
 			vector_const_predicate(vector_nodict, constnode->constvalue, predicate_result_nodict);
-		}
-
-		/*
-		 * If the vector is dictionary-encoded, we have just computed the
-		 * predicate for dictionary and now have to translate it.
-		 */
-		if (vector->dictionary)
-		{
-			translate_from_dictionary(vector, predicate_result_nodict, predicate_result);
 		}
 
 		/* Account for nulls which shouldn't pass the predicate. */
