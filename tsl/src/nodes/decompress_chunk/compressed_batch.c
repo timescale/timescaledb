@@ -121,112 +121,6 @@ translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
 #undef INNER_LOOP
 }
 
-static inline void
-vector_predicate_saop_impl(VectorPredicate *vector_const_predicate, bool is_or,
-						   const ArrowArray *vector, Datum array, uint64 *restrict final_result)
-{
-	const size_t result_bits = vector->length;
-	const size_t result_words = (result_bits + 63) / 64;
-
-	uint64 *restrict array_result;
-	/*
-	 * For OR, we need an intermediate storage to accumulate the results
-	 * from all elements.
-	 * For AND, we can apply predicate for each element to the final result.
-	 */
-	uint64 array_result_storage[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
-	if (is_or)
-	{
-		array_result = array_result_storage;
-		for (size_t i = 0; i < result_words; i++)
-		{
-			array_result_storage[i] = 0;
-		}
-	}
-	else
-	{
-		array_result = final_result;
-	}
-
-	ArrayType *arr = DatumGetArrayTypeP(array);
-
-	int16 typlen;
-	bool typbyval;
-	char typalign;
-	get_typlenbyvalalign(ARR_ELEMTYPE(arr), &typlen, &typbyval, &typalign);
-
-	const char *s = (const char *) ARR_DATA_PTR(arr);
-	Ensure(ARR_NULLBITMAP(arr) == NULL,
-		   "vectorized scalar array ops do not support nullable arrays");
-
-	const int nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
-
-	for (int i = 0; i < nitems; i++)
-	{
-		Datum constvalue = fetch_att(s, typbyval, typlen);
-		s = att_addlength_pointer(s, typlen, s);
-		s = (char *) att_align_nominal(s, typalign);
-
-		/*
-		 * For OR, we also need an intermediate storage for predicate result
-		 * for each array element, since the predicates AND their result.
-		 *
-		 * For AND, we can and apply predicate for each array element to the
-		 * final result.
-		 */
-		uint64 single_result_storage[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
-		uint64 *restrict single_result;
-		if (is_or)
-		{
-			single_result = single_result_storage;
-			for (size_t outer = 0; outer < result_words; outer++)
-			{
-				single_result[outer] = -1;
-			}
-		}
-		else
-		{
-			single_result = final_result;
-		}
-
-		vector_const_predicate(vector, constvalue, single_result);
-
-		if (is_or)
-		{
-			for (size_t outer = 0; outer < result_words; outer++)
-			{
-				array_result[outer] |= single_result[outer];
-			}
-		}
-	}
-
-	if (is_or)
-	{
-		for (size_t outer = 0; outer < result_words; outer++)
-		{
-			/*
-			 * The tail bits corresponding to past-the-end rows when n % 64 != 0
-			 * should be already zeroed out in the final_result.
-			 */
-			final_result[outer] &= array_result[outer];
-		}
-	}
-}
-
-static void
-vector_predicate_saop_and(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
-						  uint64 *restrict result)
-{
-	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
-}
-
-static void
-vector_predicate_saop_or(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
-						 uint64 *restrict result)
-{
-	vector_predicate_saop_impl(scalar_predicate, /* is_or = */ true, vector, array, result);
-}
-
 static int
 get_max_element_bytes(ArrowArray *text_array)
 {
@@ -528,6 +422,15 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 		else
 		{
 			vector_const_predicate(vector_nodict, constnode->constvalue, predicate_result_nodict);
+		}
+
+		/*
+		 * If the vector is dictionary-encoded, we have just computed the
+		 * predicate for dictionary and now have to translate it.
+		 */
+		if (vector->dictionary)
+		{
+			translate_from_dictionary(vector, predicate_result_nodict, predicate_result);
 		}
 
 		/* Account for nulls which shouldn't pass the predicate. */

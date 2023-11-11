@@ -227,3 +227,4 @@ set timescaledb.debug_require_vector_qual to 'only';
 select count(*), min(ts) from t where a = 'same';
 select count(*), min(ts) from t where a = 'different1';
 select count(*), min(ts) from t where a = 'different1000';
+select count(*), min(ts), max(ts) from t where a in ('same', 'different500');

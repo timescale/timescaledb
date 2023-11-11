@@ -629,7 +629,7 @@ WARNING:  column type "timestamp without time zone" used for "ts" does not follo
 NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
 -------------------
- (5,public,t,t)
+ (7,public,t,t)
 (1 row)
 
 alter table t set (timescaledb.compress);
@@ -662,5 +662,11 @@ select count(*), min(ts) from t where a = 'different1000';
  count |           min            
 -------+--------------------------
      1 | Fri Jan 01 02:17:41 2021
+(1 row)
+
+select count(*), min(ts), max(ts) from t where a in ('same', 'different500');
+ count |           min            |           max            
+-------+--------------------------+--------------------------
+  1001 | Fri Jan 01 01:01:02 2021 | Fri Jan 01 02:09:21 2021
 (1 row)
 
