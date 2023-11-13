@@ -16,9 +16,11 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunkwise_agg.h"
+#include "compression/compressionam_handler.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"
@@ -149,6 +151,16 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	{
 		/* To be implemented */
 	}
+
+	Relation relation = table_open(rte->relid, AccessShareLock);
+
+	if (relation->rd_tableam == compressionam_routine())
+	{
+		if (!ts_guc_enable_transparent_decompression && ts_guc_enable_columnarscan)
+			columnar_scan_set_rel_pathlist(root, rel, ht);
+	}
+
+	table_close(relation, AccessShareLock);
 }
 
 void

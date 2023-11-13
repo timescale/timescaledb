@@ -241,8 +241,225 @@ SELECT * FROM readings WHERE time = '2022-06-01 00:00:07';
 (1 row)
 
 INSERT INTO readings VALUES ('2022-06-01', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO NOTHING;
+SET enable_indexscan = false;
+SET enable_bitmapscan = false; -- currently doesn't work on compression TAM
+-- Columnar scan with qual on segmentby where filtering should be
+-- turned into scankeys
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: "time", device
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (device < 4)
+               Scankey: (device < 4)
+(6 rows)
+
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+(5 rows)
+
+-- Show with indexscan
+SET enable_indexscan = true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Limit
+   ->  Incremental Sort
+         Sort Key: "time", device
+         Presorted Key: "time"
+         ->  Index Scan using "1_1_readings_time_key" on _hyper_1_1_chunk
+               Filter: (device < 4)
+(6 rows)
+
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+(5 rows)
+
+SET enable_indexscan = false;
+-- Compare the output to transparent decompression. Heap output is
+-- shown further down.
+SET timescaledb.enable_transparent_decompression TO true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+         ->  Gather
+               Workers Planned: 1
+               ->  Parallel Append
+                     ->  Seq Scan on _hyper_1_1_chunk
+                           Filter: (device < 4)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                           Filter: (device < 4)
+                           ->  Parallel Seq Scan on compress_hyper_2_7_chunk
+                                 Filter: (device < 4)
+(12 rows)
+
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+(5 rows)
+
+SET timescaledb.enable_transparent_decompression TO false;
+-- Qual on compressed column with index
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+                         QUERY PLAN                         
+------------------------------------------------------------
+ Limit
+   ->  Sort
+         Sort Key: "time", device
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (location < 4)
+               Scankey: (location < 4)
+(6 rows)
+
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
+ Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
+ Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
+(5 rows)
+
+-- With index scan
+SET enable_indexscan = true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Limit
+   ->  Incremental Sort
+         Sort Key: "time", device
+         Presorted Key: "time"
+         ->  Index Scan using "1_1_readings_time_key" on _hyper_1_1_chunk
+               Filter: (location < 4)
+(6 rows)
+
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
+ Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
+ Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
+(5 rows)
+
+SET enable_indexscan = false;
+-- With transparent decompression
+SET timescaledb.enable_transparent_decompression TO true;
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
+ Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
+ Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
+(5 rows)
+
+SET timescaledb.enable_transparent_decompression TO false;
+-- Ordering on compressed column that has index
+SET enable_indexscan = true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Limit
+   ->  Index Scan using _hyper_1_1_chunk_readings_location_idx on _hyper_1_1_chunk
+(2 rows)
+
+SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:15:00 2022 PDT |        1 |     23 | 31.3889641515487 | 85.2225946586275
+ Wed Jun 01 00:53:10 2022 PDT |        1 |     23 | 23.7504133501012 | 66.7493748468098
+ Wed Jun 01 01:01:10 2022 PDT |        1 |     23 | 7.45510140333042 | 43.6563419416481
+ Wed Jun 01 01:30:25 2022 PDT |        1 |     23 | 30.0992169522525 | 60.8634665478617
+(5 rows)
+
+-- Show with transparent decompression
+SET timescaledb.enable_transparent_decompression TO true;
+SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 01:19:50 2022 PDT |        1 |      1 | 29.5443807293122 | 2.56533840018596
+ Wed Jun 01 01:44:35 2022 PDT |        1 |      1 | 1.09145497137706 | 81.9018703001777
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:12:45 2022 PDT |        1 |      1 | 13.1569511365916 | 86.7500491115748
+ Wed Jun 01 02:22:45 2022 PDT |        1 |      1 | 32.3284351265662 |  46.457827923454
+(5 rows)
+
+SET timescaledb.enable_transparent_decompression TO false;
+-- Test that filtering is not removed on ColumnarScan when it includes
+-- columns that cannot be scankeys.
+DROP INDEX readings_location_idx;
+EXPLAIN (analyze, costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 AND location = 2 LIMIT 5;
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
+         Filter: ((device < 4) AND (location = 2))
+         Rows Removed by Filter: 27
+         Scankey: ((device < 4) AND (location = 2))
+(5 rows)
+
+-- Test that columnar scan can be turned off
+SET timescaledb.enable_columnarscan = false;
+EXPLAIN (analyze, costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY device ASC LIMIT 5;
+                             QUERY PLAN                              
+---------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Sort (actual rows=5 loops=1)
+         Sort Key: device
+         Sort Method: top-N heapsort 
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=1253 loops=1)
+               Filter: (device < 4)
+               Rows Removed by Filter: 10991
+(7 rows)
+
 -- We should be able to change it back to heap.
 ALTER TABLE :chunk SET ACCESS METHOD heap;
+-- Show same output as first query above but for heap
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+             time             | location | device |       temp       |     humidity     
+------------------------------+----------+--------+------------------+------------------
+ Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
+ Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
+ Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
+ Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+(5 rows)
+
 -- Show access method used on chunk
 SELECT c.relname, a.amname FROM pg_class c
 INNER JOIN pg_am a ON (c.relam = a.oid)
