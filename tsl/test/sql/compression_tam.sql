@@ -132,8 +132,75 @@ SELECT * FROM readings WHERE time = '2022-06-01 00:00:07';
 
 INSERT INTO readings VALUES ('2022-06-01', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO NOTHING;
 
+SET enable_indexscan = false;
+SET enable_bitmapscan = false; -- currently doesn't work on compression TAM
+
+-- Columnar scan with qual on segmentby where filtering should be
+-- turned into scankeys
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+
+-- Show with indexscan
+SET enable_indexscan = true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SET enable_indexscan = false;
+
+-- Compare the output to transparent decompression. Heap output is
+-- shown further down.
+SET timescaledb.enable_transparent_decompression TO true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
+SET timescaledb.enable_transparent_decompression TO false;
+
+-- Qual on compressed column with index
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+
+-- With index scan
+SET enable_indexscan = true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SET enable_indexscan = false;
+
+-- With transparent decompression
+SET timescaledb.enable_transparent_decompression TO true;
+SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
+SET timescaledb.enable_transparent_decompression TO false;
+
+-- Ordering on compressed column that has index
+SET enable_indexscan = true;
+EXPLAIN (costs off, timing off, summary off)
+SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+
+-- Show with transparent decompression
+SET timescaledb.enable_transparent_decompression TO true;
+SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
+SET timescaledb.enable_transparent_decompression TO false;
+
+-- Test that filtering is not removed on ColumnarScan when it includes
+-- columns that cannot be scankeys.
+DROP INDEX readings_location_idx;
+EXPLAIN (analyze, costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 AND location = 2 LIMIT 5;
+
+-- Test that columnar scan can be turned off
+SET timescaledb.enable_columnarscan = false;
+EXPLAIN (analyze, costs off, timing off, summary off)
+SELECT * FROM :chunk WHERE device < 4 ORDER BY device ASC LIMIT 5;
+
+
 -- We should be able to change it back to heap.
 ALTER TABLE :chunk SET ACCESS METHOD heap;
+
+-- Show same output as first query above but for heap
+SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 -- Show access method used on chunk
 SELECT c.relname, a.amname FROM pg_class c

@@ -37,6 +37,7 @@
 #include "export.h"
 #include "hypertable.h"
 #include "license_guc.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/gapfill/gapfill_functions.h"
 #include "nodes/skip_scan/skip_scan.h"
@@ -194,6 +195,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
+	_columnar_scan_init();
 	_skip_scan_init();
 	_vector_agg_init();
 	/* Register a cleanup function to be called when the backend exits */
