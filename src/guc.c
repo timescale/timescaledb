@@ -81,6 +81,7 @@ bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
+TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 static char *ts_guc_default_segmentby_fn = NULL;
@@ -669,6 +670,17 @@ _guc_init(void)
 							 "suitable sparse indexes when compressed. Must be set at the moment "
 							 "of chunk compression, e.g. when the `compress_chunk()` is called.",
 							 &ts_guc_auto_sparse_indexes,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
+							 "Enable columnar-optimized scans for supported access methods",
+							 "Use scan optimizations for columnar-oriented storage",
+							 &ts_guc_enable_columnarscan,
 							 true,
 							 PGC_USERSET,
 							 0,

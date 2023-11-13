@@ -241,17 +241,56 @@ typedef struct CompressionScanDescData *CompressionScanDesc;
  * Initialization common for beginscan and rescan.
  */
 static void
-initscan(CompressionScanDesc scan, ScanKey key)
+initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 {
-	if (key != NULL && scan->rs_base.rs_nkeys > 0)
-		memcpy(scan->rs_base.rs_key, key, scan->rs_base.rs_nkeys * sizeof(ScanKeyData));
+	int nvalidkeys = 0;
 
+	/*
+	 * Translate any scankeys to the corresponding scankeys on the compressed
+	 * relation.
+	 *
+	 * It is only possible to use scankeys in the following two cases:
+	 *
+	 * 1. The scankey is for a segment_by column
+	 * 2. The scankey is for a column that has min/max metadata (i.e., order_by column).
+	 *
+	 * TODO: Implement support for (2) above, which involves transforming a
+	 * scankey to the corresponding min/max scankeys.
+	 */
+	if (NULL != keys && nkeys > 0)
+	{
+		const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(scan->rs_base.rs_rd);
+
+		for (int i = 0; i < nkeys; i++)
+		{
+			const ScanKey key = &keys[i];
+
+			for (int j = 0; j < caminfo->num_columns; j++)
+			{
+				const ColumnCompressionSettings *column = &caminfo->columns[j];
+
+				if (column->is_segmentby && key->sk_attno == column->attnum)
+				{
+					scan->rs_base.rs_key[nvalidkeys] = *key;
+					/* Remap the attribute number to the corresponding
+					 * compressed rel attribute number */
+					scan->rs_base.rs_key[nvalidkeys++].sk_attno =
+						get_attnum(caminfo->compressed_relid, NameStr(column->attname));
+					break;
+				}
+			}
+		}
+	}
+
+	scan->rs_base.rs_nkeys = nvalidkeys;
+
+	/* Use the TableScanDescData's scankeys to store the transformed compression scan keys */
 	if (scan->rs_base.rs_flags & SO_TYPE_SEQSCAN)
 		pgstat_count_compression_scan(scan->rs_base.rs_rd);
 }
 
 static TableScanDesc
-compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key,
+compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
 						ParallelTableScanDesc parallel_scan, uint32 flags)
 {
 	CompressionScanDesc scan;
@@ -263,6 +302,7 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->rs_base.rs_rd = relation;
 	scan->rs_base.rs_snapshot = snapshot;
 	scan->rs_base.rs_nkeys = nkeys;
+	scan->rs_base.rs_key = palloc0(sizeof(ScanKeyData) * nkeys);
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
 
@@ -290,14 +330,17 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	else
 		scan->rs_base.rs_key = NULL;
 
-	initscan(scan, key);
+	initscan(scan, keys, nkeys);
 
 	if (flags & SO_TYPE_ANALYZE)
 		scan->compressed_scan_desc = table_beginscan_analyze(scan->compressed_rel);
 	else
-		scan->compressed_scan_desc = table_beginscan(scan->compressed_rel, snapshot, 0, NULL);
+		scan->compressed_scan_desc = table_beginscan(scan->compressed_rel,
+													 snapshot,
+													 scan->rs_base.rs_nkeys,
+													 scan->rs_base.rs_key);
 
-	scan->heap_scan = heapam->scan_begin(relation, snapshot, nkeys, key, parallel_scan, flags);
+	scan->heap_scan = heapam->scan_begin(relation, snapshot, nkeys, keys, parallel_scan, flags);
 
 	return &scan->rs_base;
 }
@@ -309,9 +352,9 @@ compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool all
 	CompressionScanDesc scan = (CompressionScanDesc) sscan;
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
-	initscan(scan, key);
+	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->compressed_tuple_index = 1;
-	table_rescan(scan->compressed_scan_desc, NULL);
+	table_rescan(scan->compressed_scan_desc, key);
 	heapam->scan_rescan(scan->heap_scan, key, set_params, allow_strat, allow_sync, allow_pagemode);
 }
 
