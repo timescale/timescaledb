@@ -68,7 +68,7 @@ typedef struct SortInfo
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										Chunk *chunk);
 
-extern bool ts_is_decompress_chunk_path(Path *path);
+extern bool ts_is_decompress_chunk_path(const Path *path);
 FormData_compression_settings *get_column_compressioninfo(List *hypertable_compression_info,
 														  char *column_name);
 extern CompressionInfo *build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk,

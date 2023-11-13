@@ -2109,8 +2109,8 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 
 /* Check if the provided path is a DecompressChunkPath */
 bool
-ts_is_decompress_chunk_path(Path *path)
+ts_is_decompress_chunk_path(const Path *path)
 {
 	return IsA(path, CustomPath) &&
-		   castNode(CustomPath, path)->methods == &decompress_chunk_path_methods;
+		   ((const CustomPath *) path)->methods == &decompress_chunk_path_methods;
 }
