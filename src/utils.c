@@ -37,6 +37,7 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "utils.h"
@@ -995,6 +996,7 @@ ts_relation_size_impl(Oid relid)
 	Datum reloid = ObjectIdGetDatum(relid);
 	Relation rel;
 
+	DEBUG_WAITPOINT("relation_size_before_lock");
 	/* Open relation earlier to keep a lock during all function calls */
 	rel = try_relation_open(relid, AccessShareLock);
 
