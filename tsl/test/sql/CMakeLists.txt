@@ -150,7 +150,7 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    dist_util
+    dist_util-${PG_VERSION_MAJOR}
     move
     remote_connection_cache
     remote_copy
