@@ -51,11 +51,152 @@
 static const TableAmRoutine compressionam_methods;
 static void compressionam_handler_end_conversion(Oid relid);
 
-static Oid
-get_compressed_table_relid(Oid chunk_relid)
+typedef struct ColumnCompressionSettings
+{
+	NameData attname;
+	AttrNumber attnum;
+	bool is_orderby;
+	bool is_segmentby;
+	bool orderby_desc;
+	bool nulls_first;
+} ColumnCompressionSettings;
+
+/*
+ * Compression info cache struct for access method.
+ *
+ * This struct is cached in a relcache entry's rd_amcache pointer and needs to
+ * have a structure that can be palloc'ed in a single memory chunk.
+ */
+typedef struct CompressionAmInfo
+{
+	int32 hypertable_id;		  /* TimescaleDB ID of parent hypertable */
+	int32 relation_id;			  /* TimescaleDB ID of relation (chunk ID) */
+	int32 compressed_relation_id; /* TimescaleDB ID of compressed relation (chunk ID) */
+	Oid compressed_relid;		  /* Relid of compressed relation */
+	int num_columns;
+	int num_segmentby;
+	int num_orderby;
+	int num_keys;
+	/* Per-column information follows. */
+	ColumnCompressionSettings columns[FLEXIBLE_ARRAY_MEMBER];
+} CompressionAmInfo;
+
+#define COMPRESSION_AM_INFO_SIZE(natts)                                                            \
+	(sizeof(CompressionAmInfo) + sizeof(ColumnCompressionSettings) * (natts))
+
+static int32
+get_compressed_chunk_id(Oid chunk_relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	return ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
+	return chunk->fd.compressed_chunk_id;
+}
+
+static int32
+get_chunk_id_from_relid(Oid relid)
+{
+	int32 chunk_id;
+	Oid nspid = get_rel_namespace(relid);
+	const char *schema = get_namespace_name(nspid);
+	const char *relname = get_rel_name(relid);
+	ts_chunk_get_id(schema, relname, &chunk_id, false);
+
+	return chunk_id;
+}
+
+static CompressionAmInfo *
+lazy_build_compressionam_info_cache(Relation rel, bool include_compressed_relinfo)
+{
+	CompressionAmInfo *caminfo = rel->rd_amcache;
+
+	if (NULL == caminfo)
+	{
+		TupleDesc tupdesc = RelationGetDescr(rel);
+		int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
+		Oid hyper_relid = ts_hypertable_id_to_relid(hyper_id, false);
+		CompressionSettings *settings = ts_compression_settings_get(hyper_relid);
+
+		Ensure(settings,
+			   "no compression settings for relation %s",
+			   get_rel_name(RelationGetRelid(rel)));
+
+		/* Anything put in rel->rd_amcache must be a single memory chunk
+		 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
+		 * to free it with a single pfree(). */
+		caminfo =
+			MemoryContextAllocZero(CacheMemoryContext, COMPRESSION_AM_INFO_SIZE(tupdesc->natts));
+		caminfo->compressed_relid = InvalidOid;
+		caminfo->num_columns = tupdesc->natts;
+		caminfo->hypertable_id = hyper_id;
+
+		for (int i = 0; i < caminfo->num_columns; i++)
+		{
+			const Form_pg_attribute attr = &tupdesc->attrs[i];
+			ColumnCompressionSettings *colsettings = &caminfo->columns[i];
+			const char *attname = NameStr(attr->attname);
+			int segmentby_pos = ts_array_position(settings->fd.segmentby, attname);
+			int orderby_pos = ts_array_position(settings->fd.orderby, attname);
+
+			namestrcpy(&colsettings->attname, attname);
+			colsettings->attnum = attr->attnum;
+			colsettings->is_segmentby = segmentby_pos > 0;
+			colsettings->is_orderby = orderby_pos > 0;
+
+			if (colsettings->is_segmentby)
+				caminfo->num_segmentby += 1;
+
+			if (colsettings->is_orderby)
+			{
+				caminfo->num_orderby += 1;
+				colsettings->orderby_desc =
+					ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
+				colsettings->nulls_first =
+					ts_array_get_element_bool(settings->fd.orderby_nullsfirst, orderby_pos);
+			}
+
+			if (colsettings->is_segmentby || colsettings->is_orderby)
+				caminfo->num_keys += 1;
+		}
+
+		Assert(caminfo->num_segmentby == ts_array_length(settings->fd.segmentby));
+		Assert(caminfo->num_orderby == ts_array_length(settings->fd.orderby));
+	}
+
+	/* Only optionally include information about the compressed chunk because
+	 * it might not exist when this cache is built. The information will be
+	 * added the next time the function is called instead. */
+	if (!OidIsValid(caminfo->compressed_relid) && include_compressed_relinfo)
+	{
+		caminfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
+		caminfo->compressed_relation_id = get_compressed_chunk_id(rel->rd_id);
+		caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
+	}
+
+	return caminfo;
+}
+
+static inline CompressionAmInfo *
+RelationGetCompressionAmInfo(Relation rel)
+{
+	return lazy_build_compressionam_info_cache(rel, true);
+}
+
+static void
+build_segment_and_orderby_bms(const CompressionAmInfo *caminfo, Bitmapset **segmentby,
+							  Bitmapset **orderby)
+{
+	*segmentby = NULL;
+	*orderby = NULL;
+
+	for (int i = 0; i < caminfo->num_columns; i++)
+	{
+		const ColumnCompressionSettings *colsettings = &caminfo->columns[i];
+
+		if (colsettings->is_segmentby)
+			*segmentby = bms_add_member(*segmentby, colsettings->attnum);
+
+		if (colsettings->is_orderby)
+			*orderby = bms_add_member(*orderby, colsettings->attnum);
+	}
 }
 
 /* ------------------------------------------------------------------------
@@ -80,68 +221,6 @@ compressionam_slot_callbacks(Relation relation)
 
 #define pgstat_count_compression_getnext(rel) pgstat_count_heap_getnext(rel)
 
-typedef struct CompressionInfoData
-{
-	CompressionSettings *settings;
-	int16 *column_offsets;
-	Bitmapset *segmentby_cols;
-	Bitmapset *orderby_cols;
-	int hypertable_id;
-	int num_columns;
-	int num_segmentby;
-	int num_orderby;
-	int num_keys;
-} CompressionInfoData;
-
-static CompressionInfoData *
-build_compression_info_data(Relation rel)
-{
-	TupleDesc tupdesc = RelationGetDescr(rel);
-	CompressionInfoData *cdata = palloc0(sizeof(CompressionInfoData));
-	CompressionSettings *settings;
-	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
-	Oid hyper_relid = ts_hypertable_id_to_relid(hyper_id, false);
-
-	settings = ts_compression_settings_get(hyper_relid);
-	Ensure(settings,
-		   "no compression settings for relation %s",
-		   get_rel_name(RelationGetRelid(rel)));
-
-	cdata->num_columns = tupdesc->natts;
-	cdata->column_offsets = palloc0(sizeof(int) * tupdesc->natts);
-	cdata->hypertable_id = hyper_id;
-	cdata->settings = settings;
-
-	for (int i = 0; i < cdata->num_columns; i++)
-	{
-		const Form_pg_attribute attr = &tupdesc->attrs[i];
-		bool is_segmentby = ts_array_is_member(settings->fd.segmentby, NameStr(attr->attname));
-		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
-
-		cdata->column_offsets[i] = AttrNumberGetAttrOffset(attr->attnum);
-
-		if (is_segmentby)
-		{
-			cdata->num_segmentby += 1;
-			cdata->segmentby_cols = bms_add_member(cdata->segmentby_cols, attr->attnum);
-		}
-
-		if (is_orderby)
-		{
-			cdata->num_orderby += 1;
-			cdata->orderby_cols = bms_add_member(cdata->orderby_cols, attr->attnum);
-		}
-
-		if (is_segmentby || is_orderby)
-			cdata->num_keys += 1;
-	}
-
-	Assert(cdata->num_segmentby == ts_array_length(settings->fd.segmentby));
-	Assert(cdata->num_orderby == ts_array_length(settings->fd.orderby));
-
-	return cdata;
-}
-
 typedef struct CompressionScanDescData
 {
 	TableScanDescData rs_base;
@@ -152,7 +231,6 @@ typedef struct CompressionScanDescData
 	int64 returned_row_count;
 	int32 compressed_row_count;
 	AttrNumber count_colattno;
-	CompressionInfoData *cdata;
 	int16 *attrs_map;
 	bool compressed_read_done;
 } CompressionScanDescData;
@@ -206,7 +284,6 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
 
 	scan->attrs_map = build_attribute_offset_map(tupdesc, c_tupdesc, &scan->count_colattno);
-	scan->cdata = build_compression_info_data(relation);
 
 	if (nkeys > 0)
 		scan->rs_base.rs_key = (ScanKey) palloc(sizeof(ScanKeyData) * nkeys);
@@ -346,9 +423,9 @@ compressionam_index_fetch_begin(Relation rel)
 {
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
-	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
-	Relation crel = table_open(cchunk_relid, AccessShareLock);
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 
+	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 	cscan->h_base.rel = rel;
 	cscan->compr_rel = crel;
 	cscan->compr_hscan = crel->rd_tableam->index_fetch_begin(crel);
@@ -543,7 +620,7 @@ compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
 	TM_IndexDeleteOp noncompr_delstate = *delstate;
 	TM_IndexDeleteOp compr_delstate = *delstate;
-	Oid compr_relid = get_compressed_table_relid(RelationGetRelid(rel));
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 	/* Hash table setup for TID deduplication */
 	typedef struct TidEntry
 	{
@@ -686,7 +763,7 @@ compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 	if (compr_delstate.ndeltids > 0 && (total_knowndeletable_compressed > 0 || delstate->bottomup))
 	{
 		/* Assume RowExclusivelock since this involves deleting tuples */
-		Relation compr_rel = table_open(compr_relid, RowExclusiveLock);
+		Relation compr_rel = table_open(caminfo->compressed_relid, RowExclusiveLock);
 
 		xid_compr = heapam->index_delete_tuples(compr_rel, &compr_delstate);
 
@@ -760,7 +837,6 @@ typedef struct ConversionState
 {
 	Oid relid;
 	Tuplesortstate *tuplesortstate;
-	CompressionInfoData *cdata;
 } ConversionState;
 
 static ConversionState *conversionstate = NULL;
@@ -858,11 +934,11 @@ compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
 
 	if (is_compressed_tid(tid))
 	{
-		Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(relation));
+		CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
 		/* SELECT FOR UPDATE takes RowShareLock, so assume this
 		 * lockmode. Another option to consider is take same lock as currently
 		 * held on the non-compressed relation */
-		Relation crel = table_open(cchunk_relid, RowShareLock);
+		Relation crel = table_open(caminfo->compressed_relid, RowShareLock);
 		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(crel));
 		ItemPointerData decoded_tid;
 
@@ -956,13 +1032,13 @@ compressionam_relation_copy_for_cluster(Relation OldCompression, Relation NewCom
 static void
 compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
-	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
 
 	FEATURE_NOT_SUPPORTED;
 
-	Relation crel = vacuum_open_relation(cchunk_relid,
+	Relation crel = vacuum_open_relation(caminfo->compressed_relid,
 										 NULL,
 										 params->options,
 										 params->log_min_duration >= 0,
@@ -1027,7 +1103,6 @@ typedef struct IndexCallbackState
 {
 	IndexBuildCallback callback;
 	Relation rel;
-	CompressionInfoData *cdata;
 	IndexInfo *index_info;
 	EState *estate;
 	void *orig_state;
@@ -1051,14 +1126,19 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 	IndexCallbackState *icstate = state;
 	// bool checking_uniqueness = (callback_state->index_info->ii_Unique ||
 	//							callback_state->index_info->ii_ExclusionOps != NULL);
-	int num_rows = -1;
+	int32 num_rows = -1;
 	TupleDesc idesc = RelationGetDescr(index);
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(icstate->rel);
+	Bitmapset *segmentby_cols = NULL;
+	Bitmapset *orderby_cols = NULL;
+
+	build_segment_and_orderby_bms(caminfo, &segmentby_cols, &orderby_cols);
 
 	for (int i = 0; i < icstate->index_info->ii_NumIndexAttrs; i++)
 	{
 		const AttrNumber attno = icstate->index_info->ii_IndexAttrNumbers[i];
 
-		if (bms_is_member(attno, icstate->cdata->segmentby_cols))
+		if (bms_is_member(attno, segmentby_cols))
 		{
 			// Segment by column, nothing to decompress. Just return the value
 			// from the compressed chunk since it is the same for every row in
@@ -1098,9 +1178,9 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 	{
 		for (int colnum = 0; colnum < icstate->index_info->ii_NumIndexAttrs; colnum++)
 		{
-			const AttrNumber table_attno = icstate->index_info->ii_IndexAttrNumbers[colnum];
+			const AttrNumber attno = icstate->index_info->ii_IndexAttrNumbers[colnum];
 
-			if (bms_is_member(table_attno, icstate->cdata->segmentby_cols))
+			if (bms_is_member(attno, segmentby_cols))
 			{
 				// Segment by column
 			}
@@ -1145,6 +1225,9 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 		tid_to_compressed_tid(&index_tid, tid, rownum + 1);
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
 	}
+
+	bms_free(segmentby_cols);
+	bms_free(orderby_cols);
 }
 
 /*
@@ -1161,8 +1244,8 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 									 BlockNumber numblocks, IndexBuildCallback callback,
 									 void *callback_state, TableScanDesc scan)
 {
-	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(relation));
-	Relation crel = table_open(cchunk_relid, AccessShareLock);
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 	AttrNumber count_cattno = InvalidAttrNumber;
 	IndexCallbackState icstate = {
 		.callback = callback,
@@ -1177,7 +1260,6 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 													/* minContextSize = */ 0,
 													/* initBlockSize = */ 64 * 1024,
 													/* maxBlockSize = */ 64 * 1024),
-		.cdata = build_compression_info_data(relation),
 		.attrs_map = build_attribute_offset_map(RelationGetDescr(relation),
 												RelationGetDescr(crel),
 												&count_cattno),
@@ -1280,8 +1362,8 @@ compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 	uint64 size = table_block_relation_size(rel, forkNumber);
 
 	/*
-	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
-	Relation crel = try_relation_open(cchunk_relid, AccessShareLock);
+	  CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	Relation crel = try_relation_open(caminfo->compressed_relid, AccessShareLock);
 
 	if (crel == NULL)
 		return 0;
@@ -1299,12 +1381,12 @@ static void
 compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
 									 double *tuples, double *allvisfrac)
 {
-	Oid cchunk_relid = get_compressed_table_relid(RelationGetRelid(rel));
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 
-	if (!OidIsValid(cchunk_relid))
+	if (!OidIsValid(caminfo->compressed_relid))
 		return;
 
-	Relation crel = table_open(cchunk_relid, AccessShareLock);
+	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 
 	/* Cannot pass on attr_widths since they are cached widths for the
 	 * non-compressed relation which also doesn't have the same number of
@@ -1367,25 +1449,24 @@ compressionam_handler_start_conversion(Oid relid)
 	ConversionState *state = palloc0(sizeof(ConversionState));
 	Relation relation = table_open(relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
-	CompressionInfoData *cdata = build_compression_info_data(relation);
-	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * cdata->num_keys);
-	Oid *sort_operators = palloc0(sizeof(*sort_operators) * cdata->num_keys);
-	Oid *sort_collations = palloc0(sizeof(*sort_collations) * cdata->num_keys);
-	bool *nulls_first = palloc0(sizeof(*nulls_first) * cdata->num_keys);
-	const CompressionSettings *settings = cdata->settings;
-
-	Assert(cdata->num_segmentby == ts_array_length(settings->fd.segmentby));
+	CompressionAmInfo *caminfo = lazy_build_compressionam_info_cache(relation, false);
+	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * caminfo->num_keys);
+	Oid *sort_operators = palloc0(sizeof(*sort_operators) * caminfo->num_keys);
+	Oid *sort_collations = palloc0(sizeof(*sort_collations) * caminfo->num_keys);
+	bool *nulls_first = palloc0(sizeof(*nulls_first) * caminfo->num_keys);
+	int segmentby_pos = 0;
+	int orderby_pos = 0;
 
 	state->relid = relid;
 
-	for (int i = 0; i < tupdesc->natts; i++)
+	for (int i = 0; i < caminfo->num_columns; i++)
 	{
+		const ColumnCompressionSettings *column = &caminfo->columns[i];
 		const Form_pg_attribute attr = &tupdesc->attrs[i];
-		const char *attname = NameStr(attr->attname);
-		int segmentby_pos = ts_array_position(settings->fd.segmentby, attname);
-		int orderby_pos = ts_array_position(settings->fd.orderby, attname);
 
-		if (segmentby_pos > 0 || orderby_pos > 0)
+		Assert(attr->attnum == column->attnum);
+
+		if (column->is_segmentby || column->is_orderby)
 		{
 			TypeCacheEntry *tentry;
 			int sort_index = -1;
@@ -1393,33 +1474,31 @@ compressionam_handler_start_conversion(Oid relid)
 
 			tentry = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
 
-			if (segmentby_pos > 0)
+			if (column->is_segmentby)
 			{
-				sort_index = segmentby_pos - 1;
+				sort_index = segmentby_pos++;
 				sort_op = tentry->lt_opr;
 			}
-			else if (orderby_pos > 0)
+			else if (column->is_orderby)
 			{
-				bool orderby_asc =
-					!ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
-				sort_index = cdata->num_segmentby + (orderby_pos - 1);
-				sort_op = orderby_asc ? tentry->lt_opr : tentry->gt_opr;
+				sort_index = caminfo->num_segmentby + orderby_pos++;
+				sort_op = !column->orderby_desc ? tentry->lt_opr : tentry->gt_opr;
 			}
 
 			if (!OidIsValid(sort_op))
 				elog(ERROR,
 					 "no valid sort operator for column \"%s\" of type \"%s\"",
-					 attname,
+					 NameStr(column->attname),
 					 format_type_be(attr->atttypid));
 
-			sort_keys[sort_index] = attr->attnum;
+			sort_keys[sort_index] = column->attnum;
 			sort_operators[sort_index] = sort_op;
+			nulls_first[sort_index] = column->nulls_first;
 		}
 	}
 
-	state->cdata = cdata;
 	state->tuplesortstate = tuplesort_begin_heap(tupdesc,
-												 cdata->num_keys,
+												 caminfo->num_keys,
 												 sort_keys,
 												 sort_operators,
 												 sort_collations,
@@ -1449,9 +1528,10 @@ compressionam_handler_end_conversion(Oid relid)
 
 	Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
+	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 	RowCompressor row_compressor;
 
-	row_compressor_init(conversionstate->cdata->settings,
+	row_compressor_init(settings,
 						&row_compressor,
 						relation,
 						compressed_rel,
