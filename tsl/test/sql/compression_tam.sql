@@ -130,6 +130,8 @@ SELECT * FROM readings WHERE time = '2022-06-01 00:00:06';
 INSERT INTO readings VALUES ('2022-06-01 00:00:07', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 16;
 SELECT * FROM readings WHERE time = '2022-06-01 00:00:07';
 
+INSERT INTO readings VALUES ('2022-06-01', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO NOTHING;
+
 -- We should be able to change it back to heap.
 ALTER TABLE :chunk SET ACCESS METHOD heap;
 
