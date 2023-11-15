@@ -79,8 +79,9 @@ def build_debug_config(overrides):
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
         }
     )
-    if not pull_request:
-        base_config["tsdb_build_args"] += " -DENABLE_MULTINODETESTS=ON"
+    # We use .get() here to be able to handle also configurations without PG versions
+    if not pull_request or overrides.get("pg") == PG15_LATEST:
+        base_config["tsdb_build_args"] += " -DENABLE_MULTINODE_TESTS=ON"
     base_config.update(overrides)
     return base_config
 
@@ -100,7 +101,7 @@ def build_release_config(overrides):
         }
     )
     if not pull_request:
-        release_config["tsdb_build_args"] += " -DENABLE_MULTINODETESTS=ON"
+        release_config["tsdb_build_args"] += " -DENABLE_MULTINODE_TESTS=ON"
     base_config.update(release_config)
     base_config.update(overrides)
     return base_config
@@ -157,7 +158,7 @@ def macos_config(overrides):
         }
     )
     if not pull_request:
-        base_config["tsdb_build_args"] += " -DENABLE_MULTINODETESTS=ON"
+        base_config["tsdb_build_args"] += " -DENABLE_MULTINODE_TESTS=ON"
     base_config.update(overrides)
     return base_config
 
@@ -237,7 +238,7 @@ if not pull_request:
             "dist_gapfill_pushdown-13",
             "transparent_decompress_chunk-13",
         },
-        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF -DENABLE_MULTINODETESTS=ON",
+        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF -DENABLE_MULTINODE_TESTS=ON",
     }
     m["include"].append(build_debug_config(pg13_debug_earliest))
 
