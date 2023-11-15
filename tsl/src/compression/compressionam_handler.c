@@ -23,8 +23,10 @@
 #include <parser/parsetree.h>
 #include <pgstat.h>
 #include <postgres_ext.h>
+#include <storage/buf.h>
 #include <storage/bufmgr.h>
 #include <storage/lockdefs.h>
+#include <storage/off.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/memutils.h>
@@ -186,7 +188,7 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 
 	scan->compressed_rel = table_open(c_chunk->table_id, AccessShareLock);
-	scan->compressed_tuple_index = 0;
+	scan->compressed_tuple_index = 1;
 	scan->compressed_slot = table_slot_create(scan->compressed_rel, NULL);
 	scan->returned_row_count = 0;
 	scan->compressed_row_count = 0;
@@ -222,7 +224,7 @@ compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool all
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	initscan(scan, key);
-	scan->compressed_tuple_index = 0;
+	scan->compressed_tuple_index = 1;
 	table_rescan(scan->compressed_scan_desc, NULL);
 	heapam->scan_rescan(scan->heap_scan, key, set_params, allow_strat, allow_sync, allow_pagemode);
 }
@@ -257,23 +259,26 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		return heapam->scan_getnextslot(scan->heap_scan, direction, slot);
 	}
 
-	Assert(scan->compressed_tuple_index <= scan->compressed_row_count);
+	Assert(scan->compressed_tuple_index == 1 ||
+		   scan->compressed_tuple_index <= scan->compressed_row_count);
 
 	if (TupIsNull(scan->compressed_slot) ||
-		(scan->compressed_tuple_index + 1 == scan->compressed_row_count))
+		(scan->compressed_tuple_index == scan->compressed_row_count))
 	{
 		if (!table_scan_getnextslot(scan->compressed_scan_desc, direction, scan->compressed_slot))
 		{
 			ExecClearTuple(slot);
+			tts_arrow_set_heaptuple_mode(slot);
 			scan->compressed_read_done = true;
-			return false;
+			return compressionam_getnextslot(sscan, direction, slot);
 		}
 
 		bool isnull;
 		Datum count = slot_getattr(scan->compressed_slot, scan->count_colattno, &isnull);
+
 		Assert(!isnull);
 		scan->compressed_row_count = DatumGetInt32(count);
-		scan->compressed_tuple_index = 0;
+		scan->compressed_tuple_index = 1;
 		ExecStoreArrowTuple(slot, scan->compressed_slot, scan->compressed_tuple_index);
 	}
 	else
@@ -359,14 +364,10 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	Relation crel = cscan->compr_rel;
-	ItemPointerData compr_tid;
-
-	/* Read the compressed tuple index out of the TID */
-	uint16 compr_index = tid->ip_blkid.bi_hi;
+	ItemPointerData orig_tid;
 
 	/* Recreate the original TID for the compressed table */
-	ItemPointerCopy(tid, &compr_tid);
-	compr_tid.ip_blkid.bi_hi = 0;
+	uint16 tuple_index = compressed_tid_to_tid(&orig_tid, tid);
 
 	/*
 	 * Avoid decompression if the new TID from the index points to the same
@@ -381,17 +382,17 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 	 * possible to optimize that case further by retaining a window/cache of
 	 * decompressed tuples, keyed on TID.
 	 */
-	if (!TTS_EMPTY(slot) && ItemPointerEquals(&cscan->tid, &compr_tid))
+	if (!TTS_EMPTY(slot) && ItemPointerEquals(&cscan->tid, &orig_tid))
 	{
 		/* Still in the same compressed tuple, so just update tuple index and
 		 * return the same Arrow slot */
-		ExecStoreArrowTupleExisting(slot, compr_index);
+		ExecStoreArrowTupleExisting(slot, tuple_index);
 		ItemPointerCopy(tid, &slot->tts_tid);
 		return true;
 	}
 
 	bool result = crel->rd_tableam->index_fetch_tuple(cscan->compr_hscan,
-													  &compr_tid,
+													  &orig_tid,
 													  snapshot,
 													  cscan->compressed_slot,
 													  call_again,
@@ -399,9 +400,9 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 
 	if (result)
 	{
-		ExecStoreArrowTuple(slot, cscan->compressed_slot, compr_index);
+		ExecStoreArrowTuple(slot, cscan->compressed_slot, tuple_index);
 		/* Save the current compressed TID */
-		ItemPointerCopy(&compr_tid, &cscan->tid);
+		ItemPointerCopy(&orig_tid, &cscan->tid);
 		cscan->num_decompressions++;
 	}
 
@@ -439,6 +440,7 @@ compressionam_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snaps
 static TransactionId
 compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
+	FEATURE_NOT_SUPPORTED;
 	return 0;
 }
 #endif
@@ -517,7 +519,8 @@ compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
 static void
 compressionam_finish_bulk_insert(Relation rel, int options)
 {
-	compressionam_handler_end_conversion(rel->rd_id);
+	if (conversionstate)
+		compressionam_handler_end_conversion(rel->rd_id);
 }
 
 /* ------------------------------------------------------------------------
@@ -569,6 +572,9 @@ compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrateg
 	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(rel));
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
+
+	FEATURE_NOT_SUPPORTED;
+
 	Relation crel = vacuum_open_relation(cchunk_relid,
 										 NULL,
 										 params->options,
@@ -593,6 +599,8 @@ compressionam_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
 
+	FEATURE_NOT_SUPPORTED;
+
 	return cscan->compressed_rel->rd_tableam->scan_analyze_next_block(cscan->compressed_scan_desc,
 																	  blockno,
 																	  bstrategy);
@@ -609,6 +617,8 @@ compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXm
 									  double *liverows, double *deadrows, TupleTableSlot *slot)
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
+
+	FEATURE_NOT_SUPPORTED;
 
 	bool result =
 		cscan->compressed_rel->rd_tableam->scan_analyze_next_tuple(cscan->compressed_scan_desc,
@@ -746,10 +756,9 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 			}
 		}
 
-		// Encode compressed tuple index (rownum) into high blocknumber. This
-		// is currently a hack and we should probably use less bits.
-		tid->ip_blkid.bi_hi = (uint16) rownum;
-		icstate->callback(index, tid, values, isnull, tupleIsAlive, icstate->orig_state);
+		ItemPointerData index_tid;
+		tid_to_compressed_tid(&index_tid, tid, rownum + 1);
+		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
 	}
 }
 
@@ -859,6 +868,8 @@ compressionam_relation_toast_am(Relation rel)
 static uint64
 compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 {
+	uint64 size = table_block_relation_size(rel, forkNumber);
+	/*
 	Oid cchunk_relid = get_compressed_chunk_relid(RelationGetRelid(rel));
 	Relation crel = try_relation_open(cchunk_relid, AccessShareLock);
 
@@ -869,6 +880,7 @@ compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 
 	size += crel->rd_tableam->relation_size(crel, forkNumber);
 	relation_close(crel, AccessShareLock);
+	*/
 	return size;
 }
 
@@ -1019,14 +1031,14 @@ compressionam_handler_end_conversion(Oid relid)
 
 	if (!chunk)
 		elog(ERROR, "could not find uncompressed chunk for relation %s", get_rel_name(relid));
-
 	Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
 	Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+
+	tuplesort_performsort(conversionstate->tuplesortstate);
+
 	Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
 	RowCompressor row_compressor;
-
-	tuplesort_performsort(conversionstate->tuplesortstate);
 
 	row_compressor_init(conversionstate->cdata->settings,
 						&row_compressor,
