@@ -56,6 +56,9 @@ typedef struct ChunkInsertState
 	bool chunk_compressed;
 	bool chunk_partial;
 
+	/* Chunk uses our own table access method */
+	bool use_tam;
+
 	Oid compressed_chunk_table_id;
 } ChunkInsertState;
 
