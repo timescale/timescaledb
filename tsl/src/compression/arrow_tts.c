@@ -292,6 +292,7 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 	if (aslot->tuple_index == InvalidTupleIndex)
 	{
 		slot_getsomeattrs(aslot->child_slot, natts);
+
 		/* The child slot points to an non-compressed tuple, so just copy over
 		 * the values from the child. */
 		copy_slot_values(aslot->child_slot, slot, natts);
@@ -300,7 +301,9 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 
 	attrs_map = arrow_slot_get_attribute_offset_map(slot);
 
-	/* Find highest attribute number/offset in compressed relation */
+	/* Find highest attribute number/offset in compressed relation in order to
+	 * make slot_getsomeattrs() get all the required attributes in the
+	 * compressed tuple. */
 	for (int i = 0; i < natts; i++)
 	{
 		int16 coff = attrs_map[AttrNumberGetAttrOffset(natts)];
