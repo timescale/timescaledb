@@ -90,7 +90,34 @@ build_attribute_offset_map(const TupleDesc tupdesc, const TupleDesc ctupdesc,
 extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, TupleTableSlot *compressed_slot,
 										   uint16 tuple_index);
 extern TupleTableSlot *ExecStoreArrowTupleExisting(TupleTableSlot *slot, uint16 tuple_index);
+extern void tts_arrow_set_heaptuple_mode(TupleTableSlot *slot);
 
 #define TTS_IS_ARROWTUPLE(slot) ((slot)->tts_ops == &TTSOpsArrowTuple)
+
+#define MaxCompressedBlockNumber ((BlockNumber) 0x3FFFFF)
+
+static inline void
+tid_to_compressed_tid(ItemPointer out_tid, ItemPointer in_tid, uint16 tuple_index)
+{
+	BlockNumber blockno = ItemPointerGetBlockNumber(in_tid);
+	OffsetNumber offsetno = ItemPointerGetOffsetNumber(in_tid);
+	BlockNumber index_blockno = (blockno << 10) | (tuple_index & 0x3FF);
+
+	Assert(blockno <= MaxCompressedBlockNumber);
+	ItemPointerSet(out_tid, index_blockno, offsetno);
+}
+
+static inline uint16
+compressed_tid_to_tid(ItemPointer out_tid, ItemPointer in_tid)
+{
+	BlockNumber blockno = ItemPointerGetBlockNumber(in_tid);
+	OffsetNumber offsetno = ItemPointerGetOffsetNumber(in_tid);
+	uint16 tuple_index = (blockno & 0x3FF);
+	BlockNumber orig_blockno = (blockno >> 10);
+
+	ItemPointerSet(out_tid, orig_blockno, offsetno);
+
+	return tuple_index;
+}
 
 #endif /* PG_ARROW_TUPTABLE_H */
