@@ -153,6 +153,7 @@ static int create_segment_filter_scankey(RowDecompressor *decompressor,
 										 ScanKeyData *scankeys, int num_scankeys,
 										 Bitmapset **null_columns, Datum value, bool isnull);
 static void run_analyze_on_chunk(Oid chunk_relid);
+static void create_per_compressed_column(RowDecompressor *decompressor);
 
 /********************
  ** compress_chunk **
@@ -417,14 +418,13 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	if (matched_index_rel != NULL)
 	{
-#ifdef TS_DEBUG
-		const char *compression_path =
-			GetConfigOption("timescaledb.show_compression_path_info", true, false);
-		if (compression_path != NULL && strcmp(compression_path, "on") == 0)
+		if (ts_guc_debug_compression_path_info)
+		{
 			elog(INFO,
 				 "compress_chunk_indexscan_start matched index \"%s\"",
 				 get_rel_name(matched_index_rel->rd_id));
-#endif
+		}
+
 		index_scan = index_beginscan(in_rel, matched_index_rel, GetTransactionSnapshot(), 0, 0);
 		slot = table_slot_create(in_rel, NULL);
 		index_rescan(index_scan, NULL, 0, NULL, 0);
@@ -443,12 +443,11 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	}
 	else
 	{
-#ifdef TS_DEBUG
-		const char *compression_path =
-			GetConfigOption("timescaledb.show_compression_path_info", true, false);
-		if (compression_path != NULL && strcmp(compression_path, "on") == 0)
+		if (ts_guc_debug_compression_path_info)
+		{
 			elog(INFO, "compress_chunk_tuplesort_start");
-#endif
+		}
+
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(in_rel, n_keys, keys);
 		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc);
 		tuplesort_end(sorted_rel);
@@ -1376,23 +1375,13 @@ segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datum, bool is_n
  ** decompress_chunk **
  **********************/
 
-static bool per_compressed_col_get_data(PerCompressedColumn *per_compressed_col,
-										Datum *decompressed_datums, bool *decompressed_is_nulls,
-										TupleDesc out_desc);
-
 RowDecompressor
 build_decompressor(Relation in_rel, Relation out_rel)
 {
 	TupleDesc in_desc = RelationGetDescr(in_rel);
-	TupleDesc out_desc = RelationGetDescr(out_rel);
-
-	Oid compressed_typeid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
-
-	Assert(OidIsValid(compressed_typeid));
+	TupleDesc out_desc = CreateTupleDescCopyConstr(RelationGetDescr(out_rel));
 
 	RowDecompressor decompressor = {
-		.per_compressed_cols =
-			create_per_compressed_column(in_desc, out_desc, out_rel->rd_id, compressed_typeid),
 		.num_compressed_columns = in_desc->natts,
 
 		.in_desc = in_desc,
@@ -1416,7 +1405,11 @@ build_decompressor(Relation in_rel, Relation out_rel)
 														"decompress chunk per-compressed row",
 														ALLOCSET_DEFAULT_SIZES),
 		.estate = CreateExecutorState(),
+
+		.decompressed_slots = palloc0(sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION),
 	};
+
+	create_per_compressed_column(&decompressor);
 
 	/*
 	 * We need to make sure decompressed_is_nulls is in a defined state. While this
@@ -1461,7 +1454,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		row_decompressor_decompress_row(&decompressor, NULL);
+		row_decompressor_decompress_row_to_table(&decompressor);
 	}
 
 	table_endscan(heapScan);
@@ -1475,23 +1468,29 @@ decompress_chunk(Oid in_table, Oid out_table)
 	table_close(in_rel, NoLock);
 }
 
-PerCompressedColumn *
-create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid out_relid,
-							 Oid compressed_data_type_oid)
+static void
+create_per_compressed_column(RowDecompressor *decompressor)
 {
-	PerCompressedColumn *per_compressed_cols =
-		palloc(sizeof(*per_compressed_cols) * in_desc->natts);
+	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	Assert(OidIsValid(compressed_data_type_oid));
+
+	decompressor->per_compressed_cols =
+		palloc(sizeof(*decompressor->per_compressed_cols) * decompressor->in_desc->natts);
 
 	Assert(OidIsValid(compressed_data_type_oid));
 
-	for (int16 col = 0; col < in_desc->natts; col++)
+	for (int16 col = 0; col < decompressor->in_desc->natts; col++)
 	{
 		Oid decompressed_type;
 		bool is_compressed;
 		int16 decompressed_column_offset;
-		PerCompressedColumn *per_compressed_col = &per_compressed_cols[col];
-		Form_pg_attribute compressed_attr = TupleDescAttr(in_desc, col);
+		PerCompressedColumn *per_compressed_col = &decompressor->per_compressed_cols[col];
+		Form_pg_attribute compressed_attr = TupleDescAttr(decompressor->in_desc, col);
 		char *col_name = NameStr(compressed_attr->attname);
+		if (strcmp(col_name, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
+		{
+			decompressor->count_compressed_attindex = col;
+		}
 
 		/* find the mapping from compressed column to uncompressed column, setting
 		 * the index of columns that don't have an uncompressed version
@@ -1499,19 +1498,19 @@ create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid out_reli
 		 * Assumption: column names are the same on compressed and
 		 *       uncompressed chunk.
 		 */
-		AttrNumber decompressed_colnum = get_attnum(out_relid, col_name);
+		AttrNumber decompressed_colnum = get_attnum(decompressor->out_rel->rd_id, col_name);
 		if (!AttributeNumberIsValid(decompressed_colnum))
 		{
 			*per_compressed_col = (PerCompressedColumn){
 				.decompressed_column_offset = -1,
-				.is_null = true,
 			};
 			continue;
 		}
 
 		decompressed_column_offset = AttrNumberGetAttrOffset(decompressed_colnum);
 
-		decompressed_type = TupleDescAttr(out_desc, decompressed_column_offset)->atttypid;
+		decompressed_type =
+			TupleDescAttr(decompressor->out_desc, decompressed_column_offset)->atttypid;
 
 		/* determine if the data is compressed or not */
 		is_compressed = compressed_attr->atttypid == compressed_data_type_oid;
@@ -1525,200 +1524,223 @@ create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc, Oid out_reli
 
 		*per_compressed_col = (PerCompressedColumn){
 			.decompressed_column_offset = decompressed_column_offset,
-			.is_null = true,
 			.is_compressed = is_compressed,
 			.decompressed_type = decompressed_type,
 		};
 	}
-
-	return per_compressed_cols;
 }
 
-void
-populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols, int16 num_cols,
-										  Datum *compressed_datums, bool *compressed_is_nulls)
+/*
+ * Decompresses the current compressed batch into decompressed_slots, and returns
+ * the number of rows in batch.
+ */
+static int
+decompress_batch(RowDecompressor *decompressor)
 {
-	for (int16 col = 0; col < num_cols; col++)
-	{
-		PerCompressedColumn *per_col = &per_compressed_cols[col];
-		if (per_col->decompressed_column_offset < 0)
-			continue;
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
-		per_col->is_null = compressed_is_nulls[col];
-		if (per_col->is_null)
+	/*
+	 * Set segmentbys and compressed columns with default value.
+	 */
+	for (int input_column = 0; input_column < decompressor->num_compressed_columns; input_column++)
+	{
+		PerCompressedColumn *column_info = &decompressor->per_compressed_cols[input_column];
+		const int output_index = column_info->decompressed_column_offset;
+
+		/* Metadata column. */
+		if (output_index < 0)
 		{
-			per_col->is_null = true;
-			per_col->iterator = NULL;
-			per_col->val = 0;
 			continue;
 		}
 
-		if (per_col->is_compressed)
+		/* Segmentby column. */
+		if (!column_info->is_compressed)
 		{
-			CompressedDataHeader *header = get_compressed_data_header(compressed_datums[col]);
+			decompressor->decompressed_datums[output_index] =
+				decompressor->compressed_datums[input_column];
+			decompressor->decompressed_is_nulls[output_index] =
+				decompressor->compressed_is_nulls[input_column];
+			continue;
+		}
 
-			per_col->iterator =
-				definitions[header->compression_algorithm]
-					.iterator_init_forward(PointerGetDatum(header), per_col->decompressed_type);
+		/* Compressed column with default value. */
+		if (decompressor->compressed_is_nulls[input_column])
+		{
+			column_info->iterator = NULL;
+			decompressor->decompressed_datums[output_index] =
+				getmissingattr(decompressor->out_desc,
+							   output_index + 1,
+							   &decompressor->decompressed_is_nulls[output_index]);
+
+			continue;
+		}
+
+		/* Normal compressed column. */
+		CompressedDataHeader *header =
+			get_compressed_data_header(decompressor->compressed_datums[input_column]);
+		column_info->iterator =
+			definitions[header->compression_algorithm]
+				.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
+	}
+
+	/*
+	 * Set the number of batch rows from count metadata column.
+	 */
+	const int n_batch_rows =
+		DatumGetInt32(decompressor->compressed_datums[decompressor->count_compressed_attindex]);
+	CheckCompressedData(n_batch_rows > 0);
+	CheckCompressedData(n_batch_rows <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+
+	/*
+	 * Decompress all compressed columns for each row of the batch.
+	 */
+	for (int current_row = 0; current_row < n_batch_rows; current_row++)
+	{
+		for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
+		{
+			PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
+			if (column_info->iterator == NULL)
+			{
+				continue;
+			}
+			Assert(column_info->is_compressed);
+
+			const int output_index = column_info->decompressed_column_offset;
+			const DecompressResult value = column_info->iterator->try_next(column_info->iterator);
+			CheckCompressedData(!value.is_done);
+			decompressor->decompressed_datums[output_index] = value.val;
+			decompressor->decompressed_is_nulls[output_index] = value.is_null;
+		}
+
+		/*
+		 * Form the heap tuple for this decompressed rows and save it for later
+		 * processing.
+		 */
+		if (decompressor->decompressed_slots[current_row] == NULL)
+		{
+			MemoryContextSwitchTo(old_ctx);
+			decompressor->decompressed_slots[current_row] =
+				MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsHeapTuple);
+			MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 		}
 		else
-			per_col->val = compressed_datums[col];
+		{
+			ExecClearTuple(decompressor->decompressed_slots[current_row]);
+		}
+
+		TupleTableSlot *decompressed_slot = decompressor->decompressed_slots[current_row];
+
+		HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
+													   decompressor->decompressed_datums,
+													   decompressor->decompressed_is_nulls);
+		decompressed_tuple->t_tableOid = decompressor->out_rel->rd_id;
+
+		ExecStoreHeapTuple(decompressed_tuple, decompressed_slot, /* should_free = */ false);
 	}
+
+	/*
+	 * Verify that all other columns have ended, i.e. their length is consistent
+	 * with the count metadata column.
+	 */
+	for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
+	{
+		PerCompressedColumn *column_info = &decompressor->per_compressed_cols[col];
+		if (column_info->iterator == NULL)
+		{
+			continue;
+		}
+		Assert(column_info->is_compressed);
+		const DecompressResult value = column_info->iterator->try_next(column_info->iterator);
+		CheckCompressedData(value.is_done);
+	}
+	MemoryContextSwitchTo(old_ctx);
+
+	decompressor->batches_decompressed++;
+	decompressor->tuples_decompressed += n_batch_rows;
+
+	return n_batch_rows;
 }
 
 void
-row_decompressor_decompress_row(RowDecompressor *decompressor, Tuplesortstate *tuplesortstate)
+row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 {
-	/* each compressed row decompresses to at least one row,
-	 * even if all the data is NULL
-	 */
-	bool wrote_data = false;
-	bool is_done = false;
+	const int n_batch_rows = decompress_batch(decompressor);
 
 	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
-	populate_per_compressed_columns_from_data(decompressor->per_compressed_cols,
-											  decompressor->in_desc->natts,
-											  decompressor->compressed_datums,
-											  decompressor->compressed_is_nulls);
+	/* Insert all decompressed rows into table using the bulk insert API. */
+	table_multi_insert(decompressor->out_rel,
+					   decompressor->decompressed_slots,
+					   n_batch_rows,
+					   decompressor->mycid,
+					   /* options = */ 0,
+					   decompressor->bistate);
 
-	decompressor->batches_decompressed++;
-	do
+	/*
+	 * Now, update the indexes. If we have several indexes, we want to first
+	 * insert the entire batch into one index, then into another, and so on.
+	 * Working with one index at a time gives better data access locality,
+	 * which reduces the load on shared buffers cache.
+	 * The normal Postgres code inserts each row into all indexes, so to do it
+	 * the other way around, we create a temporary ResultRelInfo that only
+	 * references one index. Then we loop over indexes, and for each index we
+	 * set it to this temporary ResultRelInfo, and insert all rows into this
+	 * single index.
+	 */
+	if (decompressor->indexstate->ri_NumIndices > 0)
 	{
-		/* we're done if all the decompressors return NULL */
-		is_done = true;
-		for (int16 col = 0; col < decompressor->num_compressed_columns; col++)
+		ResultRelInfo indexstate_copy = *decompressor->indexstate;
+		Relation single_index_relation;
+		IndexInfo *single_index_info;
+		indexstate_copy.ri_NumIndices = 1;
+		indexstate_copy.ri_IndexRelationDescs = &single_index_relation;
+		indexstate_copy.ri_IndexRelationInfo = &single_index_info;
+		for (int i = 0; i < decompressor->indexstate->ri_NumIndices; i++)
 		{
-			bool col_is_done = per_compressed_col_get_data(&decompressor->per_compressed_cols[col],
-														   decompressor->decompressed_datums,
-														   decompressor->decompressed_is_nulls,
-														   decompressor->out_desc);
-			is_done &= col_is_done;
-		}
-
-		/* if we're not done we have data to write. even if we're done, each
-		 * compressed should decompress to at least one row, so we should write that
-		 */
-		if (!is_done || !wrote_data)
-		{
-			decompressor->tuples_decompressed++;
-
-			if (tuplesortstate == NULL)
+			single_index_relation = decompressor->indexstate->ri_IndexRelationDescs[i];
+			single_index_info = decompressor->indexstate->ri_IndexRelationInfo[i];
+			for (int row = 0; row < n_batch_rows; row++)
 			{
-				HeapTuple decompressed_tuple = heap_form_tuple(decompressor->out_desc,
-															   decompressor->decompressed_datums,
-															   decompressor->decompressed_is_nulls);
-
-				heap_insert(decompressor->out_rel,
-							decompressed_tuple,
-							decompressor->mycid,
-							0 /*=options*/,
-							decompressor->bistate);
-
+				TupleTableSlot *decompressed_slot = decompressor->decompressed_slots[row];
 				EState *estate = decompressor->estate;
 				ExprContext *econtext = GetPerTupleExprContext(estate);
 
-				TupleTableSlot *tts_slot =
-					MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsHeapTuple);
-				ExecStoreHeapTuple(decompressed_tuple, tts_slot, false);
-
 				/* Arrange for econtext's scan tuple to be the tuple under test */
-				econtext->ecxt_scantuple = tts_slot;
+				econtext->ecxt_scantuple = decompressed_slot;
 #if PG14_LT
-				estate->es_result_relation_info = decompressor->indexstate;
+				estate->es_result_relation_info = &indexstate_copy;
 #endif
-				ExecInsertIndexTuplesCompat(decompressor->indexstate,
-											tts_slot,
+				ExecInsertIndexTuplesCompat(&indexstate_copy,
+											decompressed_slot,
 											estate,
 											false,
 											false,
 											NULL,
 											NIL,
 											false);
-
-				ExecDropSingleTupleTableSlot(tts_slot);
-				heap_freetuple(decompressed_tuple);
 			}
-			else
-			{
-				TupleTableSlot *slot =
-					MakeSingleTupleTableSlot(decompressor->out_desc, &TTSOpsVirtual);
-				/* create the virtual tuple slot */
-				ExecClearTuple(slot);
-				for (int i = 0; i < decompressor->out_desc->natts; i++)
-				{
-					slot->tts_isnull[i] = decompressor->decompressed_is_nulls[i];
-					slot->tts_values[i] = decompressor->decompressed_datums[i];
-				}
-
-				ExecStoreVirtualTuple(slot);
-
-				slot_getallattrs(slot);
-
-				tuplesort_puttupleslot(tuplesortstate, slot);
-				ExecDropSingleTupleTableSlot(slot);
-			}
-			wrote_data = true;
 		}
-	} while (!is_done);
+	}
 
 	MemoryContextSwitchTo(old_ctx);
 	MemoryContextReset(decompressor->per_compressed_row_ctx);
 }
 
-/* populate the relevent index in an array from a per_compressed_col.
- * returns if decompression is done for this column
- */
-bool
-per_compressed_col_get_data(PerCompressedColumn *per_compressed_col, Datum *decompressed_datums,
-							bool *decompressed_is_nulls, TupleDesc out_desc)
+void
+row_decompressor_decompress_row_to_tuplesort(RowDecompressor *decompressor,
+											 Tuplesortstate *tuplesortstate)
 {
-	DecompressResult decompressed;
-	int16 decompressed_column_offset = per_compressed_col->decompressed_column_offset;
+	const int n_batch_rows = decompress_batch(decompressor);
 
-	/* skip metadata columns */
-	if (decompressed_column_offset < 0)
-		return true;
+	MemoryContext old_ctx = MemoryContextSwitchTo(decompressor->per_compressed_row_ctx);
 
-	/* segment-bys */
-	if (!per_compressed_col->is_compressed)
+	for (int i = 0; i < n_batch_rows; i++)
 	{
-		decompressed_datums[decompressed_column_offset] = per_compressed_col->val;
-		decompressed_is_nulls[decompressed_column_offset] = per_compressed_col->is_null;
-		return true;
+		tuplesort_puttupleslot(tuplesortstate, decompressor->decompressed_slots[i]);
 	}
 
-	/* compressed NULL */
-	if (per_compressed_col->is_null)
-	{
-		decompressed_datums[decompressed_column_offset] =
-			getmissingattr(out_desc,
-						   decompressed_column_offset + 1,
-						   &decompressed_is_nulls[decompressed_column_offset]);
-
-		return true;
-	}
-
-	/* other compressed data */
-	if (per_compressed_col->iterator == NULL)
-		elog(ERROR, "tried to decompress more data than was compressed in column");
-
-	decompressed = per_compressed_col->iterator->try_next(per_compressed_col->iterator);
-	if (decompressed.is_done)
-	{
-		/* We want a way to free the decompression iterator's data to avoid OOM issues */
-		per_compressed_col->iterator = NULL;
-		decompressed_is_nulls[decompressed_column_offset] = true;
-		return true;
-	}
-
-	decompressed_is_nulls[decompressed_column_offset] = decompressed.is_null;
-	if (decompressed.is_null)
-		decompressed_datums[decompressed_column_offset] = 0;
-	else
-		decompressed_datums[decompressed_column_offset] = decompressed.val;
-
-	return false;
+	MemoryContextSwitchTo(old_ctx);
+	MemoryContextReset(decompressor->per_compressed_row_ctx);
 }
 
 /********************/
@@ -2133,7 +2155,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 						  decompressor.compressed_is_nulls);
 
 		write_logical_replication_msg_decompression_start();
-		row_decompressor_decompress_row(&decompressor, NULL);
+		row_decompressor_decompress_row_to_table(&decompressor);
 		write_logical_replication_msg_decompression_end();
 
 		TM_FailureData tmfd;
@@ -2158,7 +2180,6 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	FreeBulkInsertState(decompressor.bistate);
 
 	CommandCounterIncrement();
-
 	table_close(in_rel, NoLock);
 }
 
@@ -3109,7 +3130,7 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 			table_endscan(heapScan);
 			report_error(result);
 		}
-		row_decompressor_decompress_row(decompressor, NULL);
+		row_decompressor_decompress_row_to_table(decompressor);
 		*chunk_status_changed = true;
 	}
 	if (scankeys)
@@ -3225,15 +3246,19 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 			index_close(index_rel, AccessShareLock);
 			report_error(result);
 		}
-		row_decompressor_decompress_row(decompressor, NULL);
+		row_decompressor_decompress_row_to_table(decompressor);
 		heap_freetuple(compressed_tuple);
 		*chunk_status_changed = true;
 	}
-	elog(DEBUG1,
-		 "Number of compressed rows fetched from index: %d. "
-		 "Number of compressed rows filtered by orderby columns: %d.",
-		 num_segmentby_filtered_rows,
-		 num_orderby_filtered_rows);
+
+	if (ts_guc_debug_compression_path_info)
+	{
+		elog(INFO,
+			 "Number of compressed rows fetched from index: %d. "
+			 "Number of compressed rows filtered by orderby columns: %d.",
+			 num_segmentby_filtered_rows,
+			 num_orderby_filtered_rows);
+	}
 
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(scan);

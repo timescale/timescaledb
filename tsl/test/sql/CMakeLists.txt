@@ -13,12 +13,14 @@ set(TEST_FILES
     cagg_refresh.sql
     cagg_utils.sql
     cagg_watermark.sql
+    compress_default.sql
     compressed_collation.sql
     compression_create_compressed_table.sql
     compression_conflicts.sql
     compression_insert.sql
     compression_policy.sql
     compression_qualpushdown.sql
+    decompress_index.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
@@ -74,6 +76,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_tableam.sql
     cagg_policy_run.sql
     ddl_hook.sql
+    decompress_memory.sql
     decompress_vector_qual.sql
     hypertable_generalization.sql
     insert_memory_usage.sql
@@ -122,10 +125,10 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
-    list(APPEND TEST_FILES chunk_utils_internal.sql)
+    list(APPEND TEST_FILES chunk_utils_internal.sql
+         compression_update_delete.sql)
   endif()
-  list(APPEND TEST_FILES compression.sql compression_update_delete.sql
-       compression_permissions.sql)
+  list(APPEND TEST_FILES compression.sql compression_permissions.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
