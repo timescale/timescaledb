@@ -417,6 +417,9 @@ ts_sort_transform_optimization(PlannerInfo *root, RelOptInfo *rel)
 	last_pk = llast(root->query_pathkeys);
 	transformed = sort_transform_ec(root, last_pk->pk_eclass);
 
+//	fprintf(stderr, "transformed pathkey:\n");
+//	my_print(transformed);
+
 	if (transformed == NULL)
 		return;
 
