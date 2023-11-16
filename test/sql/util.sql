@@ -6,6 +6,8 @@
 \set VERBOSITY default
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+\set TMP_USER :TEST_DBNAME _wizard
+
 DO $$
 BEGIN
   ASSERT( _timescaledb_functions.get_partition_for_key(''::text) = 669664877 );
@@ -14,18 +16,18 @@ BEGIN
 END$$;
 
 \pset null '[NULL]'
-CREATE USER wizard;
+CREATE USER :TMP_USER;
 SELECT * FROM (
     VALUES
-       (_timescaledb_functions.makeaclitem('wizard', 'wizard', 'insert', false)),
-       (_timescaledb_functions.makeaclitem('wizard', 'wizard', 'insert,select', false)),
-       (_timescaledb_functions.makeaclitem('wizard', 'wizard', 'insert', true)),
-       (_timescaledb_functions.makeaclitem('wizard', 'wizard', 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem(NULL, 'wizard', 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem('wizard', NULL, 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem('wizard', 'wizard', NULL, true)),
-       (_timescaledb_functions.makeaclitem('wizard', 'wizard', 'insert,select', NULL)),
-       (_timescaledb_functions.makeaclitem(0, 'wizard', 'insert,select', true)),
-       (_timescaledb_functions.makeaclitem('wizard', 0, 'insert,select', true))
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert', false)),
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert,select', false)),
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert', true)),
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert,select', true)),
+       (_timescaledb_functions.makeaclitem(NULL, :'TMP_USER', 'insert,select', true)),
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', NULL, 'insert,select', true)),
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', NULL, true)),
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', :'TMP_USER', 'insert,select', NULL)),
+       (_timescaledb_functions.makeaclitem(0, :'TMP_USER', 'insert,select', true)),
+       (_timescaledb_functions.makeaclitem(:'TMP_USER', 0, 'insert,select', true))
     ) AS t(item);
-DROP USER wizard;
+DROP USER :TMP_USER;
