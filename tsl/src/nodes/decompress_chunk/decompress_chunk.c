@@ -365,7 +365,7 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 //	my_print(compressed_path);
 
 	double num_segmentby_groups = 1;
-	for (int segmentby_attno = bms_first_member(compression_info->chunk_segmentby_attnos);
+	for (int segmentby_attno = bms_next_member(compression_info->chunk_segmentby_attnos, -1);
 		segmentby_attno > 0;
 		segmentby_attno = bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
