@@ -349,6 +349,11 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
+	/*
+	 * Don't disable the compressed batch sorted merge plan with the enable_sort
+	 * GUC. We have a separate GUC for it, and this way you can try to force the
+	 * batch sorted merge plan by disabling sort.
+	 */
 	const bool old_enable_sort = enable_sort;
 	enable_sort = true;
 	cost_sort(&sort_path,
@@ -361,9 +366,12 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 			  work_mem,
 			  -1);
 	enable_sort = old_enable_sort;
-//	fprintf(stderr, "compressed_path rows %lf\n", compressed_path->rows);
-//	my_print(compressed_path);
 
+	/*
+	 * In compressed batch sorted merge, for each distinct segmentby value we
+	 * have to keep the corresponding latest batch open. Estimate the number of
+	 * these batches to account for it in the cost model.
+	 */
 	double num_segmentby_groups = 1;
 	for (int segmentby_attno = bms_next_member(compression_info->chunk_segmentby_attnos, -1);
 		segmentby_attno > 0;
@@ -377,16 +385,26 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 			&vardata);
 		bool isdefault = false;
 		const double ndistinct = get_variable_numdistinct(&vardata, &isdefault);
-//		fprintf(stderr, "segmentby attno %s (%d) ndistinct %lf default %d\n",
-//			get_attname(compression_info->compressed_rte->relid, segmentby_attno, /* missing_ok = */ false),
-//			segmentby_attno, ndistinct, isdefault);
+		/*
+		 * Having correlated segmentby columns doesn't make much sense, so assume
+		 * they are totally uncorrelated for estimating the number of distinct
+		 * values.
+		 */
 		num_segmentby_groups *= ndistinct;
+
 		if (vardata.freefunc != NULL && vardata.statsTuple != NULL)
 		{
 			vardata.freefunc(vardata.statsTuple);
 		}
 	}
-//	fprintf(stderr, "total segmentby groups %lf\n", num_segmentby_groups);
+
+	/*
+	 * We're not taking the restrictions on the compressed scan into account
+	 * when estimating the number of distinct segmentby values above, but at
+	 * least we should make sure that our estimate is lower than the total
+	 * number of rows returned by the compressed path.
+	 */
+	const double simultaneously_open_baches = Min(sort_path.rows, num_segmentby_groups);
 
 	/* startup_cost is cost before fetching first tuple */
 	dcpath->custom_path.path.startup_cost = sort_path.total_cost;
@@ -406,15 +424,19 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 	 * point. So, we use a quadratic cost model here to have higher costs than the normal
 	 * decompression when more than ~100 batches are used. We set
 	 * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST to 0.8 to become most costly as soon as we have to
-	 * process more than 120 batches.
+	 * simultaneously hold more than 120 batches.
+	 *
+	 * Besides the component quadratic in the number of batches that are open at
+	 * the same time, we also have a component that is linear in the number of
+	 * total processed batches.
 	 *
 	 * Note: To behave similarly to the cost model of the regular decompression path, this cost
-	 * model does not consider the number of tuples.
+	 * model does not consider the number of decompressed tuples.
 	 */
 	dcpath->custom_path.path.total_cost =
 		sort_path.total_cost
 			+ sort_path.rows * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST
-			+ pow(num_segmentby_groups, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
+			+ pow(simultaneously_open_baches, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
 
 	dcpath->custom_path.path.rows = sort_path.rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 }
