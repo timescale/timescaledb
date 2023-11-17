@@ -926,7 +926,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery,
 											  finalized,
 											  schema_name,
-											  stmt->into->rel->relname);
+											  stmt->into->rel->relname,
+											  true);
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
 	/* Insert the MIN of the time dimension type for the new watermark */
@@ -1024,7 +1025,8 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		cagg_validate_query(direct_query,
 							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),
-							NameStr(agg->data.user_view_name));
+							NameStr(agg->data.user_view_name),
+							true);
 
 	/* Flip */
 	agg->data.materialized_only = !agg->data.materialized_only;

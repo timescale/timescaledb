@@ -219,6 +219,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 			policy_compression_add_internal(all_policies.rel_oid,
 											all_policies.compress->compress_after,
 											all_policies.compress->compress_after_type,
+											NULL,
 											DEFAULT_COMPRESSION_SCHEDULE_INTERVAL,
 											false,
 											if_exists,
@@ -234,6 +235,7 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 			policy_retention_add_internal(all_policies.rel_oid,
 										  all_policies.retention->drop_after_type,
 										  all_policies.retention->drop_after,
+										  NULL,
 										  (Interval) DEFAULT_RETENTION_SCHEDULE_INTERVAL,
 										  false,
 										  false,
@@ -702,6 +704,7 @@ policies_show(PG_FUNCTION_ARGS)
 						 job,
 						 POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 						 SHOW_POLICY_KEY_COMPRESS_AFTER);
+			/* POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE not supported with caggs */
 			ts_jsonb_add_interval(parse_state,
 								  SHOW_POLICY_KEY_COMPRESS_INTERVAL,
 								  &(job->fd.schedule_interval));
@@ -714,6 +717,7 @@ policies_show(PG_FUNCTION_ARGS)
 						 job,
 						 POL_RETENTION_CONF_KEY_DROP_AFTER,
 						 SHOW_POLICY_KEY_DROP_AFTER);
+			/* POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE not supported with caggs */
 			ts_jsonb_add_interval(parse_state,
 								  SHOW_POLICY_KEY_RETENTION_INTERVAL,
 								  &(job->fd.schedule_interval));

@@ -12,11 +12,12 @@
 -- might be kept, but data within the window will never be deleted.
 CREATE OR REPLACE FUNCTION @extschema@.add_retention_policy(
        relation REGCLASS,
-       drop_after "any",
+       drop_after "any" = NULL,
        if_not_exists BOOL = false,
        schedule_interval INTERVAL = NULL,
        initial_start TIMESTAMPTZ = NULL,
-       timezone TEXT = NULL
+       timezone TEXT = NULL,
+       drop_created_before INTERVAL = NULL
 )
 RETURNS INTEGER AS '@MODULE_PATHNAME@', 'ts_policy_retention_add'
 LANGUAGE C VOLATILE;
@@ -45,11 +46,13 @@ LANGUAGE C VOLATILE STRICT;
 
 /* compression policy */
 CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(
-    hypertable REGCLASS, compress_after "any",
+    hypertable REGCLASS,
+    compress_after "any" = NULL,
     if_not_exists BOOL = false,
     schedule_interval INTERVAL = NULL,
     initial_start TIMESTAMPTZ = NULL,
-    timezone TEXT = NULL
+    timezone TEXT = NULL,
+    compress_created_before INTERVAL = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
@@ -83,6 +86,7 @@ LANGUAGE C VOLATILE;
 /* 1 step policies */
 
 /* Add policies */
+/* Unsupported drop_created_before/compress_created_before in add/alter for caggs */
 CREATE OR REPLACE FUNCTION timescaledb_experimental.add_policies(
     relation REGCLASS,
     if_not_exists BOOL = false,

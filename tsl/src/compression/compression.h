@@ -113,16 +113,11 @@ typedef struct PerCompressedColumn
 	 */
 	DecompressionIterator *iterator;
 
-	/* segment info; only used if !is_compressed */
-	Datum val;
-
 	/* is this a compressed column or a segment-by column */
 	bool is_compressed;
 
-	/* the value stored in the compressed table was NULL */
-	bool is_null;
-
-	/* the index in the decompressed table of the data -1,
+	/*
+	 * the index in the decompressed table of the data -1,
 	 * if the data is metadata not found in the decompressed table
 	 */
 	int16 decompressed_column_offset;
@@ -132,6 +127,7 @@ typedef struct RowDecompressor
 {
 	PerCompressedColumn *per_compressed_cols;
 	int16 num_compressed_columns;
+	int16 count_compressed_attindex;
 
 	TupleDesc in_desc;
 	Relation in_rel;
@@ -153,6 +149,8 @@ typedef struct RowDecompressor
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+
+	TupleTableSlot **decompressed_slots;
 } RowDecompressor;
 
 /*
@@ -342,8 +340,9 @@ extern bool segment_info_datum_is_in_group(SegmentInfo *segment_info, Datum datu
 extern TupleTableSlot *compress_row_exec(CompressSingleRowState *cr, TupleTableSlot *slot);
 extern void compress_row_end(CompressSingleRowState *cr);
 extern void compress_row_destroy(CompressSingleRowState *cr);
-extern void row_decompressor_decompress_row(RowDecompressor *row_decompressor,
-											Tuplesortstate *tuplesortstate);
+extern void row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
+extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
+														 Tuplesortstate *tuplesortstate);
 extern int16 *compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns,
 										   int n_columns, int *n_keys_out,
 										   const ColumnCompressionInfo ***keys_out);
@@ -351,18 +350,12 @@ extern void compress_chunk_populate_sort_info_for_column(Oid table,
 														 const ColumnCompressionInfo *column,
 														 AttrNumber *att_nums, Oid *sort_operator,
 														 Oid *collation, bool *nulls_first);
-extern PerCompressedColumn *create_per_compressed_column(TupleDesc in_desc, TupleDesc out_desc,
-														 Oid out_relid,
-														 Oid compressed_data_type_oid);
 extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
 								Relation compressed_table, int num_compression_infos,
 								const ColumnCompressionInfo **column_compression_info,
 								int16 *column_offsets, int16 num_columns_in_compressed_table,
 								bool need_bistate, bool reset_sequence, int insert_options);
 extern void row_compressor_finish(RowCompressor *row_compressor);
-extern void populate_per_compressed_columns_from_data(PerCompressedColumn *per_compressed_cols,
-													  int16 num_cols, Datum *compressed_datums,
-													  bool *compressed_is_nulls);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);

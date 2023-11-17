@@ -1308,12 +1308,10 @@ FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht
 WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
 ORDER BY ch1.id LIMIT 1 \gset
 -- check that you uncompress and delete only for exact SEGMENTBY value
-SET client_min_messages TO DEBUG1;
+SET timescaledb.debug_compression_path_info TO true;
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 10 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk where c4 = 5;
  count 
 -------
     10
@@ -1321,7 +1319,6 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- report 10k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 = 5;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 = 5;
  count 
 -------
  10000
@@ -1329,16 +1326,12 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 = 5;
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 
 -- delete 10k rows
 DELETE FROM sample_table WHERE c4 = 5;
-LOG:  statement: DELETE FROM sample_table WHERE c4 = 5;
-DEBUG:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 = 5;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 = 5;
  count 
 -------
      0
@@ -1346,7 +1339,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 = 5;
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
      0
@@ -1354,7 +1346,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk where c4 = 5;
  count 
 -------
      0
@@ -1363,20 +1354,16 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 10000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only for less than SEGMENTBY value
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 50 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 < 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk where c4 < 5;
  count 
 -------
     50
@@ -1384,7 +1371,6 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- report 50k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 < 5;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 < 5;
  count 
 -------
  50000
@@ -1392,16 +1378,12 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 < 5;
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 < 5 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 < 5 
 -- delete 50k rows
 DELETE FROM sample_table WHERE c4 < 5;
-LOG:  statement: DELETE FROM sample_table WHERE c4 < 5;
-DEBUG:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by orderby columns: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 < 5;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 < 5;
  count 
 -------
      0
@@ -1409,7 +1391,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 < 5;
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
      0
@@ -1417,7 +1398,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 < 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk where c4 < 5;
  count 
 -------
      0
@@ -1426,20 +1406,16 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 50000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only for greater and equal than SEGMENTBY value
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 50 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 >= 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk where c4 >= 5;
  count 
 -------
     50
@@ -1447,7 +1423,6 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- report 50k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 >= 5;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 >= 5;
  count 
 -------
  50000
@@ -1455,16 +1430,12 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 >= 5;
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 >= 5 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 >= 5 
 -- delete 50k rows
 DELETE FROM sample_table WHERE c4 >= 5;
-LOG:  statement: DELETE FROM sample_table WHERE c4 >= 5;
-DEBUG:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by orderby columns: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 >= 5;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 >= 5;
  count 
 -------
      0
@@ -1472,7 +1443,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 >= 5;
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
      0
@@ -1480,7 +1450,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 >= 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk where c4 >= 5;
  count 
 -------
      0
@@ -1489,21 +1458,17 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 50000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only for exact ORDERBY value
 -- this will uncompress segments which have min <= value and max >= value
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 10k rows
 SELECT COUNT(*) FROM sample_table WHERE c2 = 3;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c2 = 3;
  count 
 -------
  10000
@@ -1511,7 +1476,6 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c2 = 3;
 
 -- report 100 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
  count 
 -------
    100
@@ -1519,15 +1483,11 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c2 = 3 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c2 = 3 
 -- delete 10k rows
 DELETE FROM sample_table WHERE c2 = 3;
-LOG:  statement: DELETE FROM sample_table WHERE c2 = 3;
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c2 = 3;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c2 = 3;
  count 
 -------
      0
@@ -1535,7 +1495,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c2 = 3;
 
 -- report 90k rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
  90000
@@ -1543,7 +1502,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE _ts_meta_min_2 <= 3 and _ts_meta_max_2 >= 3;
  count 
 -------
      0
@@ -1552,21 +1510,17 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 10000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only for less then ORDERBY value
 -- this will uncompress segments which have min < value
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 20k rows
 SELECT COUNT(*) FROM sample_table WHERE c1 < 2;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c1 < 2;
  count 
 -------
  20000
@@ -1574,7 +1528,6 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c1 < 2;
 
 -- report 20 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_max_1 < 2;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE _ts_meta_max_1 < 2;
  count 
 -------
     20
@@ -1582,15 +1535,11 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 < 2 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 < 2 
 -- delete 20k rows
 DELETE FROM sample_table WHERE c1 < 2;
-LOG:  statement: DELETE FROM sample_table WHERE c1 < 2;
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c1 < 2;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c1 < 2;
  count 
 -------
      0
@@ -1598,7 +1547,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c1 < 2;
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
      0
@@ -1606,7 +1554,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows in compressed chunk
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_max_1 < 2;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE _ts_meta_max_1 < 2;
  count 
 -------
      0
@@ -1615,21 +1562,17 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 20000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only for greater or equal then ORDERBY value
 -- this will uncompress segments which have max >= value
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 30k rows
 SELECT COUNT(*) FROM sample_table WHERE c1 >= 7;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c1 >= 7;
  count 
 -------
  30000
@@ -1637,7 +1580,6 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c1 >= 7;
 
 -- report 30 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_1 >= 7;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE _ts_meta_min_1 >= 7;
  count 
 -------
     30
@@ -1645,15 +1587,11 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 >= 7 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 >= 7 
 -- delete 30k rows
 DELETE FROM sample_table WHERE c1 >= 7;
-LOG:  statement: DELETE FROM sample_table WHERE c1 >= 7;
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c1 >= 7;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c1 >= 7;
  count 
 -------
      0
@@ -1661,7 +1599,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c1 >= 7;
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
      0
@@ -1669,7 +1606,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE _ts_meta_min_1 >= 7;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE _ts_meta_min_1 >= 7;
  count 
 -------
      0
@@ -1678,22 +1614,18 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 30000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only tuples which satisfy SEGMENTBY
 -- and ORDERBY qualifiers, segments only contain one distinct value for
 -- these qualifiers, everything should be deleted that was decompressed
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 1k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
  count 
 -------
   1000
@@ -1701,7 +1633,6 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
 
 -- report 1 row in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
  count 
 -------
      1
@@ -1709,16 +1640,12 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 and c1 = 5 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 and c1 = 5 
 -- delete 1k rows
 DELETE FROM sample_table WHERE c4 = 5 and c1 = 5;
-LOG:  statement: DELETE FROM sample_table WHERE c4 = 5 and c1 = 5;
-DEBUG:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 9.
+INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 9.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
  count 
 -------
      0
@@ -1726,7 +1653,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
 
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
      0
@@ -1734,7 +1660,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 5 AND _ts_meta_min_1 <= 5 and _ts_meta_max_1 >= 5;
  count 
 -------
      0
@@ -1743,22 +1668,18 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 1000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only tuples which satisfy SEGMENTBY
 -- and ORDERBY qualifiers, segments contain more than one distinct value for
 -- these qualifiers, not everything should be deleted that was decompressed
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 4k rows
 SELECT COUNT(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
-LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
  count 
 -------
   4000
@@ -1766,7 +1687,6 @@ LOG:  statement: SELECT COUNT(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
 
 -- report 40 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
  count 
 -------
     40
@@ -1774,16 +1694,12 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- fetch total and number of affected rows
 SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM sample_table 
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 > 5 and c2 = 5 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 > 5 and c2 = 5 
 -- delete 4k rows
 DELETE FROM sample_table WHERE c4 > 5 and c2 = 5;
-LOG:  statement: DELETE FROM sample_table WHERE c4 > 5 and c2 = 5;
-DEBUG:  Number of compressed rows fetched from index: 40. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Number of compressed rows fetched from index: 40. Number of compressed rows filtered by orderby columns: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
-LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
  count 
 -------
      0
@@ -1791,7 +1707,6 @@ LOG:  statement: SELECT count(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
 
 -- report 36k rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
  36000
@@ -1799,7 +1714,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 0 rows in compressed chunks
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 > 5 AND _ts_meta_min_2 <= 5 and _ts_meta_max_2 >= 5;
  count 
 -------
      0
@@ -1808,14 +1722,12 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- validate correct number of rows was deleted
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM sample_table;
-LOG:  statement: SELECT COUNT(*) = 100000 - 4000 FROM sample_table;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- check that you uncompress and delete only tuples which satisfy SEGMENTBY
 -- and ORDERBY qualifiers.
 -- no: of rows satisfying SEGMENTBY qualifiers is 10
@@ -1823,10 +1735,8 @@ LOG:  statement: ROLLBACK;
 -- Once both qualifiers are applied ensure that only 7 rows are present in
 -- compressed chunk
 BEGIN;
-LOG:  statement: BEGIN;
 -- report 0 rows in uncompressed chunk
 SELECT COUNT(*) FROM ONLY :CHUNK_1;
-LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_chunk;
  count 
 -------
      0
@@ -1834,7 +1744,6 @@ LOG:  statement: SELECT COUNT(*) FROM ONLY _timescaledb_internal._hyper_19_37_ch
 
 -- report 10 compressed rows for given condition c4 = 4
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 4;
  count 
 -------
     10
@@ -1842,22 +1751,17 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 
 -- report 3 compressed rows for given condition c4 = 4 and c1 >= 7
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 4 AND _ts_meta_max_1 >= 7;
  count 
 -------
      3
 (1 row)
 
 SELECT COUNT(*) AS "total_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_rows" FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 4 
 SELECT COUNT(*) AS "total_affected_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7 \gset
-LOG:  statement: SELECT COUNT(*) AS "total_affected_rows" FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 4 AND _ts_meta_max_1 >= 7 
 UPDATE sample_table SET c3 = c3 + 0 WHERE c4 = 4 AND c1 >= 7;
-LOG:  statement: UPDATE sample_table SET c3 = c3 + 0 WHERE c4 = 4 AND c1 >= 7;
-DEBUG:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 7.
+INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 7.
 -- report 7 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
-LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 4;
  count 
 -------
      7
@@ -1866,16 +1770,13 @@ LOG:  statement: SELECT COUNT(*) FROM _timescaledb_internal.compress_hyper_20_38
 -- ensure correct number of rows are moved from compressed chunk
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
-LOG:  statement: SELECT COUNT(*) = 10 - 3 FROM _timescaledb_internal.compress_hyper_20_38_chunk WHERE c4 = 4;
  ?column? 
 ----------
  t
 (1 row)
 
 ROLLBACK;
-LOG:  statement: ROLLBACK;
-RESET client_min_messages;
-LOG:  statement: RESET client_min_messages;
+RESET timescaledb.debug_compression_path_info;
 --github issue: 5640
 CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
 CREATE INDEX ON tab1(time);
@@ -2451,10 +2352,8 @@ ERROR:  UPDATE/DELETE is disabled on compressed chunks
 --github issue: 5586
 --testcase with multiple indexes
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE IF EXISTS test WITH (FORCE);
-NOTICE:  database "test" does not exist, skipping
-CREATE DATABASE test;
-\c test :ROLE_SUPERUSER
+CREATE DATABASE test5586;
+\c test5586 :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
 CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
@@ -2483,72 +2382,58 @@ SELECT compress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
-SET client_min_messages TO DEBUG2;
+set timescaledb.debug_compression_path_info to on;
 BEGIN;
-LOG:  statement: BEGIN;
 SELECT COUNT(*) FROM tab1 WHERE filler_3 = 5 AND filler_2 = 4;
-LOG:  statement: SELECT COUNT(*) FROM tab1 WHERE filler_3 = 5 AND filler_2 = 4;
  count 
 -------
   3598
 (1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_3 = 5 AND filler_2 = 4;
-LOG:  statement: UPDATE tab1 SET v0 = v1 + v2 WHERE filler_3 = 5 AND filler_2 = 4;
-DEBUG:  index "compress_hyper_2_2_chunk_filler_2_filler_3" is used for scan. 
-DEBUG:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by orderby columns: 0.
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 BEGIN;
-LOG:  statement: BEGIN;
 SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5 AND filler_2 = 4;
-LOG:  statement: SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5 AND filler_2 = 4;
  count 
 -------
   3598
 (1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5 AND filler_2 = 4;
-LOG:  statement: UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5 AND filler_2 = 4;
-DEBUG:  index "compress_hyper_2_2_chunk_filler_1_filler_2" is used for scan. 
-DEBUG:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by orderby columns: 0.
 ROLLBACK;
-LOG:  statement: ROLLBACK;
 -- idealy filler_1 index should be selected,
 -- instead first matching index is selected
 BEGIN;
-LOG:  statement: BEGIN;
 SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5;
-LOG:  statement: SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5;
  count 
 -------
  14392
 (1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5;
-LOG:  statement: UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5;
-DEBUG:  index "compress_hyper_2_2_chunk__compressed_hypertable_2__ts_meta_mi_2" is used for scan. 
-DEBUG:  Number of compressed rows fetched from index: 16. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Number of compressed rows fetched from index: 16. Number of compressed rows filtered by orderby columns: 0.
 ROLLBACK;
-LOG:  statement: ROLLBACK;
-RESET client_min_messages;
-LOG:  statement: RESET client_min_messages;
+RESET timescaledb.debug_compression_path_info;
 DROP TABLE tab1;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE test5586;
 --issue: #6024
 CREATE TABLE t(a integer, b integer);
 SELECT create_hypertable('t', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
  create_hypertable 
 -------------------
- (3,public,t,t)
+ (31,public,t,t)
 (1 row)
 
 INSERT INTO t values(1, 2);
 ALTER TABLE t SET (timescaledb.compress);
 SELECT compress_chunk(show_chunks('t'));
-             compress_chunk             
-----------------------------------------
- _timescaledb_internal._hyper_3_3_chunk
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_31_62_chunk
 (1 row)
 
 -- should not crash

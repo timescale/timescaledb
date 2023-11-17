@@ -152,6 +152,7 @@ static const struct config_enum_entry require_vector_qual_options[] = {
 #endif
 
 DebugRequireVectorQual ts_guc_debug_require_vector_qual = RVQ_Allow;
+bool ts_guc_debug_compression_path_info = false;
 
 static bool ts_guc_enable_hypertable_create = true;
 static bool ts_guc_enable_hypertable_compression = true;
@@ -821,6 +822,17 @@ _guc_init(void)
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
 							 /* bootValue= */ RVQ_Allow,
 							 /* options = */ require_vector_qual_options,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
+	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_compression_path_info",
+							 /* short_desc= */ "show various compression-related debug info",
+							 /* long_desc= */ "this is for debugging purposes",
+							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
+							 /* bootValue= */ false,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,

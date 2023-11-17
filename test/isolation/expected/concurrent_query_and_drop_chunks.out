@@ -1,4 +1,4 @@
-Parsed test spec with 2 sessions
+Parsed test spec with 4 sessions
 
 starting permutation: s2_query s1_wp_enable s2_query s1_drop_chunks s1_wp_release s2_show_num_chunks
 step s2_query: SELECT * FROM measurements ORDER BY 1;
@@ -34,6 +34,33 @@ Sun Jan 03 10:30:00 2021 PST|     2|   2
 (1 row)
 
 step s2_show_num_chunks: SELECT count(*) FROM show_chunks('measurements') ORDER BY 1;
+count
+-----
+    1
+(1 row)
+
+
+starting permutation: s3_wp_enable s4_hypertable_size s3_drop_chunks s3_wp_release
+step s3_wp_enable: SELECT debug_waitpoint_enable('relation_size_before_lock');
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s4_hypertable_size: SELECT count(*) FROM hypertable_size('measurements'); <waiting ...>
+step s3_drop_chunks: SELECT count(*) FROM drop_chunks('measurements', TIMESTAMPTZ '2020-03-01');
+count
+-----
+    1
+(1 row)
+
+step s3_wp_release: SELECT debug_waitpoint_release('relation_size_before_lock');
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s4_hypertable_size: <... completed>
 count
 -----
     1

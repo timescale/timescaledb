@@ -120,3 +120,13 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.invalidation_process_cagg_log(
     OUT ret_window_start BIGINT,
     OUT ret_window_end BIGINT
 ) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_invalidation_process_cagg_log' LANGUAGE C STRICT VOLATILE;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.cagg_validate_query(
+    query TEXT,
+    OUT is_valid BOOLEAN,
+    OUT error_level TEXT,
+    OUT error_code TEXT,
+    OUT error_message TEXT,
+    OUT error_detail TEXT,
+    OUT error_hint TEXT
+) RETURNS RECORD AS '@MODULE_PATHNAME@', 'ts_continuous_agg_validate_query' LANGUAGE C STRICT VOLATILE;

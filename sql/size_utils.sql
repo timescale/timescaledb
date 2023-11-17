@@ -212,9 +212,6 @@ BEGIN
                 END IF;
         END IF;
 
-        /* Lock hypertable to avoid risk of concurrent process dropping chunks */
-        EXECUTE format('LOCK TABLE %I.%I IN ACCESS SHARE MODE', schema_name, table_name);
-
         CASE WHEN is_distributed THEN
 			RETURN QUERY
 			SELECT *, NULL::name
