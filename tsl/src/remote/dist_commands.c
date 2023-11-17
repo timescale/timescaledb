@@ -23,6 +23,7 @@
 #include "errors.h"
 #include "deparse.h"
 #include "debug_point.h"
+#include "ts_catalog/array_utils.h"
 
 typedef struct DistPreparedStmt
 {
@@ -566,7 +567,7 @@ ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 					 errmsg("invalid data nodes list"),
 					 errdetail("The array of data nodes cannot contain null values.")));
 
-		ndatanodes = ArrayGetNItems(ARR_NDIM(data_nodes), ARR_DIMS(data_nodes));
+		ndatanodes = ts_array_length(data_nodes);
 
 		if (ndatanodes == 0)
 			ereport(ERROR,

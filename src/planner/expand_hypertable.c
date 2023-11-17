@@ -44,20 +44,21 @@
 #include <utils/fmgrprotos.h>
 #include <utils/syscache.h>
 
-#include "chunk.h"
 #include "compat/compat.h"
+#include "chunk.h"
 #include "cross_module_fn.h"
-#include "extension.h"
 #include "extension_constants.h"
+#include "extension.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
 #include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "partitioning.h"
 #include "partialize.h"
+#include "partitioning.h"
 #include "planner.h"
 #include "time_utils.h"
+#include "ts_catalog/array_utils.h"
 
 typedef struct CollectQualCtx
 {
@@ -992,7 +993,7 @@ get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hyp
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid number of array dimensions for chunks_in")));
 
-	chunk_id_arr_size = ArrayGetNItems(ARR_NDIM(chunk_id_arr), ARR_DIMS(chunk_id_arr));
+	chunk_id_arr_size = ts_array_length(chunk_id_arr);
 
 	if (chunk_id_arr_size == 0)
 		return NULL;
