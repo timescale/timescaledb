@@ -7,7 +7,9 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-CREATE USER wizard;
+\set TMP_USER :TEST_DBNAME _wizard
+
+CREATE USER :TMP_USER;
 CREATE USER "Random L User";
 
 CREATE TABLE test_table_1(time timestamptz not null, temp float);
@@ -32,13 +34,13 @@ SELECT time, 100 * random()
            '1min'::interval
        ) time;
 
-GRANT ALL ON test_table_1 TO wizard;
-GRANT ALL ON test_table_2 TO wizard;
+GRANT ALL ON test_table_1 TO :TMP_USER;
+GRANT ALL ON test_table_2 TO :TMP_USER;
 GRANT SELECT, INSERT ON test_table_1 TO "Random L User";
 GRANT INSERT ON test_table_2 TO "Random L User";
 
 -- Break the relacl of the table by deleting users
-DELETE FROM pg_authid WHERE rolname IN ('wizard', 'Random L User');
+DELETE FROM pg_authid WHERE rolname IN (:'TMP_USER', 'Random L User');
 
 CREATE TABLE saved (LIKE pg_class);
 INSERT INTO saved SELECT * FROM pg_class;

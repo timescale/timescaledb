@@ -41,7 +41,8 @@ _timescaledb_functions.policy_compression_execute(
   lag                 ANYELEMENT,
   maxchunks           INTEGER,
   verbose_log         BOOLEAN,
-  recompress_enabled  BOOLEAN)
+  recompress_enabled  BOOLEAN,
+  use_creation_time   BOOLEAN)
 AS $$
 DECLARE
   htoid       REGCLASS;
@@ -54,6 +55,7 @@ DECLARE
   bit_compressed_unordered int := 2;
   bit_frozen int := 4;
   bit_compressed_partial int := 8;
+  creation_lag INTERVAL := NULL;
 BEGIN
 
   -- procedures with SET clause cannot execute transaction
@@ -67,14 +69,26 @@ BEGIN
   -- for the integer cases, we have to compute the lag w.r.t
   -- the integer_now function and then pass on to show_chunks
   IF pg_typeof(lag) IN ('BIGINT'::regtype, 'INTEGER'::regtype, 'SMALLINT'::regtype) THEN
+    -- cannot have use_creation_time set with this
+    IF use_creation_time IS TRUE THEN
+        RAISE EXCEPTION 'job % cannot use creation time with integer_now function', job_id;
+    END IF;
     lag := _timescaledb_functions.subtract_integer_from_now(htoid, lag::BIGINT);
+  END IF;
+
+  -- if use_creation_time has been specified then the lag needs to be used with the
+  -- "compress_created_before" argument. Otherwise the usual "older_than" argument
+  -- is good enough
+  IF use_creation_time IS TRUE THEN
+    creation_lag := lag;
+    lag := NULL;
   END IF;
 
   FOR chunk_rec IN
     SELECT
       show.oid, ch.schema_name, ch.table_name, ch.status
     FROM
-      @extschema@.show_chunks(htoid, older_than => lag) AS show(oid)
+      @extschema@.show_chunks(htoid, older_than => lag, created_before => creation_lag) AS show(oid)
       INNER JOIN pg_class pgc ON pgc.oid = show.oid
       INNER JOIN pg_namespace pgns ON pgc.relnamespace = pgns.oid
       INNER JOIN _timescaledb_catalog.chunk ch ON ch.table_name = pgc.relname AND ch.schema_name = pgns.nspname AND ch.hypertable_id = htid
@@ -157,7 +171,9 @@ DECLARE
   dimtype             REGTYPE;
   dimtypeinput        REGPROC;
   compress_after      TEXT;
+  compress_created_before TEXT;
   lag_value           TEXT;
+  lag_bigint_value    BIGINT;
   htid                INTEGER;
   htoid               REGCLASS;
   chunk_rec           RECORD;
@@ -165,6 +181,7 @@ DECLARE
   maxchunks           INTEGER := 0;
   numchunks           INTEGER := 1;
   recompress_enabled  BOOL;
+  use_creation_time   BOOL := FALSE;
 BEGIN
 
   -- procedures with SET clause cannot execute transaction
@@ -183,11 +200,6 @@ BEGIN
   verbose_log         := COALESCE(jsonb_object_field_text(config, 'verbose_log')::BOOLEAN, FALSE);
   maxchunks           := COALESCE(jsonb_object_field_text(config, 'maxchunks_to_compress')::INTEGER, 0);
   recompress_enabled  := COALESCE(jsonb_object_field_text(config, 'recompress')::BOOLEAN, TRUE);
-  compress_after      := jsonb_object_field_text(config, 'compress_after');
-
-  IF compress_after IS NULL THEN
-    RAISE EXCEPTION 'job % config must have compress_after', job_id;
-  END IF;
 
   -- find primary dimension type --
   SELECT dim.column_type INTO dimtype
@@ -197,29 +209,40 @@ BEGIN
   ORDER BY dim.id
   LIMIT 1;
 
-  lag_value := jsonb_object_field_text(config, 'compress_after');
+  compress_after      := jsonb_object_field_text(config, 'compress_after');
+  IF compress_after IS NULL THEN
+    compress_created_before := jsonb_object_field_text(config, 'compress_created_before');
+    IF compress_created_before IS NULL THEN
+        RAISE EXCEPTION 'job % config must have compress_after or compress_created_before', job_id;
+    END IF;
+    lag_value := compress_created_before;
+    use_creation_time := true;
+    dimtype := 'INTERVAL' ::regtype;
+  ELSE
+    lag_value := compress_after;
+  END IF;
 
   -- execute the properly type casts for the lag value
   CASE dimtype
-    WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype, 'DATE'::regtype THEN
+    WHEN 'TIMESTAMP'::regtype, 'TIMESTAMPTZ'::regtype, 'DATE'::regtype, 'INTERVAL' ::regtype  THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::INTERVAL,
-        maxchunks, verbose_log, recompress_enabled
+        maxchunks, verbose_log, recompress_enabled, use_creation_time
       );
     WHEN 'BIGINT'::regtype THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::BIGINT,
-        maxchunks, verbose_log, recompress_enabled
+        maxchunks, verbose_log, recompress_enabled, use_creation_time
       );
     WHEN 'INTEGER'::regtype THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::INTEGER,
-        maxchunks, verbose_log, recompress_enabled
+        maxchunks, verbose_log, recompress_enabled, use_creation_time
       );
     WHEN 'SMALLINT'::regtype THEN
       CALL _timescaledb_functions.policy_compression_execute(
         job_id, htid, lag_value::SMALLINT,
-        maxchunks, verbose_log, recompress_enabled
+        maxchunks, verbose_log, recompress_enabled, use_creation_time
       );
   END CASE;
 END;

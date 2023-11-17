@@ -600,6 +600,14 @@ select * from  _timescaledb_catalog.dimension;
 
 alter schema new_public rename to public;
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+-- test that the behavior is strict when providing NULL required arguments
+create table test_strict (time timestamptz not null, a int, b int);
+select create_hypertable('test_strict', 'time');
+    create_hypertable     
+--------------------------
+ (6,public,test_strict,t)
+(1 row)
+
 \set ON_ERROR_STOP 0
 select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
 ERROR:  must be owner of hypertable "test_table_perm"
@@ -609,6 +617,8 @@ select add_retention_policy('test_table_perm', INTERVAL '4 months', true);
 ERROR:  must be owner of hypertable "test_table_perm"
 select remove_retention_policy('test_table');
 ERROR:  must be owner of hypertable "test_table"
+select add_retention_policy('test_strict', drop_after => NULL);
+ERROR:  need to specify one of "drop_after" or "drop_created_before"
 \set ON_ERROR_STOP 1
 -- Check the number of non-telemetry policies. We check for telemetry
 -- policy in telemetry_community.sql
@@ -623,21 +633,7 @@ GROUP BY proc_name;
  policy_retention           |     2
 (3 rows)
 
--- test that the behavior is strict when providing NULL required arguments
-create table test_strict (time timestamptz not null, a int, b int);
-select create_hypertable('test_strict', 'time');
-    create_hypertable     
---------------------------
- (6,public,test_strict,t)
-(1 row)
-
 -- test retention with null arguments
-select add_retention_policy('test_strict', drop_after => NULL);
- add_retention_policy 
-----------------------
-                     
-(1 row)
-
 select add_retention_policy(NULL, NULL);
  add_retention_policy 
 ----------------------
@@ -665,12 +661,6 @@ select add_retention_policy('test_strict', interval '2 days', schedule_interval 
 
 -- test compression with null arguments
 alter table test_strict set (timescaledb.compress);
-select add_compression_policy('test_strict', compress_after => NULL);
- add_compression_policy 
-------------------------
-                       
-(1 row)
-
 select add_compression_policy(NULL, compress_after => NULL);
  add_compression_policy 
 ------------------------
@@ -723,6 +713,8 @@ select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_sche
 
 -- test policy check functions with NULL args
 \set ON_ERROR_STOP 0
+select add_compression_policy('test_strict', compress_after => NULL);
+ERROR:  need to specify one of "compress_after" or "compress_created_before"
 SELECT _timescaledb_functions.policy_compression_check(NULL);
 ERROR:  config must not be NULL
 SELECT _timescaledb_functions.policy_refresh_continuous_aggregate_check(NULL);

@@ -115,7 +115,7 @@ SELECT * FROM _timescaledb_config.bgw_job WHERE id >= 1000 ORDER BY id;
 select add_retention_policy();
 ERROR:  function add_retention_policy() does not exist at character 8
 select add_retention_policy('test_table');
-ERROR:  function add_retention_policy(unknown) does not exist at character 8
+ERROR:  need to specify one of "drop_after" or "drop_created_before"
 select add_retention_policy(INTERVAL '3 hours');
 ERROR:  function add_retention_policy(interval) does not exist at character 8
 select add_retention_policy('test_table', INTERVAL 'haha');
@@ -198,6 +198,7 @@ select * from _timescaledb_catalog.dimension;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA IF NOT EXISTS my_new_schema;
 create or replace function my_new_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant usage on SCHEMA my_new_schema to public;
 grant execute on ALL FUNCTIONS IN SCHEMA my_new_schema to public;
 select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
  set_integer_now_func 

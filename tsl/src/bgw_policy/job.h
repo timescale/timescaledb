@@ -29,6 +29,7 @@ typedef struct PolicyRetentionData
 	Oid object_relid;
 	Datum boundary;
 	Datum boundary_type;
+	bool use_creation_time;
 } PolicyRetentionData;
 
 typedef struct PolicyContinuousAggData

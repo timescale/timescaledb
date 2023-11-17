@@ -32,7 +32,7 @@ bool
 policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_label,
 											Oid partitioning_type, Oid lag_type, Datum lag_datum)
 {
-	if (IS_INTEGER_TYPE(partitioning_type))
+	if (IS_INTEGER_TYPE(partitioning_type) && lag_type != INTERVALOID)
 	{
 		bool found;
 		int64 config_value = ts_jsonb_get_int64_field(config, json_label, &found);

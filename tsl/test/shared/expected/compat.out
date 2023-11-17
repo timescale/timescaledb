@@ -407,8 +407,8 @@ ERROR:  null values cannot be formatted as an SQL identifier
 CALL _timescaledb_internal.policy_compression(0,NULL);
 WARNING:  procedure _timescaledb_internal.policy_compression(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  job 0 has null config
-CALL _timescaledb_internal.policy_compression_execute(0,0,NULL::interval,0,true,true);
-WARNING:  procedure _timescaledb_internal.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
+CALL _timescaledb_internal.policy_compression_execute(0,0,NULL::interval,0,true,true,true);
+WARNING:  procedure _timescaledb_internal.policy_compression_execute(integer,integer,anyelement,integer,boolean,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid hypertable or continuous aggregate
 CALL _timescaledb_internal.policy_recompression(0,NULL);
 WARNING:  procedure _timescaledb_internal.policy_recompression(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.

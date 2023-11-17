@@ -12,8 +12,8 @@ static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id
 									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval,
 									int32 parent_mat_hypertable_id);
-static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause,
-									List *targetList);
+static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
+									bool is_cagg_create);
 static bool cagg_agg_validate(Node *node, void *context);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								 const bool finalized);
@@ -149,7 +149,8 @@ destroy_union_query(Query *q)
  * the `bucket_width` and other fields of `tbinfo`.
  */
 static void
-caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList)
+caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
+						bool is_cagg_create)
 {
 	ListCell *l;
 	bool found = false;
@@ -320,22 +321,27 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				tbinfo->bucket_width_type = width->consttype;
 
 				if (width->constisnull)
-					ereport(ERROR,
-							(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-							 errmsg("invalid bucket width for time bucket function")));
-
-				if (width->consttype == INTERVALOID)
 				{
-					tbinfo->interval = DatumGetIntervalP(width->constvalue);
-					if (tbinfo->interval->month != 0)
-						tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
+					if (is_cagg_create)
+						ereport(ERROR,
+								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+								 errmsg("invalid bucket width for time bucket function")));
 				}
-
-				if (tbinfo->bucket_width != BUCKET_WIDTH_VARIABLE)
+				else
 				{
-					/* The bucket size is fixed. */
-					tbinfo->bucket_width =
-						ts_interval_value_to_internal(width->constvalue, width->consttype);
+					if (width->consttype == INTERVALOID)
+					{
+						tbinfo->interval = DatumGetIntervalP(width->constvalue);
+						if (tbinfo->interval && tbinfo->interval->month != 0)
+							tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
+					}
+
+					if (tbinfo->bucket_width != BUCKET_WIDTH_VARIABLE)
+					{
+						/* The bucket size is fixed. */
+						tbinfo->bucket_width =
+							ts_interval_value_to_internal(width->constvalue, width->consttype);
+					}
 				}
 			}
 			else
@@ -618,10 +624,9 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 
 CAggTimebucketInfo
 cagg_validate_query(const Query *query, const bool finalized, const char *cagg_schema,
-					const char *cagg_name)
+					const char *cagg_name, const bool is_cagg_create)
 {
 	CAggTimebucketInfo bucket_info = { 0 }, bucket_info_parent;
-	Cache *hcache;
 	Hypertable *ht = NULL, *ht_parent = NULL;
 	RangeTblRef *rtref = NULL, *rtref_other = NULL;
 	RangeTblEntry *rte = NULL, *rte_other = NULL;
@@ -799,15 +804,27 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	{
 		const Dimension *part_dimension = NULL;
 		int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
+		Cache *hcache = ts_hypertable_cache_pin();
 
 		if (rte->relkind == RELKIND_RELATION)
-			ht = ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_NONE, &hcache);
+		{
+			ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+
+			if (!ht)
+			{
+				ts_cache_release(hcache);
+				ereport(ERROR,
+						(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+						 errmsg("table \"%s\" is not a hypertable", get_rel_name(rte->relid))));
+			}
+		}
 		else
 		{
 			cagg_parent = ts_continuous_agg_find_by_relid(rte->relid);
 
 			if (!cagg_parent)
 			{
+				ts_cache_release(hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("invalid continuous aggregate query"),
@@ -817,6 +834,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 
 			if (!ContinuousAggIsFinalized(cagg_parent))
 			{
+				ts_cache_release(hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("old format of continuous aggregate is not supported"),
@@ -827,7 +845,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			}
 
 			parent_mat_hypertable_id = cagg_parent->data.mat_hypertable_id;
-			hcache = ts_hypertable_cache_pin();
 			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
 
 			/* If parent cagg is hierarchical then we should get the matht otherwise the rawht. */
@@ -846,9 +863,12 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		}
 
 		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		{
+			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("hypertable is an internal compressed hypertable")));
+		}
 
 		if (rte->relkind == RELKIND_RELATION)
 		{
@@ -861,6 +881,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
 				Assert(cagg != NULL);
 
+				ts_cache_release(hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("hypertable is a continuous aggregate materialization table"),
@@ -882,10 +903,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		 *       below, along with any other fallout.
 		 */
 		if (part_dimension->partitioning != NULL)
+		{
+			ts_cache_release(hcache);
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("custom partitioning functions not supported"
 							" with continuous aggregates")));
+		}
 
 		if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)) &&
 			rte->relkind == RELKIND_RELATION)
@@ -894,6 +918,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			const char *funcname = NameStr(part_dimension->fd.integer_now_func);
 
 			if (strlen(funcschema) == 0 || strlen(funcname) == 0)
+			{
+				ts_cache_release(hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("custom time function required on hypertable \"%s\"",
@@ -901,6 +927,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 						 errdetail("An integer-based hypertable requires a custom time function to "
 								   "support continuous aggregates."),
 						 errhint("Set a custom time function on the hypertable.")));
+			}
 		}
 
 		caggtimebucketinfo_init(&bucket_info,
@@ -932,7 +959,10 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		 * column of the hypertable
 		 */
 		Assert(query->groupClause);
-		caggtimebucket_validate(&bucket_info, query->groupClause, query->targetList);
+		caggtimebucket_validate(&bucket_info,
+								query->groupClause,
+								query->targetList,
+								is_cagg_create);
 	}
 
 	/* Check row security settings for the table. */
@@ -950,7 +980,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		Assert(prev_query->groupClause);
 		caggtimebucket_validate(&bucket_info_parent,
 								prev_query->groupClause,
-								prev_query->targetList);
+								prev_query->targetList,
+								is_cagg_create);
 
 		/* Cannot create cagg with fixed bucket on top of variable bucket. */
 		if ((bucket_info_parent.bucket_width == BUCKET_WIDTH_VARIABLE &&

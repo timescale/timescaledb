@@ -344,8 +344,8 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
  * a binary heap.
  */
 static void
-cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compression_info, DecompressChunkPath *dcpath,
-									Path *compressed_path)
+cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compression_info,
+									DecompressChunkPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
@@ -374,15 +374,15 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 	 */
 	double num_segmentby_groups = 1;
 	for (int segmentby_attno = bms_next_member(compression_info->chunk_segmentby_attnos, -1);
-		segmentby_attno > 0;
-		segmentby_attno = bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
+		 segmentby_attno > 0;
+		 segmentby_attno =
+			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
 		Var var = { .xpr.type = T_Var,
-			.varno = compression_info->compressed_rel->relid,
-			.varattno = segmentby_attno };
+					.varno = compression_info->compressed_rel->relid,
+					.varattno = segmentby_attno };
 		VariableStatData vardata;
-		examine_variable(root, (Node *) &var, compression_info->compressed_rel->relid,
-			&vardata);
+		examine_variable(root, (Node *) &var, compression_info->compressed_rel->relid, &vardata);
 		bool isdefault = false;
 		const double ndistinct = get_variable_numdistinct(&vardata, &isdefault);
 		/*
@@ -434,9 +434,8 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 	 * model does not consider the number of decompressed tuples.
 	 */
 	dcpath->custom_path.path.total_cost =
-		sort_path.total_cost
-			+ sort_path.rows * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST
-			+ pow(simultaneously_open_baches, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
+		sort_path.total_cost + sort_path.rows * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST +
+		pow(simultaneously_open_baches, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
 
 	dcpath->custom_path.path.rows = sort_path.rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 }
@@ -701,7 +700,11 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	chunk_rel->partial_pathlist = NIL;
 
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
-	decompress_chunk_add_plannerinfo(root, compression_info, chunk, chunk_rel, sort_info.needs_sequence_num);
+	decompress_chunk_add_plannerinfo(root,
+									 compression_info,
+									 chunk,
+									 chunk_rel,
+									 sort_info.needs_sequence_num);
 	compressed_rel = compression_info->compressed_rel;
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
@@ -843,7 +846,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * query here.
 				 */
 				batch_merge_path->custom_path.path.pathkeys = root->query_pathkeys;
-				cost_decompress_sorted_merge_append(root, compression_info, batch_merge_path, compressed_path);
+				cost_decompress_sorted_merge_append(root,
+													compression_info,
+													batch_merge_path,
+													compressed_path);
 
 				/* If the chunk is partially compressed, prepare the path only and add it later
 				 * to a merge append path when we are able to generate the ordered result for the
@@ -982,8 +988,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *)
-				decompress_chunk_path_create(root, compression_info, compressed_path->parallel_workers, compressed_path);
+			path = (Path *) decompress_chunk_path_create(root,
+														 compression_info,
+														 compressed_path->parallel_workers,
+														 compressed_path);
 
 			if (ts_chunk_is_partial(chunk))
 			{
