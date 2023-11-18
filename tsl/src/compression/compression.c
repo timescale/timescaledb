@@ -231,7 +231,6 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	int n_keys;
 	ListCell *lc;
 	int indexscan_direction = NoMovementScanDirection;
-	List *in_rel_index_oids;
 	Relation matched_index_rel = NULL;
 	TupleTableSlot *slot;
 	IndexScanDesc index_scan;
@@ -261,8 +260,6 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
-	in_rel_index_oids = RelationGetIndexList(in_rel);
-	int i = 0;
 	/* Before calling row compressor relation should be segmented and sorted as per
 	 * compress_segmentby and compress_orderby column/s configured in ColumnCompressionInfo.
 	 * Cost of sorting can be mitigated if we find an existing BTREE index defined for
@@ -287,6 +284,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 	 */
 	if (ts_guc_enable_compression_indexscan)
 	{
+		List *in_rel_index_oids = RelationGetIndexList(in_rel);
 		foreach (lc, in_rel_index_oids)
 		{
 			Oid index_oid = lfirst_oid(lc);
@@ -308,6 +306,7 @@ compress_chunk(Oid in_table, Oid out_table, const ColumnCompressionInfo **column
 
 			if (n_keys <= index_info->ii_NumIndexKeyAttrs && index_info->ii_Am == BTREE_AM_OID)
 			{
+				int i;
 				for (i = 0; i < n_keys; i++)
 				{
 					int16 att_num = get_attnum(in_table, NameStr(keys[i]->attname));
