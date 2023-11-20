@@ -349,6 +349,13 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
+	/*
+	 * Don't disable the compressed batch sorted merge plan with the enable_sort
+	 * GUC. We have a separate GUC for it, and this way you can try to force the
+	 * batch sorted merge plan by disabling sort.
+	 */
+	const bool old_enable_sort = enable_sort;
+	enable_sort = true;
 	cost_sort(&sort_path,
 			  root,
 			  dcpath->compressed_pathkeys,
@@ -358,6 +365,7 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
 			  0.0,
 			  work_mem,
 			  -1);
+	enable_sort = old_enable_sort;
 
 	/* startup_cost is cost before fetching first tuple */
 	dcpath->custom_path.path.startup_cost = sort_path.total_cost;

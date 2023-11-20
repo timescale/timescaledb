@@ -664,6 +664,25 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
                Rows Removed by Filter: 3
 (12 rows)
 
+-- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
+SET enable_sort TO OFF;
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC;
+                                                                                                                                                                                                                                                                      QUERY PLAN                                                                                                                                                                                                                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=4 loops=1)
+   Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x1, _hyper_1_1_chunk.x2, _hyper_1_1_chunk.x3, _hyper_1_1_chunk.x4, _hyper_1_1_chunk.x5
+   Sorted merge append: true
+   Bulk Decompression: false
+   ->  Sort (actual rows=3 loops=1)
+         Output: compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk.x4, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_sequence_num, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3
+         Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
+         Sort Method: quicksort 
+         ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk (actual rows=3 loops=1)
+               Output: compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk.x4, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_sequence_num, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3
+(10 rows)
+
+RESET enable_sort;
 ------
 -- Tests based on results
 ------
