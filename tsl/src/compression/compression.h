@@ -268,8 +268,12 @@ typedef struct RowCompressor
 	int insert_options;
 } RowCompressor;
 
-/* SegmentFilter is used for filtering segments based on qualifiers */
-typedef struct SegmentFilter
+/*
+ * BatchFilter is used for filtering batches before decompressing.
+ * The columns will either be segmentby columns or the corresponding
+ * metadata columns of orderby columns.
+ */
+typedef struct BatchFilter
 {
 	/* Column which we use for filtering */
 	NameData column_name;
@@ -279,7 +283,7 @@ typedef struct SegmentFilter
 	Const *value;
 	/* IS NULL or IS NOT NULL */
 	bool is_null_check;
-} SegmentFilter;
+} BatchFilter;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS);

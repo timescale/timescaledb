@@ -1091,15 +1091,14 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 			/* if the column is an orderby, add it's metadata columns too */
 			if (column_info->orderby_column_index > 0)
 			{
+				int16 index = column_info->orderby_column_index;
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														compression_column_segment_min_name(
-															column_info),
+														column_segment_min_name(index),
 														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														compression_column_segment_max_name(
-															column_info),
+														column_segment_max_name(index),
 														&attrs_used);
 			}
 		}

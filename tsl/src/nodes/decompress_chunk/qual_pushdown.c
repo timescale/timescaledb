@@ -128,10 +128,9 @@ make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta
 }
 
 static AttrNumber
-get_segment_meta_min_attr_number(FormData_hypertable_compression *compression_info,
-								 Oid compressed_relid)
+get_segment_meta_min_attr_number(int16 orderby_column_index, Oid compressed_relid)
 {
-	char *meta_col_name = compression_column_segment_min_name(compression_info);
+	char *meta_col_name = column_segment_min_name(orderby_column_index);
 
 	if (meta_col_name == NULL)
 		elog(ERROR, "could not find meta column");
@@ -140,10 +139,9 @@ get_segment_meta_min_attr_number(FormData_hypertable_compression *compression_in
 }
 
 static AttrNumber
-get_segment_meta_max_attr_number(FormData_hypertable_compression *compression_info,
-								 Oid compressed_relid)
+get_segment_meta_max_attr_number(int16 orderby_column_index, Oid compressed_relid)
 {
-	char *meta_col_name = compression_column_segment_max_name(compression_info);
+	char *meta_col_name = column_segment_max_name(orderby_column_index);
 
 	if (meta_col_name == NULL)
 		elog(ERROR, "could not find meta column");
@@ -224,6 +222,8 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	else
 		return NULL;
 
+	int16 index = compression_info->orderby_column_index;
+
 	/* May be able to allow non-strict operations as well.
 	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
 	 * block strict operations
@@ -267,7 +267,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 			return make_andclause(list_make2(
 				make_segment_meta_opexpr(context,
 										 opno_le,
-										 get_segment_meta_min_attr_number(compression_info,
+										 get_segment_meta_min_attr_number(index,
 																		  context->compressed_rte
 																			  ->relid),
 										 var_with_segment_meta,
@@ -275,7 +275,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 										 BTLessEqualStrategyNumber),
 				make_segment_meta_opexpr(context,
 										 opno_ge,
-										 get_segment_meta_max_attr_number(compression_info,
+										 get_segment_meta_max_attr_number(index,
 																		  context->compressed_rte
 																			  ->relid),
 										 var_with_segment_meta,
@@ -295,7 +295,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 				return (Expr *)
 					make_segment_meta_opexpr(context,
 											 opno,
-											 get_segment_meta_min_attr_number(compression_info,
+											 get_segment_meta_min_attr_number(index,
 																			  context
 																				  ->compressed_rte
 																				  ->relid),
@@ -317,7 +317,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 				return (Expr *)
 					make_segment_meta_opexpr(context,
 											 opno,
-											 get_segment_meta_max_attr_number(compression_info,
+											 get_segment_meta_max_attr_number(index,
 																			  context
 																				  ->compressed_rte
 																				  ->relid),

@@ -137,18 +137,6 @@ column_segment_max_name(int16 column_index)
 													COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME);
 }
 
-char *
-compression_column_segment_min_name(const FormData_hypertable_compression *fd)
-{
-	return column_segment_min_name(fd->orderby_column_index);
-}
-
-char *
-compression_column_segment_max_name(const FormData_hypertable_compression *fd)
-{
-	return column_segment_max_name(fd->orderby_column_index);
-}
-
 static void
 compresscolinfo_add_metadata_columns(CompressColInfo *cc, Relation uncompressed_rel)
 {
@@ -178,6 +166,7 @@ compresscolinfo_add_metadata_columns(CompressColInfo *cc, Relation uncompressed_
 	{
 		if (cc->col_meta[colno].orderby_column_index > 0)
 		{
+			int16 index = cc->col_meta[colno].orderby_column_index;
 			FormData_hypertable_compression fd = cc->col_meta[colno];
 			AttrNumber col_attno = get_attnum(uncompressed_rel->rd_id, NameStr(fd.attname));
 			Form_pg_attribute attr = TupleDescAttr(RelationGetDescr(uncompressed_rel),
@@ -191,18 +180,16 @@ compresscolinfo_add_metadata_columns(CompressColInfo *cc, Relation uncompressed_
 						 errdetail("Could not identify a less-than operator for the type.")));
 
 			/* segment_meta min and max columns */
-			cc->coldeflist =
-				lappend(cc->coldeflist,
-						makeColumnDef(compression_column_segment_min_name(&cc->col_meta[colno]),
-									  attr->atttypid,
-									  -1 /* typemod */,
-									  0 /*collation*/));
-			cc->coldeflist =
-				lappend(cc->coldeflist,
-						makeColumnDef(compression_column_segment_max_name(&cc->col_meta[colno]),
-									  attr->atttypid,
-									  -1 /* typemod */,
-									  0 /*collation*/));
+			cc->coldeflist = lappend(cc->coldeflist,
+									 makeColumnDef(column_segment_min_name(index),
+												   attr->atttypid,
+												   -1 /* typemod */,
+												   0 /*collation*/));
+			cc->coldeflist = lappend(cc->coldeflist,
+									 makeColumnDef(column_segment_max_name(index),
+												   attr->atttypid,
+												   -1 /* typemod */,
+												   0 /*collation*/));
 		}
 	}
 }
