@@ -52,6 +52,8 @@
 typedef struct CompressColInfo
 {
 	int numcols;
+	Hypertable *ht;
+	Oid compresseddata_oid;
 	FormData_hypertable_compression
 		*col_meta;	  /* metadata about columns from src hypertable that will be compressed*/
 	List *coldeflist; /*list of ColumnDef for the compressed column */
@@ -212,7 +214,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	int16 *segorder_colindex, *colindex;
 	int seg_attnolen = 0;
 	ListCell *lc;
-	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	cc->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	seg_attnolen = list_length(segmentby_cols);
 	rel = table_open(srctbl_relid, AccessShareLock);
@@ -324,7 +326,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		}
 		if (!OidIsValid(attroid))
 		{
-			attroid = compresseddata_oid; /* default type for column */
+			attroid = cc->compresseddata_oid; /* default type for column */
 			cc->col_meta[colno].algo_id = get_default_algorithm_id(attr->atttypid);
 		}
 		else
@@ -349,7 +351,7 @@ static void
 compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid typid)
 {
 	int colno = 0;
-	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	cc->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	ColumnDef *coldef;
 
 	cc->numcols = 1;
@@ -357,7 +359,7 @@ compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid 
 	cc->coldeflist = NIL;
 	namestrcpy(&cc->col_meta[colno].attname, colname);
 	cc->col_meta[colno].algo_id = get_default_algorithm_id(typid);
-	coldef = makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
+	coldef = makeColumnDef(colname, cc->compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
 	cc->coldeflist = lappend(cc->coldeflist, coldef);
 }
 
@@ -367,26 +369,41 @@ compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid 
 static void
 modify_compressed_toast_table_storage(CompressColInfo *cc, Oid compress_relid)
 {
-	int colno;
+	ListCell *lc;
 	List *cmds = NIL;
-	for (colno = 0; colno < cc->numcols; colno++)
+
+	foreach (lc, cc->coldeflist)
 	{
-		// get storage type for columns which have compression on
-		if (cc->col_meta[colno].algo_id != 0)
+		ColumnDef *cd = lfirst_node(ColumnDef, lc);
+		AttrNumber attno = get_attnum(compress_relid, cd->colname);
+		if (attno != InvalidAttrNumber &&
+			get_atttype(compress_relid, attno) == cc->compresseddata_oid)
 		{
-			CompressionStorage stor = compression_get_toast_storage(cc->col_meta[colno].algo_id);
+			/*
+			 * All columns that pass the datatype check are columns
+			 * that are also present in the uncompressed hypertable.
+			 * Metadata columns are missing from the uncompressed
+			 * hypertable but they do not have compresseddata datatype
+			 * and therefore would be skipped.
+			 */
+			attno = get_attnum(cc->ht->main_table_relid, cd->colname);
+			Assert(attno != InvalidAttrNumber);
+			Oid typid = get_atttype(cc->ht->main_table_relid, attno);
+			CompressionStorage stor =
+				compression_get_toast_storage(get_default_algorithm_id(typid));
 			if (stor != TOAST_STORAGE_EXTERNAL)
 			/* external is default storage for toast columns */
 			{
 				AlterTableCmd *cmd = makeNode(AlterTableCmd);
 				cmd->subtype = AT_SetStorage;
-				cmd->name = pstrdup(NameStr(cc->col_meta[colno].attname));
+				cmd->name = pstrdup(cd->colname);
 				Assert(stor == TOAST_STORAGE_EXTENDED);
 				cmd->def = (Node *) makeString("extended");
 				cmds = lappend(cmds, cmd);
 			}
 		}
 	}
+
 	if (cmds != NIL)
 	{
 		ts_alter_table_with_event_trigger(compress_relid, NULL, cmds, false);
@@ -1165,7 +1182,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 						   WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	struct CompressColInfo compress_cols;
+	struct CompressColInfo compress_cols = { .ht = ht };
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
 	Oid ownerid;
 	List *segmentby_cols;
@@ -1264,7 +1281,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 void
 tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 {
-	struct CompressColInfo compress_cols;
+	struct CompressColInfo compress_cols = { .ht = ht };
 	Oid coloid;
 	int32 orig_htid = ht->fd.id;
 	char *colname = orig_def->colname;
