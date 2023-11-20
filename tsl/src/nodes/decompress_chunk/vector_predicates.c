@@ -162,7 +162,7 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
 		 * In debug mode, do this more frequently to simplify testing.
 		 */
 #ifdef NDEBUG
-		if (array_index > 0 && array_index % 4 == 0)
+		if (array_index > 0 && array_index % 16 == 0)
 #else
 		if (array_index > 0 && array_index % 3 == 0)
 #endif
