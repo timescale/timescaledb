@@ -90,6 +90,7 @@ select * from _timescaledb_catalog.dimension;
 
 CREATE SCHEMA IF NOT EXISTS my_new_schema;
 create or replace function my_new_schema.dummy_now2() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 1::BIGINT';
+grant usage on SCHEMA my_new_schema to public;
 grant execute on ALL FUNCTIONS IN SCHEMA my_new_schema to public;
 select set_integer_now_func('test_table_int', 'my_new_schema.dummy_now2');
 

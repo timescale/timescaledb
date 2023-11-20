@@ -2,17 +2,17 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 \set ECHO errors
-        item        
---------------------
- wizard=a/wizard
- wizard=ar/wizard
- wizard=a*/wizard
- wizard=a*r*/wizard
+                item                
+------------------------------------
+ db_util_wizard=a/db_util_wizard
+ db_util_wizard=ar/db_util_wizard
+ db_util_wizard=a*/db_util_wizard
+ db_util_wizard=a*r*/db_util_wizard
  [NULL]
  [NULL]
  [NULL]
  [NULL]
- =a*r*/wizard
- wizard=a*r*/0
+ =a*r*/db_util_wizard
+ db_util_wizard=a*r*/0
 (10 rows)
 

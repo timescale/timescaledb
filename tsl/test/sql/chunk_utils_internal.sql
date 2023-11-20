@@ -406,6 +406,22 @@ EXPLAIN (COSTS OFF) SELECT * from ht_try;
 EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec > '2022-01-01 01:00';
 EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 
+-- This test verifies that a bugfix regarding the way `ROWID_VAR`s are adjusted
+-- in the chunks' targetlists on DELETE/UPDATE works (including partially
+-- compressed chunks)
+ALTER table ht_try SET (timescaledb.compress);
+INSERT INTO ht_try VALUES ('2021-06-05 01:00', 10, 222);
+SELECT compress_chunk(show_chunks('ht_try', newer_than => '2021-01-01'::timestamptz));
+INSERT INTO ht_try VALUES ('2021-06-05 01:00', 10, 222);
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+	EXPLAIN UPDATE ht_try SET value = 2
+	WHERE acq_id = 10 AND timec > now() - '15 years'::interval INTO r;
+END
+$$ LANGUAGE plpgsql;
+
 --TEST insert into a OSM chunk fails. actually any insert will fail. But we just need
 -- to mock the hook and make sure the timescaledb code works correctly.
 

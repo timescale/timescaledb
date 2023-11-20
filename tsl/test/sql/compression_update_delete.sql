@@ -762,7 +762,7 @@ WHERE ch1.hypertable_id = ht.id AND ch1.table_name LIKE 'compress_%'
 ORDER BY ch1.id LIMIT 1 \gset
 
 -- check that you uncompress and delete only for exact SEGMENTBY value
-SET client_min_messages TO DEBUG1;
+SET timescaledb.debug_compression_path_info TO true;
 BEGIN;
 -- report 10 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 where c4 = 5;
@@ -967,7 +967,7 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
 -- report true
 SELECT COUNT(*) = :total_rows - :total_affected_rows FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
 ROLLBACK;
-RESET client_min_messages;
+RESET timescaledb.debug_compression_path_info;
 
 --github issue: 5640
 CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
@@ -1258,9 +1258,8 @@ DELETE FROM sample_table WHERE time >= '2023-03-17 00:00:00-00'::timestamptz;
 --github issue: 5586
 --testcase with multiple indexes
 \c :TEST_DBNAME :ROLE_SUPERUSER
-DROP DATABASE IF EXISTS test WITH (FORCE);
-CREATE DATABASE test;
-\c test :ROLE_SUPERUSER
+CREATE DATABASE test5586;
+\c test5586 :ROLE_SUPERUSER
 SET client_min_messages = ERROR;
 CREATE EXTENSION timescaledb CASCADE;
 CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT NULL, device_id int, v0 int, v1 int, v2 float, v3 float);
@@ -1281,7 +1280,7 @@ CREATE INDEX filler_1_filler_2 ON _timescaledb_internal._compressed_hypertable_2
 CREATE INDEX filler_2_filler_3 ON _timescaledb_internal._compressed_hypertable_2 (filler_2, filler_3);
 
 SELECT compress_chunk(show_chunks('tab1'));
-SET client_min_messages TO DEBUG2;
+set timescaledb.debug_compression_path_info to on;
 BEGIN;
 SELECT COUNT(*) FROM tab1 WHERE filler_3 = 5 AND filler_2 = 4;
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_3 = 5 AND filler_2 = 4;
@@ -1299,8 +1298,11 @@ SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5;
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5;
 ROLLBACK;
 
-RESET client_min_messages;
+RESET timescaledb.debug_compression_path_info;
 DROP TABLE tab1;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE test5586;
+
 
 --issue: #6024
 CREATE TABLE t(a integer, b integer);

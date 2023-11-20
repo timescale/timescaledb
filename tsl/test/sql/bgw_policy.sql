@@ -313,13 +313,17 @@ select * from  _timescaledb_catalog.dimension;
 alter schema new_public rename to public;
 
 \c  :TEST_DBNAME :ROLE_DEFAULT_PERM_USER_2
+-- test that the behavior is strict when providing NULL required arguments
+create table test_strict (time timestamptz not null, a int, b int);
+select create_hypertable('test_strict', 'time');
+
 \set ON_ERROR_STOP 0
 select add_reorder_policy('test_table_perm', 'test_table_perm_pkey');
 select remove_reorder_policy('test_table');
 
 select add_retention_policy('test_table_perm', INTERVAL '4 months', true);
 select remove_retention_policy('test_table');
-
+select add_retention_policy('test_strict', drop_after => NULL);
 \set ON_ERROR_STOP 1
 
 -- Check the number of non-telemetry policies. We check for telemetry
@@ -330,11 +334,7 @@ WHERE proc_name NOT LIKE '%telemetry%'
 GROUP BY proc_name;
 
 
--- test that the behavior is strict when providing NULL required arguments
-create table test_strict (time timestamptz not null, a int, b int);
-select create_hypertable('test_strict', 'time');
 -- test retention with null arguments
-select add_retention_policy('test_strict', drop_after => NULL);
 select add_retention_policy(NULL, NULL);
 select add_retention_policy(NULL, drop_after => interval '2 days');
 -- this is an optional argument
@@ -342,7 +342,6 @@ select add_retention_policy('test_strict', drop_after => interval '2 days', if_n
 select add_retention_policy('test_strict', interval '2 days', schedule_interval => NULL);
 -- test compression with null arguments
 alter table test_strict set (timescaledb.compress);
-select add_compression_policy('test_strict', compress_after => NULL);
 select add_compression_policy(NULL, compress_after => NULL);
 select add_compression_policy('test_strict', INTERVAL '2 weeks', if_not_exists => NULL);
 select add_compression_policy('test_strict', INTERVAL '2 weeks', schedule_interval => NULL);
@@ -366,6 +365,7 @@ select * from _timescaledb_config.bgw_job where id in (:retenion_id_missing_sche
 
 -- test policy check functions with NULL args
 \set ON_ERROR_STOP 0
+select add_compression_policy('test_strict', compress_after => NULL);
 SELECT _timescaledb_functions.policy_compression_check(NULL);
 SELECT _timescaledb_functions.policy_refresh_continuous_aggregate_check(NULL);
 SELECT _timescaledb_functions.policy_reorder_check(NULL);

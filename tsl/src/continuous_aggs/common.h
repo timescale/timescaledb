@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 #ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_COMMON_H
 #define TIMESCALEDB_TSL_CONTINUOUS_AGGS_COMMON_H
 
@@ -122,7 +123,8 @@ typedef struct AggPartCxt
 	} while (0);
 
 extern CAggTimebucketInfo cagg_validate_query(const Query *query, const bool finalized,
-											  const char *cagg_schema, const char *cagg_name);
+											  const char *cagg_schema, const char *cagg_name,
+											  const bool is_cagg_create);
 extern Query *destroy_union_query(Query *q);
 extern Oid relation_oid(Name schema, Name name);
 extern void RemoveRangeTableEntries(Query *query);
@@ -131,4 +133,5 @@ extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Qu
 extern void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist);
 extern void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo);
 extern bool function_allowed_in_cagg_definition(Oid funcid);
-#endif
+
+#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_COMMON_H */

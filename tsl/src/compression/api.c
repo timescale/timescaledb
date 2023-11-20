@@ -1484,7 +1484,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							  decompressor.compressed_datums,
 							  decompressor.compressed_is_nulls);
 
-			row_decompressor_decompress_row(&decompressor, segment_tuplesortstate);
+			row_decompressor_decompress_row_to_tuplesort(&decompressor, segment_tuplesortstate);
 
 			simple_table_tuple_delete(compressed_chunk_rel, &(slot->tts_tid), snapshot);
 
@@ -1529,7 +1529,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 							  decompressor.compressed_datums,
 							  decompressor.compressed_is_nulls);
 
-			row_decompressor_decompress_row(&decompressor, segment_tuplesortstate);
+			row_decompressor_decompress_row_to_tuplesort(&decompressor, segment_tuplesortstate);
 
 			simple_table_tuple_delete(compressed_chunk_rel, &(slot->tts_tid), snapshot);
 			/* because this is the first tuple of the new segment */

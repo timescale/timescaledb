@@ -155,7 +155,7 @@ INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_smallint SET (timescaledb.compress);
 \set ON_ERROR_STOP 0
 select add_compression_policy( 'test_table_smallint', compress_after=> '1 day'::interval );
-ERROR:  unsupported compress_after argument type, expected type : smallint
+ERROR:  invalid value for parameter compress_after
 \set ON_ERROR_STOP 1
 SELECT add_compression_policy('test_table_smallint', 2::SMALLINT) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;

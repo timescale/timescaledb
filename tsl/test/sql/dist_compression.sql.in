@@ -192,7 +192,7 @@ SELECT count(*) from compressed where new_coli is not null;
 INSERT INTO compressed
 SELECT '2019-08-01 00:00',  100, 100, 1, 'newcolv' ;
 
-SELECT count(compress_chunk('compressed',true));
+SELECT count(compress_chunk(ch,true)) FROM show_chunks('compressed') ch;
 
 SELECT * from compressed where new_coli is not null;
 
