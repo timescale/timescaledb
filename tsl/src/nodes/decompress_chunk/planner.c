@@ -177,29 +177,8 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 			/*
 			 * Normal column, not a metadata column.
 			 */
-			AttrNumber hypertable_attno = get_attnum(path->info->ht_rte->relid, column_name);
 			AttrNumber chunk_attno = get_attnum(path->info->chunk_rte->relid, column_name);
-			Assert(hypertable_attno != InvalidAttrNumber);
 			Assert(chunk_attno != InvalidAttrNumber);
-
-			/*
-			 * The versions older than this commit didn't set up the proper
-			 * collation and typmod for segmentby columns in compressed chunks,
-			 * so we have to determine them from the main hypertable.
-			 * Additionally, we have to set the proper type for the compressed
-			 * columns. It would be cool to get rid of this code someday and
-			 * just use the types from the compressed chunk, but the problem is
-			 * that we have to support the chunks created by the older versions
-			 * of TimescaleDB.
-			 */
-			if (compression_info->algo_id == _INVALID_COMPRESSION_ALGORITHM)
-			{
-				get_atttypetypmodcoll(path->info->ht_rte->relid,
-									  hypertable_attno,
-									  &var->vartype,
-									  &var->vartypmod,
-									  &var->varcollid);
-			}
 
 			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, chunk_attrs_needed))
 			{
