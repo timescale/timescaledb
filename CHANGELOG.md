@@ -4,6 +4,73 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.13.0 (2023-11-28)
+
+This release contains performance improvements, an improved hypertable DDL API
+and bug fixes since the 2.12.2 release. We recommend that you upgrade at the next
+available opportunity.
+ 
+In addition, it includes these noteworthy features:
+
+* Full PostgreSQL 16 support for all existing features
+* Vectorized aggregation execution for sum()
+* Track chunk creation time used in retention/compression policies
+
+**Deprecation notice: Multi-node support**
+TimescaleDB 2.13 is the last version that will include multi-node support. Multi-node
+support in 2.13 is available for PostgreSQL 13, 14 and 15. Learn more about it
+[here](docs/MultiNodeDeprecation.md).
+
+If you want to migrate from multi-node TimescaleDB to single-node TimescaleDB read the
+[migration documentation](https://docs.timescale.com/migrate/latest/multi-node-to-timescale-service/).
+
+**PostgreSQL 13 deprecation announcement**
+We will continue supporting PostgreSQL 13 until April 2024. Sooner to that time, we will announce the specific version of TimescaleDB in which PostgreSQL 13 support will not be included going forward.
+
+**Starting from TimescaleDB 2.13.0**
+* No Amazon Machine Images (AMI) are published. If you previously used AMI, please 
+use another [installation method](https://docs.timescale.com/self-hosted/latest/install/)
+* Continuous Aggregates are materialized only (non-realtime) by default
+
+**Features**
+* #5575 Add chunk-wise sorted paths for compressed chunks
+* #5761 Simplify hypertable DDL API
+* #5890 Reduce WAL activity by freezing compressed tuples immediately
+* #6050 Vectorized aggregation execution for sum() 
+* #6062 Add metadata for chunk creation time
+* #6077 Make Continous Aggregates materialized only (non-realtime) by default
+* #6177 Change show_chunks/drop_chunks using chunk creation time
+* #6178 Show batches/tuples decompressed during DML operations in EXPLAIN output
+* #6185 Keep track of catalog version
+* #6227 Use creation time in retention/compression policy
+* #6307 Add SQL function cagg_validate_query
+
+**Bugfixes**
+* #6188 Add GUC for setting background worker log level
+* #6222 Allow enabling compression on hypertable with unique expression index
+* #6240 Check if worker registration succeeded
+* #6254 Fix exception detail passing in compression_policy_execute
+* #6264 Fix missing bms_del_member result assignment
+* #6275 Fix negative bitmapset member not allowed in compression
+* #6280 Potential data loss when compressing a table with a partial index that matches compression order.
+* #6289 Add support for startup chunk exclusion with aggs 
+* #6290 Repair relacl on upgrade
+* #6297 Fix segfault when creating a cagg using a NULL width in time bucket function
+* #6305 Make timescaledb_functions.makeaclitem strict
+* #6332 Fix typmod and collation for segmentby columns
+* #6339 Fix tablespace with constraints
+* #6343 Enable segmentwise recompression in compression policy
+
+**Thanks**
+* @fetchezar for reporting an issue with compression policy error messages
+* @jflambert for reporting the background worker log level issue
+* @torazem for reporting an issue with compression and large oids
+* @fetchezar for reporting an issue in the compression policy
+* @lyp-bobi for reporting an issue with tablespace with constraints
+* @pdipesh02 for contributing to the implementation of the metadata for chunk creation time, 
+             the generalized hypertable API, and show_chunks/drop_chunks using chunk creation time
+* @lkshminarayanan for all his work on PG16 support
+
 ## 2.12.2 (2023-10-19)
 
 This release contains bug fixes since the 2.12.1 release.
@@ -24,6 +91,7 @@ We recommend that you upgrade at the next available opportunity.
 * #6117 Avoid decompressing batches using an empty slot
 * #6123 Fix concurrency errors in OSM API
 * #6142 do not throw an error when deprecation GUC cannot be read
+
 **Thanks**
 * @symbx for reporting a crash when selecting from empty hypertables
 
