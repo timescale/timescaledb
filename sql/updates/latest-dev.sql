@@ -43,3 +43,34 @@ DROP FUNCTION IF EXISTS @extschema@.alter_data_node;
 DROP PROCEDURE IF EXISTS @extschema@.distributed_exec;
 DROP FUNCTION IF EXISTS @extschema@.create_distributed_restore_point;
 DROP FUNCTION IF EXISTS @extschema@.set_replication_factor;
+
+CREATE TABLE _timescaledb_catalog.compression_settings (
+	relid regclass NOT NULL,
+  segmentby text[],
+  orderby text[],
+  orderby_desc bool[],
+  orderby_nullsfirst bool[],
+  CONSTRAINT compression_settings_pkey PRIMARY KEY (relid),
+  CONSTRAINT compression_settings_check_segmentby CHECK (array_ndims(segmentby) = 1),
+  CONSTRAINT compression_settings_check_orderby_null CHECK ( (orderby IS NULL AND orderby_desc IS NULL AND orderby_nullsfirst IS NULL) OR (orderby IS NOT NULL AND orderby_desc IS NOT NULL AND orderby_nullsfirst IS NOT NULL) ),
+  CONSTRAINT compression_settings_check_orderby_cardinality CHECK (array_ndims(orderby) = 1 AND array_ndims(orderby_desc) = 1 AND array_ndims(orderby_nullsfirst) = 1 AND cardinality(orderby) = cardinality(orderby_desc) AND cardinality(orderby) = cardinality(orderby_nullsfirst))
+);
+
+INSERT INTO _timescaledb_catalog.compression_settings(relid, segmentby, orderby, orderby_desc, orderby_nullsfirst)
+  SELECT
+    format('%I.%I', ht.schema_name, ht.table_name)::regclass,
+    array_agg(attname ORDER BY segmentby_column_index) FILTER(WHERE segmentby_column_index >= 1) AS compress_segmentby,
+    array_agg(attname ORDER BY orderby_column_index) FILTER(WHERE orderby_column_index >= 1) AS compress_orderby,
+    array_agg(NOT orderby_asc ORDER BY orderby_column_index) FILTER(WHERE orderby_column_index >= 1) AS compress_orderby_desc,
+    array_agg(orderby_nullsfirst ORDER BY orderby_column_index) FILTER(WHERE orderby_column_index >= 1) AS compress_orderby_nullsfirst
+  FROM _timescaledb_catalog.hypertable_compression hc
+		INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = hc.hypertable_id
+	GROUP BY hypertable_id, ht.schema_name, ht.table_name;
+
+GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable_compression;
+DROP VIEW IF EXISTS timescaledb_information.compression_settings;
+DROP TABLE _timescaledb_catalog.hypertable_compression;
+

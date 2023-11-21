@@ -101,6 +101,50 @@ ts_array_position(ArrayType *arr, const char *name)
 	return found ? pos : 0;
 }
 
+extern TSDLLEXPORT ArrayType *
+ts_array_replace_text(ArrayType *arr, const char *old, const char *new)
+{
+	if (!arr)
+		return NULL;
+
+	Assert(ARR_NDIM(arr) == 1);
+	Assert(arr->elemtype == TEXTOID);
+
+	Datum datum;
+	bool null;
+	int pos = 1;
+	ArrayIterator it = array_create_iterator(arr, 0, NULL);
+
+	while (array_iterate(it, &datum, &null))
+	{
+		/*
+		 * Our internal catalog arrays should either be NULL or
+		 * have non-NULL members. During normal operation it should
+		 * never have NULL members. If we have NULL members either
+		 * the catalog is corrupted or some catalog tampering has
+		 * happened.
+		 */
+		Ensure(!null, "array element was NULL");
+		if (strncmp(TextDatumGetCString(datum), old, NAMEDATALEN) == 0)
+		{
+			datum = array_set_element(PointerGetDatum(arr),
+									  1,
+									  &pos,
+									  CStringGetTextDatum(new),
+									  false,
+									  -1,
+									  -1,
+									  false,
+									  TYPALIGN_INT);
+			arr = DatumGetArrayTypeP(datum);
+		}
+		pos++;
+	}
+
+	array_free_iterator(it);
+	return arr;
+}
+
 extern TSDLLEXPORT bool
 ts_array_get_element_bool(ArrayType *arr, int position)
 {

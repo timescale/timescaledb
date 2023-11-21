@@ -50,7 +50,7 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG,
 	CONTINUOUS_AGGS_INVALIDATION_THRESHOLD,
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
-	HYPERTABLE_COMPRESSION,
+	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	REMOTE_TXN,
 	CHUNK_COPY_OPERATION,
@@ -1233,47 +1233,44 @@ typedef enum Anum_continuous_aggs_watermark_pkey
 
 #define Natts_continuous_aggs_watermark_pkey (_Anum_continuous_aggs_watermark_pkey_max - 1)
 
-#define HYPERTABLE_COMPRESSION_TABLE_NAME "hypertable_compression"
-typedef enum Anum_hypertable_compression
+#define COMPRESSION_SETTINGS_TABLE_NAME "compression_settings"
+
+typedef enum Anum_compression_settings
 {
-	Anum_hypertable_compression_hypertable_id = 1,
-	Anum_hypertable_compression_attname,
-	Anum_hypertable_compression_algo_id,
-	Anum_hypertable_compression_segmentby_column_index,
-	Anum_hypertable_compression_orderby_column_index,
-	Anum_hypertable_compression_orderby_asc,
-	Anum_hypertable_compression_orderby_nullsfirst,
-	_Anum_hypertable_compression_max,
-} Anum_hypertable_compression;
+	Anum_compression_settings_relid = 1,
+	Anum_compression_settings_segmentby,
+	Anum_compression_settings_orderby,
+	Anum_compression_settings_orderby_desc,
+	Anum_compression_settings_orderby_nullsfirst,
+	_Anum_compression_settings_max,
+} Anum_compression_settings;
 
-#define Natts_hypertable_compression (_Anum_hypertable_compression_max - 1)
+#define Natts_compression_settings (_Anum_compression_settings_max - 1)
 
-typedef struct FormData_hypertable_compression
+typedef struct FormData_compression_settings
 {
-	int32 hypertable_id;
-	NameData attname;
-	int16 algo_id;
-	int16 segmentby_column_index;
-	int16 orderby_column_index;
-	bool orderby_asc;
-	bool orderby_nullsfirst;
-} FormData_hypertable_compression;
+	Oid relid;
+	ArrayType *segmentby;
+	ArrayType *orderby;
+	ArrayType *orderby_desc;
+	ArrayType *orderby_nullsfirst;
+} FormData_compression_settings;
 
-typedef FormData_hypertable_compression *Form_hypertable_compression;
+typedef FormData_compression_settings *Form_compression_settings;
 
 enum
 {
-	HYPERTABLE_COMPRESSION_PKEY = 0,
-	_MAX_HYPERTABLE_COMPRESSION_INDEX,
+	COMPRESSION_SETTINGS_PKEY = 0,
+	_MAX_COMPRESSION_SETTINGS_INDEX,
 };
-typedef enum Anum_hypertable_compression_pkey
-{
-	Anum_hypertable_compression_pkey_hypertable_id = 1,
-	Anum_hypertable_compression_pkey_attname,
-	_Anum_hypertable_compression_pkey_max,
-} Anum_hypertable_compression_pkey;
 
-#define Natts_hypertable_compression_pkey (_Anum_hypertable_compression_pkey_max - 1)
+typedef enum Anum_compression_settings_pkey
+{
+	Anum_compression_settings_pkey_relid = 1,
+	_Anum_compression_settings_pkey_max,
+} Anum_compression_settings_pkey;
+
+#define Natts_compression_chunk_size_pkey (_Anum_compression_chunk_size_pkey_max - 1)
 
 #define COMPRESSION_CHUNK_SIZE_TABLE_NAME "compression_chunk_size"
 typedef enum Anum_compression_chunk_size

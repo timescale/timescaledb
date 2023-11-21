@@ -39,6 +39,7 @@
 #include <parser/parse_coerce.h>
 
 #include "hypertable.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/hypertable_data_node.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/metadata.h"
@@ -46,7 +47,6 @@
 #include "dimension.h"
 #include "chunk.h"
 #include "chunk_adaptive.h"
-#include "ts_catalog/hypertable_compression.h"
 #include "subspace_store.h"
 #include "hypertable_cache.h"
 #include "trigger.h"
@@ -628,7 +628,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
 
 	/* remove any associated compression definitions */
-	ts_hypertable_compression_delete_by_hypertable_id(hypertable_id);
+	ts_compression_settings_delete(ts_hypertable_id_to_relid(hypertable_id, true));
 
 	if (!compressed_hypertable_id_isnull)
 	{

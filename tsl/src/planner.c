@@ -22,7 +22,6 @@
 #include "fdw/relinfo.h"
 #include "guc.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/hypertable_compression.h"
 #include "hypertable.h"
 #include "nodes/compress_dml/compress_dml.h"
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"

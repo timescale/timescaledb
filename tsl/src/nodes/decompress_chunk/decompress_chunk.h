@@ -11,6 +11,7 @@
 
 #include "chunk.h"
 #include "hypertable.h"
+#include "ts_catalog/compression_settings.h"
 
 typedef struct CompressionInfo
 {
@@ -22,6 +23,8 @@ typedef struct CompressionInfo
 	RangeTblEntry *ht_rte;
 
 	Oid compresseddata_oid;
+
+	CompressionSettings *settings;
 
 	int hypertable_id;
 	List *hypertable_compression_info;
@@ -45,7 +48,6 @@ typedef struct CompressionInfo
 
 typedef struct ColumnCompressionInfo
 {
-	FormData_hypertable_compression fd;
 	bool bulk_decompression_possible;
 } DecompressChunkColumnCompression;
 
@@ -114,8 +116,5 @@ typedef struct DecompressChunkPath
 
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										Chunk *chunk);
-
-FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_compression_info,
-															char *column_name);
 
 extern bool ts_is_decompress_chunk_path(Path *path);

@@ -64,18 +64,12 @@ DETAIL:  Dimensions cannot have NULL values.
 ALTER TABLE with_rls set (timescaledb.compress, timescaledb.compress_orderby='a');
 ERROR:  compression cannot be used on table with row security
 --note that the time column "a" should be added to the end of the orderby list
-select * from _timescaledb_catalog.hypertable_compression order by attname;
- hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
-             1 | a        |                        4 |                        |                    2 | f           | t
-             6 | a        |                        4 |                        |                    1 | f           | t
-             6 | b        |                        4 |                        |                      |             | 
-             1 | bacB toD |                        0 |                      1 |                      |             | 
-             1 | c        |                        0 |                      2 |                      |             | 
-             6 | c        |                        0 |                      1 |                      |             | 
-             1 | d        |                        4 |                        |                    1 | t           | f
-             6 | d        |                        4 |                        |                      |             | 
-(8 rows)
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text;
+      relid      |   segmentby    | orderby | orderby_desc | orderby_nullsfirst 
+-----------------+----------------+---------+--------------+--------------------
+ default_skipped | {c}            | {a}     | {t}          | {t}
+ foo2            | {"bacB toD",c} | {d,a}   | {f,t}        | {f,t}
+(2 rows)
 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d DeSc NullS lAsT');
 --shold allow alter since segment by was empty
@@ -220,15 +214,11 @@ ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
 ERROR:  operation not supported on hypertables that have compression enabled
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
-select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
- hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-            15 | a       |                        4 |                        |                    1 | t           | f
-            15 | b       |                        4 |                        |                    2 | t           | f
-            15 | c       |                        4 |                        |                      |             | 
-            15 | p       |                        1 |                        |                      |             | 
-            15 | t       |                        2 |                        |                      |             | 
-(5 rows)
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+-----------+---------+--------------+--------------------
+ foo   |           | {a,b}   | {f,f}        | {f,f}
+(1 row)
 
 SELECT decompress_chunk(ch) FROM show_chunks('foo') ch limit 1;
 ERROR:  chunk "_hyper_15_2_chunk" is not compressed
@@ -292,15 +282,11 @@ NOTICE:  chunk "_hyper_15_5_chunk" is not compressed
 
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
-select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
- hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-            15 | a       |                        4 |                        |                    1 | t           | f
-            15 | b       |                        0 |                      1 |                      |             | 
-            15 | c       |                        4 |                        |                      |             | 
-            15 | p       |                        1 |                        |                      |             | 
-            15 | t       |                        2 |                        |                      |             | 
-(5 rows)
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
+ relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+-----------+---------+--------------+--------------------
+ foo   | {b}       | {a}     | {f}          | {f}
+(1 row)
 
 SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
 FROM _timescaledb_catalog.hypertable comp_hyper
