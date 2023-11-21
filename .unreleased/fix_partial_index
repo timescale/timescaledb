@@ -1,1 +1,0 @@
-Fixes: #6280 Potential data loss when compressing a table with a partial index that matches compression order.
