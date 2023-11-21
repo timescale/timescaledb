@@ -1,2 +1,0 @@
-Fixes: #6188 Add GUC for setting background worker log level
-Thanks: @jflambert for reporting the issue
