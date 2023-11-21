@@ -403,3 +403,42 @@ BEGIN
   END LOOP;
 END;
 $$ LANGUAGE PLPGSQL;
+
+-- fix atttypmod and attcollation for segmentby columns
+DO $$
+DECLARE
+  htc_id INTEGER;
+  htc REGCLASS;
+  _attname NAME;
+  _atttypmod INTEGER;
+  _attcollation OID;
+BEGIN
+  -- find any segmentby columns where typmod and collation in
+  -- the compressed hypertable does not match the uncompressed
+  -- hypertable values
+  FOR htc_id, htc, _attname, _atttypmod, _attcollation IN
+    SELECT cat.htc_id, cat.htc, pga.attname, ht_mod, ht_coll
+    FROM pg_attribute pga
+    INNER JOIN
+    (
+      SELECT
+        htc.id AS htc_id,
+        format('%I.%I',htc.schema_name,htc.table_name) AS htc,
+        att_ht.atttypmod AS ht_mod,
+        att_ht.attcollation AS ht_coll,
+        c.attname
+      FROM _timescaledb_catalog.hypertable_compression c
+      INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id=c.hypertable_id
+      INNER JOIN pg_attribute att_ht ON att_ht.attname = c.attname AND att_ht.attrelid = format('%I.%I',ht.schema_name,ht.table_name)::regclass
+      INNER JOIN _timescaledb_catalog.hypertable htc ON htc.id=ht.compressed_hypertable_id
+      WHERE c.segmentby_column_index > 0
+    ) cat ON cat.htc::regclass = pga.attrelid AND cat.attname = pga.attname
+    WHERE pga.atttypmod <> ht_mod OR pga.attcollation <> ht_coll
+  LOOP
+    -- fix typmod and collation for the compressed hypertable and all compressed chunks
+    UPDATE pg_attribute SET atttypmod = _atttypmod, attcollation = _attcollation WHERE attname = _attname AND attrelid IN (
+      SELECT format('%I.%I',schema_name,table_name)::regclass from _timescaledb_catalog.chunk WHERE hypertable_id = htc_id AND NOT dropped UNION ALL SELECT htc
+    );
+  END LOOP;
+END
+$$;
