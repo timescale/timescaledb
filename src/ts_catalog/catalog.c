@@ -97,9 +97,9 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG_TABLE_NAME,
 	},
-	[HYPERTABLE_COMPRESSION] = {
+	[COMPRESSION_SETTINGS] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = HYPERTABLE_COMPRESSION_TABLE_NAME,
+		.table_name = COMPRESSION_SETTINGS_TABLE_NAME,
 	},
 	[COMPRESSION_CHUNK_SIZE] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
@@ -268,10 +268,10 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[CONTINUOUS_AGGS_WATERMARK_PKEY] = "continuous_aggs_watermark_pkey",
 		},
 	},
-	[HYPERTABLE_COMPRESSION] = {
-		.length =  _MAX_HYPERTABLE_COMPRESSION_INDEX,
+	[COMPRESSION_SETTINGS] = {
+		.length =  _MAX_COMPRESSION_SETTINGS_INDEX,
 		.names = (char *[]) {
-			[HYPERTABLE_COMPRESSION_PKEY] = "hypertable_compression_pkey",
+			[COMPRESSION_SETTINGS_PKEY] = "compression_settings_pkey",
 		},
 	},
 	[COMPRESSION_CHUNK_SIZE] = {
@@ -317,7 +317,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,
 	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = NULL,
 	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = NULL,
-	[HYPERTABLE_COMPRESSION] = NULL,
+	[COMPRESSION_SETTINGS] = NULL,
 	[COMPRESSION_CHUNK_SIZE] = NULL,
 	[REMOTE_TXN] = NULL,
 	[CHUNK_COPY_OPERATION] = CATALOG_SCHEMA_NAME ".chunk_copy_operation_id_seq",
