@@ -828,7 +828,6 @@ ts_bgw_scheduler_process(int32 run_for_interval_ms,
 
 	wait_for_all_jobs_to_shutdown();
 	check_for_stopped_and_timed_out_jobs();
-	proc_exit(ts_bgw_scheduler_exit_code);
 }
 
 static void

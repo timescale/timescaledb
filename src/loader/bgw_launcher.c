@@ -84,8 +84,6 @@ typedef enum SchedulerState
 
 static volatile sig_atomic_t got_SIGHUP = false;
 
-int ts_guc_bgw_scheduler_restart_time_sec = 30;
-
 static void
 launcher_sighup(SIGNAL_ARGS)
 {
@@ -240,23 +238,9 @@ terminate_background_worker(BackgroundWorkerHandle *handle)
 }
 
 extern void
-ts_bgw_cluster_launcher_init(void)
+ts_bgw_cluster_launcher_register(void)
 {
 	BackgroundWorker worker;
-
-	DefineCustomIntVariable(/* name= */ "timescaledb.bgw_scheduler_restart_time",
-							/* short_desc= */ "Restart time for scheduler in seconds",
-							/* long_desc= */
-							"The number of seconds until the scheduler restart on failure.",
-							/* valueAddr= */ &ts_guc_bgw_scheduler_restart_time_sec,
-							/* bootValue= */ 30,
-							/* minValue= */ 1,
-							/* maxValue= */ 3600,
-							/* context= */ PGC_POSTMASTER,
-							/* flags= */ GUC_UNIT_S,
-							/* check_hook= */ NULL,
-							/* assign_hook= */ NULL,
-							/* show_hook= */ NULL);
 
 	memset(&worker, 0, sizeof(worker));
 	/* set up worker settings for our main worker */
@@ -292,7 +276,7 @@ register_entrypoint_for_db(Oid db_id, VirtualTransactionId vxid, BackgroundWorke
 	memset(&worker, 0, sizeof(worker));
 	snprintf(worker.bgw_name, BGW_MAXLEN, "TimescaleDB Background Worker Scheduler");
 	worker.bgw_flags = BGWORKER_SHMEM_ACCESS | BGWORKER_BACKEND_DATABASE_CONNECTION;
-	worker.bgw_restart_time = ts_guc_bgw_scheduler_restart_time_sec,
+	worker.bgw_restart_time = BGW_NEVER_RESTART;
 	worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
 	snprintf(worker.bgw_library_name, BGW_MAXLEN, EXTENSION_NAME);
 	snprintf(worker.bgw_function_name, BGW_MAXLEN, BGW_ENTRYPOINT_FUNCNAME);
