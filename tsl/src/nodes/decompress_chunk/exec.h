@@ -10,6 +10,7 @@
 #include <postgres.h>
 
 #include <nodes/extensible.h>
+#include "batch_array.h"
 
 #define DECOMPRESS_CHUNK_COUNT_ID -9
 #define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
@@ -61,18 +62,8 @@ typedef struct DecompressChunkState
 	int hypertable_id;
 	Oid chunk_relid;
 
-	/* Batch states */
-	int n_batch_states; /* Number of batch states */
-	/*
-	 * The batch states. It's void* because they have a variable length
-	 * column array, so normal indexing can't be used. Use the batch_array_get_at
-	 * accessor instead.
-	 */
-	void *batch_states;
-	int n_batch_state_bytes;
-	Bitmapset *unused_batch_states; /* The unused batch states */
-	int batch_memory_context_bytes;
-
+	BatchArray batch_array;
+	Size batch_memory_context_bytes;
 	const struct BatchQueueFunctions *batch_queue;
 	CustomExecMethods exec_methods;
 
