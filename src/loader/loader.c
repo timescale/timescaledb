@@ -711,7 +711,7 @@ _PG_init(void)
 	timescaledb_shmem_request_hook();
 #endif
 
-	ts_bgw_cluster_launcher_init();
+	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
 	ts_seclabel_init();

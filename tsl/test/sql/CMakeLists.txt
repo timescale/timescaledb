@@ -47,7 +47,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     bgw_db_scheduler.sql
     bgw_scheduler_control.sql
-    bgw_scheduler_restart.sql
     job_errors_permissions.sql
     troubleshooting_job_errors.sql
     bgw_db_scheduler_fixed.sql
@@ -141,7 +140,6 @@ set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
     bgw_scheduler_control
-    bgw_scheduler_restart
     bgw_db_scheduler
     job_errors_permissions
     troubleshooting_job_errors
