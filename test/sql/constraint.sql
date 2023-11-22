@@ -612,7 +612,7 @@ CREATE TABLE tbl (
 fk_id int,
 id int,
 time timestamp,
-CONSTRAINT pk PRIMARY KEY (time, id) USING INDEX TABLESPACE tablespace1);
+CONSTRAINT pk PRIMARY KEY (time, id) USING INDEX TABLESPACE tablespace1 DEFERRABLE INITIALLY DEFERRED);
 
 SELECT create_hypertable('tbl', 'time');
 

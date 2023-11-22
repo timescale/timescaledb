@@ -40,10 +40,6 @@ BEGIN
 
           def := pg_get_constraintdef(constraint_oid);
 
-          IF indx_tablespace IS NOT NULL THEN
-            def := format('%s USING INDEX TABLESPACE %I', def, indx_tablespace);
-          END IF;
-
         ELSIF constraint_type = 't' THEN
           -- constraint triggers are copied separately with normal triggers
           def := NULL;
@@ -63,6 +59,18 @@ BEGIN
             $$ ALTER TABLE %I.%I ADD CONSTRAINT %I %s $$,
             chunk_row.schema_name, chunk_row.table_name, chunk_constraint_row.constraint_name, def
         );
+
+        -- if constraint (primary or unique) needs a tablespace then add it
+        -- via a separate ALTER INDEX SET TABLESPACE command. We cannot append it
+        -- to the "def" string above since it leads to a SYNTAX error when
+        -- "DEFERRABLE" or "INITIALLY DEFERRED" are used in the constraint
+        IF indx_tablespace IS NOT NULL THEN
+            EXECUTE pg_catalog.format(
+                $$ ALTER INDEX %I.%I SET TABLESPACE %I $$,
+                chunk_row.schema_name, chunk_constraint_row.constraint_name, indx_tablespace
+            );
+        END IF;
+
     END IF;
 END
 $BODY$ SET search_path TO pg_catalog, pg_temp;
