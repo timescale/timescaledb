@@ -1,0 +1,2 @@
+Fixes: #6343 Enable segmentwise recompression in compression policy
+Thanks: @fetchezar for reporting the issue
