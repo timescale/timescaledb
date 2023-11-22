@@ -513,7 +513,7 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 	 * possible to optimize that case further by retaining a window/cache of
 	 * decompressed tuples, keyed on TID.
 	 */
-	if (!TTS_EMPTY(slot) && ItemPointerIsValid(&cscan->tid) &&
+	if (!TTS_EMPTY(child_slot) && !TTS_EMPTY(slot) && ItemPointerIsValid(&cscan->tid) &&
 		ItemPointerEquals(&cscan->tid, &decoded_tid))
 	{
 		/* Still in the same compressed tuple, so just update tuple index and
