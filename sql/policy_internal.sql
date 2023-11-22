@@ -123,26 +123,19 @@ BEGIN
         )
       ) AND recompress_enabled IS TRUE THEN
       BEGIN
-        PERFORM @extschema@.decompress_chunk(chunk_rec.oid, if_compressed => true);
+        -- first check if there's an index. Might have to use a heuristic to determine if index usage would be efficient,
+        -- or if we'd better fall back to decompressing & recompressing entire chunk
+        IF _timescaledb_functions.get_compressed_chunk_index_for_recompression(chunk_rec.oid) IS NOT NULL THEN
+          PERFORM _timescaledb_functions.recompress_chunk_segmentwise(chunk_rec.oid);
+        ELSE
+          PERFORM @extschema@.decompress_chunk(chunk_rec.oid, if_compressed => true);
+          PERFORM @extschema@.compress_chunk(chunk_rec.oid);
+        END IF;
       EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS
             _message = MESSAGE_TEXT,
             _detail = PG_EXCEPTION_DETAIL;
-        RAISE WARNING 'decompressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
-            USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = sqlstate;
-      END;
-      -- SET LOCAL is only active until end of transaction.
-      -- While we could use SET at the start of the function we do not
-      -- want to bleed out search_path to caller, so we do SET LOCAL
-      -- again after COMMIT
-      BEGIN
-        PERFORM @extschema@.compress_chunk(chunk_rec.oid);
-      EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS
-            _message = MESSAGE_TEXT,
-            _detail = PG_EXCEPTION_DETAIL;
-        RAISE WARNING 'compressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
+        RAISE WARNING 'recompressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
             USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
                   ERRCODE = sqlstate;
       END;
