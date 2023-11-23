@@ -448,7 +448,24 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY device ASC LIMIT 5;
 (7 rows)
 
 -- We should be able to change it back to heap.
+-- Compression metadata should be cleaned up
+SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
+INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
+WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
+ count 
+-------
+     1
+(1 row)
+
 ALTER TABLE :chunk SET ACCESS METHOD heap;
+SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
+INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
+WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
+ count 
+-------
+     0
+(1 row)
+
 -- Show same output as first query above but for heap
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
@@ -479,3 +496,6 @@ FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
       1 |      17384 |        17388 |    4
 (1 row)
 
+-- Convert back to tscompression to check that metadata was cleaned up
+-- from last time this table used tscompression
+ALTER TABLE :chunk SET ACCESS METHOD tscompression;

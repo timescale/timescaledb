@@ -37,12 +37,21 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 				{
 #if PG15_GE
 					case AT_SetAccessMethod:
+					{
+						Oid relid = AlterTableLookupRelation(stmt, NoLock);
+
 						if (strcmp(cmd->name, "tscompression") == 0)
+							compressionam_handler_start_conversion(relid, false);
+						else
 						{
-							Oid relid = AlterTableLookupRelation(stmt, NoLock);
-							compressionam_handler_start_conversion(relid);
+							Relation rel = table_open(relid, AccessShareLock);
+
+							if (rel->rd_tableam == compressionam_routine())
+								compressionam_handler_start_conversion(relid, true);
+							table_close(rel, AccessShareLock);
 						}
 						break;
+					}
 #endif
 					default:
 						break;
