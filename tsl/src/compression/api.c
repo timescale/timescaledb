@@ -1157,7 +1157,7 @@ fetch_unmatched_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tuples
 	table_endscan(heapScan);
 }
 
-static void
+static bool
 fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tuplesortstate,
 												 int nsegmentby_cols,
 												 Relation uncompressed_chunk_rel,
@@ -1169,6 +1169,7 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	int index = 0;
 	int nsegbycols_nonnull = 0;
 	Bitmapset *null_segbycols = NULL;
+	bool matching_exist = false;
 
 	for (int seg_col = 0; seg_col < nsegmentby_cols; seg_col++)
 	{
@@ -1227,6 +1228,7 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 		}
 		if (valid)
 		{
+			matching_exist = true;
 			ExecStoreHeapTuple(uncompressed_tuple, heap_tuple_slot, false);
 			slot_getallattrs(heap_tuple_slot);
 			tuplesort_puttupleslot(segment_tuplesortstate, heap_tuple_slot);
@@ -1243,6 +1245,7 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 
 	if (scankey != NULL)
 		pfree(scankey);
+	return matching_exist;
 }
 
 /*
@@ -1353,6 +1356,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 
 	/****** compression statistics ******/
 	RelationSize after_size;
+	int64 skipped_uncompressed_rows = 0;
+	int64 skipped_compressed_rows = 0;
 
 	Tuplesortstate *segment_tuplesortstate;
 
@@ -1428,6 +1433,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 		current_segment[i] = palloc(sizeof(CompressedSegmentInfo));
 	}
 	bool current_segment_init = false;
+	bool uncompressed_fetched_for_segment = false;
+	bool skip_current_segment = false;
 
 	/************** snapshot ****************************/
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
@@ -1439,6 +1446,9 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	TupleTableSlot *slot = table_slot_create(compressed_chunk_rel, NULL);
 	index_rescan(index_scan, NULL, 0, NULL, 0);
 
+	Datum val;
+	bool is_null;
+
 	while (index_getnext_slot(index_scan, ForwardScanDirection, slot))
 	{
 		i = 0;
@@ -1448,8 +1458,6 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 		if (!current_segment_init)
 		{
 			current_segment_init = true;
-			Datum val;
-			bool is_null;
 			/* initialize current segment */
 			for (col = 0; col < slot->tts_tupleDescriptor->natts; col++)
 			{
@@ -1466,6 +1474,22 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 				}
 			}
 		}
+		if (!uncompressed_fetched_for_segment)
+		{
+			uncompressed_fetched_for_segment = true;
+			if (!fetch_matching_uncompressed_chunk_into_tuplesort(segment_tuplesortstate,
+																  nsegmentby_cols,
+																  uncompressed_chunk_rel,
+																  current_segment))
+			{
+				val = slot_getattr(slot, AttrOffsetGetAttrNumber(row_compressor.count_metadata_column_offset), &is_null);
+				Assert(!is_null);
+				skipped_uncompressed_rows += DatumGetInt64(val);
+				skipped_compressed_rows++;
+				skip_current_segment = true;
+				continue;
+			}
+		}
 		/* we have a segment already, so compare those */
 		changed_segment = decompress_segment_changed_group(current_segment,
 														   slot,
@@ -1474,6 +1498,15 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 														   nsegmentby_cols);
 		if (!changed_segment)
 		{
+			if (skip_current_segment)
+			{
+				val = slot_getattr(slot, AttrOffsetGetAttrNumber(row_compressor.count_metadata_column_offset), &is_null);
+				Assert(!is_null);
+				skipped_uncompressed_rows += DatumGetInt64(val);
+				skipped_compressed_rows++;
+				continue;
+			}
+
 			i = 0;
 			bool should_free;
 
@@ -1493,33 +1526,49 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 		}
 		else if (changed_segment)
 		{
-			fetch_matching_uncompressed_chunk_into_tuplesort(segment_tuplesortstate,
-															 nsegmentby_cols,
-															 uncompressed_chunk_rel,
-															 current_segment);
+			if (!skip_current_segment)
+			{
+				tuplesort_performsort(segment_tuplesortstate);
 
-			tuplesort_performsort(segment_tuplesortstate);
+				recompress_segment(segment_tuplesortstate, uncompressed_chunk_rel, &row_compressor);
 
-			recompress_segment(segment_tuplesortstate, uncompressed_chunk_rel, &row_compressor);
+				/* now any pointers returned will be garbage */
+				tuplesort_end(segment_tuplesortstate);
 
-			/* now any pointers returned will be garbage */
-			tuplesort_end(segment_tuplesortstate);
+				CommandCounterIncrement();
+
+				/* reinit tuplesort and add the first tuple of the new segment to it */
+				segment_tuplesortstate = tuplesort_begin_heap(uncompressed_rel_tupdesc,
+															  n_keys,
+															  sort_keys,
+															  sort_operators,
+															  sort_collations,
+															  nulls_first,
+															  maintenance_work_mem,
+															  NULL,
+															  false);
+			}
+
+			skip_current_segment = false;
 
 			decompress_segment_update_current_segment(current_segment,
 													  slot, /*slot from compressed chunk*/
 													  decompressor.per_compressed_cols,
 													  segmentby_column_offsets_compressed,
 													  nsegmentby_cols);
-			/* reinit tuplesort and add the first tuple of the new segment to it */
-			segment_tuplesortstate = tuplesort_begin_heap(uncompressed_rel_tupdesc,
-														  n_keys,
-														  sort_keys,
-														  sort_operators,
-														  sort_collations,
-														  nulls_first,
-														  maintenance_work_mem,
-														  NULL,
-														  false);
+
+			if (!fetch_matching_uncompressed_chunk_into_tuplesort(segment_tuplesortstate,
+																  nsegmentby_cols,
+																  uncompressed_chunk_rel,
+																  current_segment))
+			{
+				val = slot_getattr(slot, AttrOffsetGetAttrNumber(row_compressor.count_metadata_column_offset), &is_null);
+				Assert(!is_null);
+				skipped_uncompressed_rows += DatumGetInt64(val);
+				skipped_compressed_rows++;
+				skip_current_segment = true;
+				continue;
+			}
 
 			bool should_free;
 			compressed_tuple = ExecFetchSlotHeapTuple(slot, false, &should_free);
@@ -1534,6 +1583,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 			simple_table_tuple_delete(compressed_chunk_rel, &(slot->tts_tid), snapshot);
 			/* because this is the first tuple of the new segment */
 			changed_segment = false;
+			skip_current_segment = false;
 			/* make changes visible */
 			CommandCounterIncrement();
 
@@ -1549,12 +1599,15 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	 * the current segment could not be initialized in the case where two recompress operations
 	 * execute concurrently: one blocks on the Exclusive lock but has already read the chunk
 	 * status and determined that there is data in the uncompressed chunk */
-	if (!changed_segment && current_segment_init)
+	if (!changed_segment && !skip_current_segment && current_segment_init)
 	{
-		fetch_matching_uncompressed_chunk_into_tuplesort(segment_tuplesortstate,
-														 nsegmentby_cols,
-														 uncompressed_chunk_rel,
-														 current_segment);
+		if (!uncompressed_fetched_for_segment)
+		{
+			fetch_matching_uncompressed_chunk_into_tuplesort(segment_tuplesortstate,
+															 nsegmentby_cols,
+															 uncompressed_chunk_rel,
+															 current_segment);
+		}
 		tuplesort_performsort(segment_tuplesortstate);
 		recompress_segment(segment_tuplesortstate, uncompressed_chunk_rel, &row_compressor);
 		tuplesort_end(segment_tuplesortstate);
@@ -1595,6 +1648,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	/* the compression size statistics we are able to update and accurately report are:
 	 * rowcount pre/post compression,
 	 * compressed chunk sizes */
+	row_compressor.rowcnt_pre_compression += skipped_uncompressed_rows;
+	row_compressor.num_compressed_rows += skipped_compressed_rows;
 	compression_chunk_size_catalog_update_recompressed(uncompressed_chunk->fd.id,
 													   compressed_chunk->fd.id,
 													   &after_size,
