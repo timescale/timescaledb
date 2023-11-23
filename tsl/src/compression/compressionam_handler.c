@@ -225,9 +225,9 @@ compressionam_slot_callbacks(Relation relation)
 typedef struct CompressionScanDescData
 {
 	TableScanDescData rs_base;
-	TableScanDesc heap_scan;
+	TableScanDesc uscan_desc; /* scan descriptor for non-compressed relation */
 	Relation compressed_rel;
-	TableScanDesc compressed_scan_desc;
+	TableScanDesc cscan_desc; /* scan descriptor for compressed relation */
 	uint16 compressed_tuple_index;
 	int64 returned_row_count;
 	int32 compressed_row_count;
@@ -290,6 +290,24 @@ initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 		pgstat_count_compression_scan(scan->rs_base.rs_rd);
 }
 
+static const char *
+get_scan_type(uint32 flags)
+{
+	if (flags & SO_TYPE_TIDSCAN)
+		return "TID";
+	if (flags & SO_TYPE_TIDRANGESCAN)
+		return "TID range";
+	if (flags & SO_TYPE_BITMAPSCAN)
+		return "bitmap";
+	if (flags & SO_TYPE_SAMPLESCAN)
+		return "sample";
+	if (flags & SO_TYPE_ANALYZE)
+		return "analyze";
+	if (flags & SO_TYPE_SEQSCAN)
+		return "sequence";
+	return "unknown";
+}
+
 static TableScanDesc
 compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
 						ParallelTableScanDesc parallel_scan, uint32 flags)
@@ -298,6 +316,8 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	RelationIncrementReferenceCount(relation);
+
+	elog(DEBUG1, "starting %s scan", get_scan_type(flags));
 
 	scan = palloc0(sizeof(CompressionScanDescData));
 	scan->rs_base.rs_rd = relation;
@@ -334,14 +354,14 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	initscan(scan, keys, nkeys);
 
 	if (flags & SO_TYPE_ANALYZE)
-		scan->compressed_scan_desc = table_beginscan_analyze(scan->compressed_rel);
+		scan->cscan_desc = table_beginscan_analyze(scan->compressed_rel);
 	else
-		scan->compressed_scan_desc = table_beginscan(scan->compressed_rel,
-													 snapshot,
-													 scan->rs_base.rs_nkeys,
-													 scan->rs_base.rs_key);
+		scan->cscan_desc = table_beginscan(scan->compressed_rel,
+										   snapshot,
+										   scan->rs_base.rs_nkeys,
+										   scan->rs_base.rs_key);
 
-	scan->heap_scan = heapam->scan_begin(relation, snapshot, nkeys, keys, parallel_scan, flags);
+	scan->uscan_desc = heapam->scan_begin(relation, snapshot, nkeys, keys, parallel_scan, flags);
 
 	return &scan->rs_base;
 }
@@ -355,8 +375,8 @@ compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool all
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->compressed_tuple_index = 1;
-	table_rescan(scan->compressed_scan_desc, key);
-	heapam->scan_rescan(scan->heap_scan, key, set_params, allow_strat, allow_sync, allow_pagemode);
+	table_rescan(scan->cscan_desc, key);
+	heapam->scan_rescan(scan->uscan_desc, key, set_params, allow_strat, allow_sync, allow_pagemode);
 }
 
 static void
@@ -366,9 +386,9 @@ compressionam_endscan(TableScanDesc sscan)
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	RelationDecrementReferenceCount(sscan->rs_rd);
-	table_endscan(scan->compressed_scan_desc);
+	table_endscan(scan->cscan_desc);
 	table_close(scan->compressed_rel, AccessShareLock);
-	heapam->scan_end(scan->heap_scan);
+	heapam->scan_end(scan->uscan_desc);
 
 	if (scan->rs_base.rs_key)
 		pfree(scan->rs_base.rs_key);
@@ -390,7 +410,7 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 		child_slot = arrow_slot_get_noncompressed_slot(slot);
 
-		bool result = heapam->scan_getnextslot(scan->heap_scan, direction, child_slot);
+		bool result = heapam->scan_getnextslot(scan->uscan_desc, direction, child_slot);
 
 		if (result)
 			ExecStoreArrowTuple(slot, InvalidTupleIndex);
@@ -405,7 +425,7 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 
 	if (TupIsNull(child_slot) || (scan->compressed_tuple_index == scan->compressed_row_count))
 	{
-		if (!table_scan_getnextslot(scan->compressed_scan_desc, direction, child_slot))
+		if (!table_scan_getnextslot(scan->cscan_desc, direction, child_slot))
 		{
 			ExecClearTuple(slot);
 			scan->compressed_read_done = true;
@@ -1108,7 +1128,7 @@ compressionam_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 
 	FEATURE_NOT_SUPPORTED;
 
-	return cscan->compressed_rel->rd_tableam->scan_analyze_next_block(cscan->compressed_scan_desc,
+	return cscan->compressed_rel->rd_tableam->scan_analyze_next_block(cscan->cscan_desc,
 																	  blockno,
 																	  bstrategy);
 }
@@ -1128,12 +1148,11 @@ compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXm
 		arrow_slot_get_compressed_slot(slot, RelationGetDescr(cscan->compressed_rel));
 	FEATURE_NOT_SUPPORTED;
 
-	bool result =
-		cscan->compressed_rel->rd_tableam->scan_analyze_next_tuple(cscan->compressed_scan_desc,
-																   OldestXmin,
-																   liverows,
-																   deadrows,
-																   child_slot);
+	bool result = cscan->compressed_rel->rd_tableam->scan_analyze_next_tuple(cscan->cscan_desc,
+																			 OldestXmin,
+																			 liverows,
+																			 deadrows,
+																			 child_slot);
 
 	if (result)
 		ExecStoreArrowTuple(slot, 1);
