@@ -295,8 +295,10 @@ get_scan_type(uint32 flags)
 {
 	if (flags & SO_TYPE_TIDSCAN)
 		return "TID";
+#if PG14_GE
 	if (flags & SO_TYPE_TIDRANGESCAN)
 		return "TID range";
+#endif
 	if (flags & SO_TYPE_BITMAPSCAN)
 		return "bitmap";
 	if (flags & SO_TYPE_SAMPLESCAN)
@@ -613,39 +615,54 @@ static bool
 compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapshot,
 								TupleTableSlot *slot)
 {
+	bool result;
+	ItemPointerData decoded_tid;
+	const uint16 tuple_index =
+		is_compressed_tid(tid) ? compressed_tid_to_tid(&decoded_tid, tid) : InvalidTupleIndex;
+
 	if (!is_compressed_tid(tid))
 	{
-		/* Just pass this on to regular heap AM */
+		/*
+		 * For non-compressed tuples, we fetch the tuple and copy it into the
+		 * destination slot.
+		 *
+		 * We need to have a new slot for the call since the heap AM expects a
+		 * BufferHeap TTS and we cannot pass down our Arrow TTS.
+		 */
 		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
-		bool result = heapam->tuple_fetch_row_version(relation, tid, snapshot, child_slot);
-
-		if (result)
-			ExecStoreArrowTuple(slot, InvalidTupleIndex);
-
-		return result;
+		result = heapam->tuple_fetch_row_version(relation, tid, snapshot, child_slot);
+	}
+	else
+	{
+		CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+		Relation child_rel = table_open(caminfo->compressed_relid, AccessShareLock);
+		TupleTableSlot *child_slot =
+			arrow_slot_get_compressed_slot(slot, RelationGetDescr(child_rel));
+		result = table_tuple_fetch_row_version(child_rel, &decoded_tid, snapshot, child_slot);
+		table_close(child_rel, NoLock);
 	}
 
-	FEATURE_NOT_SUPPORTED;
-	/*
-	ItemPointerData decoded_tid;
+	if (result)
+		ExecStoreArrowTuple(slot, tuple_index);
 
-	uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
-	Oid compr_relid = get_compressed_table_relid(RelationGetRelid(relation));
-	Relation compr_rel = table_open(compr_relid, AccessShareLock);
-	TupleTableSlot *compr_slot = table_slot_create(compr_rel, NULL);
-
-	compr_rel->rd_tableam->tuple_fetch_row_version(compr_rel, &decoded_tid, snapshot, compr_slot);
-	table_close(compr_rel, NoLock);
-	*/
-	return false;
+	return result;
 }
 
 static bool
 compressionam_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 {
-	FEATURE_NOT_SUPPORTED;
-	return false;
+	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
+	ItemPointerData ctid;
+
+	if (!is_compressed_tid(tid))
+	{
+		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+		return heapam->tuple_tid_valid(cscan->uscan_desc, tid);
+	}
+
+	(void) compressed_tid_to_tid(&ctid, tid);
+	return cscan->compressed_rel->rd_tableam->tuple_tid_valid(cscan->cscan_desc, &ctid);
 }
 
 static bool
