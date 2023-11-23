@@ -88,7 +88,7 @@ select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
 insert into mytab_twoseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
 
-select * from :chunk_to_compress_2;
+select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
 
 SELECT compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name_2
 from compressed_chunk_info_view where hypertable_name = 'mytab_twoseg' \gset
@@ -101,7 +101,7 @@ select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2
 select ctid, * from :compressed_chunk_name_2;
 
 -- verify that initial data is returned as expected
-select * from :chunk_to_compress_2;
+select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
 
 -- should still have 2 compressed rows
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
@@ -176,7 +176,7 @@ INSERT INTO mytab_prep VALUES ('2023-01-01'::timestamptz, 2, NULL, 2),
 alter table mytab_prep set (timescaledb.compress, timescaledb.compress_segmentby = 'a, c');
 
 PREPARE p1 AS
-SELECT * FROM mytab_prep;
+SELECT * FROM mytab_prep ORDER BY a, c, time DESC;
 
 select show_chunks as chunk_to_compress_prep from show_chunks('mytab_prep') limit 1 \gset
 SELECT compress_chunk(:'chunk_to_compress_prep'); -- the output of the prepared plan would change before and after compress
