@@ -15,7 +15,7 @@
 
 extern const TableAmRoutine *compressionam_routine(void);
 extern void compressionam_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht);
-extern void compressionam_handler_start_conversion(Oid relid);
+extern void compressionam_handler_start_conversion(Oid relid, bool to_other_am);
 extern Datum compressionam_handler(PG_FUNCTION_ARGS);
 
 #endif /* TIMESCALEDB_TSL_COMPRESSIONAM_HANDLER_H */
