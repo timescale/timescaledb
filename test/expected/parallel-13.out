@@ -285,37 +285,42 @@ SELECT count(*) FROM "test" WHERE i > 1 AND length(version()) > 0;
 (1 row)
 
 RESET parallel_leader_participation;
--- Test parallel chunk append is used
+-- Test parallel chunk append is used (index scan is disabled to trigger a parallel chunk append)
 SET parallel_tuple_cost = 0;
-:PREFIX SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+SET enable_indexscan = OFF;
+:PREFIX SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 ORDER BY I LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 ORDER BY I LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
  Sort
-   Sort Key: test.i, _hyper_1_1_chunk.i
-   ->  Hash Right Join
-         Hash Cond: (_hyper_1_1_chunk.i = test.i)
+   Sort Key: test.i, _hyper_1_1_chunk_1.i
+   ->  Merge Left Join
+         Merge Cond: (test.i = _hyper_1_1_chunk_1.i)
          ->  Limit
-               ->  Gather
+               ->  Gather Merge
                      Workers Planned: 2
-                     ->  Parallel Seq Scan on _hyper_1_1_chunk
-                           Filter: (i < 500000)
-         ->  Hash
-               ->  Limit
-                     ->  Gather
-                           Workers Planned: 2
+                     ->  Sort
+                           Sort Key: test.i
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Custom Scan (ChunkAppend) on test
                                        Chunks excluded during startup: 0
                                        ->  Result
                                              One-Time Filter: (length(version()) > 0)
-                                             ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                                             ->  Parallel Seq Scan on _hyper_1_1_chunk
                                        ->  Result
                                              One-Time Filter: (length(version()) > 0)
                                              ->  Parallel Seq Scan on _hyper_1_2_chunk
-(23 rows)
+         ->  Materialize
+               ->  Limit
+                     ->  Gather Merge
+                           Workers Planned: 2
+                           ->  Sort
+                                 Sort Key: _hyper_1_1_chunk_1.i
+                                 ->  Parallel Seq Scan on _hyper_1_1_chunk _hyper_1_1_chunk_1
+                                       Filter: (i < 500000)
+(27 rows)
 
-SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
+SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 ORDER BY I LIMIT 10) AS t1 LEFT JOIN (SELECT * FROM "test" WHERE i < 500000 ORDER BY I LIMIT 10) AS t2 ON (t1.i = t2.i) ORDER BY t1.i, t2.i;
  i  |  j   |             ts              | i  |  j   |             ts              
 ----+------+-----------------------------+----+------+-----------------------------
   0 |  0.1 | Wed Dec 31 16:00:00 1969    |  0 |  0.1 | Wed Dec 31 16:00:00 1969
@@ -330,6 +335,7 @@ SELECT * FROM (SELECT * FROM "test" WHERE length(version()) > 0 LIMIT 10) AS t1 
  90 | 90.1 | Wed Dec 31 16:00:00.09 1969 | 90 | 90.1 | Wed Dec 31 16:00:00.09 1969
 (10 rows)
 
+SET enable_indexscan = ON;
 -- Test normal chunk append can be used in a parallel worker
 :PREFIX SELECT * FROM (SELECT * FROM "test" WHERE i >= 999000 ORDER BY i) AS t1 JOIN (SELECT * FROM "test" WHERE i >= 400000 ORDER BY i) AS t2 ON (TRUE) ORDER BY t1.i, t2.i LIMIT 10;
                                                             QUERY PLAN                                                            
