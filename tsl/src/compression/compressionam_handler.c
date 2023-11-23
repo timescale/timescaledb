@@ -46,6 +46,7 @@
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 
 static const TableAmRoutine compressionam_methods;
@@ -1485,8 +1486,13 @@ compressionam_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanst
 	return false;
 }
 
-void
-compressionam_handler_start_conversion(Oid relid)
+/*
+ * Convert a table to compression AM.
+ *
+ * Need to setup the conversion state used to compress the data.
+ */
+static void
+convert_to_compressionam(Oid relid)
 {
 	MemoryContext oldcxt = MemoryContextSwitchTo(CurTransactionContext);
 	ConversionState *state = palloc0(sizeof(ConversionState));
@@ -1553,6 +1559,27 @@ compressionam_handler_start_conversion(Oid relid)
 	relation_close(relation, AccessShareLock);
 	conversionstate = state;
 	MemoryContextSwitchTo(oldcxt);
+}
+
+/*
+ * Convert the table away from compression AM to another table access method.
+ * When this happens it is necessary to cleanup metadata.
+ */
+static void
+convert_from_compressionam(Oid relid)
+{
+	int32 chunk_id = get_chunk_id_from_relid(relid);
+	int PG_USED_FOR_ASSERTS_ONLY count = ts_compression_chunk_size_delete(chunk_id);
+	Assert(count == 1);
+}
+
+void
+compressionam_handler_start_conversion(Oid relid, bool to_other_am)
+{
+	if (to_other_am)
+		convert_from_compressionam(relid);
+	else
+		convert_to_compressionam(relid);
 }
 
 void
