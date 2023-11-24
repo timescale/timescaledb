@@ -1500,6 +1500,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 
 			tuplesort_performsort(segment_tuplesortstate);
 
+			row_compressor_reset(&row_compressor);
 			recompress_segment(segment_tuplesortstate, uncompressed_chunk_rel, &row_compressor);
 
 			/* now any pointers returned will be garbage */
@@ -1556,6 +1557,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 														 uncompressed_chunk_rel,
 														 current_segment);
 		tuplesort_performsort(segment_tuplesortstate);
+		row_compressor_reset(&row_compressor);
 		recompress_segment(segment_tuplesortstate, uncompressed_chunk_rel, &row_compressor);
 		tuplesort_end(segment_tuplesortstate);
 
@@ -1582,6 +1584,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	if (unmatched_rows_exist)
 	{
 		tuplesort_performsort(segment_tuplesortstate);
+		row_compressor_reset(&row_compressor);
 		row_compressor_append_sorted_rows(&row_compressor,
 										  segment_tuplesortstate,
 										  RelationGetDescr(uncompressed_chunk_rel));
