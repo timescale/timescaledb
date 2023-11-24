@@ -31,7 +31,7 @@
 #include "import/planner.h"
 #include "import/allpaths.h"
 #include "compression/create.h"
-#include "nodes/decompress_chunk/batch_queue_heap.h"
+#include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
