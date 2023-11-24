@@ -1293,6 +1293,12 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 }
 
 void
+row_compressor_reset(RowCompressor *row_compressor)
+{
+	row_compressor->first_iteration = true;
+}
+
+void
 row_compressor_finish(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
