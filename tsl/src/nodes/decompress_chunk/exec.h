@@ -45,6 +45,20 @@ typedef struct DecompressChunkColumnDescription
 	bool bulk_decompression_supported;
 } DecompressChunkColumnDescription;
 
+typedef struct DecompressContext
+{
+	BatchArray batch_array;
+	Size batch_memory_context_bytes;
+	bool reverse;
+	bool enable_bulk_decompression;
+
+	/*
+	 * Scratch space for bulk decompression which might need a lot of temporary
+	 * data.
+	 */
+	MemoryContext bulk_decompression_context;
+} DecompressContext;
+
 typedef struct DecompressChunkState
 {
 	CustomScanState csstate;
@@ -56,14 +70,12 @@ typedef struct DecompressChunkState
 	int num_total_columns;
 	int num_compressed_columns;
 
+	DecompressContext decompress_context;
 	DecompressChunkColumnDescription *template_columns;
 
-	bool reverse;
 	int hypertable_id;
 	Oid chunk_relid;
 
-	BatchArray batch_array;
-	Size batch_memory_context_bytes;
 	const struct BatchQueueFunctions *batch_queue;
 	CustomExecMethods exec_methods;
 
@@ -74,17 +86,9 @@ typedef struct DecompressChunkState
 	SortSupportData *sortkeys;	   /* Sort keys for binary heap compare function */
 	TupleTableSlot *last_batch_first_tuple;
 
-	bool enable_bulk_decompression;
-
 	/* Perform calculation of the aggregate directly in the decompress chunk node and emit partials
 	 */
 	bool perform_vectorized_aggregation;
-
-	/*
-	 * Scratch space for bulk decompression which might need a lot of temporary
-	 * data.
-	 */
-	MemoryContext bulk_decompression_context;
 
 	/*
 	 * For some predicates, we have more efficient implementation that work on
