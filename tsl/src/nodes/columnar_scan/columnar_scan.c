@@ -62,7 +62,7 @@ build_scan_keys(Index relid, List *clauses, int *num_keys, List **scankey_quals)
 				OpExpr *opexpr = castNode(OpExpr, qual);
 				Oid opno = opexpr->opno;
 				Expr *leftop, *rightop, *expr = NULL;
-				Var *relvar;
+				Var *relvar = NULL;
 				Datum scanvalue = 0;
 				bool argfound = false;
 
@@ -95,6 +95,8 @@ build_scan_keys(Index relid, List *clauses, int *num_keys, List **scankey_quals)
 				if (!OidIsValid(opno) || !op_strict(opno))
 					break;
 
+				Assert(expr != NULL);
+
 				if (IsA(expr, Const))
 				{
 					Const *c = castNode(Const, expr);
@@ -119,6 +121,8 @@ build_scan_keys(Index relid, List *clauses, int *num_keys, List **scankey_quals)
 												   &op_strategy,
 												   &op_lefttype,
 												   &op_righttype);
+
+						Assert(relvar != NULL);
 
 						ScanKeyEntryInitialize(&scankeys[nkeys++],
 											   0 /* flags */,
