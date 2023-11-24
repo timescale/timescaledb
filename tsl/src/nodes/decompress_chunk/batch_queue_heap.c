@@ -58,7 +58,7 @@ static int32
 decompress_binaryheap_compare_heap_pos(Datum a, Datum b, void *arg)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) arg;
-	BatchArray *batch_array = &chunk_state->batch_array;
+	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
 	int batchA = DatumGetInt32(a);
 	Assert(batchA <= batch_array->n_batch_states);
 
@@ -95,7 +95,7 @@ binaryheap_add_unordered_autoresize(binaryheap *heap, Datum d)
 void
 batch_queue_heap_pop(DecompressChunkState *chunk_state)
 {
-	BatchArray *batch_array = &chunk_state->batch_array;
+	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
 
 	if (binaryheap_empty(chunk_state->merge_heap))
 	{
@@ -124,7 +124,7 @@ batch_queue_heap_pop(DecompressChunkState *chunk_state)
 bool
 batch_queue_heap_needs_next_batch(DecompressChunkState *chunk_state)
 {
-	BatchArray *batch_array = &chunk_state->batch_array;
+	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
 
 	if (binaryheap_empty(chunk_state->merge_heap))
 	{
@@ -156,7 +156,7 @@ batch_queue_heap_needs_next_batch(DecompressChunkState *chunk_state)
 void
 batch_queue_heap_push_batch(DecompressChunkState *chunk_state, TupleTableSlot *compressed_slot)
 {
-	BatchArray *batch_array = &chunk_state->batch_array;
+	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
 
 	Assert(!TupIsNull(compressed_slot));
 
@@ -182,7 +182,7 @@ batch_queue_heap_push_batch(DecompressChunkState *chunk_state, TupleTableSlot *c
 TupleTableSlot *
 batch_queue_heap_top_tuple(DecompressChunkState *chunk_state)
 {
-	BatchArray *batch_array = &chunk_state->batch_array;
+	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
 
 	if (binaryheap_empty(chunk_state->merge_heap))
 	{
@@ -198,10 +198,12 @@ batch_queue_heap_top_tuple(DecompressChunkState *chunk_state)
 void
 batch_queue_heap_create(DecompressChunkState *chunk_state)
 {
-	batch_array_init(&chunk_state->batch_array,
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+
+	batch_array_init(&dcontext->batch_array,
 					 INITIAL_BATCH_CAPACITY,
 					 chunk_state->num_compressed_columns,
-					 chunk_state->batch_memory_context_bytes);
+					 dcontext->batch_memory_context_bytes);
 
 	chunk_state->merge_heap = binaryheap_allocate(INITIAL_BATCH_CAPACITY,
 												  decompress_binaryheap_compare_heap_pos,
@@ -225,7 +227,7 @@ batch_queue_heap_reset(DecompressChunkState *chunk_state)
 void
 batch_queue_heap_free(DecompressChunkState *chunk_state)
 {
-	BatchArray *batch_array = &chunk_state->batch_array;
+	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
 
 	elog(DEBUG3, "Heap has capacity of %d", chunk_state->merge_heap->bh_space);
 	elog(DEBUG3, "Created batch states %d", batch_array->n_batch_states);
