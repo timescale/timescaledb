@@ -18,3 +18,5 @@
 extern TSDLLEXPORT int ts_array_length(ArrayType *arr);
 extern TSDLLEXPORT bool ts_array_is_member(ArrayType *arr, const char *name);
 extern TSDLLEXPORT int ts_array_position(ArrayType *arr, const char *name);
+extern TSDLLEXPORT bool ts_array_get_element_bool(ArrayType *arr, int position);
+extern TSDLLEXPORT const char *ts_array_get_element_text(ArrayType *arr, int position);
