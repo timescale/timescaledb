@@ -9,6 +9,7 @@ name: Windows Packages
     - '*'
     branches:
     - release_test
+    - trigger/windows_packages
 
 jobs:
   config:
@@ -43,7 +44,7 @@ jobs:
             pkg_version: ${{ fromJson(needs.config.outputs.pg13_earliest) }}.1
           - test: 13max
             pg: 13
-            pkg_version: ${{ fromJson(needs.config.outputs.pg13_latest) }}
+            pkg_version: 13.12 # hardcoded since 13.13 is not available on chocolatey
           - test: 14min
             pg: 14
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_earliest) }}.1
