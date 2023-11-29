@@ -106,3 +106,50 @@ SELECT city, to_char(bucket, 'YYYY-MM-DD HH:mi:ss'), min, max FROM conditions_su
 SELECT city, to_char(bucket, 'YYYY-MM-DD HH:mi:ss'), min, max FROM conditions_summary_1hour ORDER BY bucket;
 
 DROP TABLE conditions CASCADE;
+
+-- Experimental functions using different schema for installation than PUBLIC
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+
+CREATE DATABASE test;
+\c test :ROLE_SUPERUSER
+CREATE SCHEMA test;
+SET client_min_messages TO ERROR;
+CREATE EXTENSION timescaledb SCHEMA test;
+
+CREATE TABLE conditions(
+  tstamp TIMESTAMP NOT NULL,
+  city text NOT NULL,
+  temperature INT NOT NULL);
+
+SELECT test.create_hypertable(
+  'conditions', 'tstamp',
+  chunk_time_interval => INTERVAL '1 day'
+);
+
+CREATE MATERIALIZED VIEW conditions_summary_monthly
+WITH (timescaledb.continuous) AS
+SELECT city,
+       timescaledb_experimental.time_bucket_ng('1 month', tstamp) AS bucket,
+       MIN(temperature),
+       MAX(temperature)
+FROM conditions
+GROUP BY city, bucket
+WITH NO DATA;
+
+CREATE MATERIALIZED VIEW conditions_summary_yearly
+WITH (timescaledb.continuous) AS
+SELECT city,
+       test.time_bucket('1 year', tstamp) AS bucket,
+       MIN(temperature),
+       MAX(temperature)
+FROM conditions
+GROUP BY city, bucket
+WITH NO DATA;
+
+-- experimental should be FALSE for time_bucket
+-- experimental should be TRUE for time_bucket_bg
+SELECT name, bucket_width, experimental FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1;
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE test WITH (FORCE);
