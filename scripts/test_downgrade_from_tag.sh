@@ -11,6 +11,7 @@ TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
 CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
 PG_VERSION=${PG_VERSION:-14.3}
+PG_VERSION_MAJOR=$(echo "${PG_VERSION}" | awk '{split($0,v,"."); print v[1]}')
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
@@ -31,8 +32,6 @@ CONTAINER_ORIG=timescaledb-orig-${PID}
 CONTAINER_CLEAN_RESTORE=timescaledb-clean-restore-${PID}
 CONTAINER_UPDATED=timescaledb-updated-${PID}
 CONTAINER_CLEAN_RERUN=timescaledb-clean-rerun-${PID}
-
-export PG_VERSION
 
 if [[ "$DO_CLEANUP" = "false" ]]; then
     echo "!!Debug mode: Containers and temporary directory will be left on disk"
@@ -214,7 +213,10 @@ docker_pgcmd ${CONTAINER_UPDATED} "SELECT user_view_schema, user_view_name FROM 
 
 echo "Executing ALTER EXTENSION timescaledb UPDATE for update ($UPDATE_FROM_TAG -> $UPDATE_TO_TAG)"
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "single"
-docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "dn1"
+# PG16 does not support MN
+if [ "${PG_VERSION_MAJOR}" -lt 16 ]; then
+    docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE" "dn1"
+fi
 # Need to update also postgres DB since add_data_node may connect to
 # it and it will be borked if we don't upgrade to an extension binary
 # which is available in the image.
@@ -227,7 +229,10 @@ docker_pgcmd ${CONTAINER_UPDATED} "SELECT user_view_schema, user_view_name FROM 
 # downgrade the just upgraded version.
 echo "Executing ALTER EXTENSION timescaledb UPDATE for downgrade ($UPDATE_TO_TAG -> $UPDATE_FROM_TAG)"
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE TO '$VERSION'" "postgres"
-docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE TO '$VERSION'" "dn1"
+# PG16 does not support MN
+if [ "${PG_VERSION_MAJOR}" -lt 16 ]; then
+    docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE TO '$VERSION'" "dn1"
+fi
 docker_pgcmd ${CONTAINER_UPDATED} "ALTER EXTENSION timescaledb UPDATE TO '$VERSION'" "single"
 
 # Check that there is nothing wrong before taking a backup
@@ -244,13 +249,19 @@ docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.${TEST_VERS
 docker_pgscript ${CONTAINER_CLEAN_RERUN} /src/test/sql/updates/setup.post-downgrade.sql
 
 docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc single > /tmp/single.dump"
-docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.dump"
 docker cp ${CONTAINER_UPDATED}:/tmp/single.dump ${TEST_TMPDIR}/single.dump
-docker cp ${CONTAINER_UPDATED}:/tmp/dn1.dump ${TEST_TMPDIR}/dn1.dump
+# PG16 does not support MN
+if [ "${PG_VERSION_MAJOR}" -lt 16 ]; then
+    docker_exec ${CONTAINER_UPDATED} "pg_dump -h localhost -U postgres -Fc dn1 > /tmp/dn1.dump"
+    docker cp ${CONTAINER_UPDATED}:/tmp/dn1.dump ${TEST_TMPDIR}/dn1.dump
+fi
 
 echo "Restoring database on clean version"
 docker cp ${TEST_TMPDIR}/single.dump ${CONTAINER_CLEAN_RESTORE}:/tmp/single.dump
-docker cp ${TEST_TMPDIR}/dn1.dump ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.dump
+# PG16 does not support MN
+if [ "${PG_VERSION_MAJOR}" -lt 16 ]; then
+    docker cp ${TEST_TMPDIR}/dn1.dump ${CONTAINER_CLEAN_RESTORE}:/tmp/dn1.dump
+fi
 
 # Restore single
 docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres single"
@@ -258,11 +269,14 @@ docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single SET timescaledb.r
 docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d single /tmp/single.dump"
 docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE single RESET timescaledb.restoring"
 
-# Restore dn1
-docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres dn1"
-docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='on'"
-docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.dump"
-docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 RESET timescaledb.restoring"
+# PG16 does not support MN
+if [ "${PG_VERSION_MAJOR}" -lt 16 ]; then
+    # Restore dn1
+    docker_exec ${CONTAINER_CLEAN_RESTORE} "createdb -h localhost -U postgres dn1"
+    docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 SET timescaledb.restoring='on'"
+    docker_exec ${CONTAINER_CLEAN_RESTORE} "pg_restore -h localhost -U postgres -d dn1 /tmp/dn1.dump"
+    docker_pgcmd ${CONTAINER_CLEAN_RESTORE} "ALTER DATABASE dn1 RESET timescaledb.restoring"
+fi
 
 echo "Comparing downgraded ($UPDATE_TO_TAG -> $UPDATE_FROM_TAG) with clean install ($UPDATE_TO_TAG)"
 docker_pgdiff_all /src/test/sql/updates/post.${TEST_VERSION}.sql "single"
