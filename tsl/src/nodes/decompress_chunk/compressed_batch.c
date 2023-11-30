@@ -16,7 +16,6 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
-#include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/vector_predicates.h"
 
 /*
@@ -81,7 +80,7 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 static void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i)
 {
-	DecompressChunkColumnDescription *column_description = &dcontext->template_columns[i];
+	CompressionColumnDescription *column_description = &dcontext->template_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->iterator = NULL;
 	column_values->arrow = NULL;
@@ -230,7 +229,7 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 		 * Find the compressed column referred to by the Var.
 		 */
 		Var *var = castNode(Var, linitial(args));
-		DecompressChunkColumnDescription *column_description = NULL;
+		CompressionColumnDescription *column_description = NULL;
 		int column_index = 0;
 		for (; column_index < dcontext->num_total_columns; column_index++)
 		{
@@ -441,7 +440,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 
 	for (int i = 0; i < dcontext->num_total_columns; i++)
 	{
-		DecompressChunkColumnDescription *column_description = &dcontext->template_columns[i];
+		CompressionColumnDescription *column_description = &dcontext->template_columns[i];
 
 		switch (column_description->type)
 		{

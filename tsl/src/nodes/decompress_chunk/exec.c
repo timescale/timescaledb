@@ -262,7 +262,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	Assert(num_compressed <= num_total);
 	dcontext->num_compressed_columns = num_compressed;
 	dcontext->num_total_columns = num_total;
-	dcontext->template_columns = palloc0(sizeof(DecompressChunkColumnDescription) * num_total);
+	dcontext->template_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
 	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
 	dcontext->ps = &node->ss.ps;
 
@@ -277,7 +277,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	for (int compressed_index = 0; compressed_index < list_length(chunk_state->decompression_map);
 		 compressed_index++)
 	{
-		DecompressChunkColumnDescription column = {
+		CompressionColumnDescription column = {
 			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
 			.output_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
 			.bulk_decompression_supported =
@@ -360,7 +360,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		for (int i = 0; i < num_total; i++)
 		{
-			DecompressChunkColumnDescription *column = &dcontext->template_columns[i];
+			CompressionColumnDescription *column = &dcontext->template_columns[i];
 			if (column->bulk_decompression_supported)
 			{
 				/* Values array, with 64 element padding (actually we have less). */
@@ -488,7 +488,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	/* Two columns are decompressed, the column that needs to be aggregated and the count column */
 	Assert(dcontext->num_total_columns == 2);
 
-	DecompressChunkColumnDescription *column_description = &dcontext->template_columns[0];
+	CompressionColumnDescription *column_description = &dcontext->template_columns[0];
 	Assert(dcontext->template_columns[1].type == COUNT_COLUMN);
 
 	/* Get a free batch slot */
@@ -529,7 +529,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 		 * To calculate the sum for a segment by value, we need to multiply the value of the segment
 		 * by column with the number of compressed tuples in this batch.
 		 */
-		DecompressChunkColumnDescription *column_description_count = &dcontext->template_columns[1];
+		CompressionColumnDescription *column_description_count = &dcontext->template_columns[1];
 
 		while (true)
 		{
