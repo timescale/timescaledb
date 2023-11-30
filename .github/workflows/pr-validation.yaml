@@ -55,4 +55,32 @@ jobs:
           fi
         fi
 
+  check_loader_change:
+    name: Check for loader changes
+    # Ignore loader changes if acknowledged already
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
 
+      - name: Check if the pull request changes the loader
+        shell: bash --norc --noprofile {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Get the list of modified files in this pull request
+          files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path')
+
+          # Check for loader changes
+          if echo "${files}" | grep -Eq "^src/loader/.+$"; then
+            echo "Warning: This PR changes the loader. Therefore, upgrading to the next TimescaleDB"
+            echo "version requires a restart of PostgreSQL. Please coordinate the release with the"
+            echo "cloud team before merging."
+            echo
+            echo "After the release is coordinated, add the 'upgrade-requires-restart' label"
+            echo "to the PR to acknowledge this warning."
+            exit 1
+          fi
+      
