@@ -9,6 +9,8 @@ name: RPM packages
     - '*'
     branches:
     - release_test
+  pull_request:
+    paths: .github/workflows/rpm-packages.yaml
 
 jobs:
   rpm_tests:
@@ -35,7 +37,7 @@ jobs:
         # we need EPEL on centos 7 to satisfy PG15 dependencies
         if [[ "$(rpm -E %{rhel})" -eq "7" ]]
         then
-          yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+          yum install -y http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
         fi
 
         tee /etc/yum.repos.d/timescale_timescaledb.repo <<EOL
