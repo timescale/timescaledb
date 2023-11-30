@@ -1,0 +1,1 @@
+Fixes: #6365 Use numrows_pre_compression in approximate row count
