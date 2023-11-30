@@ -7,7 +7,7 @@
 #pragma once
 
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/decompress_context.h"
 
 typedef struct ArrowArray ArrowArray;
 

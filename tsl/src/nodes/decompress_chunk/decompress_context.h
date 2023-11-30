@@ -14,17 +14,17 @@
 
 #include "batch_array.h"
 
-typedef enum DecompressChunkColumnType
+typedef enum CompressionColumnType
 {
 	SEGMENTBY_COLUMN,
 	COMPRESSED_COLUMN,
 	COUNT_COLUMN,
 	SEQUENCE_NUM_COLUMN,
-} DecompressChunkColumnType;
+} CompressionColumnType;
 
-typedef struct DecompressChunkColumnDescription
+typedef struct CompressionColumnDescription
 {
-	DecompressChunkColumnType type;
+	CompressionColumnType type;
 	Oid typid;
 	int value_bytes;
 
@@ -42,11 +42,11 @@ typedef struct DecompressChunkColumnDescription
 	AttrNumber compressed_scan_attno;
 
 	bool bulk_decompression_supported;
-} DecompressChunkColumnDescription;
+} CompressionColumnDescription;
 
 typedef struct DecompressContext
 {
-	DecompressChunkColumnDescription *template_columns;
+	CompressionColumnDescription *template_columns;
 	int num_total_columns;
 	int num_compressed_columns;
 	List *vectorized_quals_constified;
