@@ -319,7 +319,10 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 
 	RelationIncrementReferenceCount(relation);
 
-	elog(DEBUG1, "starting %s scan", get_scan_type(flags));
+	elog(DEBUG3,
+		 "starting %s scan of relation %s",
+		 get_scan_type(flags),
+		 RelationGetRelationName(relation));
 
 	scan = palloc0(sizeof(CompressionScanDescData));
 	scan->rs_base.rs_rd = relation;
