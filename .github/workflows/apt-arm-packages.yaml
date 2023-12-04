@@ -9,6 +9,7 @@ name: APT ARM64 packages
     - '*'
     branches:
     - release_test
+    - trigger/package_test
 jobs:
   apt_tests:
     name: APT ARM64 ${{ matrix.image }} PG${{ matrix.pg }}
@@ -17,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "debian:10-slim","debian:11-slim","debian:12-slim","ubuntu:20.04","ubuntu:22.04"]
-        pg: [ 13, 14, 15 ]
+        pg: [ 13, 14, 15, 16 ]
 
     steps:
     - name: Setup emulation

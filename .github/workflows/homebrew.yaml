@@ -9,6 +9,7 @@ name: Homebrew
     - '*'
     branches:
     - release_test
+    - trigger/package_test
 
 jobs:
   homebrew:
