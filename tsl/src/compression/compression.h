@@ -7,7 +7,6 @@
 #define TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
 
 #include <postgres.h>
-#include <c.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
@@ -16,9 +15,10 @@
 typedef struct BulkInsertStateData *BulkInsertState;
 
 #include <nodes/execnodes.h>
-#include "segment_meta.h"
 
 #include "compat/compat.h"
+#include "segment_meta.h"
+
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
  * varlen header, and followed by a version specifying which compression
@@ -180,7 +180,7 @@ typedef struct CompressionAlgorithmDefinition
 	CompressionStorage compressed_data_storage;
 } CompressionAlgorithmDefinition;
 
-typedef enum CompressionAlgorithms
+typedef enum CompressionAlgorithm
 {
 	/* Not a real algorithm, if this does get used, it's a bug in the code */
 	_INVALID_COMPRESSION_ALGORITHM = 0,
@@ -194,7 +194,7 @@ typedef enum CompressionAlgorithms
 	/* end of real values */
 	_END_COMPRESSION_ALGORITHMS,
 	_MAX_NUM_COMPRESSION_ALGORITHMS = 128,
-} CompressionAlgorithms;
+} CompressionAlgorithm;
 
 typedef struct CompressionStats
 {
@@ -315,16 +315,18 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
-extern CompressionStorage compression_get_toast_storage(CompressionAlgorithms algo);
+extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
+extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
+
 extern CompressionStats compress_chunk(Oid in_table, Oid out_table,
 									   const ColumnCompressionInfo **column_compression_info,
 									   int num_compression_infos, int insert_options);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
-	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
+	CompressionAlgorithm algorithm, bool reverse))(Datum, Oid element_type);
 
-extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithms algorithm);
+extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithm algorithm);
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;

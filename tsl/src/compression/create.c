@@ -31,12 +31,12 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "compat/compat.h"
 #include "ts_catalog/catalog.h"
 #include "create.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "ts_catalog/continuous_agg.h"
-#include "compat/compat.h"
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_cache.h"
@@ -75,38 +75,6 @@ static void compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, 
 					 errmsg("bad compression hypertable internal name")));                         \
 		}                                                                                          \
 	} while (0);
-
-static enum CompressionAlgorithms
-get_default_algorithm_id(Oid typeoid)
-{
-	switch (typeoid)
-	{
-		case INT4OID:
-		case INT2OID:
-		case INT8OID:
-		case DATEOID:
-		case TIMESTAMPOID:
-		case TIMESTAMPTZOID:
-			return COMPRESSION_ALGORITHM_DELTADELTA;
-
-		case FLOAT4OID:
-		case FLOAT8OID:
-			return COMPRESSION_ALGORITHM_GORILLA;
-
-		case NUMERICOID:
-			return COMPRESSION_ALGORITHM_ARRAY;
-
-		default:
-		{
-			/* use dictitionary if possible, otherwise use array */
-			TypeCacheEntry *tentry =
-				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
-			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
-				return COMPRESSION_ALGORITHM_ARRAY;
-			return COMPRESSION_ALGORITHM_DICTIONARY;
-		}
-	}
-}
 
 static char *
 compression_column_segment_metadata_name(int16 column_index, const char *type)
@@ -327,7 +295,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		if (!OidIsValid(attroid))
 		{
 			attroid = cc->compresseddata_oid; /* default type for column */
-			cc->col_meta[colno].algo_id = get_default_algorithm_id(attr->atttypid);
+			cc->col_meta[colno].algo_id = compression_get_default_algorithm(attr->atttypid);
 		}
 		else
 		{
@@ -358,7 +326,7 @@ compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid 
 	cc->col_meta = palloc0(sizeof(FormData_hypertable_compression) * cc->numcols);
 	cc->coldeflist = NIL;
 	namestrcpy(&cc->col_meta[colno].attname, colname);
-	cc->col_meta[colno].algo_id = get_default_algorithm_id(typid);
+	cc->col_meta[colno].algo_id = compression_get_default_algorithm(typid);
 	coldef = makeColumnDef(colname, cc->compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
 	cc->coldeflist = lappend(cc->coldeflist, coldef);
 }
@@ -390,7 +358,7 @@ modify_compressed_toast_table_storage(CompressColInfo *cc, Oid compress_relid)
 			Assert(attno != InvalidAttrNumber);
 			Oid typid = get_atttype(cc->ht->main_table_relid, attno);
 			CompressionStorage stor =
-				compression_get_toast_storage(get_default_algorithm_id(typid));
+				compression_get_toast_storage(compression_get_default_algorithm(typid));
 			if (stor != TOAST_STORAGE_EXTERNAL)
 			/* external is default storage for toast columns */
 			{

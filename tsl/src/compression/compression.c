@@ -4,10 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include "compression/compression.h"
-
 #include <math.h>
 
+#include <postgres.h>
 #include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
@@ -51,6 +50,7 @@
 
 #include "array.h"
 #include "chunk.h"
+#include "compression.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "arrow_c_data_interface.h"
@@ -108,15 +108,16 @@ write_logical_replication_msg_decompression_end()
 }
 
 static Compressor *
-compressor_for_algorithm_and_type(CompressionAlgorithms algorithm, Oid type)
+compressor_for_type(Oid type)
 {
+	CompressionAlgorithm algorithm = compression_get_default_algorithm(type);
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 
 	return definitions[algorithm].compressor_for_type(type);
 }
 
-DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithms algorithm,
+DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm,
 															 bool reverse))(Datum, Oid)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
@@ -129,7 +130,7 @@ DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorith
 }
 
 DecompressAllFunction
-tsl_get_decompress_all_function(CompressionAlgorithms algorithm)
+tsl_get_decompress_all_function(CompressionAlgorithm algorithm)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
@@ -952,8 +953,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 														column_attr->attcollation);
 			}
 			*column = (PerColumn){
-				.compressor = compressor_for_algorithm_and_type(compression_info->algo_id,
-																column_attr->atttypid),
+				.compressor = compressor_for_type(column_attr->atttypid),
 				.min_metadata_attr_offset = segment_min_attr_offset,
 				.max_metadata_attr_offset = segment_max_attr_offset,
 				.min_max_metadata_builder = segment_min_max_builder,
@@ -1916,11 +1916,51 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 }
 
 extern CompressionStorage
-compression_get_toast_storage(CompressionAlgorithms algorithm)
+compression_get_toast_storage(CompressionAlgorithm algorithm)
 {
 	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	return definitions[algorithm].compressed_data_storage;
+}
+
+/*
+ * Return a default compression algorithm suitable
+ * for the type. The actual algorithm used for a
+ * type might be different though since the compressor
+ * can deviate from the default. The actual algorithm
+ * used for a specific batch can only be determined
+ * by reading the batch header.
+ */
+extern CompressionAlgorithm
+compression_get_default_algorithm(Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case INT4OID:
+		case INT2OID:
+		case INT8OID:
+		case DATEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			return COMPRESSION_ALGORITHM_DELTADELTA;
+
+		case FLOAT4OID:
+		case FLOAT8OID:
+			return COMPRESSION_ALGORITHM_GORILLA;
+
+		case NUMERICOID:
+			return COMPRESSION_ALGORITHM_ARRAY;
+
+		default:
+		{
+			/* use dictitionary if possible, otherwise use array */
+			TypeCacheEntry *tentry =
+				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
+			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
+				return COMPRESSION_ALGORITHM_ARRAY;
+			return COMPRESSION_ALGORITHM_DICTIONARY;
+		}
+	}
 }
 
 /*
