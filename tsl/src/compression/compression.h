@@ -232,8 +232,6 @@ typedef struct RowCompressor
 	Oid index_oid;
 	/* relation info necessary to update indexes on compressed table */
 	ResultRelInfo *resultRelInfo;
-	/* segment by index index in the RelInfo if any */
-	int8 segmentby_index_index;
 
 	/* in theory we could have more input columns than outputted ones, so we
 	   store the number of inputs/compressors separately */
