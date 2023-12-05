@@ -581,7 +581,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.vectorized_aggregation",
+	DefineCustomBoolVariable("timescaledb.enable_vectorized_aggregation",
 							 "Enable vectorized aggregation",
 							 "Enable vectorized aggregation for compressed data",
 							 &ts_guc_enable_vectorized_aggregation,
