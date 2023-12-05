@@ -20,3 +20,5 @@ extern TSDLLEXPORT bool ts_array_is_member(ArrayType *arr, const char *name);
 extern TSDLLEXPORT int ts_array_position(ArrayType *arr, const char *name);
 extern TSDLLEXPORT bool ts_array_get_element_bool(ArrayType *arr, int position);
 extern TSDLLEXPORT const char *ts_array_get_element_text(ArrayType *arr, int position);
+extern TSDLLEXPORT ArrayType *ts_array_add_element_text(ArrayType *arr, const char *value);
+extern TSDLLEXPORT ArrayType *ts_array_add_element_bool(ArrayType *arr, bool value);
