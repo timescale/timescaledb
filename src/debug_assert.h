@@ -6,7 +6,6 @@
 #ifndef TIMESCALEDB_DEBUG_ASSERT_H
 #define TIMESCALEDB_DEBUG_ASSERT_H
 
-#include <c.h>
 #include <postgres.h>
 
 /*
