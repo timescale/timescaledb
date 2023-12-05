@@ -200,21 +200,11 @@ m["include"].append(
 # test timescaledb with release config on latest postgres release in MacOS
 m["include"].append(
     build_release_config(
-        macos_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
-    )
-)
-
-m["include"].append(
-    build_release_config(
         macos_config({"pg": PG16_LATEST, "ignored_tests": ignored_tests})
     )
 )
 
 # test latest postgres release without telemetry
-m["include"].append(
-    build_without_telemetry({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
-)
-
 m["include"].append(
     build_without_telemetry(
         {
