@@ -6,7 +6,6 @@
 #ifndef TIMESCALEDB_WITH_CLAUSE_PARSER_H
 #define TIMESCALEDB_WITH_CLAUSE_PARSER_H
 #include <postgres.h>
-#include <c.h>
 
 #include <nodes/parsenodes.h>
 #include <utils.h>

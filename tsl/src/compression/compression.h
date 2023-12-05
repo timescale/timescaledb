@@ -7,7 +7,6 @@
 #define TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
 
 #include <postgres.h>
-#include <c.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
