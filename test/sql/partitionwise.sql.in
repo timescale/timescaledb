@@ -273,3 +273,12 @@ FROM hyper_timepart
 GROUP BY 1, 2
 ORDER BY 1, 2
 LIMIT 10;
+
+-- Test removal of redundant group key optimization in PG16
+-- All lower versions include the redundant key on device column
+:PREFIX
+SELECT device, avg(temp)
+FROM hyper_timepart
+WHERE device = 1
+GROUP BY 1
+LIMIT 10;
