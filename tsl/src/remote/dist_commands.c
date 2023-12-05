@@ -567,7 +567,7 @@ ts_dist_cmd_exec(PG_FUNCTION_ARGS)
 					 errmsg("invalid data nodes list"),
 					 errdetail("The array of data nodes cannot contain null values.")));
 
-		ndatanodes = ts_array_length(data_nodes);
+		ndatanodes = ArrayGetNItems(ARR_NDIM(data_nodes), ARR_DIMS(data_nodes));
 
 		if (ndatanodes == 0)
 			ereport(ERROR,

@@ -11,21 +11,23 @@
 #include <debug_assert.h>
 #include "array_utils.h"
 
-extern TSDLLEXPORT int
-ts_array_length(ArrayType *arr)
-{
-	if (!arr)
-		return 0;
-
-	return ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
-}
-
 /*
  * Array helper function for internal catalog arrays.
  * These are not suitable for arbitrary dimension
  * arrays but only for 1-dimensional arrays as we use
  * them in our catalog.
  */
+
+extern TSDLLEXPORT int
+ts_array_length(ArrayType *arr)
+{
+	if (!arr)
+		return 0;
+
+	Assert(ARR_NDIM(arr) == 1);
+
+	return ARR_DIMS(arr)[0];
+}
 
 extern TSDLLEXPORT bool
 ts_array_is_member(ArrayType *arr, const char *name)
@@ -38,6 +40,7 @@ ts_array_is_member(ArrayType *arr, const char *name)
 
 	Assert(ARR_NDIM(arr) == 1);
 	Assert(arr->elemtype == TEXTOID);
+	Assert(name);
 
 	ArrayIterator it = array_create_iterator(arr, 0, NULL);
 	while (array_iterate(it, &datum, &null))
@@ -125,4 +128,54 @@ ts_array_get_element_text(ArrayType *arr, int position)
 	Ensure(!isnull, "invalid array position");
 
 	return TextDatumGetCString(value);
+}
+
+extern TSDLLEXPORT ArrayType *
+ts_array_add_element_text(ArrayType *arr, const char *value)
+{
+	Datum val = CStringGetTextDatum(value);
+	if (!arr)
+	{
+		return construct_array(&val, 1, TEXTOID, -1, false, TYPALIGN_INT);
+	}
+	else
+	{
+		Assert(ARR_NDIM(arr) == 1);
+		Assert(arr->elemtype == TEXTOID);
+
+		Datum d = PointerGetDatum(arr);
+
+		int position = ts_array_length(arr);
+		Assert(position);
+		position++;
+
+		d = array_set_element(d, 1, &position, val, false, -1, -1, false, TYPALIGN_INT);
+
+		return DatumGetArrayTypeP(d);
+	}
+}
+
+extern TSDLLEXPORT ArrayType *
+ts_array_add_element_bool(ArrayType *arr, bool value)
+{
+	if (!arr)
+	{
+		Datum val = BoolGetDatum(value);
+		return construct_array(&val, 1, BOOLOID, 1, true, TYPALIGN_CHAR);
+	}
+	else
+	{
+		Assert(ARR_NDIM(arr) == 1);
+		Assert(arr->elemtype == BOOLOID);
+
+		Datum d = PointerGetDatum(arr);
+
+		int position = ts_array_length(arr);
+		Assert(position);
+		position++;
+
+		d = array_set_element(d, 1, &position, value, false, -1, 1, true, TYPALIGN_CHAR);
+
+		return DatumGetArrayTypeP(d);
+	}
 }

@@ -40,6 +40,7 @@
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_cache.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/hypertable_compression.h"
 #include "custom_type_cache.h"
 #include "trigger.h"
@@ -842,7 +843,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo, List **i
 			}
 
 			arr = DatumGetArrayTypeP(adatum); /* ensure not toasted */
-			numkeys = ARR_DIMS(arr)[0];
+			numkeys = ts_array_length(arr);
 			if (ARR_NDIM(arr) != 1 || numkeys < 0 || ARR_HASNULL(arr) ||
 				ARR_ELEMTYPE(arr) != INT2OID)
 				elog(ERROR, "conkey is not a 1-D smallint array");

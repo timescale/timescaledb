@@ -44,6 +44,7 @@
 #include "remote/stmt_params.h"
 #include "remote/dist_commands.h"
 #include "remote/tuplefactory.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_data_node.h"
 
@@ -1017,7 +1018,7 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 		Assert(HeapTupleIsValid(type_tuple));
 		type = (Form_pg_type) GETSTRUCT(type_tuple);
 		Assert(slot_values[k] != NULL);
-		nelems = ARR_DIMS(slot_values[k])[0];
+		nelems = ts_array_length(slot_values[k]);
 
 		decoded_data = palloc0(nelems * sizeof(Datum));
 
