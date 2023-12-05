@@ -25,6 +25,7 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "custom_type_cache.h"
 #include "debug_assert.h"
 #include "ts_catalog/hypertable_compression.h"
 #include "import/planner.h"
@@ -82,13 +83,9 @@ static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionI
 							   List *pathkeys);
 
 static bool
-is_compressed_column(CompressionInfo *info, AttrNumber attno)
+is_compressed_column(CompressionInfo *info, Oid type)
 {
-	char *column_name = get_attname(info->compressed_rte->relid, attno, false);
-	FormData_hypertable_compression *column_info =
-		get_column_compressioninfo(info->hypertable_compression_info, column_name);
-
-	return column_info->algo_id != 0;
+	return type == info->compresseddata_oid;
 }
 
 static EquivalenceClass *
@@ -282,6 +279,8 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 	ListCell *lc;
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
+
+	info->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
@@ -732,7 +731,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->right_em->em_expr);
-					if (is_compressed_column(info, var->varattno))
+					if (is_compressed_column(info, var->vartype))
 					{
 						references_compressed = true;
 						break;
@@ -743,7 +742,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->left_em->em_expr);
-					if (is_compressed_column(info, var->varattno))
+					if (is_compressed_column(info, var->vartype))
 					{
 						references_compressed = true;
 						break;

@@ -22,6 +22,8 @@ typedef struct CompressionInfo
 	RangeTblEntry *compressed_rte;
 	RangeTblEntry *ht_rte;
 
+	Oid compresseddata_oid;
+
 	int hypertable_id;
 	List *hypertable_compression_info;
 
