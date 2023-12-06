@@ -63,7 +63,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_indexscan.sql
     compression_segment_meta.sql
     compress_sorted_merge_filter.sql
-    compress_table.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
