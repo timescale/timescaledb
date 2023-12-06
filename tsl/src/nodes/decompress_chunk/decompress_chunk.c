@@ -825,7 +825,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		path = (Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
 
 		/*
-		 * Create a path for the sorted merge append optimization. This optimization performs a
+		 * Create a path for the batch sorted merge optimization. This optimization performs a
 		 * merge append of the involved batches by using a binary heap and preserving the
 		 * compression order. This optimization is only taken into consideration if we can't push
 		 * down the sort to the compressed chunk. If we can push down the sort, the batches can be
