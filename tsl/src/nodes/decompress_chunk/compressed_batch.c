@@ -298,9 +298,7 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 		 * Find the vector_const predicate.
 		 */
 		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
-		Ensure(vector_const_predicate != NULL,
-			   "vectorized predicate not found for postgres predicate %d",
-			   vector_const_opcode);
+		Assert(vector_const_predicate != NULL);
 
 		/*
 		 * Find the compressed column referred to by the Var.
