@@ -529,47 +529,31 @@ ORDER BY time;
                                                 QUERY PLAN                                                
 ----------------------------------------------------------------------------------------------------------
  Sort (actual rows=48 loops=1)
-   Sort Key: mt."time"
+   Sort Key: mt_1."time"
    Sort Method: quicksort 
    ->  Merge Join (actual rows=48 loops=1)
-         Merge Cond: (nd.node = mt.device_id)
-         Join Filter: ((mt."time" > nd.start_time) AND (mt."time" < nd.stop_time))
+         Merge Cond: (nd.node = mt_1.device_id)
+         Join Filter: ((mt_1."time" > nd.start_time) AND (mt_1."time" < nd.stop_time))
          Rows Removed by Join Filter: 289
          ->  Sort (actual rows=1 loops=1)
                Sort Key: nd.node
                Sort Method: quicksort 
                ->  Seq Scan on nodetime nd (actual rows=1 loops=1)
          ->  Sort (actual rows=1250 loops=1)
-               Sort Key: mt.device_id
+               Sort Key: mt_1.device_id
                Sort Method: quicksort 
-               ->  Custom Scan (ChunkAppend) on metrics_ordered_idx mt (actual rows=1541 loops=1)
-                     Order: mt."time"
+               ->  Append (actual rows=1541 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk mt_1 (actual rows=480 loops=1)
-                           ->  Sort (actual rows=5 loops=1)
-                                 Sort Key: compress_hyper_2_6_chunk._ts_meta_min_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=5 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk mt_2 (actual rows=960 loops=1)
-                           ->  Sort (actual rows=5 loops=1)
-                                 Sort Key: compress_hyper_2_7_chunk._ts_meta_min_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
+                           ->  Seq Scan on compress_hyper_2_7_chunk (actual rows=5 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk mt_3 (actual rows=48 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_2_8_chunk._ts_meta_min_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_2_8_chunk (actual rows=1 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk mt_4 (actual rows=48 loops=1)
-                           ->  Sort (actual rows=1 loops=1)
-                                 Sort Key: compress_hyper_2_9_chunk._ts_meta_min_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
+                           ->  Seq Scan on compress_hyper_2_9_chunk (actual rows=1 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_1_5_chunk mt_5 (actual rows=5 loops=1)
-                           ->  Sort (actual rows=5 loops=1)
-                                 Sort Key: compress_hyper_2_10_chunk._ts_meta_min_1
-                                 Sort Method: quicksort 
-                                 ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
-(41 rows)
+                           ->  Seq Scan on compress_hyper_2_10_chunk (actual rows=5 loops=1)
+(25 rows)
 
 SET enable_mergejoin = FALSE;
 SET enable_hashjoin = TRUE;

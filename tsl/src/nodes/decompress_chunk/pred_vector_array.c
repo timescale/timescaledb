@@ -18,8 +18,8 @@
  * flag. Written along the lines of ExecEvalScalarArrayOp().
  */
 static inline void
-vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
-						   const ArrowArray *vector, Datum array, uint64 *restrict final_result)
+vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
+							const ArrowArray *vector, Datum array, uint64 *restrict final_result)
 {
 	const size_t result_bits = vector->length;
 	const size_t result_words = (result_bits + 63) / 64;
@@ -149,7 +149,6 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
 				}
 				if (all_rows_match == -1ULL)
 				{
-					fprintf(stderr, "early exit -- all rows match!\n");
 					return;
 				}
 			}
@@ -186,22 +185,22 @@ vector_array_operator_impl(VectorPredicate *vector_const_predicate, bool is_or,
  * which is much simpler than the OR version.
  */
 static pg_noinline void
-vector_array_operator_and(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
-						  uint64 *restrict result)
+vector_array_predicate_and(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
+						   uint64 *restrict result)
 {
-	vector_array_operator_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
+	vector_array_predicate_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
 }
 
 void
-vector_array_operator(VectorPredicate *scalar_predicate, bool is_or, const ArrowArray *vector,
-					  Datum array, uint64 *restrict result)
+vector_array_predicate(VectorPredicate *scalar_predicate, bool is_or, const ArrowArray *vector,
+					   Datum array, uint64 *restrict result)
 {
 	if (is_or)
 	{
-		vector_array_operator_impl(scalar_predicate, /* is_or = */ true, vector, array, result);
+		vector_array_predicate_impl(scalar_predicate, /* is_or = */ true, vector, array, result);
 	}
 	else
 	{
-		vector_array_operator_and(scalar_predicate, vector, array, result);
+		vector_array_predicate_and(scalar_predicate, vector, array, result);
 	}
 }

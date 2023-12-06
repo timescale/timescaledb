@@ -37,15 +37,7 @@
 #include "nodes/decompress_chunk/qual_pushdown.h"
 #include "utils.h"
 
-#define DECOMPRESS_CHUNK_CPU_TUPLE_COST 0.01
-
 #define DECOMPRESS_CHUNK_BATCH_SIZE 1000
-
-/* We have to decompress the compressed batches in parallel. Therefore, we need a high
- * amount of memory. Set the tuple cost for this algorithm a very high value to prevent
- * that this algorithm is chosen when a lot of batches needs to be merged. For more details,
- * see the discussion in cost_decompress_sorted_merge_append(). */
-#define DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST 0.8
 
 static CustomPathMethods decompress_chunk_path_methods = {
 	.CustomName = "DecompressChunk",
@@ -334,8 +326,17 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
 
 	/* total_cost is cost for fetching all tuples */
-	path->total_cost = compressed_path->total_cost + path->rows * DECOMPRESS_CHUNK_CPU_TUPLE_COST;
+	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+}
+
+/* Smoothstep function S1 (the h01 cubic Hermite spline). */
+static double
+smoothstep(double x, double start, double end)
+{
+	x = (x - start) / (end - start);
+	x = x < 0 ? 0 : x > 1 ? 1 : x;
+	return x * x * (3.0f - 2.0f * x);
 }
 
 /*
@@ -343,8 +344,8 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
  * a binary heap.
  */
 static void
-cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpath,
-									Path *child_path)
+cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
+						DecompressChunkPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
@@ -358,41 +359,105 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
 	cost_sort(&sort_path,
 			  root,
 			  dcpath->compressed_pathkeys,
-			  child_path->total_cost,
-			  child_path->rows,
-			  child_path->pathtarget->width,
+			  compressed_path->total_cost,
+			  compressed_path->rows,
+			  compressed_path->pathtarget->width,
 			  0.0,
 			  work_mem,
 			  -1);
 	enable_sort = old_enable_sort;
 
-	/* startup_cost is cost before fetching first tuple */
-	dcpath->custom_path.path.startup_cost = sort_path.total_cost;
+	/*
+	 * In compressed batch sorted merge, for each distinct segmentby value we
+	 * have to keep the corresponding latest batch open. Estimate the number of
+	 * these batches with the usual Postgres estimator for grouping cardinality.
+	 */
+	List *segmentby_groupexprs = NIL;
+	for (int segmentby_attno = bms_next_member(compression_info->chunk_segmentby_attnos, -1);
+		 segmentby_attno > 0;
+		 segmentby_attno =
+			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
+	{
+		Var *var = palloc(sizeof(Var));
+		*var = (Var){ .xpr.type = T_Var,
+					  .varno = compression_info->compressed_rel->relid,
+					  .varattno = segmentby_attno };
+		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
+	}
+	const double open_batches_estimated = estimate_num_groups_compat(root,
+																	 segmentby_groupexprs,
+																	 dcpath->custom_path.path.rows,
+																	 NULL,
+																	 NULL);
+	Assert(open_batches_estimated > 0);
 
 	/*
-	 * The cost model for the normal chunk decompression produces the following total
-	 * costs.
-	 *
-	 * Segments  Total costs
-	 * 10         711.84
-	 * 50        4060.91
-	 * 100       8588.32
-	 * 10000   119281.84
-	 *
-	 * The cost model of the regular decompression is roughly linear. Opening multiple batches in
-	 * parallel needs resources and merging a high amount of batches becomes inefficient at some
-	 * point. So, we use a quadratic cost model here to have higher costs than the normal
-	 * decompression when more than ~100 batches are used. We set
-	 * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST to 0.8 to become most costly as soon as we have to
-	 * process more than 120 batches.
-	 *
-	 * Note: To behave similarly to the cost model of the regular decompression path, this cost
-	 * model does not consider the number of tuples.
+	 * We can't have more open batches than the total number of compressed rows,
+	 * so clamp it for sanity of the following calculations.
 	 */
-	dcpath->custom_path.path.total_cost =
-		sort_path.total_cost + pow(sort_path.rows, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
+	const double open_batches_clamped = Min(open_batches_estimated, sort_path.rows);
 
-	dcpath->custom_path.path.rows = sort_path.rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	/*
+	 * Keeping a lot of batches open might use a lot of memory. The batch sorted
+	 * merge can't offload anything to disk, so we just penalize it heavily if
+	 * we expect it to go over the work_mem. First, estimate the amount of
+	 * memory we'll need. We do this on the basis of uncompressed chunk width,
+	 * as if we had to materialize entire decompressed batches. This might
+	 * be less precise when bulk decompression is not used, because we
+	 * materialize only the compressed data which is smaller. But it accounts
+	 * for projections, which is probably more important than precision, because
+	 * we often read a small subset of columns in analytical queries. The
+	 * compressed chunk is never projected so we can't use it for that.
+	 */
+	const double work_mem_bytes = work_mem * 1024;
+	const double needed_memory_bytes = open_batches_clamped * DECOMPRESS_CHUNK_BATCH_SIZE *
+									   dcpath->custom_path.path.pathtarget->width;
+
+	fprintf(stderr,
+			"open batches %lf, needed_bytes %lf\n",
+			open_batches_clamped,
+			needed_memory_bytes);
+
+	/*
+	 * Next, calculate the cost penalty. It is a smooth step, starting at 75% of
+	 * work_mem, and ending at 125%. We want to effectively disable this plan
+	 * if it doesn't fit into the available memory, so the penalty should be
+	 * comparable to disable_cost but still less than it, so that the
+	 * manual disables still have priority.
+	 */
+	const double work_mem_penalty =
+		0.1 * disable_cost *
+		smoothstep(needed_memory_bytes, 0.75 * work_mem_bytes, 1.25 * work_mem_bytes);
+	Assert(work_mem_penalty >= 0);
+
+	/*
+	 * startup_cost is cost before fetching first tuple. Batch sorted merge has
+	 * to load at least the number of batches we expect to be open
+	 * simultaneously, before it can produce the first row.
+	 */
+	const double sort_path_cost_for_startup =
+		sort_path.startup_cost +
+		(sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows);
+	Assert(sort_path_cost_for_startup >= 0);
+	dcpath->custom_path.path.startup_cost = sort_path_cost_for_startup + work_mem_penalty;
+
+	/*
+	 * Finally, to run this path to completion, we have to complete the
+	 * underlying sort path, and return all uncompressed rows. Getting one
+	 * uncompressed row involves replacing the top row in the heap, which costs
+	 * O(log(heap size)). The constant multiplier is found empirically by
+	 * benchmarking the queries returning 1 - 1e9 tuples, with segmentby
+	 * cardinality 1 to 1e4, and adjusting the cost so that the fastest plan is
+	 * used. The "+ 1" under the logarithm is to avoid zero uncompressed row cost
+	 * when we expect to have only 1 batch open.
+	 */
+	const double sort_path_cost_rest = sort_path.total_cost - sort_path_cost_for_startup;
+	Assert(sort_path_cost_rest >= 0);
+	const double uncompressed_row_cost = 1.5 * log(open_batches_clamped + 1) * cpu_tuple_cost;
+	Assert(uncompressed_row_cost > 0);
+	dcpath->custom_path.path.total_cost = dcpath->custom_path.path.startup_cost +
+										  sort_path_cost_rest +
+										  dcpath->custom_path.path.rows * uncompressed_row_cost;
 }
 
 /*
@@ -454,7 +519,7 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
  * compatible and the optimization can be used.
  */
 static MergeBatchResult
-can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
+can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 {
 	PathKey *pk;
 	Var *var;
@@ -563,13 +628,13 @@ can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
  */
 static void
 add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht, Index ht_relid,
-					   Path *decompress_chunk_path, Path *child_path)
+					   Path *decompress_chunk_path, Path *compressed_path)
 {
 	if (root->query_pathkeys == NIL || hypertable_is_distributed(ht))
 		return;
 
 	/* We are only interested in regular (i.e., non index) paths */
-	if (!IsA(child_path, Path))
+	if (!IsA(compressed_path, Path))
 		return;
 
 	/* Iterate over the sort_pathkeys and generate all possible useful sortings */
@@ -620,14 +685,14 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	double new_row_estimate;
 	Index ht_relid = 0;
 
-	CompressionInfo *info = build_compressioninfo(root, ht, chunk_rel);
+	CompressionInfo *compression_info = build_compressioninfo(root, ht, chunk_rel);
 
 	/* double check we don't end up here on single chunk queries with ONLY */
-	Assert(info->chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
-		   (info->chunk_rel->reloptkind == RELOPT_BASEREL &&
-			ts_rte_is_marked_for_expansion(info->chunk_rte)));
+	Assert(compression_info->chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
+		   (compression_info->chunk_rel->reloptkind == RELOPT_BASEREL &&
+			ts_rte_is_marked_for_expansion(compression_info->chunk_rte)));
 
-	SortInfo sort_info = build_sortinfo(chunk, chunk_rel, info, root->query_pathkeys);
+	SortInfo sort_info = build_sortinfo(chunk, chunk_rel, compression_info, root->query_pathkeys);
 
 	Assert(chunk->fd.compressed_chunk_id > 0);
 
@@ -637,20 +702,24 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	chunk_rel->partial_pathlist = NIL;
 
 	/* add RangeTblEntry and RelOptInfo for compressed chunk */
-	decompress_chunk_add_plannerinfo(root, info, chunk, chunk_rel, sort_info.needs_sequence_num);
-	compressed_rel = info->compressed_rel;
+	decompress_chunk_add_plannerinfo(root,
+									 compression_info,
+									 chunk,
+									 chunk_rel,
+									 sort_info.needs_sequence_num);
+	compressed_rel = compression_info->compressed_rel;
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root,
 				   chunk_rel,
 				   compressed_rel,
-				   info->hypertable_compression_info,
+				   compression_info->hypertable_compression_info,
 				   ts_chunk_is_partial(chunk));
 	set_baserel_size_estimates(root, compressed_rel);
 	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 
-	if (!info->single_chunk)
+	if (!compression_info->single_chunk)
 	{
 		/* adjust the parent's estimate by the diff of new and old estimate */
 		AppendRelInfo *chunk_info = ts_get_appendrelinfo(root, chunk_rel->relid, false);
@@ -662,17 +731,17 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 	chunk_rel->rows = new_row_estimate;
 
-	create_compressed_scan_paths(root, compressed_rel, info, &sort_info);
+	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
 	/* compute parent relids of the chunk and use it to filter paths*/
 	Relids parent_relids = NULL;
-	if (!info->single_chunk)
+	if (!compression_info->single_chunk)
 		parent_relids = find_childrel_parents(root, chunk_rel);
 
 	/* create non-parallel paths */
 	foreach (lc, compressed_rel->pathlist)
 	{
-		Path *child_path = lfirst(lc);
+		Path *compressed_path = lfirst(lc);
 		Path *path;
 
 		/*
@@ -683,7 +752,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * that would have invalid references due to our
 		 * EquivalenceClasses.
 		 */
-		if (IsA(child_path, BitmapHeapPath) && child_path->param_info)
+		if (IsA(compressed_path, BitmapHeapPath) && compressed_path->param_info)
 			continue;
 
 		/*
@@ -697,9 +766,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * The parent-child relationship between chunk_rel and ht is known
 		 * to PG and so it does not try to create meaningless rinfos for that case.
 		 */
-		if (child_path->param_info != NULL)
+		if (compressed_path->param_info != NULL)
 		{
-			if (bms_is_member(chunk_rel->relid, child_path->param_info->ppi_req_outer))
+			if (bms_is_member(chunk_rel->relid, compressed_path->param_info->ppi_req_outer))
 				continue;
 			/* check if this is path made with references between
 			 * compressed_rel + hypertable or a nesting subquery.
@@ -707,7 +776,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * happens since PG is not aware that the nesting
 			 * subquery that references the hypertable is a parent of compressed_rel as well.
 			 */
-			if (bms_overlap(parent_relids, child_path->param_info->ppi_req_outer))
+			if (bms_overlap(parent_relids, compressed_path->param_info->ppi_req_outer))
 				continue;
 
 			ListCell *lc_ri;
@@ -722,16 +791,16 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * compatible. Therefore we skip any Path that is
 			 * parameterized on a compressed column here.
 			 */
-			foreach (lc_ri, child_path->param_info->ppi_clauses)
+			foreach (lc_ri, compressed_path->param_info->ppi_clauses)
 			{
 				RestrictInfo *ri = lfirst_node(RestrictInfo, lc_ri);
 
 				if (ri->right_em && IsA(ri->right_em->em_expr, Var) &&
 					(Index) castNode(Var, ri->right_em->em_expr)->varno ==
-						info->compressed_rel->relid)
+						compression_info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->right_em->em_expr);
-					if (is_compressed_column(info, var->vartype))
+					if (is_compressed_column(compression_info, var->vartype))
 					{
 						references_compressed = true;
 						break;
@@ -739,10 +808,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				}
 				if (ri->left_em && IsA(ri->left_em->em_expr, Var) &&
 					(Index) castNode(Var, ri->left_em->em_expr)->varno ==
-						info->compressed_rel->relid)
+						compression_info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->left_em->em_expr);
-					if (is_compressed_column(info, var->vartype))
+					if (is_compressed_column(compression_info, var->vartype))
 					{
 						references_compressed = true;
 						break;
@@ -753,10 +822,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				continue;
 		}
 
-		path = (Path *) decompress_chunk_path_create(root, info, 0, child_path);
+		path = (Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
 
 		/*
-		 * Create a path for the sorted merge append optimization. This optimization performs a
+		 * Create a path for the batch sorted merge optimization. This optimization performs a
 		 * merge append of the involved batches by using a binary heap and preserving the
 		 * compression order. This optimization is only taken into consideration if we can't push
 		 * down the sort to the compressed chunk. If we can push down the sort, the batches can be
@@ -766,7 +835,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 		if (ts_guc_enable_decompression_sorted_merge && !sort_info.can_pushdown_sort)
 		{
-			MergeBatchResult merge_result = can_sorted_merge_append(root, info, chunk);
+			MergeBatchResult merge_result = can_batch_sorted_merge(root, compression_info, chunk);
 			if (merge_result != MERGE_NOT_POSSIBLE)
 			{
 				batch_merge_path = copy_decompress_chunk_path((DecompressChunkPath *) path);
@@ -779,7 +848,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * query here.
 				 */
 				batch_merge_path->custom_path.path.pathkeys = root->query_pathkeys;
-				cost_decompress_sorted_merge_append(root, batch_merge_path, child_path);
+				cost_batch_sorted_merge(root, compression_info, batch_merge_path, compressed_path);
 
 				/* If the chunk is partially compressed, prepare the path only and add it later
 				 * to a merge append path when we are able to generate the ordered result for the
@@ -808,16 +877,16 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 * creation. Examples of this in: create_merge_append_path &
 			 * create_merge_append_plan
 			 */
-			if (!pathkeys_contained_in(dcpath->compressed_pathkeys, child_path->pathkeys))
+			if (!pathkeys_contained_in(dcpath->compressed_pathkeys, compressed_path->pathkeys))
 			{
 				Path sort_path; /* dummy for result of cost_sort */
 
 				cost_sort(&sort_path,
 						  root,
 						  dcpath->compressed_pathkeys,
-						  child_path->total_cost,
-						  child_path->rows,
-						  child_path->pathtarget->width,
+						  compressed_path->total_cost,
+						  compressed_path->rows,
+						  compressed_path->pathtarget->width,
 						  0.0,
 						  work_mem,
 						  -1);
@@ -891,7 +960,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		}
 
 		/* Add useful sorted versions of the decompress path */
-		add_chunk_sorted_paths(root, chunk_rel, ht, ht_relid, path, child_path);
+		add_chunk_sorted_paths(root, chunk_rel, ht, ht_relid, path, compressed_path);
 
 		/* this has to go after the path is copied for the ordered path since path can get freed in
 		 * add_path */
@@ -906,20 +975,22 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	{
 		foreach (lc, compressed_rel->partial_pathlist)
 		{
-			Path *child_path = lfirst(lc);
+			Path *compressed_path = lfirst(lc);
 			Path *path;
-			if (child_path->param_info != NULL &&
-				(bms_is_member(chunk_rel->relid, child_path->param_info->ppi_req_outer) ||
-				 (!info->single_chunk &&
-				  bms_is_member(ht_relid, child_path->param_info->ppi_req_outer))))
+			if (compressed_path->param_info != NULL &&
+				(bms_is_member(chunk_rel->relid, compressed_path->param_info->ppi_req_outer) ||
+				 (!compression_info->single_chunk &&
+				  bms_is_member(ht_relid, compressed_path->param_info->ppi_req_outer))))
 				continue;
 
 			/*
 			 * If this is a partially compressed chunk we have to combine data
 			 * from compressed and uncompressed chunk.
 			 */
-			path = (Path *)
-				decompress_chunk_path_create(root, info, child_path->parallel_workers, child_path);
+			path = (Path *) decompress_chunk_path_create(root,
+														 compression_info,
+														 compressed_path->parallel_workers,
+														 compressed_path);
 
 			if (ts_chunk_is_partial(chunk))
 			{

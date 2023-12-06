@@ -412,7 +412,7 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 		 */
 		if (saop)
 		{
-			vector_array_operator(vector_const_predicate,
+			vector_array_predicate(vector_const_predicate,
 								  saop->useOr,
 								  vector_nodict,
 								  constnode->constvalue,
