@@ -9,6 +9,7 @@ name: RPM packages
     - '*'
     branches:
     - release_test
+    - trigger/package_test
 
 jobs:
   rpm_tests:
@@ -20,11 +21,15 @@ jobs:
       fail-fast: false
       matrix:
         image: [ "centos:centos7", "rockylinux:8", "rockylinux:9" ]
-        pg: [ 13, 14, 15 ]
+        pg: [ 13, 14, 15, 16 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
             pkg_suffix: "-oss"
+        exclude:
+          # PG 16 is not available on centos7
+          - image: centos:centos7
+            pg: 16
 
     steps:
     - name: Add postgres repositories
@@ -95,6 +100,8 @@ jobs:
         fi
 
     - name: Test Downgrade
+      # TSB 2.13.0 is the first version with PG 16 support, so no downgrades are supported at the moment
+      if: matrix.pg != '16'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.

@@ -123,20 +123,6 @@ TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
 
-/*
- * Exit code for the scheduler.
- *
- * Normally it exits with a zero which means that it will not restart. If an
- * error is raised, it exits with error code 1, which will trigger a
- * restart.
- *
- * This variable exists to be able to trigger a restart for a normal exit,
- * which is useful when debugging.
- *
- * See backend/postmaster/bgworker.c
- */
-int ts_bgw_scheduler_exit_code = 0;
-
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
@@ -595,7 +581,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.vectorized_aggregation",
+	DefineCustomBoolVariable("timescaledb.enable_vectorized_aggregation",
 							 "Enable vectorized aggregation",
 							 "Enable vectorized aggregation for compressed data",
 							 &ts_guc_enable_vectorized_aggregation,
@@ -785,19 +771,6 @@ _guc_init(void)
 							 /* check_hook= */ NULL,
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
-
-	DefineCustomIntVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler_exit_code",
-							/* short_desc= */ "exit code to use when shutting down the scheduler",
-							/* long_desc= */ "this is for debugging purposes",
-							/* valueAddr= */ &ts_bgw_scheduler_exit_code,
-							/* bootValue= */ 0,
-							/* minValue= */ 0,
-							/* maxValue= */ 255,
-							/* context= */ PGC_SIGHUP,
-							/* flags= */ 0,
-							/* check_hook= */ NULL,
-							/* assign_hook= */ NULL,
-							/* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ "timescaledb.current_timestamp_mock",
 							   /* short_desc= */ "set the current timestamp",

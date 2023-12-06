@@ -31,15 +31,16 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "compat/compat.h"
 #include "ts_catalog/catalog.h"
 #include "create.h"
 #include "chunk.h"
 #include "chunk_index.h"
 #include "ts_catalog/continuous_agg.h"
-#include "compat/compat.h"
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_cache.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/hypertable_compression.h"
 #include "custom_type_cache.h"
 #include "trigger.h"
@@ -52,6 +53,8 @@
 typedef struct CompressColInfo
 {
 	int numcols;
+	Hypertable *ht;
+	Oid compresseddata_oid;
 	FormData_hypertable_compression
 		*col_meta;	  /* metadata about columns from src hypertable that will be compressed*/
 	List *coldeflist; /*list of ColumnDef for the compressed column */
@@ -73,38 +76,6 @@ static void compresscolinfo_add_catalog_entries(CompressColInfo *compress_cols, 
 					 errmsg("bad compression hypertable internal name")));                         \
 		}                                                                                          \
 	} while (0);
-
-static enum CompressionAlgorithms
-get_default_algorithm_id(Oid typeoid)
-{
-	switch (typeoid)
-	{
-		case INT4OID:
-		case INT2OID:
-		case INT8OID:
-		case DATEOID:
-		case TIMESTAMPOID:
-		case TIMESTAMPTZOID:
-			return COMPRESSION_ALGORITHM_DELTADELTA;
-
-		case FLOAT4OID:
-		case FLOAT8OID:
-			return COMPRESSION_ALGORITHM_GORILLA;
-
-		case NUMERICOID:
-			return COMPRESSION_ALGORITHM_ARRAY;
-
-		default:
-		{
-			/* use dictitionary if possible, otherwise use array */
-			TypeCacheEntry *tentry =
-				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
-			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
-				return COMPRESSION_ALGORITHM_ARRAY;
-			return COMPRESSION_ALGORITHM_DICTIONARY;
-		}
-	}
-}
 
 static char *
 compression_column_segment_metadata_name(int16 column_index, const char *type)
@@ -137,18 +108,6 @@ column_segment_max_name(int16 column_index)
 													COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME);
 }
 
-char *
-compression_column_segment_min_name(const FormData_hypertable_compression *fd)
-{
-	return column_segment_min_name(fd->orderby_column_index);
-}
-
-char *
-compression_column_segment_max_name(const FormData_hypertable_compression *fd)
-{
-	return column_segment_max_name(fd->orderby_column_index);
-}
-
 static void
 compresscolinfo_add_metadata_columns(CompressColInfo *cc, Relation uncompressed_rel)
 {
@@ -178,6 +137,7 @@ compresscolinfo_add_metadata_columns(CompressColInfo *cc, Relation uncompressed_
 	{
 		if (cc->col_meta[colno].orderby_column_index > 0)
 		{
+			int16 index = cc->col_meta[colno].orderby_column_index;
 			FormData_hypertable_compression fd = cc->col_meta[colno];
 			AttrNumber col_attno = get_attnum(uncompressed_rel->rd_id, NameStr(fd.attname));
 			Form_pg_attribute attr = TupleDescAttr(RelationGetDescr(uncompressed_rel),
@@ -191,18 +151,16 @@ compresscolinfo_add_metadata_columns(CompressColInfo *cc, Relation uncompressed_
 						 errdetail("Could not identify a less-than operator for the type.")));
 
 			/* segment_meta min and max columns */
-			cc->coldeflist =
-				lappend(cc->coldeflist,
-						makeColumnDef(compression_column_segment_min_name(&cc->col_meta[colno]),
-									  attr->atttypid,
-									  -1 /* typemod */,
-									  0 /*collation*/));
-			cc->coldeflist =
-				lappend(cc->coldeflist,
-						makeColumnDef(compression_column_segment_max_name(&cc->col_meta[colno]),
-									  attr->atttypid,
-									  -1 /* typemod */,
-									  0 /*collation*/));
+			cc->coldeflist = lappend(cc->coldeflist,
+									 makeColumnDef(column_segment_min_name(index),
+												   attr->atttypid,
+												   -1 /* typemod */,
+												   0 /*collation*/));
+			cc->coldeflist = lappend(cc->coldeflist,
+									 makeColumnDef(column_segment_max_name(index),
+												   attr->atttypid,
+												   -1 /* typemod */,
+												   0 /*collation*/));
 		}
 	}
 }
@@ -225,7 +183,7 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 	int16 *segorder_colindex, *colindex;
 	int seg_attnolen = 0;
 	ListCell *lc;
-	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	cc->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
 	seg_attnolen = list_length(segmentby_cols);
 	rel = table_open(srctbl_relid, AccessShareLock);
@@ -337,8 +295,8 @@ compresscolinfo_init(CompressColInfo *cc, Oid srctbl_relid, List *segmentby_cols
 		}
 		if (!OidIsValid(attroid))
 		{
-			attroid = compresseddata_oid; /* default type for column */
-			cc->col_meta[colno].algo_id = get_default_algorithm_id(attr->atttypid);
+			attroid = cc->compresseddata_oid; /* default type for column */
+			cc->col_meta[colno].algo_id = compression_get_default_algorithm(attr->atttypid);
 		}
 		else
 		{
@@ -362,15 +320,15 @@ static void
 compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid typid)
 {
 	int colno = 0;
-	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	cc->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	ColumnDef *coldef;
 
 	cc->numcols = 1;
 	cc->col_meta = palloc0(sizeof(FormData_hypertable_compression) * cc->numcols);
 	cc->coldeflist = NIL;
 	namestrcpy(&cc->col_meta[colno].attname, colname);
-	cc->col_meta[colno].algo_id = get_default_algorithm_id(typid);
-	coldef = makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
+	cc->col_meta[colno].algo_id = compression_get_default_algorithm(typid);
+	coldef = makeColumnDef(colname, cc->compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
 	cc->coldeflist = lappend(cc->coldeflist, coldef);
 }
 
@@ -380,26 +338,41 @@ compresscolinfo_init_singlecolumn(CompressColInfo *cc, const char *colname, Oid 
 static void
 modify_compressed_toast_table_storage(CompressColInfo *cc, Oid compress_relid)
 {
-	int colno;
+	ListCell *lc;
 	List *cmds = NIL;
-	for (colno = 0; colno < cc->numcols; colno++)
+
+	foreach (lc, cc->coldeflist)
 	{
-		// get storage type for columns which have compression on
-		if (cc->col_meta[colno].algo_id != 0)
+		ColumnDef *cd = lfirst_node(ColumnDef, lc);
+		AttrNumber attno = get_attnum(compress_relid, cd->colname);
+		if (attno != InvalidAttrNumber &&
+			get_atttype(compress_relid, attno) == cc->compresseddata_oid)
 		{
-			CompressionStorage stor = compression_get_toast_storage(cc->col_meta[colno].algo_id);
+			/*
+			 * All columns that pass the datatype check are columns
+			 * that are also present in the uncompressed hypertable.
+			 * Metadata columns are missing from the uncompressed
+			 * hypertable but they do not have compresseddata datatype
+			 * and therefore would be skipped.
+			 */
+			attno = get_attnum(cc->ht->main_table_relid, cd->colname);
+			Assert(attno != InvalidAttrNumber);
+			Oid typid = get_atttype(cc->ht->main_table_relid, attno);
+			CompressionStorage stor =
+				compression_get_toast_storage(compression_get_default_algorithm(typid));
 			if (stor != TOAST_STORAGE_EXTERNAL)
 			/* external is default storage for toast columns */
 			{
 				AlterTableCmd *cmd = makeNode(AlterTableCmd);
 				cmd->subtype = AT_SetStorage;
-				cmd->name = pstrdup(NameStr(cc->col_meta[colno].attname));
+				cmd->name = pstrdup(cd->colname);
 				Assert(stor == TOAST_STORAGE_EXTENDED);
 				cmd->def = (Node *) makeString("extended");
 				cmds = lappend(cmds, cmd);
 			}
 		}
 	}
+
 	if (cmds != NIL)
 	{
 		ts_alter_table_with_event_trigger(compress_relid, NULL, cmds, false);
@@ -870,7 +843,7 @@ validate_existing_constraints(Hypertable *ht, CompressColInfo *colinfo, List **i
 			}
 
 			arr = DatumGetArrayTypeP(adatum); /* ensure not toasted */
-			numkeys = ARR_DIMS(arr)[0];
+			numkeys = ts_array_length(arr);
 			if (ARR_NDIM(arr) != 1 || numkeys < 0 || ARR_HASNULL(arr) ||
 				ARR_ELEMTYPE(arr) != INT2OID)
 				elog(ERROR, "conkey is not a 1-D smallint array");
@@ -1178,7 +1151,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 						   WithClauseResult *with_clause_options)
 {
 	int32 compress_htid;
-	struct CompressColInfo compress_cols;
+	struct CompressColInfo compress_cols = { .ht = ht };
 	bool compress_enable = DatumGetBool(with_clause_options[CompressEnabled].parsed);
 	Oid ownerid;
 	List *segmentby_cols;
@@ -1277,7 +1250,7 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 void
 tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 {
-	struct CompressColInfo compress_cols;
+	struct CompressColInfo compress_cols = { .ht = ht };
 	Oid coloid;
 	int32 orig_htid = ht->fd.id;
 	char *colname = orig_def->colname;

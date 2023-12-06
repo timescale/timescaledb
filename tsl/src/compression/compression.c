@@ -4,10 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include "compression/compression.h"
-
 #include <math.h>
 
+#include <postgres.h>
 #include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/multixact.h>
@@ -51,6 +50,7 @@
 
 #include "array.h"
 #include "chunk.h"
+#include "compression.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "arrow_c_data_interface.h"
@@ -108,15 +108,16 @@ write_logical_replication_msg_decompression_end()
 }
 
 static Compressor *
-compressor_for_algorithm_and_type(CompressionAlgorithms algorithm, Oid type)
+compressor_for_type(Oid type)
 {
+	CompressionAlgorithm algorithm = compression_get_default_algorithm(type);
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 
 	return definitions[algorithm].compressor_for_type(type);
 }
 
-DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithms algorithm,
+DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm,
 															 bool reverse))(Datum, Oid)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
@@ -129,7 +130,7 @@ DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorith
 }
 
 DecompressAllFunction
-tsl_get_decompress_all_function(CompressionAlgorithms algorithm)
+tsl_get_decompress_all_function(CompressionAlgorithm algorithm)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
@@ -934,8 +935,9 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 
 			if (compression_info->orderby_column_index > 0)
 			{
-				char *segment_min_col_name = compression_column_segment_min_name(compression_info);
-				char *segment_max_col_name = compression_column_segment_max_name(compression_info);
+				int16 index = compression_info->orderby_column_index;
+				char *segment_min_col_name = column_segment_min_name(index);
+				char *segment_max_col_name = column_segment_max_name(index);
 				AttrNumber segment_min_attr_number =
 					get_attnum(compressed_table->rd_id, segment_min_col_name);
 				AttrNumber segment_max_attr_number =
@@ -951,8 +953,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 														column_attr->attcollation);
 			}
 			*column = (PerColumn){
-				.compressor = compressor_for_algorithm_and_type(compression_info->algo_id,
-																column_attr->atttypid),
+				.compressor = compressor_for_type(column_attr->atttypid),
 				.min_metadata_attr_offset = segment_min_attr_offset,
 				.max_metadata_attr_offset = segment_max_attr_offset,
 				.min_max_metadata_builder = segment_min_max_builder,
@@ -1289,6 +1290,12 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 	row_compressor->rows_compressed_into_current_value = 0;
 
 	MemoryContextReset(row_compressor->per_row_ctx);
+}
+
+void
+row_compressor_reset(RowCompressor *row_compressor)
+{
+	row_compressor->first_iteration = true;
 }
 
 void
@@ -1909,11 +1916,51 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 }
 
 extern CompressionStorage
-compression_get_toast_storage(CompressionAlgorithms algorithm)
+compression_get_toast_storage(CompressionAlgorithm algorithm)
 {
 	if (algorithm == _INVALID_COMPRESSION_ALGORITHM || algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 	return definitions[algorithm].compressed_data_storage;
+}
+
+/*
+ * Return a default compression algorithm suitable
+ * for the type. The actual algorithm used for a
+ * type might be different though since the compressor
+ * can deviate from the default. The actual algorithm
+ * used for a specific batch can only be determined
+ * by reading the batch header.
+ */
+extern CompressionAlgorithm
+compression_get_default_algorithm(Oid typeoid)
+{
+	switch (typeoid)
+	{
+		case INT4OID:
+		case INT2OID:
+		case INT8OID:
+		case DATEOID:
+		case TIMESTAMPOID:
+		case TIMESTAMPTZOID:
+			return COMPRESSION_ALGORITHM_DELTADELTA;
+
+		case FLOAT4OID:
+		case FLOAT8OID:
+			return COMPRESSION_ALGORITHM_GORILLA;
+
+		case NUMERICOID:
+			return COMPRESSION_ALGORITHM_ARRAY;
+
+		default:
+		{
+			/* use dictitionary if possible, otherwise use array */
+			TypeCacheEntry *tentry =
+				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
+			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
+				return COMPRESSION_ALGORITHM_ARRAY;
+			return COMPRESSION_ALGORITHM_DICTIONARY;
+		}
+	}
 }
 
 /*
@@ -1970,6 +2017,7 @@ build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor *decom
 			}
 			if (COMPRESSIONCOL_IS_ORDER_BY(fd))
 			{
+				int16 index = fd->orderby_column_index;
 				/* Cannot optimize orderby columns with NULL values since those
 				 * are not visible in metadata
 				 */
@@ -1977,7 +2025,7 @@ build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor *decom
 					continue;
 
 				key_index = create_segment_filter_scankey(decompressor,
-														  compression_column_segment_min_name(fd),
+														  column_segment_min_name(index),
 														  BTLessEqualStrategyNumber,
 														  scankeys,
 														  key_index,
@@ -1985,7 +2033,7 @@ build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor *decom
 														  value,
 														  false); /* is_null_check */
 				key_index = create_segment_filter_scankey(decompressor,
-														  compression_column_segment_max_name(fd),
+														  column_segment_max_name(index),
 														  BTGreaterEqualStrategyNumber,
 														  scankeys,
 														  key_index,
@@ -2543,13 +2591,12 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 #endif
 
 #if PG14_GE
-static SegmentFilter *
-add_filter_column_strategy(char *column_name, StrategyNumber strategy, Const *value,
-						   bool is_null_check)
+static BatchFilter *
+make_batchfilter(char *column_name, StrategyNumber strategy, Const *value, bool is_null_check)
 {
-	SegmentFilter *segment_filter = palloc0(sizeof(*segment_filter));
+	BatchFilter *segment_filter = palloc0(sizeof(*segment_filter));
 
-	*segment_filter = (SegmentFilter){
+	*segment_filter = (BatchFilter){
 		.strategy = strategy,
 		.value = value,
 		.is_null_check = is_null_check,
@@ -2643,7 +2690,7 @@ fix_and_reorder_index_filters(Relation comp_chunk_rel, Relation index_rel,
 	forboth (lp, segmentby_predicates, lf, index_filters)
 	{
 		Node *node = lfirst(lp);
-		SegmentFilter *sf = lfirst(lf);
+		BatchFilter *sf = lfirst(lf);
 
 		if (node == NULL)
 			continue;
@@ -2788,7 +2835,7 @@ find_matching_index(Relation comp_chunk_rel, List *index_filters)
 			{
 				AttrNumber attnum = index_rel->rd_index->indkey.values[i];
 				char *attname = get_attname(RelationGetRelid(comp_chunk_rel), attnum, false);
-				SegmentFilter *sf = lfirst(li);
+				BatchFilter *sf = lfirst(li);
 				/* ensure column exists in index relation */
 				if (!strcmp(attname, sf->column_name.data))
 				{
@@ -2877,59 +2924,55 @@ fill_predicate_context(Chunk *ch, List *predicates, List **filters, List **index
 						{
 							/* save segment by column name and its corresponding value specified in
 							 * WHERE */
-							*index_filters =
-								lappend(*index_filters,
-										add_filter_column_strategy(column_name,
-																   op_strategy,
-																   arg_value,
-																   false)); /* is_null_check */
+							*index_filters = lappend(*index_filters,
+													 make_batchfilter(column_name,
+																	  op_strategy,
+																	  arg_value,
+																	  false)); /* is_null_check */
 							*segmentby_predicates = lappend(*segmentby_predicates, node);
 						}
 					}
 				}
 				else if (COMPRESSIONCOL_IS_ORDER_BY(fd))
 				{
+					int16 index = fd->orderby_column_index;
 					switch (op_strategy)
 					{
 						case BTEqualStrategyNumber:
 						{
 							/* orderby col = value implies min <= value and max >= value */
-							*filters = lappend(
-								*filters,
-								add_filter_column_strategy(compression_column_segment_min_name(fd),
-														   BTLessEqualStrategyNumber,
-														   arg_value,
-														   false)); /* is_null_check */
-							*filters = lappend(
-								*filters,
-								add_filter_column_strategy(compression_column_segment_max_name(fd),
-														   BTGreaterEqualStrategyNumber,
-														   arg_value,
-														   false)); /* is_null_check */
+							*filters = lappend(*filters,
+											   make_batchfilter(column_segment_min_name(index),
+																BTLessEqualStrategyNumber,
+																arg_value,
+																false)); /* is_null_check */
+							*filters = lappend(*filters,
+											   make_batchfilter(column_segment_max_name(index),
+																BTGreaterEqualStrategyNumber,
+																arg_value,
+																false)); /* is_null_check */
 						}
 						break;
 						case BTLessStrategyNumber:
 						case BTLessEqualStrategyNumber:
 						{
 							/* orderby col <[=] value implies min <[=] value */
-							*filters = lappend(
-								*filters,
-								add_filter_column_strategy(compression_column_segment_min_name(fd),
-														   op_strategy,
-														   arg_value,
-														   false)); /* is_null_check */
+							*filters = lappend(*filters,
+											   make_batchfilter(column_segment_min_name(index),
+																op_strategy,
+																arg_value,
+																false)); /* is_null_check */
 						}
 						break;
 						case BTGreaterStrategyNumber:
 						case BTGreaterEqualStrategyNumber:
 						{
 							/* orderby col >[=] value implies max >[=] value */
-							*filters = lappend(
-								*filters,
-								add_filter_column_strategy(compression_column_segment_max_name(fd),
-														   op_strategy,
-														   arg_value,
-														   false)); /* is_null_check */
+							*filters = lappend(*filters,
+											   make_batchfilter(column_segment_max_name(index),
+																op_strategy,
+																arg_value,
+																false)); /* is_null_check */
 						}
 					}
 				}
@@ -2949,12 +2992,11 @@ fill_predicate_context(Chunk *ch, List *predicates, List **filters, List **index
 						ts_hypertable_compression_get_by_pkey(ch->fd.hypertable_id, column_name);
 					if (COMPRESSIONCOL_IS_SEGMENT_BY(fd))
 					{
-						*index_filters =
-							lappend(*index_filters,
-									add_filter_column_strategy(column_name,
-															   InvalidStrategy,
-															   NULL,
-															   true)); /* is_null_check */
+						*index_filters = lappend(*index_filters,
+												 make_batchfilter(column_name,
+																  InvalidStrategy,
+																  NULL,
+																  true)); /* is_null_check */
 						*segmentby_predicates = lappend(*segmentby_predicates, node);
 						if (ntest->nulltesttype == IS_NULL)
 							*is_null = lappend_int(*is_null, 1);
@@ -2986,7 +3028,7 @@ build_update_delete_scankeys(RowDecompressor *decompressor, List *filters, int *
 							 Bitmapset **null_columns)
 {
 	ListCell *lc;
-	SegmentFilter *filter;
+	BatchFilter *filter;
 	int key_index = 0;
 
 	ScanKeyData *scankeys = palloc0(filters->length * sizeof(ScanKeyData));
@@ -3288,7 +3330,7 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	Relation comp_chunk_rel;
 	Chunk *comp_chunk;
 	RowDecompressor decompressor;
-	SegmentFilter *filter;
+	BatchFilter *filter;
 
 	bool chunk_status_changed = false;
 	ScanKeyData *scankeys = NULL;

@@ -211,6 +211,12 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
 
+-- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
+SET enable_sort TO OFF;
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC;
+RESET enable_sort;
+
 ------
 -- Tests based on results
 ------

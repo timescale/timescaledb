@@ -57,17 +57,7 @@ CREATE TABLE conditions (
         0.25;
 \endif
 
-
-\set ON_ERROR_STOP 0
--- should fail relation does not exist
-CALL cagg_migrate('conditions_summary_daily');
-CREATE TABLE conditions_summary_daily();
--- should fail continuous agg does not exist
-CALL cagg_migrate('conditions_summary_daily');
-\set ON_ERROR_STOP 1
-
-DROP TABLE conditions_summary_daily;
-
+-- new cagg format (finalized=true)
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -86,11 +76,6 @@ GROUP BY
     bucket
 WITH NO DATA;
 
-\set ON_ERROR_STOP 0
--- should fail because we don't need to migrate finalized caggs
-CALL cagg_migrate('conditions_summary_daily_new');
-\set ON_ERROR_STOP 1
-
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
@@ -108,6 +93,39 @@ FROM
     conditions
 GROUP BY
     bucket;
+
+-- for permission tests
+CREATE MATERIALIZED VIEW conditions_summary_weekly
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
+SELECT
+\if :IS_TIME_DIMENSION
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+\else
+    time_bucket(INTEGER '168', "time") AS bucket,
+\endif
+    MIN(temperature),
+    MAX(temperature),
+    AVG(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    bucket;
+
+\set ON_ERROR_STOP 0
+-- should fail because we don't need to migrate finalized caggs
+CALL cagg_migrate('conditions_summary_daily_new');
+\set ON_ERROR_STOP 1
+
+\set ON_ERROR_STOP 0
+-- should fail relation does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+CREATE TABLE conditions_summary_not_cagg();
+-- should fail continuous agg does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+\set ON_ERROR_STOP 1
+
+DROP TABLE conditions_summary_not_cagg;
 
 SELECT
     ca.raw_hypertable_id AS "RAW_HYPERTABLE_ID",
@@ -269,32 +287,15 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 -- should return no rows because the cagg was overwritten
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily_new';
 
--- permissions test
+-- permission tests
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-DROP MATERIALIZED VIEW conditions_summary_daily;
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
+ALTER MATERIALIZED VIEW conditions_summary_weekly OWNER TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-
-CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-\if :IS_TIME_DIMENSION
-    time_bucket(INTERVAL '1 day', "time") AS bucket,
-\else
-    time_bucket(INTEGER '24', "time") AS bucket,
-\endif
-    MIN(temperature),
-    MAX(temperature),
-    AVG(temperature),
-    SUM(temperature)
-FROM
-    conditions
-GROUP BY
-    bucket;
 
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
-CALL cagg_migrate('conditions_summary_daily');
+CALL cagg_migrate('conditions_summary_weekly');
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
@@ -304,7 +305,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
-CALL cagg_migrate('conditions_summary_daily');
+CALL cagg_migrate('conditions_summary_weekly');
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
@@ -314,7 +315,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
-CALL cagg_migrate('conditions_summary_daily');
+CALL cagg_migrate('conditions_summary_weekly');
 \set ON_ERROR_STOP 1
 
 RESET ROLE;
@@ -323,12 +324,12 @@ GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_st
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 -- all necessary permissions granted
-CALL cagg_migrate('conditions_summary_daily');
+CALL cagg_migrate('conditions_summary_weekly');
 
 -- check migrated data. should return 0 (zero) rows
-SELECT * FROM conditions_summary_daily
+SELECT * FROM conditions_summary_weekly
 EXCEPT
-SELECT * FROM conditions_summary_daily_new;
+SELECT * FROM conditions_summary_weekly_new;
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
 
@@ -341,19 +342,19 @@ RESET ROLE;
 --  execute transaction control statements. Transaction control statements are only
 --  allowed if CALL is executed in its own transaction.`
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-DROP MATERIALIZED VIEW conditions_summary_daily_new;
+DROP MATERIALIZED VIEW conditions_summary_weekly_new;
 
 \set ON_ERROR_STOP 0
 BEGIN;
 -- should fail with `invalid transaction termination`
-CALL cagg_migrate('conditions_summary_daily');
+CALL cagg_migrate('conditions_summary_weekly');
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
-CREATE OR REPLACE FUNCTION execute_migration() RETURNS void AS
+CREATE FUNCTION execute_migration() RETURNS void AS
 $$
 BEGIN
-    CALL cagg_migrate('conditions_summary_daily');
+    CALL cagg_migrate('conditions_summary_weekly');
     RETURN;
 END;
 $$
@@ -368,8 +369,10 @@ ROLLBACK;
 \set ON_ERROR_STOP 1
 
 -- cleanup
+DROP FUNCTION execute_migration();
 REVOKE SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan FROM :ROLE_DEFAULT_PERM_USER;
 REVOKE USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq FROM :ROLE_DEFAULT_PERM_USER;
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
 DROP MATERIALIZED VIEW conditions_summary_daily;
+DROP MATERIALIZED VIEW conditions_summary_weekly;
 DROP TABLE conditions;

@@ -12,9 +12,7 @@
 #ifndef TIMESCALEDB_TSL_COMPRESSION_ARRAY_H
 #define TIMESCALEDB_TSL_COMPRESSION_ARRAY_H
 
-#include <c.h>
 #include <postgres.h>
-
 #include <fmgr.h>
 
 #include "compression/compression.h"

@@ -108,16 +108,7 @@ psql:include/cagg_migrate_common.sql:22: WARNING:  distributed hypertable is dep
         generate_series(1, 1000, 1),
         0.25;
 \endif
-\set ON_ERROR_STOP 0
--- should fail relation does not exist
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:63: ERROR:  relation "conditions_summary_daily" does not exist at character 19
-CREATE TABLE conditions_summary_daily();
--- should fail continuous agg does not exist
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:66: ERROR:  continuous aggregate "public.conditions_summary_daily" does not exist
-\set ON_ERROR_STOP 1
-DROP TABLE conditions_summary_daily;
+-- new cagg format (finalized=true)
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -135,11 +126,6 @@ FROM
 GROUP BY
     bucket
 WITH NO DATA;
-\set ON_ERROR_STOP 0
--- should fail because we don't need to migrate finalized caggs
-CALL cagg_migrate('conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:91: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
-\set ON_ERROR_STOP 1
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
@@ -157,7 +143,40 @@ FROM
     conditions
 GROUP BY
     bucket;
-psql:include/cagg_migrate_common.sql:110: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:95: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+-- for permission tests
+CREATE MATERIALIZED VIEW conditions_summary_weekly
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
+SELECT
+\if :IS_TIME_DIMENSION
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+\else
+    time_bucket(INTEGER '168', "time") AS bucket,
+\endif
+    MIN(temperature),
+    MAX(temperature),
+    AVG(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    bucket;
+psql:include/cagg_migrate_common.sql:113: NOTICE:  refreshing continuous aggregate "conditions_summary_weekly"
+\set ON_ERROR_STOP 0
+-- should fail because we don't need to migrate finalized caggs
+CALL cagg_migrate('conditions_summary_daily_new');
+psql:include/cagg_migrate_common.sql:117: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
+\set ON_ERROR_STOP 1
+\set ON_ERROR_STOP 0
+-- should fail relation does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+psql:include/cagg_migrate_common.sql:122: ERROR:  relation "conditions_summary_not_cagg" does not exist at character 19
+CREATE TABLE conditions_summary_not_cagg();
+-- should fail continuous agg does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+psql:include/cagg_migrate_common.sql:125: ERROR:  continuous aggregate "public.conditions_summary_not_cagg" does not exist
+\set ON_ERROR_STOP 1
+DROP TABLE conditions_summary_not_cagg;
 SELECT
     ca.raw_hypertable_id AS "RAW_HYPERTABLE_ID",
     h.schema_name AS "MAT_SCHEMA_NAME",
@@ -175,7 +194,7 @@ WHERE
 \set ON_ERROR_STOP 0
 -- should fail because the new cagg with suffix '_new' already exists
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:129: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
+psql:include/cagg_migrate_common.sql:147: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
 \set ON_ERROR_STOP 1
 -- remove the new cagg to execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
@@ -236,8 +255,8 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:151: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
-psql:include/cagg_migrate_common.sql:151: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
+psql:include/cagg_migrate_common.sql:169: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:169: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
  mat_hypertable_id | step_id |  status  |       type       |                                                                         config                                                                          
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -264,13 +283,13 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
 CALL _timescaledb_functions.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:156: ERROR:  plan already exists for materialized hypertable 3
+psql:include/cagg_migrate_common.sql:174: ERROR:  plan already exists for materialized hypertable 3
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:157: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
+psql:include/cagg_migrate_common.sql:175: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
 \set ON_ERROR_STOP 1
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
-psql:include/cagg_migrate_common.sql:161: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:179: NOTICE:  defaulting compress_orderby to bucket
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
 SELECT add_continuous_aggregate_policy('conditions_summary_daily', '30 days'::interval, '1 day'::interval, '1 hour'::interval);
@@ -309,12 +328,12 @@ AND job_id >= 1000;
 
 -- execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:180: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:198: NOTICE:  drop cascades to 10 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:181: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:199: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:182: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:182: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
+psql:include/cagg_migrate_common.sql:200: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:200: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
     h.schema_name AS "NEW_MAT_SCHEMA_NAME",
@@ -339,13 +358,13 @@ WHERE
  avg    | numeric |           |          |         | main    | 
  sum    | numeric |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_6.bucket,
-    _materialized_hypertable_6.min,
-    _materialized_hypertable_6.max,
-    _materialized_hypertable_6.avg,
-    _materialized_hypertable_6.sum
-   FROM _timescaledb_internal._materialized_hypertable_6
-  WHERE _materialized_hypertable_6.bucket < COALESCE(_timescaledb_functions.cagg_watermark(6)::integer, '-2147483648'::integer)
+ SELECT _materialized_hypertable_7.bucket,
+    _materialized_hypertable_7.min,
+    _materialized_hypertable_7.max,
+    _materialized_hypertable_7.avg,
+    _materialized_hypertable_7.sum
+   FROM _timescaledb_internal._materialized_hypertable_7
+  WHERE _materialized_hypertable_7.bucket < COALESCE(_timescaledb_functions.cagg_watermark(7)::integer, '-2147483648'::integer)
 UNION ALL
  SELECT time_bucket(24, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -353,7 +372,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.cagg_watermark(6)::integer, '-2147483648'::integer)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.cagg_watermark(7)::integer, '-2147483648'::integer)
   GROUP BY (time_bucket(24, conditions."time"));
 
 SELECT *
@@ -363,9 +382,9 @@ AND hypertable_name = :'NEW_MAT_TABLE_NAME'
 AND job_id >= 1000;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                            config                             | next_start | initial_start |   hypertable_schema   |      hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------+------------+---------------+-----------------------+----------------------------+------------------------+-------------------------------------------
-   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 6, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_functions | policy_compression_check
-   1004 | Refresh Continuous Aggregate Policy [1004] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 6} |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
-   1003 | Retention Policy [1003]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 6}                       |            |               | _timescaledb_internal | _materialized_hypertable_6 | _timescaledb_functions | policy_retention_check
+   1005 | Compression Policy [1005]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 7, "compress_after": 100}                   |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_compression_check
+   1004 | Refresh Continuous Aggregate Policy [1004] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 7} |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1003 | Retention Policy [1003]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": 400, "hypertable_id": 7}                       |            |               | _timescaledb_internal | _materialized_hypertable_7 | _timescaledb_functions | policy_retention_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -418,16 +437,16 @@ SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily') c ORDER BY
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily_new') c ORDER BY c::regclass::text;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_6_122_chunk
- _timescaledb_internal._hyper_6_123_chunk
- _timescaledb_internal._hyper_6_124_chunk
- _timescaledb_internal._hyper_6_125_chunk
- _timescaledb_internal._hyper_6_126_chunk
- _timescaledb_internal._hyper_6_127_chunk
- _timescaledb_internal._hyper_6_128_chunk
- _timescaledb_internal._hyper_6_129_chunk
- _timescaledb_internal._hyper_6_130_chunk
- _timescaledb_internal._hyper_6_131_chunk
+ _timescaledb_internal._hyper_7_128_chunk
+ _timescaledb_internal._hyper_7_129_chunk
+ _timescaledb_internal._hyper_7_130_chunk
+ _timescaledb_internal._hyper_7_131_chunk
+ _timescaledb_internal._hyper_7_132_chunk
+ _timescaledb_internal._hyper_7_133_chunk
+ _timescaledb_internal._hyper_7_134_chunk
+ _timescaledb_internal._hyper_7_135_chunk
+ _timescaledb_internal._hyper_7_136_chunk
+ _timescaledb_internal._hyper_7_137_chunk
 (10 rows)
 
 -- check migrated data after compression. should return 0 (zero) rows
@@ -445,9 +464,9 @@ JOIN _timescaledb_catalog.continuous_agg ON mat_hypertable_id = hypertable_id
 ORDER BY bgw_job.id;
 -- test migration overriding the new cagg and keeping the old
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:230: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:248: NOTICE:  drop cascades to 10 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:231: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:249: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                            config                             |      check_schema      |                check_name                 | timezone 
@@ -458,8 +477,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
-psql:include/cagg_migrate_common.sql:234: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:234: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
+psql:include/cagg_migrate_common.sql:252: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:252: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                   View "public.conditions_summary_daily"
@@ -471,13 +490,13 @@ psql:include/cagg_migrate_common.sql:234: WARNING:  refresh the continuous aggre
  avg    | numeric |           |          |         | main    | 
  sum    | numeric |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_8.bucket,
-    _materialized_hypertable_8.min,
-    _materialized_hypertable_8.max,
-    _materialized_hypertable_8.avg,
-    _materialized_hypertable_8.sum
-   FROM _timescaledb_internal._materialized_hypertable_8
-  WHERE _materialized_hypertable_8.bucket < COALESCE(_timescaledb_functions.cagg_watermark(8)::integer, '-2147483648'::integer)
+ SELECT _materialized_hypertable_9.bucket,
+    _materialized_hypertable_9.min,
+    _materialized_hypertable_9.max,
+    _materialized_hypertable_9.avg,
+    _materialized_hypertable_9.sum
+   FROM _timescaledb_internal._materialized_hypertable_9
+  WHERE _materialized_hypertable_9.bucket < COALESCE(_timescaledb_functions.cagg_watermark(9)::integer, '-2147483648'::integer)
 UNION ALL
  SELECT time_bucket(24, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -485,7 +504,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.cagg_watermark(8)::integer, '-2147483648'::integer)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.cagg_watermark(9)::integer, '-2147483648'::integer)
   GROUP BY (time_bucket(24, conditions."time"));
 
 -- cagg with the old format because it was overriden
@@ -520,15 +539,15 @@ UNION ALL
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:241: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:259: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                            config                             |      check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+---------------------------------------------------------------+------------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1006 | Retention Policy [1006]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |             8 | {"drop_after": 400, "hypertable_id": 8}                       | _timescaledb_functions | policy_retention_check                    | 
- public | conditions_summary_daily | 1007 | Refresh Continuous Aggregate Policy [1007] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |             8 | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 8} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1008 | Compression Policy [1008]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |             8 | {"hypertable_id": 8, "compress_after": 100}                   | _timescaledb_functions | policy_compression_check                  | 
+ public | conditions_summary_daily | 1006 | Retention Policy [1006]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |             9 | {"drop_after": 400, "hypertable_id": 9}                       | _timescaledb_functions | policy_retention_check                    | 
+ public | conditions_summary_daily | 1007 | Refresh Continuous Aggregate Policy [1007] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |             9 | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 9} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
+ public | conditions_summary_daily | 1008 | Compression Policy [1008]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |             9 | {"hypertable_id": 9, "compress_after": 100}                   | _timescaledb_functions | policy_compression_check                  | 
 (3 rows)
 
 -- should return the old cagg jobs
@@ -548,9 +567,9 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 -- test migration overriding the new cagg and removing the old
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:251: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:269: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:252: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:270: NOTICE:  drop cascades to 10 other objects
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
@@ -562,12 +581,12 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
-psql:include/cagg_migrate_common.sql:256: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:256: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
-psql:include/cagg_migrate_common.sql:256: NOTICE:  drop cascades to 10 other objects
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1002 not found, skipping
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1001 not found, skipping
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1000 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:274: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
+psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1002 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1001 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1000 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                   View "public.conditions_summary_daily"
@@ -579,13 +598,13 @@ psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1000 not found, skipping
  avg    | numeric |           |          |         | main    | 
  sum    | numeric |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_10.bucket,
-    _materialized_hypertable_10.min,
-    _materialized_hypertable_10.max,
-    _materialized_hypertable_10.avg,
-    _materialized_hypertable_10.sum
-   FROM _timescaledb_internal._materialized_hypertable_10
-  WHERE _materialized_hypertable_10.bucket < COALESCE(_timescaledb_functions.cagg_watermark(10)::integer, '-2147483648'::integer)
+ SELECT _materialized_hypertable_11.bucket,
+    _materialized_hypertable_11.min,
+    _materialized_hypertable_11.max,
+    _materialized_hypertable_11.avg,
+    _materialized_hypertable_11.sum
+   FROM _timescaledb_internal._materialized_hypertable_11
+  WHERE _materialized_hypertable_11.bucket < COALESCE(_timescaledb_functions.cagg_watermark(11)::integer, '-2147483648'::integer)
 UNION ALL
  SELECT time_bucket(24, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -593,24 +612,24 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.cagg_watermark(10)::integer, '-2147483648'::integer)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.cagg_watermark(11)::integer, '-2147483648'::integer)
   GROUP BY (time_bucket(24, conditions."time"));
 
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:261: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:279: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 -- should fail because the old cagg was removed
 SELECT * FROM conditions_summary_daily_old;
-psql:include/cagg_migrate_common.sql:263: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
+psql:include/cagg_migrate_common.sql:281: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                             config                             |      check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+----------------------------------------------------------------+------------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1009 | Retention Policy [1009]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            10 | {"drop_after": 400, "hypertable_id": 10}                       | _timescaledb_functions | policy_retention_check                    | 
- public | conditions_summary_daily | 1010 | Refresh Continuous Aggregate Policy [1010] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            10 | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 10} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1011 | Compression Policy [1011]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            10 | {"hypertable_id": 10, "compress_after": 100}                   | _timescaledb_functions | policy_compression_check                  | 
+ public | conditions_summary_daily | 1009 | Retention Policy [1009]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            11 | {"drop_after": 400, "hypertable_id": 11}                       | _timescaledb_functions | policy_retention_check                    | 
+ public | conditions_summary_daily | 1010 | Refresh Continuous Aggregate Policy [1010] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            11 | {"end_offset": 1, "start_offset": 50, "mat_hypertable_id": 11} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
+ public | conditions_summary_daily | 1011 | Compression Policy [1011]                  | @ 1 day           | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            11 | {"hypertable_id": 11, "compress_after": 100}                   | _timescaledb_functions | policy_compression_check                  | 
 (3 rows)
 
 -- should return no rows because the old cagg was removed
@@ -625,61 +644,43 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 --------+------+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
 (0 rows)
 
--- permissions test
+-- permission tests
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:273: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
-DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:291: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
+ALTER MATERIALIZED VIEW conditions_summary_weekly OWNER TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-\if :IS_TIME_DIMENSION
-    time_bucket(INTERVAL '1 day', "time") AS bucket,
-\else
-    time_bucket(INTEGER '24', "time") AS bucket,
-\endif
-    MIN(temperature),
-    MAX(temperature),
-    AVG(temperature),
-    SUM(temperature)
-FROM
-    conditions
-GROUP BY
-    bucket;
-psql:include/cagg_migrate_common.sql:293: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:297: ERROR:  permission denied for table continuous_agg_migrate_plan
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:298: ERROR:  permission denied for table continuous_agg_migrate_plan
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:307: ERROR:  permission denied for table continuous_agg_migrate_plan_step
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:308: ERROR:  permission denied for table continuous_agg_migrate_plan_step
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:317: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:318: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- all necessary permissions granted
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:326: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:327: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_weekly_new', CAST('1008' AS integer), NULL);"
 -- check migrated data. should return 0 (zero) rows
-SELECT * FROM conditions_summary_daily
+SELECT * FROM conditions_summary_weekly
 EXCEPT
-SELECT * FROM conditions_summary_daily_new;
+SELECT * FROM conditions_summary_weekly_new;
  bucket | min | max | avg | sum 
 --------+-----+-----+-----+-----
 (0 rows)
@@ -687,25 +688,24 @@ SELECT * FROM conditions_summary_daily_new;
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
  mat_hypertable_id | step_id |  status  |       type       |                                                                         config                                                                          
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------
-                12 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "1008"}
-                12 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                12 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
-                12 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "integer"}
-                12 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |       7 | FINISHED | COPY DATA        | {"end_ts": "300", "start_ts": "200", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |       8 | FINISHED | COPY DATA        | {"end_ts": "400", "start_ts": "300", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |       9 | FINISHED | COPY DATA        | {"end_ts": "500", "start_ts": "400", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |      10 | FINISHED | COPY DATA        | {"end_ts": "600", "start_ts": "500", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |      11 | FINISHED | COPY DATA        | {"end_ts": "700", "start_ts": "600", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |      14 | FINISHED | COPY DATA        | {"end_ts": "1000", "start_ts": "900", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
-                12 |      15 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                12 |      16 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                12 |      17 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                12 |      18 | FINISHED | ENABLE POLICIES  | 
-(18 rows)
+                 4 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "1008"}
+                 4 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_weekly_new"}
+                 4 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
+                 4 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "1008", "cagg_name_new": "conditions_summary_weekly_new", "window_start_type": "integer"}
+                 4 |       5 | FINISHED | COPY DATA        | {"end_ts": "100", "start_ts": "0", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |       6 | FINISHED | COPY DATA        | {"end_ts": "200", "start_ts": "100", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |       7 | FINISHED | COPY DATA        | {"end_ts": "300", "start_ts": "200", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |       8 | FINISHED | COPY DATA        | {"end_ts": "400", "start_ts": "300", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |       9 | FINISHED | COPY DATA        | {"end_ts": "500", "start_ts": "400", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |      10 | FINISHED | COPY DATA        | {"end_ts": "600", "start_ts": "500", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |      11 | FINISHED | COPY DATA        | {"end_ts": "700", "start_ts": "600", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |      12 | FINISHED | COPY DATA        | {"end_ts": "800", "start_ts": "700", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |      13 | FINISHED | COPY DATA        | {"end_ts": "900", "start_ts": "800", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "integer"}
+                 4 |      14 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_weekly_new"}
+                 4 |      15 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                 4 |      16 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                 4 |      17 | FINISHED | ENABLE POLICIES  | 
+(17 rows)
 
 RESET ROLE;
 -- according to the official documentation trying to execute a procedure with
@@ -715,20 +715,20 @@ RESET ROLE;
 --  execute transaction control statements. Transaction control statements are only
 --  allowed if CALL is executed in its own transaction.`
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:343: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
-DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:344: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:344: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+DROP MATERIALIZED VIEW conditions_summary_weekly_new;
+psql:include/cagg_migrate_common.sql:345: NOTICE:  drop cascades to 6 other objects
 \set ON_ERROR_STOP 0
 BEGIN;
 -- should fail with `invalid transaction termination`
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:349: ERROR:  invalid transaction termination
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:350: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
-CREATE OR REPLACE FUNCTION execute_migration() RETURNS void AS
+CREATE FUNCTION execute_migration() RETURNS void AS
 $$
 BEGIN
-    CALL cagg_migrate('conditions_summary_daily');
+    CALL cagg_migrate('conditions_summary_weekly');
     RETURN;
 END;
 $$
@@ -738,16 +738,19 @@ LANGUAGE plpgsql;
 BEGIN;
 -- should fail with `invalid transaction termination`
 SELECT execute_migration();
-psql:include/cagg_migrate_common.sql:366: ERROR:  invalid transaction termination
+psql:include/cagg_migrate_common.sql:367: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
 -- cleanup
+DROP FUNCTION execute_migration();
 REVOKE SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan FROM :ROLE_DEFAULT_PERM_USER;
 REVOKE USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq FROM :ROLE_DEFAULT_PERM_USER;
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:373: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:375: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:374: NOTICE:  drop cascades to 10 other objects
+psql:include/cagg_migrate_common.sql:376: NOTICE:  drop cascades to 10 other objects
+DROP MATERIALIZED VIEW conditions_summary_weekly;
+psql:include/cagg_migrate_common.sql:377: NOTICE:  drop cascades to 6 other objects
 DROP TABLE conditions;
 -- ########################################################
 -- ## TIMESTAMP data type tests
@@ -813,16 +816,7 @@ psql:include/cagg_migrate_common.sql:20: WARNING:  column type "timestamp withou
         generate_series(1, 1000, 1),
         0.25;
 \endif
-\set ON_ERROR_STOP 0
--- should fail relation does not exist
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:63: ERROR:  relation "conditions_summary_daily" does not exist at character 19
-CREATE TABLE conditions_summary_daily();
--- should fail continuous agg does not exist
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:66: ERROR:  continuous aggregate "public.conditions_summary_daily" does not exist
-\set ON_ERROR_STOP 1
-DROP TABLE conditions_summary_daily;
+-- new cagg format (finalized=true)
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -840,11 +834,6 @@ FROM
 GROUP BY
     bucket
 WITH NO DATA;
-\set ON_ERROR_STOP 0
--- should fail because we don't need to migrate finalized caggs
-CALL cagg_migrate('conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:91: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
-\set ON_ERROR_STOP 1
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
@@ -862,7 +851,40 @@ FROM
     conditions
 GROUP BY
     bucket;
-psql:include/cagg_migrate_common.sql:110: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:95: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+-- for permission tests
+CREATE MATERIALIZED VIEW conditions_summary_weekly
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
+SELECT
+\if :IS_TIME_DIMENSION
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+\else
+    time_bucket(INTEGER '168', "time") AS bucket,
+\endif
+    MIN(temperature),
+    MAX(temperature),
+    AVG(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    bucket;
+psql:include/cagg_migrate_common.sql:113: NOTICE:  refreshing continuous aggregate "conditions_summary_weekly"
+\set ON_ERROR_STOP 0
+-- should fail because we don't need to migrate finalized caggs
+CALL cagg_migrate('conditions_summary_daily_new');
+psql:include/cagg_migrate_common.sql:117: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
+\set ON_ERROR_STOP 1
+\set ON_ERROR_STOP 0
+-- should fail relation does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+psql:include/cagg_migrate_common.sql:122: ERROR:  relation "conditions_summary_not_cagg" does not exist at character 19
+CREATE TABLE conditions_summary_not_cagg();
+-- should fail continuous agg does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+psql:include/cagg_migrate_common.sql:125: ERROR:  continuous aggregate "public.conditions_summary_not_cagg" does not exist
+\set ON_ERROR_STOP 1
+DROP TABLE conditions_summary_not_cagg;
 SELECT
     ca.raw_hypertable_id AS "RAW_HYPERTABLE_ID",
     h.schema_name AS "MAT_SCHEMA_NAME",
@@ -880,7 +902,7 @@ WHERE
 \set ON_ERROR_STOP 0
 -- should fail because the new cagg with suffix '_new' already exists
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:129: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
+psql:include/cagg_migrate_common.sql:147: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
 \set ON_ERROR_STOP 1
 -- remove the new cagg to execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
@@ -937,8 +959,8 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:151: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
-psql:include/cagg_migrate_common.sql:151: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
+psql:include/cagg_migrate_common.sql:169: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:169: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
  mat_hypertable_id | step_id |  status  |       type       |                                                                                                        config                                                                                                        
 -------------------+---------+----------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -961,13 +983,13 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
 CALL _timescaledb_functions.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:156: ERROR:  plan already exists for materialized hypertable 16
+psql:include/cagg_migrate_common.sql:174: ERROR:  plan already exists for materialized hypertable 16
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:157: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
+psql:include/cagg_migrate_common.sql:175: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
 \set ON_ERROR_STOP 1
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
-psql:include/cagg_migrate_common.sql:161: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:179: NOTICE:  defaulting compress_orderby to bucket
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -1006,12 +1028,12 @@ AND job_id >= 1000;
 
 -- execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:180: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:198: NOTICE:  drop cascades to 6 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:181: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:199: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:182: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:182: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
+psql:include/cagg_migrate_common.sql:200: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:200: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
     h.schema_name AS "NEW_MAT_SCHEMA_NAME",
@@ -1036,13 +1058,13 @@ WHERE
  avg    | numeric                     |           |          |         | main    | 
  sum    | numeric                     |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_19.bucket,
-    _materialized_hypertable_19.min,
-    _materialized_hypertable_19.max,
-    _materialized_hypertable_19.avg,
-    _materialized_hypertable_19.sum
-   FROM _timescaledb_internal._materialized_hypertable_19
-  WHERE _materialized_hypertable_19.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(19)), '-infinity'::timestamp without time zone)
+ SELECT _materialized_hypertable_20.bucket,
+    _materialized_hypertable_20.min,
+    _materialized_hypertable_20.max,
+    _materialized_hypertable_20.avg,
+    _materialized_hypertable_20.sum
+   FROM _timescaledb_internal._materialized_hypertable_20
+  WHERE _materialized_hypertable_20.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(20)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1050,7 +1072,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(19)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(20)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 SELECT *
@@ -1060,9 +1082,9 @@ AND hypertable_name = :'NEW_MAT_TABLE_NAME'
 AND job_id >= 1000;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1017 | Compression Policy [1017]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 19, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_19 | _timescaledb_functions | policy_compression_check
-   1016 | Refresh Continuous Aggregate Policy [1016] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 19} |            |               | _timescaledb_internal | _materialized_hypertable_19 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
-   1015 | Retention Policy [1015]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 19}                                |            |               | _timescaledb_internal | _materialized_hypertable_19 | _timescaledb_functions | policy_retention_check
+   1017 | Compression Policy [1017]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 20, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_20 | _timescaledb_functions | policy_compression_check
+   1016 | Refresh Continuous Aggregate Policy [1016] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 20} |            |               | _timescaledb_internal | _materialized_hypertable_20 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1015 | Retention Policy [1015]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 20}                                |            |               | _timescaledb_internal | _materialized_hypertable_20 | _timescaledb_functions | policy_retention_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -1096,23 +1118,23 @@ SELECT * FROM conditions_summary_daily_new;
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_16_245_chunk
- _timescaledb_internal._hyper_16_246_chunk
- _timescaledb_internal._hyper_16_247_chunk
- _timescaledb_internal._hyper_16_248_chunk
- _timescaledb_internal._hyper_16_249_chunk
- _timescaledb_internal._hyper_16_250_chunk
+ _timescaledb_internal._hyper_16_237_chunk
+ _timescaledb_internal._hyper_16_238_chunk
+ _timescaledb_internal._hyper_16_239_chunk
+ _timescaledb_internal._hyper_16_240_chunk
+ _timescaledb_internal._hyper_16_241_chunk
+ _timescaledb_internal._hyper_16_242_chunk
 (6 rows)
 
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily_new') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_19_257_chunk
- _timescaledb_internal._hyper_19_258_chunk
- _timescaledb_internal._hyper_19_259_chunk
- _timescaledb_internal._hyper_19_260_chunk
- _timescaledb_internal._hyper_19_261_chunk
- _timescaledb_internal._hyper_19_262_chunk
+ _timescaledb_internal._hyper_20_255_chunk
+ _timescaledb_internal._hyper_20_256_chunk
+ _timescaledb_internal._hyper_20_257_chunk
+ _timescaledb_internal._hyper_20_258_chunk
+ _timescaledb_internal._hyper_20_259_chunk
+ _timescaledb_internal._hyper_20_260_chunk
 (6 rows)
 
 -- check migrated data after compression. should return 0 (zero) rows
@@ -1130,9 +1152,9 @@ JOIN _timescaledb_catalog.continuous_agg ON mat_hypertable_id = hypertable_id
 ORDER BY bgw_job.id;
 -- test migration overriding the new cagg and keeping the old
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:230: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:248: NOTICE:  drop cascades to 6 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:231: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:249: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                                     config                                      |      check_schema      |                check_name                 | timezone 
@@ -1143,8 +1165,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
-psql:include/cagg_migrate_common.sql:234: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:234: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
+psql:include/cagg_migrate_common.sql:252: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:252: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                             View "public.conditions_summary_daily"
@@ -1156,13 +1178,13 @@ psql:include/cagg_migrate_common.sql:234: WARNING:  refresh the continuous aggre
  avg    | numeric                     |           |          |         | main    | 
  sum    | numeric                     |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_21.bucket,
-    _materialized_hypertable_21.min,
-    _materialized_hypertable_21.max,
-    _materialized_hypertable_21.avg,
-    _materialized_hypertable_21.sum
-   FROM _timescaledb_internal._materialized_hypertable_21
-  WHERE _materialized_hypertable_21.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+ SELECT _materialized_hypertable_22.bucket,
+    _materialized_hypertable_22.min,
+    _materialized_hypertable_22.max,
+    _materialized_hypertable_22.avg,
+    _materialized_hypertable_22.sum
+   FROM _timescaledb_internal._materialized_hypertable_22
+  WHERE _materialized_hypertable_22.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(22)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1170,7 +1192,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(21)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(22)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- cagg with the old format because it was overriden
@@ -1205,15 +1227,15 @@ UNION ALL
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:241: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:259: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                                     config                                      |      check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+---------------------------------------------------------------------------------+------------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1018 | Retention Policy [1018]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            21 | {"drop_after": "@ 30 days", "hypertable_id": 21}                                | _timescaledb_functions | policy_retention_check                    | 
- public | conditions_summary_daily | 1019 | Refresh Continuous Aggregate Policy [1019] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            21 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 21} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1020 | Compression Policy [1020]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            21 | {"hypertable_id": 21, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
+ public | conditions_summary_daily | 1018 | Retention Policy [1018]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            22 | {"drop_after": "@ 30 days", "hypertable_id": 22}                                | _timescaledb_functions | policy_retention_check                    | 
+ public | conditions_summary_daily | 1019 | Refresh Continuous Aggregate Policy [1019] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            22 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 22} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
+ public | conditions_summary_daily | 1020 | Compression Policy [1020]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            22 | {"hypertable_id": 22, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
 (3 rows)
 
 -- should return the old cagg jobs
@@ -1233,9 +1255,9 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 -- test migration overriding the new cagg and removing the old
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:251: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:269: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:252: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:270: NOTICE:  drop cascades to 6 other objects
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
@@ -1247,12 +1269,12 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
-psql:include/cagg_migrate_common.sql:256: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:256: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
-psql:include/cagg_migrate_common.sql:256: NOTICE:  drop cascades to 6 other objects
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1014 not found, skipping
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1013 not found, skipping
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1012 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:274: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
+psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1014 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1013 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1012 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                             View "public.conditions_summary_daily"
@@ -1264,13 +1286,13 @@ psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1012 not found, skipping
  avg    | numeric                     |           |          |         | main    | 
  sum    | numeric                     |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_23.bucket,
-    _materialized_hypertable_23.min,
-    _materialized_hypertable_23.max,
-    _materialized_hypertable_23.avg,
-    _materialized_hypertable_23.sum
-   FROM _timescaledb_internal._materialized_hypertable_23
-  WHERE _materialized_hypertable_23.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+ SELECT _materialized_hypertable_24.bucket,
+    _materialized_hypertable_24.min,
+    _materialized_hypertable_24.max,
+    _materialized_hypertable_24.avg,
+    _materialized_hypertable_24.sum
+   FROM _timescaledb_internal._materialized_hypertable_24
+  WHERE _materialized_hypertable_24.bucket < COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(24)), '-infinity'::timestamp without time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1278,24 +1300,24 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(23)), '-infinity'::timestamp without time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(24)), '-infinity'::timestamp without time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:261: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:279: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 -- should fail because the old cagg was removed
 SELECT * FROM conditions_summary_daily_old;
-psql:include/cagg_migrate_common.sql:263: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
+psql:include/cagg_migrate_common.sql:281: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                                     config                                      |      check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+---------------------------------------------------------------------------------+------------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1021 | Retention Policy [1021]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            23 | {"drop_after": "@ 30 days", "hypertable_id": 23}                                | _timescaledb_functions | policy_retention_check                    | 
- public | conditions_summary_daily | 1022 | Refresh Continuous Aggregate Policy [1022] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            23 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 23} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1023 | Compression Policy [1023]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            23 | {"hypertable_id": 23, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
+ public | conditions_summary_daily | 1021 | Retention Policy [1021]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            24 | {"drop_after": "@ 30 days", "hypertable_id": 24}                                | _timescaledb_functions | policy_retention_check                    | 
+ public | conditions_summary_daily | 1022 | Refresh Continuous Aggregate Policy [1022] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            24 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 24} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
+ public | conditions_summary_daily | 1023 | Compression Policy [1023]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            24 | {"hypertable_id": 24, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
 (3 rows)
 
 -- should return no rows because the old cagg was removed
@@ -1310,82 +1332,64 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 --------+------+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
 (0 rows)
 
--- permissions test
+-- permission tests
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:273: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
-DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:291: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
+ALTER MATERIALIZED VIEW conditions_summary_weekly OWNER TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-\if :IS_TIME_DIMENSION
-    time_bucket(INTERVAL '1 day', "time") AS bucket,
-\else
-    time_bucket(INTEGER '24', "time") AS bucket,
-\endif
-    MIN(temperature),
-    MAX(temperature),
-    AVG(temperature),
-    SUM(temperature)
-FROM
-    conditions
-GROUP BY
-    bucket;
-psql:include/cagg_migrate_common.sql:293: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:297: ERROR:  permission denied for table continuous_agg_migrate_plan
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:298: ERROR:  permission denied for table continuous_agg_migrate_plan
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:307: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:308: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:317: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:318: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- all necessary permissions granted
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:326: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp without time zone), NULL);"
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:327: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_weekly_new', CAST('Mon Jan 02 00:00:00 2023' AS timestamp without time zone), NULL);"
 -- check migrated data. should return 0 (zero) rows
-SELECT * FROM conditions_summary_daily
+SELECT * FROM conditions_summary_weekly
 EXCEPT
-SELECT * FROM conditions_summary_daily_new;
+SELECT * FROM conditions_summary_weekly_new;
  bucket | min | max | avg | sum 
 --------+-----+-----+-----+-----
 (0 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
- mat_hypertable_id | step_id |  status  |       type       |                                                                                                        config                                                                                                        
--------------------+---------+----------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-                25 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Sun Jan 01 00:00:00 2023"}
-                25 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                25 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
-                25 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp without time zone"}
-                25 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 00:00:00 2022", "start_ts": "Fri Dec 31 00:00:00 2021", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                25 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 00:00:00 2022", "start_ts": "Fri Mar 11 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                25 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 00:00:00 2022", "start_ts": "Fri May 20 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                25 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 00:00:00 2022", "start_ts": "Fri Jul 29 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                25 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 00:00:00 2022", "start_ts": "Fri Oct 07 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                25 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 00:00:00 2023", "start_ts": "Fri Dec 16 00:00:00 2022", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
-                25 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                25 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                25 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                25 |      14 | FINISHED | ENABLE POLICIES  | 
+ mat_hypertable_id | step_id |  status  |       type       |                                                                                                        config                                                                                                         
+-------------------+---------+----------+------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                17 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Mon Jan 02 00:00:00 2023"}
+                17 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_weekly_new"}
+                17 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
+                17 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Mon Jan 02 00:00:00 2023", "cagg_name_new": "conditions_summary_weekly_new", "window_start_type": "timestamp without time zone"}
+                17 |       5 | FINISHED | COPY DATA        | {"end_ts": "Mon Mar 07 00:00:00 2022", "start_ts": "Mon Dec 27 00:00:00 2021", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                17 |       6 | FINISHED | COPY DATA        | {"end_ts": "Mon May 16 00:00:00 2022", "start_ts": "Mon Mar 07 00:00:00 2022", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                17 |       7 | FINISHED | COPY DATA        | {"end_ts": "Mon Jul 25 00:00:00 2022", "start_ts": "Mon May 16 00:00:00 2022", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                17 |       8 | FINISHED | COPY DATA        | {"end_ts": "Mon Oct 03 00:00:00 2022", "start_ts": "Mon Jul 25 00:00:00 2022", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                17 |       9 | FINISHED | COPY DATA        | {"end_ts": "Mon Dec 12 00:00:00 2022", "start_ts": "Mon Oct 03 00:00:00 2022", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                17 |      10 | FINISHED | COPY DATA        | {"end_ts": "Mon Feb 20 00:00:00 2023", "start_ts": "Mon Dec 12 00:00:00 2022", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp without time zone"}
+                17 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_weekly_new"}
+                17 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                17 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                17 |      14 | FINISHED | ENABLE POLICIES  | 
 (14 rows)
 
 RESET ROLE;
@@ -1396,20 +1400,20 @@ RESET ROLE;
 --  execute transaction control statements. Transaction control statements are only
 --  allowed if CALL is executed in its own transaction.`
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:343: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
-DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:344: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:344: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+DROP MATERIALIZED VIEW conditions_summary_weekly_new;
+psql:include/cagg_migrate_common.sql:345: NOTICE:  drop cascades to 6 other objects
 \set ON_ERROR_STOP 0
 BEGIN;
 -- should fail with `invalid transaction termination`
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:349: ERROR:  invalid transaction termination
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:350: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
-CREATE OR REPLACE FUNCTION execute_migration() RETURNS void AS
+CREATE FUNCTION execute_migration() RETURNS void AS
 $$
 BEGIN
-    CALL cagg_migrate('conditions_summary_daily');
+    CALL cagg_migrate('conditions_summary_weekly');
     RETURN;
 END;
 $$
@@ -1419,16 +1423,19 @@ LANGUAGE plpgsql;
 BEGIN;
 -- should fail with `invalid transaction termination`
 SELECT execute_migration();
-psql:include/cagg_migrate_common.sql:366: ERROR:  invalid transaction termination
+psql:include/cagg_migrate_common.sql:367: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
 -- cleanup
+DROP FUNCTION execute_migration();
 REVOKE SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan FROM :ROLE_DEFAULT_PERM_USER;
 REVOKE USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq FROM :ROLE_DEFAULT_PERM_USER;
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:373: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:375: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:374: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:376: NOTICE:  drop cascades to 6 other objects
+DROP MATERIALIZED VIEW conditions_summary_weekly;
+psql:include/cagg_migrate_common.sql:377: NOTICE:  drop cascades to 6 other objects
 DROP TABLE conditions;
 -- ########################################################
 -- ## TIMESTAMPTZ data type tests
@@ -1493,16 +1500,7 @@ psql:include/cagg_migrate_common.sql:20: WARNING:  distributed hypertable is dep
         generate_series(1, 1000, 1),
         0.25;
 \endif
-\set ON_ERROR_STOP 0
--- should fail relation does not exist
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:63: ERROR:  relation "conditions_summary_daily" does not exist at character 19
-CREATE TABLE conditions_summary_daily();
--- should fail continuous agg does not exist
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:66: ERROR:  continuous aggregate "public.conditions_summary_daily" does not exist
-\set ON_ERROR_STOP 1
-DROP TABLE conditions_summary_daily;
+-- new cagg format (finalized=true)
 CREATE MATERIALIZED VIEW conditions_summary_daily_new
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -1520,11 +1518,6 @@ FROM
 GROUP BY
     bucket
 WITH NO DATA;
-\set ON_ERROR_STOP 0
--- should fail because we don't need to migrate finalized caggs
-CALL cagg_migrate('conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:91: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
-\set ON_ERROR_STOP 1
 -- older continuous aggregate to be migrated
 CREATE MATERIALIZED VIEW conditions_summary_daily
 WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
@@ -1542,7 +1535,40 @@ FROM
     conditions
 GROUP BY
     bucket;
-psql:include/cagg_migrate_common.sql:110: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:95: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
+-- for permission tests
+CREATE MATERIALIZED VIEW conditions_summary_weekly
+WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
+SELECT
+\if :IS_TIME_DIMENSION
+    time_bucket(INTERVAL '1 week', "time") AS bucket,
+\else
+    time_bucket(INTEGER '168', "time") AS bucket,
+\endif
+    MIN(temperature),
+    MAX(temperature),
+    AVG(temperature),
+    SUM(temperature)
+FROM
+    conditions
+GROUP BY
+    bucket;
+psql:include/cagg_migrate_common.sql:113: NOTICE:  refreshing continuous aggregate "conditions_summary_weekly"
+\set ON_ERROR_STOP 0
+-- should fail because we don't need to migrate finalized caggs
+CALL cagg_migrate('conditions_summary_daily_new');
+psql:include/cagg_migrate_common.sql:117: ERROR:  continuous aggregate "public.conditions_summary_daily_new" does not require any migration
+\set ON_ERROR_STOP 1
+\set ON_ERROR_STOP 0
+-- should fail relation does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+psql:include/cagg_migrate_common.sql:122: ERROR:  relation "conditions_summary_not_cagg" does not exist at character 19
+CREATE TABLE conditions_summary_not_cagg();
+-- should fail continuous agg does not exist
+CALL cagg_migrate('conditions_summary_not_cagg');
+psql:include/cagg_migrate_common.sql:125: ERROR:  continuous aggregate "public.conditions_summary_not_cagg" does not exist
+\set ON_ERROR_STOP 1
+DROP TABLE conditions_summary_not_cagg;
 SELECT
     ca.raw_hypertable_id AS "RAW_HYPERTABLE_ID",
     h.schema_name AS "MAT_SCHEMA_NAME",
@@ -1560,7 +1586,7 @@ WHERE
 \set ON_ERROR_STOP 0
 -- should fail because the new cagg with suffix '_new' already exists
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:129: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
+psql:include/cagg_migrate_common.sql:147: ERROR:  continuous aggregate "public.conditions_summary_daily_new" already exists
 \set ON_ERROR_STOP 1
 -- remove the new cagg to execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
@@ -1617,8 +1643,8 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 
 -- should resume the execution
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:151: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
-psql:include/cagg_migrate_common.sql:151: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
+psql:include/cagg_migrate_common.sql:169: WARNING:  resuming the migration of the continuous aggregate "public.conditions_summary_daily"
+psql:include/cagg_migrate_common.sql:169: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
  mat_hypertable_id | step_id |  status  |       type       |                                                                                                          config                                                                                                           
 -------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1641,13 +1667,13 @@ SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalo
 \set ON_ERROR_STOP 0
 -- should error because plan already exists
 CALL _timescaledb_functions.cagg_migrate_create_plan(:'CAGG_DATA', 'conditions_summary_daily_new');
-psql:include/cagg_migrate_common.sql:156: ERROR:  plan already exists for materialized hypertable 29
+psql:include/cagg_migrate_common.sql:174: ERROR:  plan already exists for materialized hypertable 29
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:157: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
+psql:include/cagg_migrate_common.sql:175: ERROR:  plan already exists for continuous aggregate public.conditions_summary_daily
 \set ON_ERROR_STOP 1
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
-psql:include/cagg_migrate_common.sql:161: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:179: NOTICE:  defaulting compress_orderby to bucket
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -1686,12 +1712,12 @@ AND job_id >= 1000;
 
 -- execute the migration
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:180: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:198: NOTICE:  drop cascades to 6 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:181: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:199: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:182: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:182: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
+psql:include/cagg_migrate_common.sql:200: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:200: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
     h.schema_name AS "NEW_MAT_SCHEMA_NAME",
@@ -1716,13 +1742,13 @@ WHERE
  avg    | numeric                  |           |          |         | main    | 
  sum    | numeric                  |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_32.bucket,
-    _materialized_hypertable_32.min,
-    _materialized_hypertable_32.max,
-    _materialized_hypertable_32.avg,
-    _materialized_hypertable_32.sum
-   FROM _timescaledb_internal._materialized_hypertable_32
-  WHERE _materialized_hypertable_32.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(32)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_33.bucket,
+    _materialized_hypertable_33.min,
+    _materialized_hypertable_33.max,
+    _materialized_hypertable_33.avg,
+    _materialized_hypertable_33.sum
+   FROM _timescaledb_internal._materialized_hypertable_33
+  WHERE _materialized_hypertable_33.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(33)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1730,7 +1756,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(32)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(33)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 SELECT *
@@ -1740,9 +1766,9 @@ AND hypertable_name = :'NEW_MAT_TABLE_NAME'
 AND job_id >= 1000;
  job_id |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule |                                     config                                      | next_start | initial_start |   hypertable_schema   |       hypertable_name       |      check_schema      |                check_name                 
 --------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------------------------------------------------------------------------+------------+---------------+-----------------------+-----------------------------+------------------------+-------------------------------------------
-   1029 | Compression Policy [1029]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 32, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_32 | _timescaledb_functions | policy_compression_check
-   1028 | Refresh Continuous Aggregate Policy [1028] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 32} |            |               | _timescaledb_internal | _materialized_hypertable_32 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
-   1027 | Retention Policy [1027]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 32}                                |            |               | _timescaledb_internal | _materialized_hypertable_32 | _timescaledb_functions | policy_retention_check
+   1029 | Compression Policy [1029]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              | {"hypertable_id": 33, "compress_after": "@ 45 days"}                            |            |               | _timescaledb_internal | _materialized_hypertable_33 | _timescaledb_functions | policy_compression_check
+   1028 | Refresh Continuous Aggregate Policy [1028] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 33} |            |               | _timescaledb_internal | _materialized_hypertable_33 | _timescaledb_functions | policy_refresh_continuous_aggregate_check
+   1027 | Retention Policy [1027]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              | {"drop_after": "@ 30 days", "hypertable_id": 33}                                |            |               | _timescaledb_internal | _materialized_hypertable_33 | _timescaledb_functions | policy_retention_check
 (3 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
@@ -1776,23 +1802,23 @@ SELECT * FROM conditions_summary_daily_new;
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_29_352_chunk
- _timescaledb_internal._hyper_29_353_chunk
- _timescaledb_internal._hyper_29_354_chunk
- _timescaledb_internal._hyper_29_355_chunk
- _timescaledb_internal._hyper_29_356_chunk
- _timescaledb_internal._hyper_29_357_chunk
+ _timescaledb_internal._hyper_29_344_chunk
+ _timescaledb_internal._hyper_29_345_chunk
+ _timescaledb_internal._hyper_29_346_chunk
+ _timescaledb_internal._hyper_29_347_chunk
+ _timescaledb_internal._hyper_29_348_chunk
+ _timescaledb_internal._hyper_29_349_chunk
 (6 rows)
 
 SELECT compress_chunk(c) FROM show_chunks('conditions_summary_daily_new') c ORDER BY c::regclass::text;
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_32_364_chunk
- _timescaledb_internal._hyper_32_365_chunk
- _timescaledb_internal._hyper_32_366_chunk
- _timescaledb_internal._hyper_32_367_chunk
- _timescaledb_internal._hyper_32_368_chunk
- _timescaledb_internal._hyper_32_369_chunk
+ _timescaledb_internal._hyper_33_362_chunk
+ _timescaledb_internal._hyper_33_363_chunk
+ _timescaledb_internal._hyper_33_364_chunk
+ _timescaledb_internal._hyper_33_365_chunk
+ _timescaledb_internal._hyper_33_366_chunk
+ _timescaledb_internal._hyper_33_367_chunk
 (6 rows)
 
 -- check migrated data after compression. should return 0 (zero) rows
@@ -1810,9 +1836,9 @@ JOIN _timescaledb_catalog.continuous_agg ON mat_hypertable_id = hypertable_id
 ORDER BY bgw_job.id;
 -- test migration overriding the new cagg and keeping the old
 DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:230: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:248: NOTICE:  drop cascades to 6 other objects
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:231: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:249: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                                     config                                      |      check_schema      |                check_name                 | timezone 
@@ -1823,8 +1849,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
-psql:include/cagg_migrate_common.sql:234: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:234: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
+psql:include/cagg_migrate_common.sql:252: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:252: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                            View "public.conditions_summary_daily"
@@ -1836,13 +1862,13 @@ psql:include/cagg_migrate_common.sql:234: WARNING:  refresh the continuous aggre
  avg    | numeric                  |           |          |         | main    | 
  sum    | numeric                  |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_34.bucket,
-    _materialized_hypertable_34.min,
-    _materialized_hypertable_34.max,
-    _materialized_hypertable_34.avg,
-    _materialized_hypertable_34.sum
-   FROM _timescaledb_internal._materialized_hypertable_34
-  WHERE _materialized_hypertable_34.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_35.bucket,
+    _materialized_hypertable_35.min,
+    _materialized_hypertable_35.max,
+    _materialized_hypertable_35.avg,
+    _materialized_hypertable_35.sum
+   FROM _timescaledb_internal._materialized_hypertable_35
+  WHERE _materialized_hypertable_35.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(35)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1850,7 +1876,7 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(34)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(35)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- cagg with the old format because it was overriden
@@ -1885,15 +1911,15 @@ UNION ALL
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:241: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:259: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                                     config                                      |      check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+---------------------------------------------------------------------------------+------------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1030 | Retention Policy [1030]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            34 | {"drop_after": "@ 30 days", "hypertable_id": 34}                                | _timescaledb_functions | policy_retention_check                    | 
- public | conditions_summary_daily | 1031 | Refresh Continuous Aggregate Policy [1031] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            34 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 34} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1032 | Compression Policy [1032]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            34 | {"hypertable_id": 34, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
+ public | conditions_summary_daily | 1030 | Retention Policy [1030]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            35 | {"drop_after": "@ 30 days", "hypertable_id": 35}                                | _timescaledb_functions | policy_retention_check                    | 
+ public | conditions_summary_daily | 1031 | Refresh Continuous Aggregate Policy [1031] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            35 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 35} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
+ public | conditions_summary_daily | 1032 | Compression Policy [1032]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            35 | {"hypertable_id": 35, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
 (3 rows)
 
 -- should return the old cagg jobs
@@ -1913,9 +1939,9 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 -- test migration overriding the new cagg and removing the old
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:251: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:269: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:252: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:270: NOTICE:  drop cascades to 6 other objects
 ALTER MATERIALIZED VIEW conditions_summary_daily_old RENAME TO conditions_summary_daily;
 -- check policies before the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
@@ -1927,12 +1953,12 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 (3 rows)
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
-psql:include/cagg_migrate_common.sql:256: NOTICE:  defaulting compress_orderby to bucket
-psql:include/cagg_migrate_common.sql:256: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
-psql:include/cagg_migrate_common.sql:256: NOTICE:  drop cascades to 6 other objects
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1026 not found, skipping
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1025 not found, skipping
-psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1024 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:274: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
+psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1026 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1025 not found, skipping
+psql:include/cagg_migrate_common.sql:274: NOTICE:  job 1024 not found, skipping
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
                            View "public.conditions_summary_daily"
@@ -1944,13 +1970,13 @@ psql:include/cagg_migrate_common.sql:256: NOTICE:  job 1024 not found, skipping
  avg    | numeric                  |           |          |         | main    | 
  sum    | numeric                  |           |          |         | main    | 
 View definition:
- SELECT _materialized_hypertable_36.bucket,
-    _materialized_hypertable_36.min,
-    _materialized_hypertable_36.max,
-    _materialized_hypertable_36.avg,
-    _materialized_hypertable_36.sum
-   FROM _timescaledb_internal._materialized_hypertable_36
-  WHERE _materialized_hypertable_36.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_37.bucket,
+    _materialized_hypertable_37.min,
+    _materialized_hypertable_37.max,
+    _materialized_hypertable_37.avg,
+    _materialized_hypertable_37.sum
+   FROM _timescaledb_internal._materialized_hypertable_37
+  WHERE _materialized_hypertable_37.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(37)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     min(conditions.temperature) AS min,
@@ -1958,24 +1984,24 @@ UNION ALL
     avg(conditions.temperature) AS avg,
     sum(conditions.temperature) AS sum
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(36)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(37)), '-infinity'::timestamp with time zone)
   GROUP BY (time_bucket('@ 1 day'::interval, conditions."time"));
 
 \set ON_ERROR_STOP 0
 -- should fail because the cagg was overriden
 SELECT * FROM conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:261: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
+psql:include/cagg_migrate_common.sql:279: ERROR:  relation "conditions_summary_daily_new" does not exist at character 15
 -- should fail because the old cagg was removed
 SELECT * FROM conditions_summary_daily_old;
-psql:include/cagg_migrate_common.sql:263: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
+psql:include/cagg_migrate_common.sql:281: ERROR:  relation "conditions_summary_daily_old" does not exist at character 15
 \set ON_ERROR_STOP 1
 -- check policies after the migration
 SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_daily';
  schema |           name           |  id  |              application_name              | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |              proc_name              |       owner        | scheduled | fixed_schedule | initial_start | hypertable_id |                                     config                                      |      check_schema      |                check_name                 | timezone 
 --------+--------------------------+------+--------------------------------------------+-------------------+-------------+-------------+--------------+------------------------+-------------------------------------+--------------------+-----------+----------------+---------------+---------------+---------------------------------------------------------------------------------+------------------------+-------------------------------------------+----------
- public | conditions_summary_daily | 1033 | Retention Policy [1033]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            36 | {"drop_after": "@ 30 days", "hypertable_id": 36}                                | _timescaledb_functions | policy_retention_check                    | 
- public | conditions_summary_daily | 1034 | Refresh Continuous Aggregate Policy [1034] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            36 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 36} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
- public | conditions_summary_daily | 1035 | Compression Policy [1035]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            36 | {"hypertable_id": 36, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
+ public | conditions_summary_daily | 1033 | Retention Policy [1033]                    | @ 1 day           | @ 5 mins    |          -1 | @ 5 mins     | _timescaledb_functions | policy_retention                    | cluster_super_user | t         | f              |               |            37 | {"drop_after": "@ 30 days", "hypertable_id": 37}                                | _timescaledb_functions | policy_retention_check                    | 
+ public | conditions_summary_daily | 1034 | Refresh Continuous Aggregate Policy [1034] | @ 1 hour          | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_refresh_continuous_aggregate | cluster_super_user | t         | f              |               |            37 | {"end_offset": "@ 1 day", "start_offset": "@ 30 days", "mat_hypertable_id": 37} | _timescaledb_functions | policy_refresh_continuous_aggregate_check | 
+ public | conditions_summary_daily | 1035 | Compression Policy [1035]                  | @ 12 hours        | @ 0         |          -1 | @ 1 hour     | _timescaledb_functions | policy_compression                  | cluster_super_user | t         | f              |               |            37 | {"hypertable_id": 37, "compress_after": "@ 45 days"}                            | _timescaledb_functions | policy_compression_check                  | 
 (3 rows)
 
 -- should return no rows because the old cagg was removed
@@ -1990,82 +2016,64 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 --------+------+----+------------------+-------------------+-------------+-------------+--------------+-------------+-----------+-------+-----------+----------------+---------------+---------------+--------+--------------+------------+----------
 (0 rows)
 
--- permissions test
+-- permission tests
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:273: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
-DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:274: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:291: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 GRANT ALL ON TABLE conditions TO :ROLE_DEFAULT_PERM_USER;
+ALTER MATERIALIZED VIEW conditions_summary_weekly OWNER TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
-CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-\if :IS_TIME_DIMENSION
-    time_bucket(INTERVAL '1 day', "time") AS bucket,
-\else
-    time_bucket(INTEGER '24', "time") AS bucket,
-\endif
-    MIN(temperature),
-    MAX(temperature),
-    AVG(temperature),
-    SUM(temperature)
-FROM
-    conditions
-GROUP BY
-    bucket;
-psql:include/cagg_migrate_common.sql:293: NOTICE:  refreshing continuous aggregate "conditions_summary_daily"
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan' catalog table
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:297: ERROR:  permission denied for table continuous_agg_migrate_plan
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:298: ERROR:  permission denied for table continuous_agg_migrate_plan
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step' catalog table
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:307: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:308: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan_step TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 \set ON_ERROR_STOP 0
 -- should fail because the lack of permissions on 'continuous_agg_migrate_plan_step_step_id_seq' catalog sequence
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:317: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:318: ERROR:  permission denied for sequence continuous_agg_migrate_plan_step_step_id_seq
 \set ON_ERROR_STOP 1
 RESET ROLE;
 GRANT USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq TO :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 -- all necessary permissions granted
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:326: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('Sun Jan 01 00:00:00 2023' AS timestamp with time zone), NULL);"
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:327: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_weekly_new', CAST('Mon Jan 02 00:00:00 2023' AS timestamp with time zone), NULL);"
 -- check migrated data. should return 0 (zero) rows
-SELECT * FROM conditions_summary_daily
+SELECT * FROM conditions_summary_weekly
 EXCEPT
-SELECT * FROM conditions_summary_daily_new;
+SELECT * FROM conditions_summary_weekly_new;
  bucket | min | max | avg | sum 
 --------+-----+-----+-----+-----
 (0 rows)
 
 SELECT mat_hypertable_id, step_id, status, type, config FROM _timescaledb_catalog.continuous_agg_migrate_plan_step ORDER BY step_id;
- mat_hypertable_id | step_id |  status  |       type       |                                                                                                          config                                                                                                           
--------------------+---------+----------+------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-                38 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Sun Jan 01 00:00:00 2023"}
-                38 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_daily_new"}
-                38 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
-                38 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Sun Jan 01 00:00:00 2023", "cagg_name_new": "conditions_summary_daily_new", "window_start_type": "timestamp with time zone"}
-                38 |       5 | FINISHED | COPY DATA        | {"end_ts": "Fri Mar 11 16:00:00 2022 PST", "start_ts": "Fri Dec 31 16:00:00 2021 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                38 |       6 | FINISHED | COPY DATA        | {"end_ts": "Fri May 20 16:00:00 2022 PDT", "start_ts": "Fri Mar 11 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                38 |       7 | FINISHED | COPY DATA        | {"end_ts": "Fri Jul 29 16:00:00 2022 PDT", "start_ts": "Fri May 20 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                38 |       8 | FINISHED | COPY DATA        | {"end_ts": "Fri Oct 07 16:00:00 2022 PDT", "start_ts": "Fri Jul 29 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                38 |       9 | FINISHED | COPY DATA        | {"end_ts": "Fri Dec 16 16:00:00 2022 PST", "start_ts": "Fri Oct 07 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                38 |      10 | FINISHED | COPY DATA        | {"end_ts": "Fri Feb 24 16:00:00 2023 PST", "start_ts": "Fri Dec 16 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_daily_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
-                38 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_daily_new"}
-                38 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                38 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_daily_new"}
-                38 |      14 | FINISHED | ENABLE POLICIES  | 
+ mat_hypertable_id | step_id |  status  |       type       |                                                                                                           config                                                                                                           
+-------------------+---------+----------+------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                30 |       1 | FINISHED | SAVE WATERMARK   | {"watermark": "Mon Jan 02 00:00:00 2023"}
+                30 |       2 | FINISHED | CREATE NEW CAGG  | {"cagg_name_new": "conditions_summary_weekly_new"}
+                30 |       3 | FINISHED | DISABLE POLICIES | {"policies": null}
+                30 |       4 | FINISHED | REFRESH NEW CAGG | {"window_start": "Mon Jan 02 00:00:00 2023", "cagg_name_new": "conditions_summary_weekly_new", "window_start_type": "timestamp with time zone"}
+                30 |       5 | FINISHED | COPY DATA        | {"end_ts": "Sun Mar 06 16:00:00 2022 PST", "start_ts": "Sun Dec 26 16:00:00 2021 PST", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                30 |       6 | FINISHED | COPY DATA        | {"end_ts": "Sun May 15 16:00:00 2022 PDT", "start_ts": "Sun Mar 06 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                30 |       7 | FINISHED | COPY DATA        | {"end_ts": "Sun Jul 24 16:00:00 2022 PDT", "start_ts": "Sun May 15 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                30 |       8 | FINISHED | COPY DATA        | {"end_ts": "Sun Oct 02 16:00:00 2022 PDT", "start_ts": "Sun Jul 24 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                30 |       9 | FINISHED | COPY DATA        | {"end_ts": "Sun Dec 11 16:00:00 2022 PST", "start_ts": "Sun Oct 02 16:00:00 2022 PDT", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                30 |      10 | FINISHED | COPY DATA        | {"end_ts": "Sun Feb 19 16:00:00 2023 PST", "start_ts": "Sun Dec 11 16:00:00 2022 PST", "cagg_name_new": "conditions_summary_weekly_new", "bucket_column_name": "bucket", "bucket_column_type": "timestamp with time zone"}
+                30 |      11 | FINISHED | COPY POLICIES    | {"policies": null, "cagg_name_new": "conditions_summary_weekly_new"}
+                30 |      12 | FINISHED | OVERRIDE CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                30 |      13 | FINISHED | DROP OLD CAGG    | {"drop_old": false, "override": false, "cagg_name_new": "conditions_summary_weekly_new"}
+                30 |      14 | FINISHED | ENABLE POLICIES  | 
 (14 rows)
 
 RESET ROLE;
@@ -2076,20 +2084,20 @@ RESET ROLE;
 --  execute transaction control statements. Transaction control statements are only
 --  allowed if CALL is executed in its own transaction.`
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:343: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
-DROP MATERIALIZED VIEW conditions_summary_daily_new;
-psql:include/cagg_migrate_common.sql:344: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:344: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+DROP MATERIALIZED VIEW conditions_summary_weekly_new;
+psql:include/cagg_migrate_common.sql:345: NOTICE:  drop cascades to 6 other objects
 \set ON_ERROR_STOP 0
 BEGIN;
 -- should fail with `invalid transaction termination`
-CALL cagg_migrate('conditions_summary_daily');
-psql:include/cagg_migrate_common.sql:349: ERROR:  invalid transaction termination
+CALL cagg_migrate('conditions_summary_weekly');
+psql:include/cagg_migrate_common.sql:350: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
-CREATE OR REPLACE FUNCTION execute_migration() RETURNS void AS
+CREATE FUNCTION execute_migration() RETURNS void AS
 $$
 BEGIN
-    CALL cagg_migrate('conditions_summary_daily');
+    CALL cagg_migrate('conditions_summary_weekly');
     RETURN;
 END;
 $$
@@ -2099,16 +2107,19 @@ LANGUAGE plpgsql;
 BEGIN;
 -- should fail with `invalid transaction termination`
 SELECT execute_migration();
-psql:include/cagg_migrate_common.sql:366: ERROR:  invalid transaction termination
+psql:include/cagg_migrate_common.sql:367: ERROR:  invalid transaction termination
 ROLLBACK;
 \set ON_ERROR_STOP 1
 -- cleanup
+DROP FUNCTION execute_migration();
 REVOKE SELECT, INSERT, UPDATE ON TABLE _timescaledb_catalog.continuous_agg_migrate_plan FROM :ROLE_DEFAULT_PERM_USER;
 REVOKE USAGE ON SEQUENCE _timescaledb_catalog.continuous_agg_migrate_plan_step_step_id_seq FROM :ROLE_DEFAULT_PERM_USER;
 TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCADE;
-psql:include/cagg_migrate_common.sql:373: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
+psql:include/cagg_migrate_common.sql:375: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 DROP MATERIALIZED VIEW conditions_summary_daily;
-psql:include/cagg_migrate_common.sql:374: NOTICE:  drop cascades to 6 other objects
+psql:include/cagg_migrate_common.sql:376: NOTICE:  drop cascades to 6 other objects
+DROP MATERIALIZED VIEW conditions_summary_weekly;
+psql:include/cagg_migrate_common.sql:377: NOTICE:  drop cascades to 6 other objects
 DROP TABLE conditions;
 -- cleanup
 \c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER;

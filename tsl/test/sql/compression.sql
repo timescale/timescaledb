@@ -19,6 +19,10 @@ insert into foo values( 3 , 16 , 20, NULL);
 insert into foo values( 10 , 10 , 20, NULL);
 insert into foo values( 20 , 11 , 20, NULL);
 insert into foo values( 30 , 12 , 20, NULL);
+analyze foo;
+-- check that approximate_row_count works with a regular table
+SELECT approximate_row_count('foo');
+SELECT count(*) from foo;
 
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 
@@ -538,9 +542,13 @@ SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE
 SELECT * FROM pg_stats WHERE tablename = :statchunk;
 
 ALTER TABLE stattest SET (timescaledb.compress);
+-- check that approximate_row_count works with all normal chunks
 SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+-- check that approximate_row_count works with all compressed chunks
 SELECT approximate_row_count('stattest');
+-- actual count should match with the above
+SELECT count(*) from stattest;
 -- Uncompressed chunk table is empty since we just compressed the chunk and moved everything to compressed chunk table.
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
@@ -564,6 +572,8 @@ SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 
 -- verify that corresponding compressed chunk table stats is updated as well.
 SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+-- verify that approximate_row_count works fine on a chunk with compressed data
+SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_COMP_CHUNK_NAME');
 
 -- Verify partial chunk stats are handled correctly when analyzing
 -- for both uncompressed and compressed chunk tables
@@ -577,7 +587,13 @@ SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 -- verify that corresponding compressed chunk table stats have not changed since
 -- we didn't compress anything new.
 SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
-
+-- verify that approximate_row_count works fine on a chunk with a mix of uncompressed
+-- and compressed data
+SELECT table_name  as "STAT_CHUNK_NAME" from temptable \gset
+SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_CHUNK_NAME');
+-- should match with the result via the hypertable post in-memory decompression
+SELECT count(*) from stattest;
+SELECT count(*) from show_chunks('stattest');
 
 -- Verify that decompressing the chunk restores autoanalyze to the hypertable's setting
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
@@ -597,7 +613,6 @@ SET client_min_messages TO NOTICE;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk and attname = 'c1';
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 
-DROP TABLE stattest;
 
 --- Test that analyze on compression internal table updates stats on original chunks
 CREATE TABLE stattest2(time TIMESTAMPTZ NOT NULL, c1 int, c2 int);
@@ -1052,3 +1067,17 @@ SET timescaledb.enable_decompression_sorted_merge = FALSE;
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 RESET timescaledb.enable_decompression_sorted_merge;
+
+-- create another chunk
+INSERT INTO stattest SELECT '2021/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(125,140) v;
+ANALYZE stattest;
+SELECT count(*) from show_chunks('stattest');
+SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'stattest') ORDER BY creation_time desc limit 1;
+SELECT table_name  as "STAT_CHUNK2_NAME" FROM temptable \gset
+-- verify that approximate_row_count works ok on normal chunks
+SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_CHUNK2_NAME');
+-- verify that approximate_row_count works fine on a hypertable with a mix of uncompressed
+-- and compressed data
+SELECT approximate_row_count('stattest');
+
+DROP TABLE stattest;
