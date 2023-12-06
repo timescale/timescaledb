@@ -79,7 +79,7 @@ static const struct BatchQueueFunctions BatchQueueFunctionsHeap = {
 /*
  * Build the sortkeys data structure from the list structure in the
  * custom_private field of the custom scan. This sort info is used to sort
- * binary heap used for sorted merge append.
+ * binary heap used for batch sorted merge.
  */
 static void
 build_batch_sorted_merge_info(DecompressChunkState *chunk_state)
@@ -892,7 +892,7 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 	{
 		if (chunk_state->batch_sorted_merge)
 		{
-			ExplainPropertyBool("Sorted merge append", chunk_state->batch_sorted_merge, es);
+			ExplainPropertyBool("Batch Sorted Merge", chunk_state->batch_sorted_merge, es);
 		}
 
 		if (es->analyze && (es->verbose || es->format != EXPLAIN_FORMAT_TEXT))
