@@ -27,14 +27,6 @@ FUNCTION_NAME(PREDICATE_NAME, VECTOR_CTYPE,
 {
 	const size_t n = arrow->length;
 
-	/* Account for nulls which shouldn't pass the predicate. */
-	const size_t n_words = (n + 63) / 64;
-	const uint64 *restrict validity = (uint64 *restrict) arrow->buffers[0];
-	for (size_t i = 0; i < n_words; i++)
-	{
-		result[i] &= validity[i];
-	}
-
 	/* Now run the predicate itself. */
 	const CONST_CTYPE constvalue = CONST_CONVERSION(constdatum);
 	const VECTOR_CTYPE *restrict vector = (VECTOR_CTYPE *restrict) arrow->buffers[1];

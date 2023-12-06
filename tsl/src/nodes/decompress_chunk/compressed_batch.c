@@ -183,6 +183,16 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
 	batch_state->vector_qual_result = palloc(bitmap_bytes);
 	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
+	if (batch_state->total_batch_rows % 64 != 0)
+	{
+		/*
+		 * We have to zero out the bits for past-the-end elements in the last
+		 * bitmap word. Since all predicates are ANDed to the result bitmap,
+		 * we can do it here once instead of doing it in each predicate.
+		 */
+		const uint64 mask = ((uint64) -1) >> (64 - batch_state->total_batch_rows % 64);
+		batch_state->vector_qual_result[batch_state->total_batch_rows / 64] = mask;
+	}
 
 	/*
 	 * Compute the quals.
@@ -190,14 +200,37 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 	ListCell *lc;
 	foreach (lc, chunk_state->vectorized_quals_constified)
 	{
-		/* For now we only support "Var ? Const" predicates. */
-		OpExpr *oe = castNode(OpExpr, lfirst(lc));
-		Var *var = castNode(Var, linitial(oe->args));
-		Const *constnode = castNode(Const, lsecond(oe->args));
+		/*
+		 * For now we support "Var ? Const" predicates and
+		 * ScalarArrayOperations.
+		 */
+		List *args = NULL;
+		RegProcedure vector_const_opcode = InvalidOid;
+		ScalarArrayOpExpr *saop = NULL;
+		OpExpr *opexpr = NULL;
+		if (IsA(lfirst(lc), ScalarArrayOpExpr))
+		{
+			saop = castNode(ScalarArrayOpExpr, lfirst(lc));
+			args = saop->args;
+			vector_const_opcode = get_opcode(saop->opno);
+		}
+		else
+		{
+			opexpr = castNode(OpExpr, lfirst(lc));
+			args = opexpr->args;
+			vector_const_opcode = get_opcode(opexpr->opno);
+		}
+
+		/*
+		 * Find the vector_const predicate.
+		 */
+		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
+		Assert(vector_const_predicate != NULL);
 
 		/*
 		 * Find the compressed column referred to by the Var.
 		 */
+		Var *var = castNode(Var, linitial(args));
 		DecompressChunkColumnDescription *column_description = NULL;
 		int column_index = 0;
 		for (; column_index < chunk_state->num_total_columns; column_index++)
@@ -273,20 +306,37 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 			predicate_result = &default_value_predicate_result;
 		}
 
-		/* Find and compute the predicate. */
-		void (*predicate)(const ArrowArray *, Datum, uint64 *restrict) =
-			get_vector_const_predicate(get_opcode(oe->opno));
-		Ensure(predicate != NULL,
-			   "vectorized predicate not found for postgres predicate %d",
-			   get_opcode(oe->opno));
-
 		/*
 		 * The vectorizable predicates should be STRICT, so we shouldn't see null
 		 * constants here.
 		 */
+		Const *constnode = castNode(Const, lsecond(args));
 		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
 
-		predicate(vector, constnode->constvalue, predicate_result);
+		/*
+		 * At last, compute the predicate.
+		 */
+		if (saop)
+		{
+			vector_array_predicate(vector_const_predicate,
+								   saop->useOr,
+								   vector,
+								   constnode->constvalue,
+								   predicate_result);
+		}
+		else
+		{
+			vector_const_predicate(vector, constnode->constvalue, predicate_result);
+		}
+
+		/* Account for nulls which shouldn't pass the predicate. */
+		const size_t n = vector->length;
+		const size_t n_words = (n + 63) / 64;
+		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
+		for (size_t i = 0; i < n_words; i++)
+		{
+			predicate_result[i] &= validity[i];
+		}
 
 		/* Process the result. */
 		if (column_values->arrow == NULL)

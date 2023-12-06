@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
 select create_hypertable('vectorqual', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
@@ -184,6 +185,29 @@ select count(*) from vectorqual where !!metric3;
      5
 (1 row)
 
+-- Custom operator on column that supports bulk decompression is not vectorized.
+set timescaledb.debug_require_vector_qual to 'forbid';
+create function int4eqq(int4, int4) returns bool as 'int4eq' language internal;
+create operator === (function = 'int4eqq', rightarg = int4, leftarg = int4);
+select count(*) from vectorqual where metric3 === 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric3 === any(array[777, 888]);
+ count 
+-------
+     2
+(1 row)
+
+-- It also doesn't have a commutator.
+select count(*) from vectorqual where 777 === metric3;
+ count 
+-------
+     2
+(1 row)
+
 -- NullTest is not vectorized.
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric4 is null;
@@ -196,6 +220,331 @@ select count(*) from vectorqual where metric4 is not null;
  count 
 -------
      2
+(1 row)
+
+-- Scalar array operators are vectorized if the operator is vectorizable.
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where metric3 = any(array[777, 888]); /* default value */
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric4 = any(array[44, 55]) /* default null */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 > any(array[-1, -2, -3]) /* any */;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric2 > all(array[-1, -2, -3]) /* all */;
+ count 
+-------
+     5
+(1 row)
+
+-- Also have to support null array elements, because they are impossible to
+-- prevent in stable expressions.
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where metric2 = any(array[null::int]) /* any with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(array[22, null]) /* any with null element */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(array[null, 32]) /* any with null element */;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = any(array[22, null, 32]) /* any with null element */;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[null::int]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[22, null]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[null, 32]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric2 = all(array[22, null, 32]) /* all with null element */;
+ count 
+-------
+     0
+(1 row)
+
+-- Check early exit.
+reset timescaledb.debug_require_vector_qual;
+create table singlebatch(like vectorqual);
+select create_hypertable('singlebatch', 'ts');
+WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
+    create_hypertable     
+--------------------------
+ (3,public,singlebatch,t)
+(1 row)
+
+alter table singlebatch set (timescaledb.compress);
+insert into singlebatch select '2022-02-02 02:02:02', metric2, device, metric3, metric4, tag from vectorqual;
+select count(compress_chunk(x, true)) from show_chunks('singlebatch') x;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.debug_require_vector_qual to 'only';
+-- Uncomment to generate the test reference w/o the vector optimizations.
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 != any(array[0, 0, 0, 0, 0]);
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 0, 0, 0, 22]);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 22, 0, 0, 0]);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 and metric2 = any(array[0, 0, 0, 0, 0]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 and metric2 != any(array[0, 0, 0, 0, 0]);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 12, 12, 12, 0]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 0, 12, 12, 12]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 and metric2 <= all(array[12, 12, 12, 12, 12]);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]) and metric3 = 777;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]) and metric3 = 777;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]) and metric3 = 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 != any(array[0, 0, 0, 0, 0]) and metric3 = 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) and metric3 = 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 = 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 = 777;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 0, 0, 0, 22]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 22, 0, 0, 0]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 != 777 and metric2 = any(array[0, 0, 0, 0, 0]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 != 777 and metric2 != any(array[0, 0, 0, 0, 0]);
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 12, 12, 12, 0]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 0, 12, 12, 12]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric3 != 777 and metric2 <= all(array[12, 12, 12, 12, 12]);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 22]) and metric3 != 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 22, 0, 0, 0]) and metric3 != 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 = any(array[0, 0, 0, 0, 0]) and metric3 != 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 != any(array[0, 0, 0, 0, 0]) and metric3 != 777;
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) and metric3 != 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 != 777;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 != 777;
+ count 
+-------
+     0
+(1 row)
+
+reset timescaledb.enable_bulk_decompression;
+reset timescaledb.debug_require_vector_qual;
+-- Comparison with other column not vectorized.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where metric3 = metric4;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where metric3 = any(array[metric4]);
+ count 
+-------
+     0
 (1 row)
 
 -- Vectorized filters also work if we have only stable functions on the right
@@ -270,7 +619,7 @@ select create_hypertable('date_table', 'ts');
 NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
- (3,public,date_table,t)
+ (5,public,date_table,t)
 (1 row)
 
 alter table date_table set (timescaledb.compress);
