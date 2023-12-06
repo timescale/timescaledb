@@ -32,18 +32,9 @@
 #include "compression/float_utils.h"
 #include "compression/segment_meta.h"
 
-#define VEC_PREFIX compression_info
-#define VEC_ELEMENT_TYPE Form_hypertable_compression
-#define VEC_DECLARE 1
-#define VEC_DEFINE 1
-#define VEC_SCOPE static inline
-#include <adts/vec.h>
-
 #define TEST_ELEMENTS 1015
 
 TS_FUNCTION_INFO_V1(ts_test_compression);
-TS_FUNCTION_INFO_V1(ts_compress_table);
-TS_FUNCTION_INFO_V1(ts_decompress_table);
 
 static void
 test_int_array()
@@ -656,78 +647,6 @@ ts_test_compression(PG_FUNCTION_ARGS)
 	/* Some tests for zig-zag encoding overflowing the original element width. */
 	test_delta4(test_delta4_case1, sizeof(test_delta4_case1) / sizeof(*test_delta4_case1));
 	test_delta4(test_delta4_case2, sizeof(test_delta4_case2) / sizeof(*test_delta4_case2));
-
-	PG_RETURN_VOID();
-}
-
-static compression_info_vec *
-compression_info_from_array(ArrayType *compression_info_arr, Oid form_oid)
-{
-	ArrayMetaState compression_info_arr_meta = {
-		.element_type = form_oid,
-	};
-	ArrayIterator compression_info_iter;
-	Datum compression_info_datum;
-	bool is_null;
-	compression_info_vec *compression_info = compression_info_vec_create(CurrentMemoryContext, 0);
-	TupleDesc form_desc = NULL;
-
-	get_typlenbyvalalign(compression_info_arr_meta.element_type,
-						 &compression_info_arr_meta.typlen,
-						 &compression_info_arr_meta.typbyval,
-						 &compression_info_arr_meta.typalign);
-
-	compression_info_iter =
-		array_create_iterator(compression_info_arr, 0, &compression_info_arr_meta);
-
-	while (array_iterate(compression_info_iter, &compression_info_datum, &is_null))
-	{
-		HeapTupleHeader form;
-		HeapTupleData tmptup;
-
-		TestAssertTrue(!is_null);
-		form = DatumGetHeapTupleHeaderCopy(compression_info_datum);
-		TestAssertTrue(HeapTupleHeaderGetTypeId(form) == form_oid);
-		if (form_desc == NULL)
-		{
-			int32 formTypmod = HeapTupleHeaderGetTypMod(form);
-			form_desc = lookup_rowtype_tupdesc(form_oid, formTypmod);
-		}
-
-		tmptup.t_len = HeapTupleHeaderGetDatumLength(form);
-		tmptup.t_data = form;
-		compression_info_vec_append(compression_info, (void *) GETSTRUCT(&tmptup));
-	}
-	if (form_desc != NULL)
-		ReleaseTupleDesc(form_desc);
-	return compression_info;
-}
-
-Datum
-ts_compress_table(PG_FUNCTION_ARGS)
-{
-	Oid in_table = PG_GETARG_OID(0);
-	Oid out_table = PG_GETARG_OID(1);
-	ArrayType *compression_info_array = DatumGetArrayTypeP(PG_GETARG_DATUM(2));
-	compression_info_vec *compression_info =
-		compression_info_from_array(compression_info_array, compression_info_array->elemtype);
-
-	compress_chunk(in_table,
-				   out_table,
-				   (const ColumnCompressionInfo **) compression_info->data,
-				   compression_info->num_elements,
-				   0 /*insert options*/);
-
-	PG_RETURN_VOID();
-}
-
-Datum
-ts_decompress_table(PG_FUNCTION_ARGS)
-{
-	Oid in_table = PG_GETARG_OID(0);
-	Oid out_table = PG_GETARG_OID(1);
-
-	decompress_chunk(in_table, out_table);
 
 	PG_RETURN_VOID();
 }
