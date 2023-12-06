@@ -1023,6 +1023,9 @@ INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
 
 ALTER TABLE sensor_data_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id', timescaledb.compress_orderby = 'time DESC');
 
+-- Increase work_mem slightly so that the batch sorted merge plan is not disabled.
+SET work_mem = '16MB';
+
 -- Compress three of the chunks
 SELECT compress_chunk(ch) FROM show_chunks('sensor_data_compressed') ch LIMIT 3;
 ANALYZE sensor_data_compressed;

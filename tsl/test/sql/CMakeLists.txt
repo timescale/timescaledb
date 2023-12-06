@@ -20,6 +20,7 @@ set(TEST_FILES
     compression_insert.sql
     compression_policy.sql
     compression_qualpushdown.sql
+    compression_sorted_merge_distinct.sql
     decompress_index.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
