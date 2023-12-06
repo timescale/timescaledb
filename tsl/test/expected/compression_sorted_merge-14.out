@@ -1,6 +1,10 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+-- Increase the working memory limit slightly, otherwise the batch sorted merge
+-- will be penalized for segmentby cardinalities larger than 100, where it is
+-- still faster than sort.
+SET work_mem to '16MB';
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 CREATE TABLE test1 (
 time timestamptz NOT NULL,
@@ -824,9 +828,9 @@ SELECT time,x3 FROM test1 ORDER BY time DESC;
 EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Result  (cost=1.06..38.26 rows=3000 width=24)
+ Result  (cost=1.06..93.44 rows=3000 width=24)
    Output: 1, 2, 3, _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..8.26 rows=3000 width=12)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..63.44 rows=3000 width=12)
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2
          Sorted merge append: true
          ->  Sort  (cost=0.00..0.00 rows=0 width=0)
@@ -849,9 +853,9 @@ SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORDER BY time DESC;
 EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORDER BY time DESC;
                                                                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                                                                          
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Result  (cost=1.06..38.26 rows=3000 width=24)
+ Result  (cost=1.06..93.44 rows=3000 width=24)
    Output: 1, 2, 3, _hyper_1_1_chunk.x2, _hyper_1_1_chunk."time"
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..8.26 rows=3000 width=12)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..63.44 rows=3000 width=12)
          Output: _hyper_1_1_chunk.x2, _hyper_1_1_chunk."time"
          Sorted merge append: true
          ->  Sort  (cost=0.00..0.00 rows=0 width=0)
