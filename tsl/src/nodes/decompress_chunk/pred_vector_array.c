@@ -189,7 +189,7 @@ static pg_noinline void
 vector_array_operator_and(VectorPredicate *scalar_predicate, const ArrowArray *vector, Datum array,
 						  uint64 *restrict result)
 {
-	return vector_array_operator_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
+	vector_array_operator_impl(scalar_predicate, /* is_or = */ false, vector, array, result);
 }
 
 void
