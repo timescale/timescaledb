@@ -9,6 +9,7 @@ name: Homebrew
     - '*'
     branches:
     - release_test
+    - trigger/package_test
 
 jobs:
   homebrew:
@@ -26,8 +27,8 @@ jobs:
 
     - name: Setup
       run: |
-        brew install postgresql@15
-        echo "/usr/local/opt/postgresql@15/bin" >> $GITHUB_PATH
+        brew install postgresql@16
+        echo "/usr/local/opt/postgresql@16/bin" >> $GITHUB_PATH
         brew tap timescale/tap
         brew info timescaledb
 
@@ -36,7 +37,7 @@ jobs:
         brew install timescaledb ${{ matrix.install_options }}
         timescaledb-tune --quiet --yes
         timescaledb_move.sh
-        brew services start postgresql@15
+        brew services start postgresql@16
 
     # checkout code to get version information
     - uses: actions/checkout@v3

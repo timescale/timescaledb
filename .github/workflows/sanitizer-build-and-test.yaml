@@ -35,16 +35,16 @@ env:
   # static sanitizer clang LDFLAGS or dynamic sanitizer gcc LDFLAGS
   LDFLAGS: "-fsanitize=address,undefined"
   ASAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_asan.txt
-    detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer/sanitizer
+    detect_odr_violation=0 log_path=${{ github.workspace }}/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
     detect_leaks=0 abort_on_error=1
 
   LSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_leak.txt
-    print_suppressions=0 log_path=${{ github.workspace }}/sanitizer/sanitizer
+    print_suppressions=0 log_path=${{ github.workspace }}/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
   UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt
-    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer/sanitizer
+    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"

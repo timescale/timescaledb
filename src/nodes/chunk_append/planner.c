@@ -107,6 +107,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	List *sort_options = NIL;
 	List *custom_private = NIL;
 	uint32 limit = 0;
+	List *orig_tlist = NIL;
 
 	ChunkAppendPath *capath = (ChunkAppendPath *) path;
 	CustomScan *cscan = makeNode(CustomScan);
@@ -115,13 +116,20 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	cscan->methods = &chunk_append_plan_methods;
 	cscan->scan.scanrelid = rel->relid;
 
-	tlist = ts_build_path_tlist(root, (Path *) path);
+	orig_tlist = ts_build_path_tlist(root, (Path *) path);
+	tlist = orig_tlist;
 
 #if PG14_GE
 	/*
 	 * If this is a child of HypertableModify we need to adjust
 	 * targetlists to not have any ROWID_VAR references as postgres
 	 * asserts that scan targetlists do not have them in setrefs.c
+	 *
+	 * We keep orig_tlist unaltered to let adjust_appendrel_attrs()
+	 * replace ROWID_VARs for chunks' targetlists (it would assert
+	 * trying to modify a "wholerow" target entry that has already
+	 * been adjusted by ts_replace_rowid_vars(); we see these in
+	 * foreign tables).
 	 */
 	if (root->parse->commandType != CMD_SELECT)
 		tlist = ts_replace_rowid_vars(root, tlist, rel->relid);
@@ -145,7 +153,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 					ts_get_appendrelinfo(root, child_path->parent->relid, false);
 
 				child_plan->targetlist =
-					castNode(List, adjust_appendrel_attrs(root, (Node *) tlist, 1, &appinfo));
+					castNode(List, adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
 			}
 			else
 			{
@@ -255,7 +263,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 																lfirst(lc_childplan),
 																lfirst(lc_childpath),
 																pathkeys,
-																tlist,
+																orig_tlist,
 																sortColIdx);
 				}
 			}
@@ -265,7 +273,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 												   lfirst(lc_plan),
 												   lfirst(lc_path),
 												   path->path.pathkeys,
-												   tlist,
+												   orig_tlist,
 												   sortColIdx);
 			}
 		}
@@ -402,11 +410,11 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				return NULL;
 			break;
 		case T_Agg:
-			if (plan->lefttree != NULL && IsA(plan->lefttree, CustomScan))
+			if (plan->lefttree != NULL)
 			{
 				Assert(plan->righttree == NULL);
-				Assert(castNode(CustomScan, plan->lefttree)->scan.scanrelid > 0);
-				return (Scan *) plan->lefttree;
+				/* Let ts_chunk_append_get_scan_plan handle the subplan */
+				return ts_chunk_append_get_scan_plan(plan->lefttree);
 			}
 			return NULL;
 			break;

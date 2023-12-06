@@ -186,6 +186,12 @@ function(generate_downgrade_script)
   endforeach()
   list(APPEND _files ${_epilog_files})
 
+  # Save the current PROJECT_VERSION_MOD
+  set(SAVED_PROJECT_VERSION_MOD ${PROJECT_VERSION_MOD})
+  # To use PROJECT_VERSION_MOD variable as a target version in downgrade scripts
+  # we should set it as the UPDATE_FROM_VERSION because it means the target version
+  # when executing the downgrade scripts
+  set(PROJECT_VERSION_MOD ${UPDATE_FROM_VERSION})
   generate_script(
     VERSION
     ${_downgrade_TARGET_VERSION}
@@ -195,4 +201,6 @@ function(generate_downgrade_script)
     ${_downgrade_OUTPUT_DIRECTORY}
     FILES
     ${_files})
+  # Restore the original PROJECT_VERSION_MOD
+  set(PROJECT_VERSION_MOD ${SAVED_PROJECT_VERSION_MOD})
 endfunction()

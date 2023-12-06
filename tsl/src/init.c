@@ -31,6 +31,7 @@
 #include "continuous_aggs/refresh.h"
 #include "continuous_aggs/invalidation.h"
 #include "continuous_aggs/repair.h"
+#include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
 #include "nodes/data_node_dispatch.h"
 #include "data_node.h"
@@ -159,6 +160,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_raw_ht = continuous_agg_invalidate_raw_ht,
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
+	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.invalidation_cagg_log_add_entry = tsl_invalidation_cagg_log_add_entry,
 	.invalidation_hyper_log_add_entry = tsl_invalidation_hyper_log_add_entry,
 	.remote_invalidation_log_delete = remote_invalidation_log_delete,

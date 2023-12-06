@@ -1,4 +1,5 @@
 set(SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/array_utils.c
     ${CMAKE_CURRENT_SOURCE_DIR}/catalog.c
     ${CMAKE_CURRENT_SOURCE_DIR}/chunk_data_node.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_chunk_size.c

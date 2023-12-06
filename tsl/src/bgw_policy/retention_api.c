@@ -101,6 +101,21 @@ policy_retention_get_drop_after_interval(const Jsonb *config)
 	return interval;
 }
 
+Interval *
+policy_retention_get_drop_created_before_interval(const Jsonb *config)
+{
+	Interval *interval =
+		ts_jsonb_get_interval_field(config, POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE);
+
+	if (interval == NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("could not find %s in config for job",
+						POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE)));
+
+	return interval;
+}
+
 static Hypertable *
 validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 {
@@ -151,8 +166,9 @@ validate_drop_chunks_hypertable(Cache *hcache, Oid user_htoid)
 
 Datum
 policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
-							  Interval default_schedule_interval, bool if_not_exists,
-							  bool fixed_schedule, TimestampTz initial_start, const char *timezone)
+							  Interval *created_before, Interval default_schedule_interval,
+							  bool if_not_exists, bool fixed_schedule, TimestampTz initial_start,
+							  const char *timezone)
 {
 	NameData application_name;
 	int32 job_id;
@@ -183,9 +199,10 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 	List *jobs = ts_bgw_job_find_by_proc_and_hypertable_id(POLICY_RETENTION_PROC_NAME,
 														   FUNCTIONS_SCHEMA_NAME,
 														   hypertable->fd.id);
-
 	if (jobs != NIL)
 	{
+		bool is_equal = false;
+
 		if (!if_not_exists)
 			ereport(ERROR,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
@@ -195,11 +212,25 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 		Assert(list_length(jobs) == 1);
 		BgwJob *existing = linitial(jobs);
 
-		if (policy_config_check_hypertable_lag_equality(existing->fd.config,
-														POL_RETENTION_CONF_KEY_DROP_AFTER,
-														partitioning_type,
-														window_type,
-														window_datum))
+		if (OidIsValid(window_type))
+			is_equal =
+				policy_config_check_hypertable_lag_equality(existing->fd.config,
+															POL_RETENTION_CONF_KEY_DROP_AFTER,
+															partitioning_type,
+															window_type,
+															window_datum);
+		else
+		{
+			Assert(created_before != NULL);
+			is_equal = policy_config_check_hypertable_lag_equality(
+				existing->fd.config,
+				POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE,
+				partitioning_type,
+				INTERVALOID,
+				IntervalPGetDatum(created_before));
+		}
+
+		if (is_equal)
 		{
 			/* If all arguments are the same, do nothing */
 			ts_cache_release(hcache);
@@ -220,12 +251,28 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 		}
 	}
 
-	if (IS_INTEGER_TYPE(partitioning_type) && !IS_INTEGER_TYPE(window_type))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
-				 errhint("Integer time duration is required for hypertables"
-						 " with integer time dimension.")));
+	if (created_before)
+	{
+		Assert(!OidIsValid(window_type));
+		window_type = INTERVALOID;
+	}
+
+	if (IS_INTEGER_TYPE(partitioning_type))
+	{
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(ht_oid);
+
+		if ((IS_INTEGER_TYPE(window_type) && cagg == NULL &&
+			 !OidIsValid(ts_get_integer_now_func(dim, false))) ||
+			(!IS_INTEGER_TYPE(window_type) && created_before == NULL))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("invalid value for parameter %s", POL_RETENTION_CONF_KEY_DROP_AFTER),
+					 errhint(
+						 "Integer duration in \"drop_after\" with valid \"integer_now\" function"
+						 " or interval time duration"
+						 " in \"drop_created_before\" is required for hypertables with integer "
+						 "time dimension.")));
+	}
 
 	if (IS_TIMESTAMP_TYPE(partitioning_type) && window_type != INTERVALOID)
 		ereport(ERROR,
@@ -242,9 +289,14 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 	switch (window_type)
 	{
 		case INTERVALOID:
-			ts_jsonb_add_interval(parse_state,
-								  POL_RETENTION_CONF_KEY_DROP_AFTER,
-								  DatumGetIntervalP(window_datum));
+			if (created_before)
+				ts_jsonb_add_interval(parse_state,
+									  POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE,
+									  created_before);
+			else
+				ts_jsonb_add_interval(parse_state,
+									  POL_RETENTION_CONF_KEY_DROP_AFTER,
+									  DatumGetIntervalP(window_datum));
 			break;
 		case INT2OID:
 			ts_jsonb_add_int64(parse_state,
@@ -306,7 +358,7 @@ Datum
 policy_retention_add(PG_FUNCTION_ARGS)
 {
 	/* behave like a strict function */
-	if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+	if (PG_ARGISNULL(0) || PG_ARGISNULL(2))
 		PG_RETURN_NULL();
 
 	Oid ht_oid = PG_GETARG_OID(0);
@@ -319,11 +371,20 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	bool fixed_schedule = !PG_ARGISNULL(4);
 	text *timezone = PG_ARGISNULL(5) ? NULL : PG_GETARG_TEXT_PP(5);
 	char *valid_timezone = NULL;
+	// Interval *created_before = PG_ARGISNULL(6) ? NULL: PG_GETARG_INTERVAL_P(6);
+	Interval *created_before = PG_GETARG_INTERVAL_P(6);
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	Datum retval;
+
+	/* drop_after and created_before cannot be specified [or omitted] together */
+	if ((PG_ARGISNULL(1) && PG_ARGISNULL(6)) || (!PG_ARGISNULL(1) && !PG_ARGISNULL(6)))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("need to specify one of \"drop_after\" or \"drop_created_before\"")));
+
 	/* if users pass in -infinity for initial_start, then use the current_timestamp instead */
 	if (fixed_schedule)
 	{
@@ -338,6 +399,7 @@ policy_retention_add(PG_FUNCTION_ARGS)
 	retval = policy_retention_add_internal(ht_oid,
 										   window_type,
 										   window_datum,
+										   created_before,
 										   default_schedule_interval,
 										   if_not_exists,
 										   fixed_schedule,

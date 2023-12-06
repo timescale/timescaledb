@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 --Enable compression path info
-SET timescaledb.show_compression_path_info= 'on';
+SET timescaledb.debug_compression_path_info= 'on';
 --Table creation
 CREATE TABLE tab1 (
     time timestamptz not null,
@@ -263,4 +263,4 @@ drop index predicate;
 DROP TABLE tab1;
 DROP TABLE tab2;
 DROP TABLE tab3;
-SET timescaledb.show_compression_path_info = 'off';
+SET timescaledb.debug_compression_path_info = 'off';

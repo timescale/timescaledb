@@ -2,7 +2,7 @@ name: Process issue workflows
 
 "on":
   issues:
-    types: [opened, labeled]
+    types: [opened, closed, labeled]
   issue_comment:
     types: [created, edited]
 
@@ -28,7 +28,25 @@ jobs:
           project-url: https://github.com/orgs/timescale/projects/128
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           labeled: continuous_aggregate
-  
+
+  close-issue:
+    name: Issue is closed
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'closed' && contains(github.event.issues.issue.labels.*.name, 'bug')
+    steps:
+      - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
+        with:
+          gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          organization: timescale
+          project_id: 55
+          resource_node_id: ${{ github.event.issue.node_id }}
+          status_value: 'Done'
+      - name: Remove waiting-for-author label
+        uses: andymckay/labeler@3a4296e9dcdf9576b0456050db78cfd34853f260
+        with:
+          remove-labels: 'waiting-for-author, no-activity'
+          repo-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+
   waiting-for-author:
     name: Waiting for Author
     runs-on: ubuntu-latest

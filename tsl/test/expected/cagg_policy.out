@@ -1145,10 +1145,13 @@ ERROR:  setup a refresh policy for "metrics_cagg" before setting up a compressio
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
 ERROR:  compression not enabled on continuous aggregate "metrics_cagg"
-\set ON_ERROR_STOP 1
 ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
 NOTICE:  defaulting compress_segmentby to device_id
 NOTICE:  defaulting compress_orderby to dayb
+--cannot use compress_created_before with cagg
+SELECT add_compression_policy('metrics_cagg', compress_created_before => '8 day'::interval) AS "COMP_JOB" ;
+ERROR:  cannot use "compress_created_before" with continuous aggregate "metrics_cagg" 
+\set ON_ERROR_STOP 1
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
  COMP_JOB 
 ----------

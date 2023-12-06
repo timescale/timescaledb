@@ -540,9 +540,12 @@ SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
 --can set compression policy only after enabling compression --
 SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval) as "REFRESH_JOB" \gset
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
+ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
+
+--cannot use compress_created_before with cagg
+SELECT add_compression_policy('metrics_cagg', compress_created_before => '8 day'::interval) AS "COMP_JOB" ;
 \set ON_ERROR_STOP 1
 
-ALTER MATERIALIZED VIEW metrics_cagg SET (timescaledb.compress);
 
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
 SELECT remove_compression_policy('metrics_cagg');

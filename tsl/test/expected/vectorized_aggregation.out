@@ -1064,7 +1064,7 @@ SELECT sum(int_value) FROM testtable;
 (57 rows)
 
 -- Vectorized aggregation NOT possible
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
                                                                                                                                                                                    QUERY PLAN                                                                                                                                                                                    
@@ -1141,7 +1141,7 @@ SELECT sum(int_value) FROM testtable;
                            Output: _hyper_1_1_chunk.int_value
 (70 rows)
 
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 -- Vectorized aggregation NOT possible without bulk decompression
 SET timescaledb.enable_bulk_decompression = OFF;
 :EXPLAIN
@@ -1752,28 +1752,28 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
  2440
 (1 row)
 
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
  sum  
 ------
  2440
 (1 row)
 
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 10;
  sum 
 -----
     
 (1 row)
 
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 10;
  sum 
 -----
     
 (1 row)
 
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 ---
 -- Tests with parallel plans
 ---
@@ -2159,14 +2159,14 @@ SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testta
                                  Output: compress_hyper_2_100_chunk."time", compress_hyper_2_100_chunk.segment_by_value, compress_hyper_2_100_chunk.int_value, compress_hyper_2_100_chunk.float_value, compress_hyper_2_100_chunk._ts_meta_count, compress_hyper_2_100_chunk._ts_meta_sequence_num, compress_hyper_2_100_chunk._ts_meta_min_1, compress_hyper_2_100_chunk._ts_meta_max_1
 (66 rows)
 
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
  sum 
 -----
     
 (1 row)
 
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
  sum 
 -----

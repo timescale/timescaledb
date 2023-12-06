@@ -35,7 +35,6 @@ set(TEST_FILES
     null_exclusion.sql
     partition.sql
     partitioning.sql
-    partitionwise.sql
     pg_dump_unprivileged.sql
     pg_join.sql
     plain.sql
@@ -68,6 +67,7 @@ set(TEST_TEMPLATES
     rowsecurity.sql.in
     update.sql.in
     parallel.sql.in
+    partitionwise.sql.in
     plan_expand_hypertable.sql.in
     plan_ordered_append.sql.in
     query.sql.in

@@ -25,6 +25,7 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "custom_type_cache.h"
 #include "debug_assert.h"
 #include "ts_catalog/hypertable_compression.h"
 #include "import/planner.h"
@@ -82,13 +83,9 @@ static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionI
 							   List *pathkeys);
 
 static bool
-is_compressed_column(CompressionInfo *info, AttrNumber attno)
+is_compressed_column(CompressionInfo *info, Oid type)
 {
-	char *column_name = get_attname(info->compressed_rte->relid, attno, false);
-	FormData_hypertable_compression *column_info =
-		get_column_compressioninfo(info->hypertable_compression_info, column_name);
-
-	return column_info->algo_id != 0;
+	return type == info->compresseddata_oid;
 }
 
 static EquivalenceClass *
@@ -283,6 +280,8 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
 
+	info->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
 
@@ -349,6 +348,13 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
+	/*
+	 * Don't disable the compressed batch sorted merge plan with the enable_sort
+	 * GUC. We have a separate GUC for it, and this way you can try to force the
+	 * batch sorted merge plan by disabling sort.
+	 */
+	const bool old_enable_sort = enable_sort;
+	enable_sort = true;
 	cost_sort(&sort_path,
 			  root,
 			  dcpath->compressed_pathkeys,
@@ -358,6 +364,7 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, DecompressChunkPath *dcpa
 			  0.0,
 			  work_mem,
 			  -1);
+	enable_sort = old_enable_sort;
 
 	/* startup_cost is cost before fetching first tuple */
 	dcpath->custom_path.path.startup_cost = sort_path.total_cost;
@@ -724,7 +731,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->right_em->em_expr);
-					if (is_compressed_column(info, var->varattno))
+					if (is_compressed_column(info, var->vartype))
 					{
 						references_compressed = true;
 						break;
@@ -735,7 +742,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->left_em->em_expr);
-					if (is_compressed_column(info, var->varattno))
+					if (is_compressed_column(info, var->vartype))
 					{
 						references_compressed = true;
 						break;
@@ -1091,15 +1098,14 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 			/* if the column is an orderby, add it's metadata columns too */
 			if (column_info->orderby_column_index > 0)
 			{
+				int16 index = column_info->orderby_column_index;
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														compression_column_segment_min_name(
-															column_info),
+														column_segment_min_name(index),
 														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														compression_column_segment_max_name(
-															column_info),
+														column_segment_max_name(index),
 														&attrs_used);
 			}
 		}

@@ -100,14 +100,6 @@ extern TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
 typedef void (*set_ssl_options_hook_type)(const char *user_name);
 extern TSDLLEXPORT set_ssl_options_hook_type ts_set_ssl_options_hook;
 
-/*
- * Exit code to use when scheduler exits.
- *
- * Mostly used for debugging, but defined also for non-debug builds since that
- * simplifies the code (and also simplifies debugging non-debug builds).
- */
-extern TSDLLEXPORT int ts_bgw_scheduler_exit_code;
-
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;
@@ -123,6 +115,8 @@ typedef enum DebugRequireVectorQual
 } DebugRequireVectorQual;
 
 extern TSDLLEXPORT DebugRequireVectorQual ts_guc_debug_require_vector_qual;
+
+extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 

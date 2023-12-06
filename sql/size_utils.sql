@@ -212,9 +212,6 @@ BEGIN
                 END IF;
         END IF;
 
-        /* Lock hypertable to avoid risk of concurrent process dropping chunks */
-        EXECUTE format('LOCK TABLE %I.%I IN ACCESS SHARE MODE', schema_name, table_name);
-
         CASE WHEN is_distributed THEN
 			RETURN QUERY
 			SELECT *, NULL::name
@@ -456,14 +453,15 @@ BEGIN
         IF local_compressed_hypertable_id IS NOT NULL THEN
            uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
 
-           WITH compressed_hypertable AS (SELECT table_name, schema_name FROM _timescaledb_catalog.hypertable ht
-           WHERE ht.id = local_compressed_hypertable_id)
-           SELECT c.oid INTO compressed_hypertable_oid FROM pg_class c
-           INNER JOIN compressed_hypertable h ON (c.relname = h.table_name)
-           INNER JOIN pg_namespace n ON (n.nspname = h.schema_name);
+           -- use the compression_chunk_size stats to fetch precompressed num rows
+           SELECT COALESCE(SUM(numrows_pre_compression), 0) FROM _timescaledb_catalog.chunk srcch,
+                _timescaledb_catalog.compression_chunk_size map, _timescaledb_catalog.hypertable srcht
+                INTO compressed_row_count
+                WHERE map.chunk_id = srcch.id
+                AND srcht.id = srcch.hypertable_id AND srcht.table_name = local_table_name
+                AND srcht.schema_name = local_schema_name;
 
-           compressed_row_count = _timescaledb_functions.get_approx_row_count(compressed_hypertable_oid);
-           RETURN (uncompressed_row_count + (compressed_row_count * max_compressed_row_count));
+           RETURN (uncompressed_row_count + compressed_row_count);
         ELSE
            uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
            RETURN uncompressed_row_count;
@@ -480,22 +478,24 @@ BEGIN
         -- 'input is chunk #1';
         IF is_compressed_chunk IS NULL AND local_compressed_chunk_id IS NOT NULL THEN
         -- 'Include both uncompressed  and compressed chunk #2';
-            WITH compressed_ns_oid AS ( SELECT table_name, oid FROM _timescaledb_catalog.chunk ch INNER JOIN pg_namespace ns ON
-            (ch.id = local_compressed_chunk_id and ch.schema_name = ns.nspname))
-            SELECT c.oid FROM pg_class c INNER JOIN compressed_ns_oid
-            ON ( c.relnamespace = compressed_ns_oid.oid AND c.relname = compressed_ns_oid.table_name)
-            INTO local_compressed_chunk_oid;
+            -- use the compression_chunk_size stats to fetch precompressed num rows
+            SELECT COALESCE(numrows_pre_compression, 0) FROM _timescaledb_catalog.compression_chunk_size
+                INTO compressed_row_count
+                WHERE compressed_chunk_id = local_compressed_chunk_id;
 
             uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
-            compressed_row_count = _timescaledb_functions.get_approx_row_count(local_compressed_chunk_oid);
-            RETURN uncompressed_row_count + (compressed_row_count * max_compressed_row_count);
+            RETURN (uncompressed_row_count + compressed_row_count);
         ELSIF is_compressed_chunk IS NULL AND local_compressed_chunk_id IS NULL THEN
         -- 'input relation is uncompressed chunk #3';
             uncompressed_row_count = _timescaledb_functions.get_approx_row_count(relation);
             RETURN uncompressed_row_count;
         ELSE
         -- 'compressed chunk only #4';
-            compressed_row_count = _timescaledb_functions.get_approx_row_count(relation) * max_compressed_row_count;
+            -- use the compression_chunk_size stats to fetch precompressed num rows
+            SELECT COALESCE(SUM(numrows_pre_compression), 0) FROM _timescaledb_catalog.chunk srcch,
+                _timescaledb_catalog.compression_chunk_size map INTO compressed_row_count
+                WHERE map.compressed_chunk_id = srcch.id
+                AND srcch.table_name = local_table_name AND srcch.schema_name = local_schema_name;
             RETURN compressed_row_count;
         END IF;
     END IF;

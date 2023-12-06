@@ -155,9 +155,9 @@ decompress_chunk_state_create(CustomScan *cscan)
 	Assert(list_length(settings) == 6);
 	chunk_state->hypertable_id = linitial_int(settings);
 	chunk_state->chunk_relid = lsecond_int(settings);
-	chunk_state->reverse = lthird_int(settings);
+	chunk_state->decompress_context.reverse = lthird_int(settings);
 	chunk_state->batch_sorted_merge = lfourth_int(settings);
-	chunk_state->enable_bulk_decompression = lfifth_int(settings);
+	chunk_state->decompress_context.enable_bulk_decompression = lfifth_int(settings);
 	chunk_state->perform_vectorized_aggregation = lsixth_int(settings);
 
 	Assert(IsA(cscan->custom_exprs, List));
@@ -265,6 +265,7 @@ static void
 decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	DecompressContext *dcontext = &chunk_state->decompress_context;
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
@@ -428,10 +429,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	Assert(current_compressed == num_compressed);
 	Assert(current_not_compressed == num_total);
 
-	chunk_state->n_batch_state_bytes =
-		sizeof(DecompressBatchState) +
-		sizeof(CompressedColumnValues) * chunk_state->num_compressed_columns;
-
 	/*
 	 * Calculate the desired size of the batch memory context. Especially if we
 	 * use bulk decompression, the results should fit into the first page of the
@@ -440,8 +437,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	 *
 	 * Start with the default size.
 	 */
-	chunk_state->batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
-	if (chunk_state->enable_bulk_decompression)
+	dcontext->batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
+	if (dcontext->enable_bulk_decompression)
 	{
 		for (int i = 0; i < num_total; i++)
 		{
@@ -454,32 +451,32 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 				 * For variable-length types (we only have text) we can't
 				 * estimate the width currently.
 				 */
-				chunk_state->batch_memory_context_bytes +=
+				dcontext->batch_memory_context_bytes +=
 					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) *
 					(column->value_bytes > 0 ? column->value_bytes : 16);
 				/* Also nulls bitmap. */
-				chunk_state->batch_memory_context_bytes +=
+				dcontext->batch_memory_context_bytes +=
 					GLOBAL_MAX_ROWS_PER_COMPRESSION / (64 * sizeof(uint64));
 				/* Arrow data structure. */
-				chunk_state->batch_memory_context_bytes +=
+				dcontext->batch_memory_context_bytes +=
 					sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
 				/* Memory context header overhead for the above parts. */
-				chunk_state->batch_memory_context_bytes += sizeof(void *) * 3;
+				dcontext->batch_memory_context_bytes += sizeof(void *) * 3;
 			}
 		}
 	}
 
 	/* Round up to even number of 4k pages. */
-	chunk_state->batch_memory_context_bytes =
-		((chunk_state->batch_memory_context_bytes + 4095) / 4096) * 4096;
+	dcontext->batch_memory_context_bytes =
+		((dcontext->batch_memory_context_bytes + 4095) / 4096) * 4096;
 
 	/* As a precaution, limit it to 1MB. */
-	chunk_state->batch_memory_context_bytes =
-		Min(chunk_state->batch_memory_context_bytes, 1 * 1024 * 1024);
+	dcontext->batch_memory_context_bytes =
+		Min(dcontext->batch_memory_context_bytes, 1 * 1024 * 1024);
 
 	elog(DEBUG3,
-		 "Batch memory context has initial capacity of  %d bytes",
-		 chunk_state->batch_memory_context_bytes);
+		 "Batch memory context has initial capacity of %zu bytes",
+		 dcontext->batch_memory_context_bytes);
 
 	/*
 	 * Choose which batch queue we are going to use: heap for batch sorted
@@ -563,6 +560,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 static TupleTableSlot *
 perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+
 	Assert(chunk_state != NULL);
 	Assert(aggref != NULL);
 
@@ -576,19 +575,23 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	Assert(chunk_state->template_columns[1].type == COUNT_COLUMN);
 
 	/* Get a free batch slot */
-	const int new_batch_index = batch_array_get_free_slot(chunk_state);
+	const int new_batch_index = batch_array_get_unused_slot(&dcontext->batch_array);
 
 	/* Nobody else should use batch states */
 	Assert(new_batch_index == 0);
-	DecompressBatchState *batch_state = batch_array_get_at(chunk_state, new_batch_index);
+	DecompressBatchState *batch_state = batch_array_get_at(&dcontext->batch_array, new_batch_index);
 
 	/* Init per batch memory context */
 	Assert(batch_state != NULL);
-	init_per_batch_mctx(chunk_state, batch_state);
+	Assert(batch_state->per_batch_context == NULL);
+	batch_state->per_batch_context =
+		create_per_batch_mctx(dcontext->batch_array.batch_memory_context_bytes);
 	Assert(batch_state->per_batch_context != NULL);
 
 	/* Init bulk decompression memory context */
-	init_bulk_decompression_mctx(chunk_state, CurrentMemoryContext);
+	Assert(dcontext->bulk_decompression_context == NULL);
+	dcontext->bulk_decompression_context = create_bulk_decompression_mctx(CurrentMemoryContext);
+	Assert(dcontext->bulk_decompression_context != NULL);
 
 	/* Get a reference the the output TupleTableSlot */
 	TupleTableSlot *decompressed_scan_slot = chunk_state->csstate.ss.ss_ScanTupleSlot;
@@ -662,7 +665,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	}
 	else if (column_description->type == COMPRESSED_COLUMN)
 	{
-		Assert(chunk_state->enable_bulk_decompression);
+		Assert(dcontext->enable_bulk_decompression);
 		Assert(column_description->bulk_decompression_supported);
 		Assert(list_length(aggref->args) == 1);
 
@@ -695,7 +698,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			Assert(decompress_all != NULL);
 
 			MemoryContext context_before_decompression =
-				MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
+				MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 			arrow = decompress_all(PointerGetDatum(header),
 								   column_description->typid,
@@ -703,7 +706,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			Assert(arrow != NULL);
 
-			MemoryContextReset(chunk_state->bulk_decompression_context);
+			MemoryContextReset(dcontext->bulk_decompression_context);
 			MemoryContextSwitchTo(context_before_decompression);
 
 			/* A compressed batch consists of 1000 tuples (see MAX_ROWS_PER_COMPRESSION). The
@@ -755,6 +758,8 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 static TupleTableSlot *
 perform_vectorized_aggregation(DecompressChunkState *chunk_state)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+
 	Assert(list_length(chunk_state->custom_scan_tlist) == 1);
 
 	/* Checked by planner */
@@ -764,7 +769,7 @@ perform_vectorized_aggregation(DecompressChunkState *chunk_state)
 	/* When using vectorized aggregates, only one result tuple is produced. So, if we have
 	 * already initialized a batch state, the aggregation was already performed.
 	 */
-	if (bms_num_members(chunk_state->unused_batch_states) != chunk_state->n_batch_states)
+	if (batch_array_has_active_batches(&dcontext->batch_array))
 	{
 		ExecClearTuple(chunk_state->csstate.ss.ss_ScanTupleSlot);
 		return chunk_state->csstate.ss.ss_ScanTupleSlot;
@@ -846,13 +851,7 @@ decompress_chunk_rescan(CustomScanState *node)
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
 
 	chunk_state->batch_queue->reset(chunk_state);
-
-	for (int i = 0; i < chunk_state->n_batch_states; i++)
-	{
-		batch_array_free_at(chunk_state, i);
-	}
-
-	Assert(bms_num_members(chunk_state->unused_batch_states) == chunk_state->n_batch_states);
+	batch_array_clear_all(&chunk_state->decompress_context.batch_array);
 
 	if (node->ss.ps.chgParam != NULL)
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
@@ -913,7 +912,9 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 
 		if (es->analyze && (es->verbose || es->format != EXPLAIN_FORMAT_TEXT))
 		{
-			ExplainPropertyBool("Bulk Decompression", chunk_state->enable_bulk_decompression, es);
+			ExplainPropertyBool("Bulk Decompression",
+								chunk_state->decompress_context.enable_bulk_decompression,
+								es);
 		}
 
 		if (chunk_state->perform_vectorized_aggregation)

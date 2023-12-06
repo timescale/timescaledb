@@ -856,9 +856,18 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		 * Until then the choice was made in favor of the most generic schema
 		 * that can be optimized later.
 		 */
+		Oid bucket_func_schema_oid = get_func_namespace(bucket_info->bucket_func->funcid);
+		Ensure(OidIsValid(bucket_func_schema_oid),
+			   "namespace for funcid %d not found",
+			   bucket_info->bucket_func->funcid);
+		char *bucket_func_schema_name = get_namespace_name(bucket_func_schema_oid);
+		Ensure(bucket_func_schema_name != NULL,
+			   "unable to get namespace name for Oid %d",
+			   bucket_func_schema_oid);
+		bool is_experimental =
+			(strncmp(bucket_func_schema_name, EXPERIMENTAL_SCHEMA_NAME, NAMEDATALEN) == 0);
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
-											 get_func_namespace(bucket_info->bucket_func->funcid) !=
-												 PG_PUBLIC_NAMESPACE,
+											 is_experimental,
 											 get_func_name(bucket_info->bucket_func->funcid),
 											 bucket_width,
 											 origin,
@@ -926,7 +935,8 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 	timebucket_exprinfo = cagg_validate_query((Query *) stmt->into->viewQuery,
 											  finalized,
 											  schema_name,
-											  stmt->into->rel->relname);
+											  stmt->into->rel->relname,
+											  true);
 	cagg_create(stmt, &viewstmt, (Query *) stmt->query, &timebucket_exprinfo, with_clause_options);
 
 	/* Insert the MIN of the time dimension type for the new watermark */
@@ -1024,7 +1034,8 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 		cagg_validate_query(direct_query,
 							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),
-							NameStr(agg->data.user_view_name));
+							NameStr(agg->data.user_view_name),
+							true);
 
 	/* Flip */
 	agg->data.materialized_only = !agg->data.materialized_only;

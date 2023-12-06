@@ -141,6 +141,7 @@ get_max_element_bytes(ArrowArray *text_array)
 static void
 decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch_state, int i)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
 	DecompressChunkColumnDescription *column_description = &chunk_state->template_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->iterator = NULL;
@@ -175,12 +176,12 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 	/* Decompress the entire batch if it is supported. */
 	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
 	ArrowArray *arrow = NULL;
-	if (chunk_state->enable_bulk_decompression && column_description->bulk_decompression_supported)
+	if (dcontext->enable_bulk_decompression && column_description->bulk_decompression_supported)
 	{
-		if (chunk_state->bulk_decompression_context == NULL)
+		if (dcontext->bulk_decompression_context == NULL)
 		{
-			init_bulk_decompression_mctx(chunk_state,
-										 MemoryContextGetParent(batch_state->per_batch_context));
+			dcontext->bulk_decompression_context = create_bulk_decompression_mctx(
+				MemoryContextGetParent(batch_state->per_batch_context));
 		}
 
 		DecompressAllFunction decompress_all =
@@ -189,13 +190,13 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 		Assert(decompress_all != NULL);
 
 		MemoryContext context_before_decompression =
-			MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
+			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 		arrow = decompress_all(PointerGetDatum(header),
 							   column_description->typid,
 							   batch_state->per_batch_context);
 
-		MemoryContextReset(chunk_state->bulk_decompression_context);
+		MemoryContextReset(dcontext->bulk_decompression_context);
 
 		MemoryContextSwitchTo(context_before_decompression);
 	}
@@ -231,8 +232,8 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 	/* As a fallback, decompress row-by-row. */
 	column_values->iterator =
 		tsl_get_decompression_iterator_init(header->compression_algorithm,
-											chunk_state->reverse)(PointerGetDatum(header),
-																  column_description->typid);
+											dcontext->reverse)(PointerGetDatum(header),
+															   column_description->typid);
 }
 
 /*
@@ -479,52 +480,14 @@ compute_vector_quals(DecompressChunkState *chunk_state, DecompressBatchState *ba
 }
 
 /*
- * Initialize the bulk decompression memory context
- */
-void
-init_bulk_decompression_mctx(DecompressChunkState *chunk_state, MemoryContext parent_ctx)
-{
-	Assert(chunk_state != NULL);
-	Assert(parent_ctx != NULL);
-	Assert(chunk_state->bulk_decompression_context == NULL);
-
-	chunk_state->bulk_decompression_context = AllocSetContextCreate(parent_ctx,
-																	"bulk decompression",
-																	/* minContextSize = */ 0,
-																	/* initBlockSize = */ 64 * 1024,
-																	/* maxBlockSize = */ 64 * 1024);
-}
-
-/*
- * Initialize the batch memory context
- *
- * We use custom size for the batch memory context page, calculated to
- * fit the typical result of bulk decompression (if we use it).
- * This allows us to save on expensive malloc/free calls, because the
- * Postgres memory contexts reallocate all pages except the first one
- * after each reset.
- */
-void
-init_per_batch_mctx(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
-{
-	Assert(chunk_state != NULL);
-	Assert(batch_state != NULL);
-	Assert(batch_state->per_batch_context == NULL);
-
-	batch_state->per_batch_context = AllocSetContextCreate(CurrentMemoryContext,
-														   "DecompressChunk per_batch",
-														   0,
-														   chunk_state->batch_memory_context_bytes,
-														   chunk_state->batch_memory_context_bytes);
-}
-
-/*
  * Initialize the batch decompression state with the new compressed  tuple.
  */
 void
 compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 									  DecompressBatchState *batch_state, TupleTableSlot *subslot)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+
 	Assert(TupIsNull(batch_state->decompressed_scan_slot));
 
 	/*
@@ -534,7 +497,8 @@ compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
 	if (batch_state->per_batch_context == NULL)
 	{
 		/* Init memory context */
-		init_per_batch_mctx(chunk_state, batch_state);
+		batch_state->per_batch_context =
+			create_per_batch_mctx(dcontext->batch_memory_context_bytes);
 		Assert(batch_state->per_batch_context != NULL);
 
 		Assert(batch_state->compressed_slot == NULL);
@@ -710,6 +674,7 @@ store_text_datum(ArrowArray *arrow, int arrow_row, Datum *dest)
 static void
 make_next_tuple(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
 	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
 	Assert(decompressed_scan_slot != NULL);
 
@@ -717,9 +682,8 @@ make_next_tuple(DecompressChunkState *chunk_state, DecompressBatchState *batch_s
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
 	const int output_row = batch_state->next_batch_row;
-	const size_t arrow_row = unlikely(chunk_state->reverse) ?
-								 batch_state->total_batch_rows - 1 - output_row :
-								 output_row;
+	const size_t arrow_row =
+		unlikely(dcontext->reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
 	const int num_compressed_columns = chunk_state->num_compressed_columns;
 	for (int i = 0; i < num_compressed_columns; i++)
@@ -819,12 +783,14 @@ make_next_tuple(DecompressChunkState *chunk_state, DecompressBatchState *batch_s
 static bool
 vector_qual(DecompressChunkState *chunk_state, DecompressBatchState *batch_state)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
 	const int output_row = batch_state->next_batch_row;
 	const size_t arrow_row =
-		chunk_state->reverse ? batch_state->total_batch_rows - 1 - output_row : output_row;
+		dcontext->reverse ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
 	if (!batch_state->vector_qual_result)
 	{

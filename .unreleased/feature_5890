@@ -1,1 +1,0 @@
-Implements: #5890 Reduce WAL activity by freezing compressed tuples immediately
