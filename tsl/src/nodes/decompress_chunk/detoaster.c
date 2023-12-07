@@ -23,9 +23,14 @@
 #include <compat/compat.h>
 #include "debug_assert.h"
 
+#if PG14_LT
+#define VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer) (toast_pointer).va_extsize
+#endif
+
 /* We redefine this postgres macro to fix a warning about signed integer comparison. */
 #define TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer)                                            \
 	(((int32) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer)) < (toast_pointer).va_rawsize - VARHDRSZ)
+
 
 /*
  * Fetch a TOAST slice from a heap table.
@@ -246,11 +251,7 @@ ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster)
 	/* Must copy to access aligned fields */
 	VARATT_EXTERNAL_GET_POINTER(toast_pointer, attr);
 
-#if PG14_LT
-	attrsize = toast_pointer.va_extsize;
-#else
 	attrsize = VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer);
-#endif
 
 	result = (struct varlena *) palloc(attrsize + VARHDRSZ);
 
