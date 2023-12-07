@@ -45,6 +45,9 @@
 
 #include "arrow_tts.h"
 
+/* Number of arrow decompression cache LRU entries  */
+#define ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES 100
+
 typedef struct ArrowColumnKey
 {
 	ItemPointerData ctid; /* Compressed TID for the compressed tuple. */
@@ -56,11 +59,14 @@ typedef struct ArrowColumnKey
  * We just cache the column data right now. We could potentially cache more
  * data such as the segmentby column and similar, but this does not pose a big
  * problem right now.
+ *
+ * ArrowArray
  */
 typedef struct ArrowColumnCacheEntry
 {
 	ArrowColumnKey key;
-	int nvalid; /* Valid columns from the compressed tuple. */
+	int nvalid;		 /* Valid columns from the compressed tuple. */
+	dlist_node node; /* List link in LRU list. */
 	Bitmapset *segmentby_columns;
 	ArrowArray **arrow_columns;
 } ArrowColumnCacheEntry;
