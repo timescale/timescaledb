@@ -20,6 +20,7 @@
 #include <utils/rel.h>
 #include <utils/relcache.h>
 
+#include <compat/compat.h>
 #include "debug_assert.h"
 
 /* We redefine this postgres macro to fix a warning about signed integer comparison. */
