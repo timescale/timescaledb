@@ -46,7 +46,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_db_scheduler.sql
-    bgw_scheduler_control.sql
     job_errors_permissions.sql
     troubleshooting_job_errors.sql
     bgw_db_scheduler_fixed.sql
@@ -131,6 +130,9 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
+  if(CMAKE_BUILD_TYPE MATCHES Debug)
+    list(APPEND TEST_FILES bgw_scheduler_control.sql)
+  endif()
   list(APPEND TEST_FILES merge_compress.sql)
 endif()
 
