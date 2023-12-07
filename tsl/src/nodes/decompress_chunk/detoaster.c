@@ -246,7 +246,11 @@ ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster)
 	/* Must copy to access aligned fields */
 	VARATT_EXTERNAL_GET_POINTER(toast_pointer, attr);
 
+#if PG14_LT
+	attrsize = toast_pointer.va_extsize;
+#else
 	attrsize = VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer);
+#endif
 
 	result = (struct varlena *) palloc(attrsize + VARHDRSZ);
 
