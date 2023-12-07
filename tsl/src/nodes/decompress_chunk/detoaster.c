@@ -14,7 +14,6 @@
 #include <access/stratnum.h>
 #include <access/table.h>
 #include <access/tableam.h>
-#include <access/toast_compression.h>
 #include <access/toast_internals.h>
 #include <utils/fmgroids.h>
 #include <utils/expandeddatum.h>
@@ -265,11 +264,40 @@ ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster)
 	return result;
 }
 
-/* ----------
- * toast_decompress_datum -
- *
- * Decompress a compressed version of a varlena datum
+/*
+ * Copy of Postgres' toast_decompress_datum(): Decompress a compressed version
+ * of a varlena datum
+ * The decompression functions have changed since PG13, so we have to keep two
+ * implementations.
  */
+#if PG14_LT
+
+#include <common/pg_lzcompress.h>
+
+static struct varlena *
+ts_toast_decompress_datum(struct varlena *attr)
+{
+	struct varlena *result;
+
+	Assert(VARATT_IS_COMPRESSED(attr));
+
+	result = (struct varlena *) palloc(TOAST_COMPRESS_RAWSIZE(attr) + VARHDRSZ);
+	SET_VARSIZE(result, TOAST_COMPRESS_RAWSIZE(attr) + VARHDRSZ);
+
+	if (pglz_decompress(TOAST_COMPRESS_RAWDATA(attr),
+						TOAST_COMPRESS_SIZE(attr),
+						VARDATA(result),
+						TOAST_COMPRESS_RAWSIZE(attr),
+						true) < 0)
+		elog(ERROR, "compressed data is corrupted");
+
+	return result;
+}
+
+#else
+
+#include <access/toast_compression.h>
+
 static struct varlena *
 ts_toast_decompress_datum(struct varlena *attr)
 {
@@ -293,6 +321,7 @@ ts_toast_decompress_datum(struct varlena *attr)
 			return NULL; /* keep compiler quiet */
 	}
 }
+#endif
 
 /* ----------
  * detoast_attr -
@@ -307,10 +336,16 @@ ts_toast_decompress_datum(struct varlena *attr)
 struct varlena *
 ts_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 {
+	if (!VARATT_IS_EXTENDED(attr))
+	{
+		/* Nothing to do here. */
+		return attr;
+	}
+
 	if (VARATT_IS_EXTERNAL_ONDISK(attr))
 	{
 		/*
-		 * This is an externally stored datum --- fetch it back from there
+		 * This is an externally stored datum --- fetch it back from there.
 		 */
 		attr = ts_toast_fetch_datum(attr, detoaster);
 		/* If it's compressed, decompress it */
@@ -321,70 +356,42 @@ ts_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 			attr = ts_toast_decompress_datum(tmp);
 			pfree(tmp);
 		}
+
+		return attr;
 	}
-	else if (VARATT_IS_EXTERNAL_INDIRECT(attr))
-	{
-		/*
-		 * This is an indirect pointer --- dereference it
-		 */
-		struct varatt_indirect redirect;
 
-		VARATT_EXTERNAL_GET_POINTER(redirect, attr);
-		attr = (struct varlena *) redirect.pointer;
+	/*
+	 * Can't get indirect TOAST here (out-of-line Datum that's stored in memory),
+	 * because we're reading from the compressed chunk table.
+	 */
+	Ensure(!VARATT_IS_EXTERNAL_INDIRECT(attr), "got indirect TOAST for compressed data");
 
-		/* nested indirect Datums aren't allowed */
-		Assert(!VARATT_IS_EXTERNAL_INDIRECT(attr));
+	/*
+	 * Compressed data doesn't have an expanded representation.
+	 */
+	Ensure(!VARATT_IS_EXTERNAL_EXPANDED(attr), "got expanded TOAST for compressed data");
 
-		/* recurse in case value is still extended in some other way */
-		attr = ts_detoast_attr(attr, detoaster);
+	/*
+	 * This would be a compressed value inside of the main tuple. We can't have
+	 * it for compressed columns because they have either external or
+	 * extended storage.
+	 */
+	Ensure(!VARATT_IS_COMPRESSED(attr), "got inline compressed TOAST for compressed data");
 
-		/* if it isn't, we'd better copy it */
-		if (attr == (struct varlena *) redirect.pointer)
-		{
-			struct varlena *result;
+	/*
+	 * The only option left is a short-header varlena --- convert to 4-byte
+	 * header format.
+	 */
+	Ensure(VARATT_IS_SHORT(attr), "got unexpected TOAST type for compressed data");
 
-			result = (struct varlena *) palloc(VARSIZE_ANY(attr));
-			memcpy(result, attr, VARSIZE_ANY(attr));
-			attr = result;
-		}
-	}
-	else if (VARATT_IS_EXTERNAL_EXPANDED(attr))
-	{
-		/*
-		 * This is an expanded-object pointer --- get flat format
-		 */
-		ExpandedObjectHeader *eoh;
-		Size resultsize;
+	Size data_size = VARSIZE_SHORT(attr) - VARHDRSZ_SHORT;
+	Size new_size = data_size + VARHDRSZ;
+	struct varlena *new_attr;
 
-		eoh = DatumGetEOHP(PointerGetDatum(attr));
-		resultsize = EOH_get_flat_size(eoh);
-		attr = (struct varlena *) palloc(resultsize);
-		EOH_flatten_into(eoh, (void *) attr, resultsize);
-
-		/* flatteners are not allowed to produce compressed/short output */
-		Assert(!VARATT_IS_EXTENDED(attr));
-	}
-	else if (VARATT_IS_COMPRESSED(attr))
-	{
-		/*
-		 * This is a compressed value inside of the main tuple
-		 */
-		attr = ts_toast_decompress_datum(attr);
-	}
-	else if (VARATT_IS_SHORT(attr))
-	{
-		/*
-		 * This is a short-header varlena --- convert to 4-byte header format
-		 */
-		Size data_size = VARSIZE_SHORT(attr) - VARHDRSZ_SHORT;
-		Size new_size = data_size + VARHDRSZ;
-		struct varlena *new_attr;
-
-		new_attr = (struct varlena *) palloc(new_size);
-		SET_VARSIZE(new_attr, new_size);
-		memcpy(VARDATA(new_attr), VARDATA_SHORT(attr), data_size);
-		attr = new_attr;
-	}
+	new_attr = (struct varlena *) palloc(new_size);
+	SET_VARSIZE(new_attr, new_size);
+	memcpy(VARDATA(new_attr), VARDATA_SHORT(attr), data_size);
+	attr = new_attr;
 
 	return attr;
 }

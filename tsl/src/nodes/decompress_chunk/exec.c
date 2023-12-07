@@ -686,7 +686,10 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			/* We have at least one value */
 			decompressed_scan_slot->tts_isnull[0] = false;
 
-			CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
+			CompressedDataHeader *header =
+				(CompressedDataHeader *) ts_detoast_attr((struct varlena *) DatumGetPointer(value),
+														 &dcontext->detoaster);
+
 			ArrowArray *arrow = NULL;
 
 			DecompressAllFunction decompress_all =

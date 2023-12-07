@@ -114,11 +114,8 @@ decompress_column(DecompressChunkState *chunk_state, DecompressBatchState *batch
 	}
 
 	/* Detoast the compressed datum. */
-	if (VARATT_IS_EXTENDED(value))
-	{
-		value = PointerGetDatum(
-			ts_detoast_attr((struct varlena *) DatumGetPointer(value), &dcontext->detoaster));
-	}
+	value = PointerGetDatum(
+		ts_detoast_attr((struct varlena *) DatumGetPointer(value), &dcontext->detoaster));
 
 	/* Decompress the entire batch if it is supported. */
 	CompressedDataHeader *header = (CompressedDataHeader *) value;
