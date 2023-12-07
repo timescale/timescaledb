@@ -130,23 +130,23 @@ SELECT * FROM cagg_validate_query($$ SELECT relkind, count(*) FROM pg_catalog.pg
 
 -- time_bucket with offset is not allowed
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time", "offset" => '-1 minute'::interval), count(*) FROM metrics GROUP BY 1 $$);
- is_valid | error_level | error_code |                            error_message                            | error_detail | error_hint 
-----------+-------------+------------+---------------------------------------------------------------------+--------------+------------
- f        | ERROR       | XX000      | continuous aggregate view must include a valid time bucket function |              | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 -- time_bucket with origin is not allowed
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time", origin => '2023-01-01'::timestamptz), count(*) FROM metrics GROUP BY 1 $$);
- is_valid | error_level | error_code |                            error_message                            | error_detail | error_hint 
-----------+-------------+------------+---------------------------------------------------------------------+--------------+------------
- f        | ERROR       | XX000      | continuous aggregate view must include a valid time bucket function |              | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 -- time_bucket with origin is not allowed
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time", origin => '2023-01-01'::timestamptz), count(*) FROM metrics GROUP BY 1 $$);
- is_valid | error_level | error_code |                            error_message                            | error_detail | error_hint 
-----------+-------------+------------+---------------------------------------------------------------------+--------------+------------
- f        | ERROR       | XX000      | continuous aggregate view must include a valid time bucket function |              | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 -- time_bucket_gapfill is not allowed

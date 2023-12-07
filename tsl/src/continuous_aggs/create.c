@@ -835,12 +835,28 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 				DirectFunctionCall1(timestamptz_out,
 									TimestampTzGetDatum(bucket_info->bucket_time_origin)));
 		}
+
+		if (bucket_info->bucket_time_offset != NULL)
+		{
+			bucket_offset = DatumGetCString(
+				DirectFunctionCall1(interval_out,
+									IntervalPGetDatum(bucket_info->bucket_time_offset)));
+		}
 	}
 	else
 	{
-		/* Bucket on integers */
+		/* Bucketing on integers */
 		bucket_width = palloc0(MAXINT8LEN + 1 * sizeof(char));
 		pg_lltoa(bucket_info->bucket_integer_width, bucket_width);
+
+		/* Integer buckets with origin are not supported, so noting to do. */
+		Assert(bucket_origin == NULL);
+
+		if (bucket_info->bucket_integer_offset != 0)
+		{
+			bucket_offset = palloc0(MAXINT8LEN + 1 * sizeof(char));
+			pg_lltoa(bucket_info->bucket_integer_offset, bucket_offset);
+		}
 	}
 
 	create_bucket_function_catalog_entry(materialize_hypertable_id,
