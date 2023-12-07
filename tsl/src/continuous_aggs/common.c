@@ -6,6 +6,9 @@
 
 #include "common.h"
 
+#include <utils/date.h>
+#include <utils/timestamp.h>
+
 static Const *check_time_bucket_argument(Node *arg, char *position);
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
@@ -148,6 +151,65 @@ destroy_union_query(Query *q)
 }
 
 /*
+ * Handle additional parameter of the timebucket function such as timezone, offset, or origin
+ */
+static void
+process_additional_timebucket_parameter(CAggTimebucketInfo *tbinfo, Const *arg)
+{
+	char *tz_name;
+	switch (exprType((Node *) arg))
+	{
+		/* Timezone as text */
+		case TEXTOID:
+			tz_name = TextDatumGetCString(arg->constvalue);
+			if (!ts_is_valid_timezone_name(tz_name))
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid timezone name \"%s\"", tz_name)));
+			}
+
+			tbinfo->bucket_time_timezone = tz_name;
+			break;
+		case INTERVALOID:
+			/* Bucket offset as interval */
+			tbinfo->bucket_time_offset = DatumGetIntervalP(arg->constvalue);
+			break;
+		case DATEOID:
+			/* Bucket origin as Date */
+			tbinfo->bucket_time_origin =
+				date2timestamptz_opt_overflow(DatumGetDateADT(arg->constvalue), NULL);
+			break;
+		case TIMESTAMPOID:
+			/* Bucket origin as Timestamp */
+			tbinfo->bucket_time_origin = DatumGetTimestamp(arg->constvalue);
+			break;
+		case TIMESTAMPTZOID:
+			/* Bucket origin as TimestampTZ */
+			tbinfo->bucket_time_origin = DatumGetTimestampTz(arg->constvalue);
+			break;
+		case INT2OID:
+			/* Bucket offset as smallint */
+			tbinfo->bucket_integer_offset = DatumGetInt16(arg->constvalue);
+			break;
+		case INT4OID:
+			/* Bucket offset as int */
+			tbinfo->bucket_integer_offset = DatumGetInt32(arg->constvalue);
+			break;
+		case INT8OID:
+			/* Bucket offset as bigint */
+			tbinfo->bucket_integer_offset = DatumGetInt64(arg->constvalue);
+			break;
+		default:
+			ereport(ERROR,
+					(errcode(ERRCODE_TS_INTERNAL_ERROR),
+					 errmsg("unable to handle time_bucket parameter of type: %s",
+							format_type_be(exprType((Node *) arg)))));
+			pg_unreachable();
+	}
+}
+
+/*
  * Check if the group-by clauses has exactly 1 time_bucket(.., <col>) where
  * <col> is the hypertable's partitioning column and other invariants. Then fill
  * the `bucket_width` and other fields of `tbinfo`.
@@ -213,36 +275,13 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			if (list_length(fe->args) >= 3)
 			{
 				Const *arg = check_time_bucket_argument(lthird(fe->args), "third");
-				if (exprType((Node *) arg) == TEXTOID)
-				{
-					const char *tz_name = TextDatumGetCString(arg->constvalue);
-					if (!ts_is_valid_timezone_name(tz_name))
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid timezone name \"%s\"", tz_name)));
-					}
-
-					tbinfo->bucket_time_timezone = tz_name;
-				}
+				process_additional_timebucket_parameter(tbinfo, arg);
 			}
 
 			if (list_length(fe->args) >= 4)
 			{
-				/* origin */
 				Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth");
-				if (exprType((Node *) arg) == TEXTOID)
-				{
-					const char *tz_name = TextDatumGetCString(arg->constvalue);
-					if (!ts_is_valid_timezone_name(tz_name))
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid timezone name \"%s\"", tz_name)));
-					}
-
-					tbinfo->bucket_time_timezone = tz_name;
-				}
+				process_additional_timebucket_parameter(tbinfo, arg);
 			}
 
 			/* Check for custom origin. */
@@ -250,7 +289,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			{
 				case DATEOID:
 					/* Origin is always 3rd arg for date variants. */
-					if (list_length(fe->args) == 3)
+					if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == DATEOID)
 					{
 						Node *arg = lthird(fe->args);
 						custom_origin = true;
@@ -262,7 +301,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 					break;
 				case TIMESTAMPOID:
 					/* Origin is always 3rd arg for timestamp variants. */
-					if (list_length(fe->args) == 3)
+					if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == TIMESTAMPOID)
 					{
 						Node *arg = lthird(fe->args);
 						custom_origin = true;
@@ -274,9 +313,10 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 					/* Origin can be 3rd or 4th arg for timestamptz variants. */
 					if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
 					{
+						Node *arg = lthird(fe->args);
 						custom_origin = true;
-						tbinfo->bucket_time_origin =
-							DatumGetTimestampTz(castNode(Const, lthird(fe->args))->constvalue);
+						Const *constval = check_time_bucket_argument(arg, "third");
+						tbinfo->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
 					}
 					else if (list_length(fe->args) >= 4 &&
 							 exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
@@ -559,7 +599,8 @@ CAggTimebucketInfo
 cagg_validate_query(const Query *query, const bool finalized, const char *cagg_schema,
 					const char *cagg_name, const bool is_cagg_create)
 {
-	CAggTimebucketInfo bucket_info = { 0 }, bucket_info_parent;
+	CAggTimebucketInfo bucket_info = { 0 };
+	CAggTimebucketInfo bucket_info_parent = { 0 };
 	Hypertable *ht = NULL, *ht_parent = NULL;
 	RangeTblRef *rtref = NULL, *rtref_other = NULL;
 	RangeTblEntry *rte = NULL, *rte_other = NULL;
@@ -891,6 +932,43 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create continuous aggregate on hypertable with row security")));
 
+	/* Test for broken time_bucket configurations (variable with with offset and origin). We need to
+	 * check only time based buckets since integer based buckets are always fixed. */
+	bool time_offset_or_origin_set =
+		(bucket_info.bucket_time_offset != NULL) ||
+		(TIMESTAMP_NOT_FINITE(bucket_info.bucket_time_origin) == false);
+
+	/* Ignore time_bucket_ng in this check, since offset and origin were allowed in the past */
+	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bucket_info.bucket_func->funcid);
+	bool is_time_bucket_ng = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
+
+	/*
+	 * Some time_bucket variants using variable-sized buckets and custom origin/offset values are
+	 * not behaving correctly. To prevent misaligned buckets, these variants are blocked at the
+	 * moment. This restriction can be removed as soon as time_bucket behaves correctly.
+	 *
+	 * 		--- Align with default origin ('midnight on January 1, 2000')
+	 * 		test2=# SELECT time_bucket('1 month', '2000-01-01 01:05:00 UTC'::timestamptz,
+	 *         timezone=>'UTC'); time_bucket
+	 *		------------------------
+	 *		2000-01-01 00:00:00+00
+	 *
+	 *		--- Using a custom origin
+	 *		test2=# SELECT time_bucket('1 month', '2000-01-01 01:05:00 UTC'::timestamptz,
+	 *         origin=>'2000-01-01 01:05:00 UTC'::timestamptz, timezone=>'UTC'); time_bucket
+	 *		------------------------
+	 *		2000-01-01 00:00:00+00              <--- Should be 2000-01-01 01:05:00+00
+	 *		(1 row)
+	 */
+	if (time_bucket_info_has_fixed_width(&bucket_info) == false && time_offset_or_origin_set &&
+		!is_time_bucket_ng)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot create continuous aggregate with variable-width bucket using "
+						"offset or origin.")));
+	}
+
 	/* hierarchical cagg validations */
 	if (is_hierarchical)
 	{
@@ -974,6 +1052,85 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 							   NameStr(cagg_parent->data.user_view_schema),
 							   NameStr(cagg_parent->data.user_view_name),
 							   width_out_parent)));
+		}
+
+		/* Test compatible time origin values */
+		if (bucket_info.bucket_time_origin != bucket_info_parent.bucket_time_origin)
+		{
+			char *origin = DatumGetCString(
+				DirectFunctionCall1(timestamptz_out,
+									TimestampTzGetDatum(bucket_info.bucket_time_origin)));
+
+			char *origin_parent = DatumGetCString(
+				DirectFunctionCall1(timestamptz_out,
+									TimestampTzGetDatum(bucket_info_parent.bucket_time_origin)));
+
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg(
+						 "cannot create continuous aggregate with different bucket origin values"),
+					 errdetail("Time origin of \"%s.%s\" [%s] and \"%s.%s\" [%s] should be the "
+							   "same.",
+							   cagg_schema,
+							   cagg_name,
+							   origin,
+							   NameStr(cagg_parent->data.user_view_schema),
+							   NameStr(cagg_parent->data.user_view_name),
+							   origin_parent)));
+		}
+
+		/* Test compatible time offset values */
+		if (bucket_info.bucket_time_offset != NULL || bucket_info_parent.bucket_time_offset != NULL)
+		{
+			Datum offset_datum = IntervalPGetDatum(bucket_info.bucket_time_offset);
+			Datum offset_datum_parent = IntervalPGetDatum(bucket_info_parent.bucket_time_offset);
+
+			bool both_buckets_are_equal = false;
+			bool both_buckets_have_offset = (bucket_info.bucket_time_offset != NULL) &&
+											(bucket_info_parent.bucket_time_offset != NULL);
+
+			if (both_buckets_have_offset)
+			{
+				both_buckets_are_equal = DatumGetBool(
+					DirectFunctionCall2(interval_eq, offset_datum, offset_datum_parent));
+			}
+
+			if (!both_buckets_are_equal)
+			{
+				char *offset = DatumGetCString(DirectFunctionCall1(interval_out, offset_datum));
+				char *offset_parent =
+					DatumGetCString(DirectFunctionCall1(interval_out, offset_datum_parent));
+
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("cannot create continuous aggregate with different bucket offset "
+								"values"),
+						 errdetail("Time origin of \"%s.%s\" [%s] and \"%s.%s\" [%s] should be the "
+								   "same.",
+								   cagg_schema,
+								   cagg_name,
+								   offset,
+								   NameStr(cagg_parent->data.user_view_schema),
+								   NameStr(cagg_parent->data.user_view_name),
+								   offset_parent)));
+			}
+		}
+
+		/* Test compatible integer offset values */
+		if (bucket_info.bucket_integer_offset != bucket_info_parent.bucket_integer_offset)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg(
+						 "cannot create continuous aggregate with different bucket offset values"),
+					 errdetail("Integer offset of \"%s.%s\" [" INT64_FORMAT
+							   "] and \"%s.%s\" [" INT64_FORMAT "] should be the same.",
+							   cagg_schema,
+							   cagg_name,
+							   bucket_info.bucket_integer_offset,
+							   NameStr(cagg_parent->data.user_view_schema),
+							   NameStr(cagg_parent->data.user_view_name),
+							   bucket_info_parent.bucket_integer_offset)));
 		}
 	}
 
@@ -1189,9 +1346,11 @@ makeRangeTblEntry(Query *query, const char *aliasname)
  *                  UNION ALL
  *                  SELECT * from q2 where existing_qual and <coale_qual>
  * where coale_qual is: time < ----> (or >= )
- * COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark( <htid>)),
+ *
+ * COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(<htid>)),
  * '-infinity'::timestamp with time zone)
- * See build_union_quals for COALESCE clauses.
+ *
+ * See build_union_query_quals for COALESCE clauses.
  */
 Query *
 build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
@@ -1225,9 +1384,7 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	/*
 	 * If there is join in CAgg definition then adjust varno
 	 * to get time column from the hypertable in the join.
-	 */
-
-	/*
+	 *
 	 * In case of joins it is enough to check if the first node is not RangeTblRef,
 	 * because the jointree has RangeTblRef as leaves and JoinExpr above them.
 	 * So if JoinExpr is present, it is the first node.
@@ -1276,11 +1433,13 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	}
 	else
 		varno = list_length(q2->rtable);
+
 	q2_quals = build_union_query_quals(materialize_htid,
 									   tbinfo->htpartcoltype,
 									   get_negator(tce->lt_opr),
 									   varno,
 									   tbinfo->htpartcolno);
+
 	q2->jointree->quals = make_and_qual(q2->jointree->quals, q2_quals);
 
 	Query *query = makeNode(Query);
