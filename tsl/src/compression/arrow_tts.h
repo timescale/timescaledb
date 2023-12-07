@@ -10,6 +10,7 @@
 #include <access/attnum.h>
 #include <access/tupdesc.h>
 #include <executor/tuptable.h>
+#include <lib/ilist.h>
 #include <nodes/bitmapset.h>
 #include <utils/builtins.h>
 #include <utils/hsearch.h>
@@ -42,6 +43,9 @@
  * are needed that match the expected slot type (BufferHeapTupletableslot) and
  * tuple descriptor of the corresponding child relations.
  *
+ * The LRU list is sorted in reverse order so the head element is the LRU
+ * element. This is because there is a dlist_pop_head, but no dlist_pop_tail.
+ *
  */
 typedef struct ArrowTupleTableSlot
 {
@@ -58,7 +62,10 @@ typedef struct ArrowTupleTableSlot
 						 * (columnar data) child tuple. Note that the first
 						 * value has index 1. If the index is 0 it means the
 						 * child slot points to a non-compressed tuple. */
-	HTAB *arrow_column_cache;
+
+	size_t arrow_column_cache_lru_count; /* Arrow column cache LRU list count */
+	dlist_head arrow_column_cache_lru;	 /* Arrow column cache LRU list */
+	HTAB *arrow_column_cache;			 /* Arrow column cache */
 	size_t cache_total;
 	size_t cache_misses;
 	MemoryContext arrowdata_mcxt;
