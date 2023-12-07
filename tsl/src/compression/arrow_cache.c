@@ -15,6 +15,31 @@
 #include "compression.h"
 #include "debug_assert.h"
 
+/*
+ * The function dlist_move_tail only exists for PG14 and above, so provide it
+ * for PG13 here.
+ */
+#if PG14_LT
+/*
+ * Move element from its current position in the list to the tail position in
+ * the same list.
+ *
+ * Undefined behaviour if 'node' is not already part of the list.
+ */
+static inline void
+dlist_move_tail(dlist_head *head, dlist_node *node)
+{
+	/* fast path if it's already at the tail */
+	if (head->head.prev == node)
+		return;
+
+	dlist_delete(node);
+	dlist_push_tail(head, node);
+
+	dlist_check(head);
+}
+#endif
+
 void
 arrow_column_cache_init(ArrowTupleTableSlot *aslot)
 {
@@ -41,6 +66,8 @@ arrow_column_cache_init(ArrowTupleTableSlot *aslot)
 	ctl.hcxt = aslot->arrowdata_mcxt;
 	aslot->arrow_column_cache =
 		hash_create("Arrow column data cache", 32, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
+	aslot->arrow_column_cache_lru_count = 0;
+	dlist_init(&aslot->arrow_column_cache_lru);
 }
 
 void
@@ -65,9 +92,66 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	Assert(aslot->arrow_column_cache != NULL);
 
 	ArrowColumnCacheEntry *restrict entry =
-		hash_search(aslot->arrow_column_cache, &key, HASH_ENTER, &found);
+		hash_search(aslot->arrow_column_cache, &key, HASH_FIND, &found);
 
 	aslot->cache_total++;
+
+	/* If entry was not found, we might have to prune the LRU list before
+	 * allocating a new entry */
+	if (!found)
+	{
+		if (aslot->arrow_column_cache_lru_count >= ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES)
+		{
+			/* If we don't have room in the cache for the new entry, pick the
+			 * least recently used and remove it. */
+			entry = dlist_container(ArrowColumnCacheEntry,
+									node,
+									dlist_pop_head_node(&aslot->arrow_column_cache_lru));
+			if (!hash_search(aslot->arrow_column_cache, &entry->key, HASH_REMOVE, NULL))
+				elog(ERROR, "LRU cache for compressed rows corrupt");
+			--aslot->arrow_column_cache_lru_count;
+
+			/* Free allocated memory in the entry. The entry itself is managed
+			 * by the hash table and might be recycled so should not be freed
+			 * here. */
+			for (int i = 0; i < entry->nvalid; ++i)
+			{
+				if (entry->arrow_columns[i])
+				{
+					/* TODO: instead of all these pfrees the entry should
+					 * either use its own MemoryContext or implement the
+					 * release function in the ArrowArray. That's the only way
+					 * to know for sure which buffers are actually separately
+					 * palloc'd. */
+					ArrowArray *arr = entry->arrow_columns[i];
+
+					for (int64 j = 0; j < arr->n_buffers; i++)
+					{
+						/* Validity bitmap might be NULL even if it is counted
+						 * in n_buffers, so need to check for NULL values. */
+						if (arr->buffers[j])
+							pfree((void *) arr->buffers[j]);
+					}
+					pfree(arr->buffers);
+					pfree(entry->arrow_columns[i]);
+				}
+			}
+			pfree(entry->segmentby_columns);
+			pfree(entry->arrow_columns);
+		}
+
+		/* Allocate a new entry in the hash table. */
+		entry = hash_search(aslot->arrow_column_cache, &key, HASH_ENTER, &found);
+		dlist_push_tail(&aslot->arrow_column_cache_lru, &entry->node);
+		++aslot->arrow_column_cache_lru_count;
+		Assert(!found);
+	}
+	else
+	{
+		dlist_move_tail(&aslot->arrow_column_cache_lru, &entry->node);
+	}
+
+	Assert(entry);
 
 	/*
 	 * Entry might be new so fill in default values.
@@ -101,6 +185,11 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 
 		MemoryContextSwitchTo(oldmctx);
 		aslot->cache_misses++;
+	}
+	else
+	{
+		/* Move the entry found to the front of the LRU list */
+		dlist_move_tail(&aslot->arrow_column_cache_lru, &entry->node);
 	}
 
 	/*
