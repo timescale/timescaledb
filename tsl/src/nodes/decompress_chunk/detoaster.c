@@ -31,7 +31,6 @@
 #define TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer)                                            \
 	(((int32) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer)) < (toast_pointer).va_rawsize - VARHDRSZ)
 
-
 /*
  * Fetch a TOAST slice from a heap table.
  *
