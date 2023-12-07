@@ -546,6 +546,9 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		chunk_state->vectorized_quals_constified =
 			lappend(chunk_state->vectorized_quals_constified, constified);
 	}
+
+	dcontext->detoaster.toastrel = NULL;
+	dcontext->detoaster.mctx = CurrentMemoryContext;
 }
 
 /*
@@ -861,6 +864,8 @@ decompress_chunk_end(CustomScanState *node)
 	chunk_state->batch_queue->free(chunk_state);
 
 	ExecEndNode(linitial(node->custom_ps));
+
+	detoaster_close(&chunk_state->decompress_context.detoaster);
 }
 
 /*

@@ -11,6 +11,7 @@
 
 #include <nodes/extensible.h>
 #include "batch_array.h"
+#include "detoaster.h"
 
 #define DECOMPRESS_CHUNK_COUNT_ID -9
 #define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10
@@ -57,6 +58,8 @@ typedef struct DecompressContext
 	 * data.
 	 */
 	MemoryContext bulk_decompression_context;
+
+	Detoaster detoaster;
 } DecompressContext;
 
 typedef struct DecompressChunkState
