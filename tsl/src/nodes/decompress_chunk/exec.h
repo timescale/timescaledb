@@ -10,13 +10,8 @@
 #include <postgres.h>
 
 #include <nodes/extensible.h>
-<<<<<<< HEAD
-#include "batch_array.h"
-#include "detoaster.h"
-=======
 #include "batch_queue.h"
 #include "decompress_context.h"
->>>>>>> origin/main
 
 #define DECOMPRESS_CHUNK_COUNT_ID -9
 #define DECOMPRESS_CHUNK_SEQUENCE_NUM_ID -10

@@ -13,6 +13,7 @@
 #include <nodes/pg_list.h>
 
 #include "batch_array.h"
+#include "detoaster.h"
 
 typedef enum CompressionColumnType
 {
@@ -74,6 +75,8 @@ typedef struct DecompressContext
 	TupleDesc compressed_slot_tdesc;
 
 	PlanState *ps; /* Set for filtering and instrumentation */
+
+	Detoaster detoaster;
 } DecompressContext;
 
 #endif /* TIMESCALEDB_DECOMPRESS_CONTEXT_H */
