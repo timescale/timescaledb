@@ -1280,8 +1280,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 		int elevel = if_not_compressed ? NOTICE : ERROR;
 		elog(elevel,
 			 "nothing to recompress in chunk %s.%s",
-			 uncompressed_chunk->fd.schema_name.data,
-			 uncompressed_chunk->fd.table_name.data);
+			 NameStr(uncompressed_chunk->fd.schema_name),
+			 NameStr(uncompressed_chunk->fd.table_name));
 	}
 
 	/*
@@ -1296,8 +1296,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 		elog(ERROR,
 			 "unexpected chunk status %d in chunk %s.%s",
 			 status,
-			 uncompressed_chunk->fd.schema_name.data,
-			 uncompressed_chunk->fd.table_name.data);
+			 NameStr(uncompressed_chunk->fd.schema_name),
+			 NameStr(uncompressed_chunk->fd.table_name));
 
 	int i = 0, htcols_listlen;
 	ListCell *lc;

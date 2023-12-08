@@ -1273,7 +1273,7 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 			get_column_compressioninfo(context->hypertable_compression_info, column_name);
 
 		compressed_attno =
-			get_attnum(context->compressed_rte->relid, compressioninfo->attname.data);
+			get_attnum(context->compressed_rte->relid, NameStr(compressioninfo->attname));
 		compress_var->varno = context->compressed_rel->relid;
 		compress_var->varattno = compressed_attno;
 

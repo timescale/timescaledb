@@ -387,7 +387,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 
 			var = copyObject(var);
 			compressed_attno =
-				get_attnum(context->compressed_rte->relid, compressioninfo->attname.data);
+				get_attnum(context->compressed_rte->relid, NameStr(compressioninfo->attname));
 			var->varno = context->compressed_rel->relid;
 			var->varattno = compressed_attno;
 
