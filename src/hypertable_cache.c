@@ -109,7 +109,6 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 														  hypertable_tuple_found,
 														  query->result,
 														  AccessShareLock,
-														  false,
 														  ts_cache_memory_ctx(cache));
 
 	switch (number_found)

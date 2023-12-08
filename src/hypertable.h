@@ -124,10 +124,7 @@ extern Hypertable *ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid r
 															bool allow_matht);
 extern int ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 												  tuple_found_func tuple_found, void *data,
-												  LOCKMODE lockmode, bool tuplock,
-												  MemoryContext mctx);
-extern TM_Result ts_hypertable_lock_tuple(Oid table_relid);
-extern bool ts_hypertable_lock_tuple_simple(Oid table_relid);
+												  LOCKMODE lockmode, MemoryContext mctx);
 extern TSDLLEXPORT int ts_hypertable_update(Hypertable *ht);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
@@ -190,13 +187,12 @@ extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_n
 														int32 replication_factor,
 														int num_data_nodes);
 
-#define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
+#define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
 										   table,                                                  \
 										   tuple_found,                                            \
 										   data,                                                   \
 										   lockmode,                                               \
-										   tuplock,                                                \
 										   CurrentMemoryContext)
 
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
