@@ -1,0 +1,295 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- statitics on
+CREATE TABLE "public"."metrics" (
+    "time" timestamp with time zone NOT NULL,
+    "device_id" "text",
+    "val" double precision
+) WITH (autovacuum_enabled=0);
+SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
+  create_hypertable   
+----------------------
+ (1,public,metrics,t)
+(1 row)
+
+insert into metrics SELECT t, 1, extract(epoch from t) from generate_series
+        ( '2007-02-01'::timestamp
+        , '2008-04-01'::timestamp
+        , '1 day'::interval) t;
+insert into metrics SELECT t, 2, extract(epoch from t) from generate_series
+        ( '2009-02-01'::timestamp
+        , '2010-04-01'::timestamp
+        , '1 day'::interval) t;
+ANALYZE metrics;
+--use the best-scenario unique index
+CREATE UNIQUE INDEX test_idx ON metrics(device_id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+            get_segmentby_defaults            
+----------------------------------------------
+ {"columns": ["device_id"], "confidence": 10}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 8}
+(1 row)
+
+--opposite order of columns
+drop index test_idx;
+CREATE UNIQUE INDEX test_idx ON metrics(time, device_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+            get_segmentby_defaults            
+----------------------------------------------
+ {"columns": ["device_id"], "confidence": 10}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 8}
+(1 row)
+
+--use a high-cardinality column in the index
+drop index test_idx;
+CREATE UNIQUE INDEX test_idx ON metrics(val, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                        get_segmentby_defaults                                                                                                        
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "Several columns are potential segment by candidates and we do not have enough information to choose one. Please use the segment_by option to explicitly specify the segment_by column", "confidence": 0}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
+                get_orderby_defaults                
+----------------------------------------------------
+ {"clauses": ["val", "time DESC"], "confidence": 8}
+(1 row)
+
+--use a non-unique index
+drop index test_idx;
+CREATE INDEX test_idx ON metrics(device_id, time, val);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+           get_segmentby_defaults            
+---------------------------------------------
+ {"columns": ["device_id"], "confidence": 8}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 5}
+(1 row)
+
+--another non-unique index column order
+drop index test_idx;
+CREATE INDEX test_idx ON metrics(val, device_id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+           get_segmentby_defaults            
+---------------------------------------------
+ {"columns": ["device_id"], "confidence": 8}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
+                get_orderby_defaults                
+----------------------------------------------------
+ {"clauses": ["time DESC", "val"], "confidence": 5}
+(1 row)
+
+--use a high-cardinality column in the non-unque index
+drop index test_idx;
+CREATE INDEX test_idx ON metrics(val, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                    get_segmentby_defaults                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
+                get_orderby_defaults                
+----------------------------------------------------
+ {"clauses": ["time DESC", "val"], "confidence": 5}
+(1 row)
+
+--use 2 indexes
+drop index test_idx;
+CREATE INDEX test_idx1 ON metrics(val, time);
+CREATE INDEX test_idx2 ON metrics(device_id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+           get_segmentby_defaults            
+---------------------------------------------
+ {"columns": ["device_id"], "confidence": 8}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
+                get_orderby_defaults                
+----------------------------------------------------
+ {"clauses": ["time DESC", "val"], "confidence": 5}
+(1 row)
+
+--no indexes
+drop index test_idx1;
+drop index test_idx2;
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                    get_segmentby_defaults                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 5}
+(1 row)
+
+-- tables with no stats --
+drop table metrics;
+--serial case
+CREATE TABLE "public"."metrics" (
+     id serial NOT NULL,
+    "time" timestamp with time zone NOT NULL,
+    "device_id" "text",
+    "val" double precision
+) WITH (autovacuum_enabled=0);
+SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
+  create_hypertable   
+----------------------
+ (2,public,metrics,t)
+(1 row)
+
+--no indexes
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                    get_segmentby_defaults                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 5}
+(1 row)
+
+--minimum index
+CREATE UNIQUE INDEX test_idx ON metrics(id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                    get_segmentby_defaults                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+(1 row)
+
+--index with device_id
+drop index test_idx;
+CREATE UNIQUE INDEX test_idx ON metrics(device_id, id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+(1 row)
+
+--two indexes
+drop index test_idx;
+CREATE UNIQUE INDEX test_idx ON metrics(id, time);
+CREATE INDEX test_idx2 ON metrics(device_id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+(1 row)
+
+--separate indexes
+drop index test_idx;
+drop index test_idx2;
+CREATE INDEX test_idx ON metrics(id);
+CREATE INDEX test_idx2 ON metrics(time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                    get_segmentby_defaults                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+(1 row)
+
+--make sure generated identity also works
+drop table metrics;
+CREATE TABLE "public"."metrics" (
+     id int GENERATED ALWAYS AS IDENTITY,
+    "time" timestamp with time zone NOT NULL,
+    "device_id" "text",
+    "val" double precision
+) WITH (autovacuum_enabled=0);
+SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
+  create_hypertable   
+----------------------
+ (3,public,metrics,t)
+(1 row)
+
+--minimum index
+CREATE UNIQUE INDEX test_idx ON metrics(id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                    get_segmentby_defaults                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+(1 row)
+
+--index with device_id
+drop index test_idx;
+CREATE UNIQUE INDEX test_idx ON metrics(device_id, id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+(1 row)
+
+--test default indexes
+drop table metrics;
+CREATE TABLE "public"."metrics" (
+     id int GENERATED ALWAYS AS IDENTITY,
+    "time" timestamp with time zone NOT NULL,
+    "device_id" "text",
+    "val" double precision
+) WITH (autovacuum_enabled=0);
+SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>true);
+  create_hypertable   
+----------------------
+ (4,public,metrics,t)
+(1 row)
+
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                                                                    get_segmentby_defaults                                                                                                    
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": [], "message": "You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes", "confidence": 5}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 5}
+(1 row)
+
+CREATE INDEX test_idx ON metrics(device_id);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 5}
+(1 row)
+
+drop index test_idx;
+CREATE UNIQUE INDEX test_idx ON metrics(device_id, time);
+SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
+                                                            get_segmentby_defaults                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------
+ {"columns": ["device_id"], "message": "Please make sure device_id is not a unique column and appropriate for a segment by", "confidence": 5}
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
+            get_orderby_defaults             
+---------------------------------------------
+ {"clauses": ["time DESC"], "confidence": 8}
+(1 row)
+
