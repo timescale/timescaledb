@@ -768,3 +768,5 @@ CREATE FUNCTION _timescaledb_functions.hypertable_constraint_add_table_fk_constr
 CREATE FUNCTION _timescaledb_functions.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
 AS 'BEGIN END' LANGUAGE PLPGSQL SET search_path TO pg_catalog,pg_temp;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_orderby_defaults(regclass,text[]);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_segmentby_defaults(regclass);
