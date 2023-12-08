@@ -723,7 +723,8 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 		performDeletion(&hypertable_addr, behavior, 0);
 	}
 	/* Clean up catalog */
-	ts_hypertable_delete_by_name(hypertable->fd.schema_name.data, hypertable->fd.table_name.data);
+	ts_hypertable_delete_by_name(NameStr(hypertable->fd.schema_name),
+								 NameStr(hypertable->fd.table_name));
 }
 
 static ScanTupleResult

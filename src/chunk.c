@@ -988,7 +988,11 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 		if (NULL == prefix)
 			prefix = NameStr(ht->fd.associated_table_prefix);
 
-		len = snprintf(chunk->fd.table_name.data, NAMEDATALEN, "%s_%d_chunk", prefix, chunk->fd.id);
+		len = snprintf(NameStr(chunk->fd.table_name),
+					   NAMEDATALEN,
+					   "%s_%d_chunk",
+					   prefix,
+					   chunk->fd.id);
 
 		if (len >= NAMEDATALEN)
 			elog(ERROR, "chunk table name too long");
@@ -3930,8 +3934,8 @@ ts_chunk_drop_internal(const Chunk *chunk, DropBehavior behavior, int32 log_leve
 	if (log_level >= 0)
 		elog(log_level,
 			 "dropping chunk %s.%s",
-			 chunk->fd.schema_name.data,
-			 chunk->fd.table_name.data);
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
 
 	/* Remove the chunk from the chunk table */
 	ts_chunk_delete_by_relid(chunk->table_id, behavior, preserve_catalog_row);
@@ -4138,8 +4142,8 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		}
 
 		/* store chunk name for output */
-		schema_name = quote_identifier(chunks[i].fd.schema_name.data);
-		table_name = quote_identifier(chunks[i].fd.table_name.data);
+		schema_name = quote_identifier(NameStr(chunks[i].fd.schema_name));
+		table_name = quote_identifier(NameStr(chunks[i].fd.table_name));
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 

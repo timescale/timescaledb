@@ -649,7 +649,7 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 					 ", time_column_name => %s",
 					 quote_literal_cstr(NameStr(time_dim->fd.column_name)));
 
-	if (time_dim->fd.partitioning_func.data[0] != '\0')
+	if (NameStr(time_dim->fd.partitioning_func)[0] != '\0')
 		appendStringInfo(hypertable_cmd,
 						 ", time_partitioning_func => %s",
 						 quote_literal_cstr(
