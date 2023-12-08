@@ -376,7 +376,7 @@ detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 	 */
 	Ensure(!VARATT_IS_EXTERNAL_EXPANDED(attr), "got expanded TOAST for compressed data");
 
-	if(VARATT_IS_COMPRESSED(attr))
+	if (VARATT_IS_COMPRESSED(attr))
 	{
 		/*
 		 * This is a compressed value stored inline in the main tuple. It rarely
