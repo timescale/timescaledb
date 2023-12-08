@@ -687,7 +687,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			decompressed_scan_slot->tts_isnull[0] = false;
 
 			CompressedDataHeader *header =
-				(CompressedDataHeader *) ts_detoast_attr((struct varlena *) DatumGetPointer(value),
+				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(value),
 														 &dcontext->detoaster);
 
 			ArrowArray *arrow = NULL;

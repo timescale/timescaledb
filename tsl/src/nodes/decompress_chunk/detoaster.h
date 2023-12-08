@@ -26,6 +26,6 @@ typedef struct Detoaster
 	SysScanDesc toastscan;
 } Detoaster;
 
-struct varlena *ts_detoast_attr(struct varlena *attr, Detoaster *detoaster);
+struct varlena *detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster);
 
 void detoaster_close(Detoaster *detoaster);

@@ -339,7 +339,7 @@ ts_toast_decompress_datum(struct varlena *attr)
  * ----------
  */
 struct varlena *
-ts_detoast_attr(struct varlena *attr, Detoaster *detoaster)
+detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 {
 	if (!VARATT_IS_EXTENDED(attr))
 	{
@@ -376,12 +376,15 @@ ts_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 	 */
 	Ensure(!VARATT_IS_EXTERNAL_EXPANDED(attr), "got expanded TOAST for compressed data");
 
-	/*
-	 * This would be a compressed value inside of the main tuple. We can't have
-	 * it for compressed columns because they have either external or
-	 * extended storage.
-	 */
-	Ensure(!VARATT_IS_COMPRESSED(attr), "got inline compressed TOAST for compressed data");
+	if(VARATT_IS_COMPRESSED(attr))
+	{
+		/*
+		 * This is a compressed value stored inline in the main tuple. It rarely
+		 * occurs in practice, because we set a low toast_tuple_target = 128
+		 * for the compressed chunks, but is still technically possible.
+		 */
+		return ts_toast_decompress_datum(attr);
+	}
 
 	/*
 	 * The only option left is a short-header varlena --- convert to 4-byte
