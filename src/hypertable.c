@@ -396,22 +396,6 @@ ts_hypertable_relid_to_id(Oid relid)
 	return result;
 }
 
-static bool
-hypertable_is_compressed_or_materialization(const Hypertable *ht)
-{
-	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-	return (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht) ||
-			status == HypertableIsMaterialization);
-}
-
-static ScanFilterResult
-hypertable_filter_exclude_compressed_and_materialization(const TupleInfo *ti, void *data)
-{
-	Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
-
-	return hypertable_is_compressed_or_materialization(ht) ? SCAN_EXCLUDE : SCAN_INCLUDE;
-}
-
 static int
 hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int indexid,
 							   tuple_found_func on_tuple_found, void *scandata, int limit,
@@ -433,34 +417,6 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 	};
 
 	return ts_scanner_scan(&scanctx);
-}
-
-static ScanTupleResult
-hypertable_tuple_append(TupleInfo *ti, void *data)
-{
-	List **hypertables = data;
-
-	*hypertables = lappend(*hypertables, ts_hypertable_from_tupleinfo(ti));
-
-	return SCAN_CONTINUE;
-}
-
-List *
-ts_hypertable_get_all(void)
-{
-	List *result = NIL;
-
-	hypertable_scan_limit_internal(NULL,
-								   0,
-								   InvalidOid,
-								   hypertable_tuple_append,
-								   &result,
-								   -1,
-								   RowExclusiveLock,
-								   CurrentMemoryContext,
-								   hypertable_filter_exclude_compressed_and_materialization);
-
-	return result;
 }
 
 static ScanTupleResult
