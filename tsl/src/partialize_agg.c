@@ -77,6 +77,13 @@ is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
 	if (aggref->aggfnoid != F_SUM_INT4)
 		return false;
 
+	/* Can aggregate only a bare decompressed column, not an expression. */
+	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
+	if (!IsA(argument->expr, Var))
+	{
+		return false;
+	}
+
 	return true;
 }
 

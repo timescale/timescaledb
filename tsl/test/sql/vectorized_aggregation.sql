@@ -116,6 +116,14 @@ SELECT sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
 
+
+--Vectorized aggregation not possible for expression
+SELECT sum(abs(int_value)) FROM testtable;
+
+:EXPLAIN
+SELECT sum(abs(int_value)) FROM testtable;
+
+
 -- Vectorized aggregation NOT possible
 SET timescaledb.enable_vectorized_aggregation = OFF;
 
