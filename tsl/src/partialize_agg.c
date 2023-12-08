@@ -98,7 +98,7 @@ is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
 		TargetEntry *target_entry = castNode(TargetEntry, agg_arg);
 
 		if (!IsA(target_entry->expr, Var))
-			continue;
+			return false;
 
 		Var *var = castNode(Var, target_entry->expr);
 
