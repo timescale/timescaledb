@@ -84,7 +84,6 @@ enum Anum_generic_create_hypertable
 #define Natts_generic_create_hypertable (_Anum_generic_create_hypertable_max - 1)
 
 extern TSDLLEXPORT Oid ts_rel_get_owner(Oid relid);
-extern List *ts_hypertable_get_all(void);
 
 typedef enum HypertableCreateFlags
 {
