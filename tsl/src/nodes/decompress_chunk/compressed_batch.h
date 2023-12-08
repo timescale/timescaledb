@@ -7,7 +7,7 @@
 #pragma once
 
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/decompress_context.h"
 
 typedef struct ArrowArray ArrowArray;
 
@@ -63,14 +63,14 @@ typedef struct DecompressBatchState
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
-extern void compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
+extern void compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 												  DecompressBatchState *batch_state,
 												  TupleTableSlot *subslot);
 
-extern void compressed_batch_advance(DecompressChunkState *chunk_state,
+extern void compressed_batch_advance(DecompressContext *dcontext,
 									 DecompressBatchState *batch_state);
 
-extern void compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
+extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
 
