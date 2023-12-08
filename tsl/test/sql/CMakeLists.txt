@@ -26,6 +26,7 @@ set(TEST_FILES
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
     exp_cagg_timezone.sql
+	gapfill.sql
     move.sql
     partialize_finalize.sql
     policy_generalization.sql
