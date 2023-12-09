@@ -18,7 +18,6 @@ typedef struct RelationData *Relation;
 typedef struct Detoaster
 {
 	MemoryContext mctx;
-	Oid toastrelid;
 	Relation toastrel;
 	Relation index;
 	SnapshotData SnapshotToast;

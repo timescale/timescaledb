@@ -220,7 +220,7 @@ void
 detoaster_close(Detoaster *detoaster)
 {
 	/* Close toast table */
-	if (detoaster->toastrel)
+	if (detoaster->toastrel != NULL)
 	{
 		systable_endscan_ordered(detoaster->toastscan);
 		table_close(detoaster->toastrel, AccessShareLock);

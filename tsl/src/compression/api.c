@@ -1594,6 +1594,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
 	index_close(index_rel, AccessExclusiveLock);
+	row_decompressor_close(&decompressor);
 
 #if PG14_LT
 	int options = 0;

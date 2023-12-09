@@ -1425,7 +1425,16 @@ build_decompressor(Relation in_rel, Relation out_rel)
 	 */
 	memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
 
+	decompressor.detoaster.mctx = CurrentMemoryContext;
+	decompressor.detoaster.toastrel = NULL;
+
 	return decompressor;
+}
+
+void
+row_decompressor_close(RowDecompressor *decompressor)
+{
+	detoaster_close(&decompressor->detoaster);
 }
 
 void
@@ -1469,6 +1478,7 @@ decompress_chunk(Oid in_table, Oid out_table)
 	MemoryContextDelete(decompressor.per_compressed_row_ctx);
 	ts_catalog_close_indexes(decompressor.indexstate);
 	FreeExecutorState(decompressor.estate);
+	row_decompressor_close(&decompressor);
 
 	table_close(out_rel, NoLock);
 	table_close(in_rel, NoLock);
@@ -1582,8 +1592,11 @@ decompress_batch(RowDecompressor *decompressor)
 		}
 
 		/* Normal compressed column. */
-		CompressedDataHeader *header =
-			get_compressed_data_header(decompressor->compressed_datums[input_column]);
+		Datum compressed_datum = PointerGetDatum(
+			detoaster_detoast_attr((struct varlena *) DatumGetPointer(
+									   decompressor->compressed_datums[input_column]),
+								   &decompressor->detoaster));
+		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
 		column_info->iterator =
 			definitions[header->compression_algorithm]
 				.iterator_init_forward(PointerGetDatum(header), column_info->decompressed_type);
@@ -2225,6 +2238,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	ts_catalog_close_indexes(decompressor.indexstate);
 	FreeExecutorState(decompressor.estate);
 	FreeBulkInsertState(decompressor.bistate);
+	row_decompressor_close(&decompressor);
 
 	CommandCounterIncrement();
 	table_close(in_rel, NoLock);
@@ -3402,6 +3416,7 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	ts_catalog_close_indexes(decompressor.indexstate);
 	FreeExecutorState(decompressor.estate);
 	FreeBulkInsertState(decompressor.bistate);
+	row_decompressor_close(&decompressor);
 
 	table_close(chunk_rel, NoLock);
 	table_close(comp_chunk_rel, NoLock);
