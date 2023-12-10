@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_DATA_FETCHER_H
-#define TIMESCALEDB_TSL_REMOTE_DATA_FETCHER_H
+#pragma once
 
 #include <postgres.h>
 #include <access/tupdesc.h>
@@ -100,5 +99,3 @@ assert_df_type(DataFetcherType type, DataFetcher *df)
 #else
 #define cast_fetcher(type, dfptr) ((type *) dfptr)
 #endif /* USE_ASSERT_CHECKING */
-
-#endif /* TIMESCALEDB_TSL_REMOTE_DATA_FETCHER_H */

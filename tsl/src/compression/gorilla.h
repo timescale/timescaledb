@@ -3,6 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#pragma once
+
 /*
  *  The Gorilla algorithm compresses floats and is modeled after the Facebook Gorilla paper:
  *  "Gorilla: A Fast, Scalable, In-Memory Time Series Database" by Tuomas Pelkonen et. al.
@@ -57,8 +59,6 @@
  *     you are done.
  *
  */
-#ifndef TIMESCALEDB_TSL_FLOAT_COMPRESSION_H
-#define TIMESCALEDB_TSL_FLOAT_COMPRESSION_H
 
 #include <postgres.h>
 #include <c.h>
@@ -104,5 +104,3 @@ extern Datum tsl_gorilla_compressor_finish(PG_FUNCTION_ARGS);
 		.compressor_for_type = gorilla_compressor_for_type,                                        \
 		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
 	}
-
-#endif

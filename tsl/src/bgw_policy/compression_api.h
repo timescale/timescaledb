@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_BGW_POLICY_COMPRESSION_API_H
-#define TIMESCALEDB_TSL_BGW_POLICY_COMPRESSION_API_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/jsonb.h>
@@ -30,5 +28,3 @@ Datum policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_dat
 									  bool fixed_schedule, TimestampTz initial_start,
 									  const char *timezone);
 bool policy_compression_remove_internal(Oid user_rel_oid, bool if_exists);
-
-#endif /* TIMESCALEDB_TSL_BGW_POLICY_COMPRESSION_API_H */

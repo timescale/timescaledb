@@ -7,7 +7,6 @@
 /*
  * Functions for working with vectorized predicates.
  */
-
 #pragma once
 
 typedef void(VectorPredicate)(const ArrowArray *, Datum, uint64 *restrict);

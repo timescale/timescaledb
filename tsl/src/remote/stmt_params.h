@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_STMT_PARAMS_H
-#define TIMESCALEDB_TSL_REMOTE_STMT_PARAMS_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -29,5 +28,3 @@ extern void stmt_params_reset(StmtParams *params);
 extern void stmt_params_free(StmtParams *params);
 extern int stmt_params_total_values(StmtParams *stmt_params);
 extern int stmt_params_converted_tuples(StmtParams *stmt_params);
-
-#endif

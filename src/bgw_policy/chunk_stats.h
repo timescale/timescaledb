@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_BGW_JOB_CHUNK_STATS_H
-#define TIMESCALEDB_BGW_JOB_CHUNK_STATS_H
+#pragma once
 
 #include "ts_catalog/catalog.h"
 #include "export.h"
@@ -21,5 +19,3 @@ extern void ts_bgw_policy_chunk_stats_delete_row_only_by_job_id(int32 job_id);
 extern void ts_bgw_policy_chunk_stats_delete_by_chunk_id(int32 chunk_id);
 extern TSDLLEXPORT void ts_bgw_policy_chunk_stats_record_job_run(int32 job_id, int32 chunk_id,
 																 TimestampTz last_time_job_run);
-
-#endif /* TIMESCALEDB_BGW_JOB_CHUNK_STATS_H */

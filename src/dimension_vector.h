@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DIMENSION_VECTOR_H
-#define TIMESCALEDB_DIMENSION_VECTOR_H
+#pragma once
 
 #include <postgres.h>
 
@@ -39,5 +38,3 @@ extern DimensionSlice *ts_dimension_vec_find_slice(const DimensionVec *vec, int6
 extern int ts_dimension_vec_find_slice_index(const DimensionVec *vec, int32 dimension_slice_id);
 extern const DimensionSlice *ts_dimension_vec_get(const DimensionVec *vec, int32 index);
 extern void ts_dimension_vec_free(DimensionVec *vec);
-
-#endif /* TIMESCALEDB_DIMENSION_VECTOR_H */

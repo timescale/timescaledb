@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_ANNOTATIONS_H
-#define TIMESCALEDB_ANNOTATIONS_H
+#pragma once
 
 /* Supported since clang 12 and GCC 7 */
 #if defined __has_attribute
@@ -26,5 +25,3 @@
 #else
 #define TS_USED
 #endif
-
-#endif /* TIMESCALEDB_ANNOTATIONS_H */

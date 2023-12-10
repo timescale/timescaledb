@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_FDW_UTILS_H
-#define TIMESCALEDB_TSL_FDW_FDW_UTILS_H
+#pragma once
 
 #include <postgres.h>
 #include <optimizer/paths.h>
@@ -21,5 +20,3 @@ extern void fdw_utils_free_path(ConsideredPath *path);
 #define fdw_utils_add_path(rel, path) add_path(rel, path);
 
 #endif /* TS_DEBUG */
-
-#endif /* TIMESCALEDB_TSL_FDW_FDW_UTILS_H */

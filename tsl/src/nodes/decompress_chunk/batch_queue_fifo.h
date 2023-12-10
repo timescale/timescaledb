@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_BATCH_QUEUE_FIFO_H
-#define TIMESCALEDB_BATCH_QUEUE_FIFO_H
+#pragma once
 
 #include "batch_queue.h"
 #include "compressed_batch.h"
@@ -69,5 +68,3 @@ static const struct BatchQueueFunctions BatchQueueFunctionsFifo = {
 
 extern BatchQueue *batch_queue_fifo_create(int num_compressed_cols, Size batch_memory_context_bytes,
 										   const BatchQueueFunctions *funcs);
-
-#endif /* TIMESCALEDB_BATCH_QUEUE_FIFO_H */

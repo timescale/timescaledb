@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_FUNC_CACHE_H
-#define TIMESCALEDB_FUNC_CACHE_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/primnodes.h>
@@ -48,5 +47,3 @@ typedef struct FuncInfo
 
 extern TSDLLEXPORT FuncInfo *ts_func_cache_get(Oid funcid);
 extern TSDLLEXPORT FuncInfo *ts_func_cache_get_bucketing_func(Oid funcid);
-
-#endif /* TIMESCALEDB_FUNC_CACHE_H */

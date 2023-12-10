@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TELEMETRY_STATS_H
-#define TIMESCALEDB_TELEMETRY_STATS_H
-
+#pragma once
 #include <postgres.h>
 
 #include "utils.h"
@@ -105,5 +103,3 @@ typedef struct TelemetryJobStats
 } TelemetryJobStats;
 
 extern void ts_telemetry_stats_gather(TelemetryStats *stats);
-
-#endif /* TIMESCALEDB_TELEMETRY_STATS_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_SCAN_EXEC_H
-#define TIMESCALEDB_TSL_FDW_SCAN_EXEC_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/rel.h>
@@ -68,5 +67,3 @@ extern TimestampTz ts_current_timestamp_override_value;
 /* Allow tests to specify the time to push down in place of now() */
 extern void fdw_scan_debug_override_current_timestamp(TimestampTz time);
 #endif
-
-#endif /* TIMESCALEDB_TSL_FDW_SCAN_EXEC_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_EVENT_TRIGGER_H
-#define TIMESCALEDB_EVENT_TRIGGER_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pg_list.h>
@@ -72,5 +71,3 @@ extern List *ts_event_trigger_dropped_objects(void);
 extern List *ts_event_trigger_ddl_commands(void);
 extern void _event_trigger_init(void);
 extern void _event_trigger_fini(void);
-
-#endif /* TIMESCALEDB_EVENT_TRIGGER_H */

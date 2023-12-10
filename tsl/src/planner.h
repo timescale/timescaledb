@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_PLANNER_H
-#define TIMESCALEDB_TSL_PLANNER_H
+#pragma once
 
 #include <postgres.h>
 #include <optimizer/planner.h>
@@ -19,5 +18,3 @@ void tsl_set_rel_pathlist_dml(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry 
 void tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
 Path *tsl_create_distributed_insert_path(PlannerInfo *root, ModifyTablePath *mtpath,
 										 Index hypertable_rti, int subplan_index);
-
-#endif /* TIMESCALEDB_TSL_PLANNER_H */

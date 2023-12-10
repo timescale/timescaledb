@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_ESTIMATE_H
-#define TIMESCALEDB_ESTIMATE_H
+#pragma once
 
 #include <postgres.h>
 
@@ -14,5 +13,3 @@
 extern double ts_estimate_group_expr_interval(PlannerInfo *root, Expr *expr,
 											  double interval_period);
 extern double ts_estimate_group(PlannerInfo *root, double path_rows);
-
-#endif /* TIMESCALEDB_ESTIMATE_H */

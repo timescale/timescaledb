@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_SUBSPACE_STORE_H
-#define TIMESCALEDB_SUBSPACE_STORE_H
+#pragma once
 
 #include <postgres.h>
 #include "dimension.h"
@@ -32,5 +31,3 @@ extern void ts_subspace_store_add(SubspaceStore *subspace_store, const Hypercube
 extern void *ts_subspace_store_get(const SubspaceStore *subspace_store, const Point *target);
 extern void ts_subspace_store_free(SubspaceStore *subspace_store);
 extern MemoryContext ts_subspace_store_mcxt(const SubspaceStore *subspace_store);
-
-#endif /* TIMESCALEDB_SUBSPACE_STORE_H */

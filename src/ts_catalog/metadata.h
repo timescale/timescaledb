@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_METADATA_H
-#define TIMESCALEDB_METADATA_H
+#pragma once
 
 #include <postgres.h>
 #include "export.h"
@@ -30,5 +29,3 @@ extern TSDLLEXPORT void ts_metadata_drop(const char *metadata_key);
 extern TSDLLEXPORT Datum ts_metadata_get_uuid(void);
 extern Datum ts_metadata_get_exported_uuid(void);
 extern Datum ts_metadata_get_install_timestamp(void);
-
-#endif /* TIMESCALEDB_METADATA_H */

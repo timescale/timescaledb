@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_NODES_GAPFILL_INTERNAL_H
-#define TIMESCALEDB_TSL_NODES_GAPFILL_INTERNAL_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
@@ -126,5 +125,3 @@ Node *gapfill_state_create(CustomScan *);
 Expr *gapfill_adjust_varnos(GapFillState *state, Expr *expr);
 Datum gapfill_exec_expr(GapFillState *state, Expr *expr, bool *isnull);
 int64 gapfill_datum_get_internal(Datum, Oid);
-
-#endif /* TIMESCALEDB_TSL_NODES_GAPFILL_INTERNAL_H */

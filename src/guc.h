@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_GUC_H
-#define TIMESCALEDB_GUC_H
+#pragma once
 
 #include <postgres.h>
 #include "export.h"
@@ -133,5 +132,3 @@ typedef enum
 } FeatureFlagType;
 
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
-
-#endif /* TIMESCALEDB_GUC_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_CHUNK_H
-#define TIMESCALEDB_TSL_CHUNK_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -22,5 +21,3 @@ extern int chunk_invoke_drop_chunks(Oid relid, Datum older_than, Datum older_tha
 									bool use_creation_time);
 extern Datum chunk_create_replica_table(PG_FUNCTION_ARGS);
 extern void chunk_update_stale_metadata(Chunk *new_chunk, List *chunk_data_nodes);
-
-#endif /* TIMESCALEDB_TSL_CHUNK_H */

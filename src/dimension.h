@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DIMENSION_H
-#define TIMESCALEDB_DIMENSION_H
+#pragma once
 
 #include <postgres.h>
 #include <access/attnum.h>
@@ -168,5 +167,3 @@ extern TSDLLEXPORT Datum ts_dimension_info_out(PG_FUNCTION_ARGS);
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_OPEN, i)
 #define hyperspace_get_closed_dimension(space, i)                                                  \
 	ts_hyperspace_get_dimension(space, DIMENSION_TYPE_CLOSED, i)
-
-#endif /* TIMESCALEDB_DIMENSION_H */

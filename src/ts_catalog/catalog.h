@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CATALOG_H
-#define TIMESCALEDB_CATALOG_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/jsonb.h>
@@ -1568,5 +1567,3 @@ bool TSDLLEXPORT ts_catalog_scan_one(CatalogTable table, int indexid, ScanKeyDat
 void TSDLLEXPORT ts_catalog_scan_all(CatalogTable table, int indexid, ScanKeyData *scankey,
 									 int num_keys, tuple_found_func tuple_found, LOCKMODE lockmode,
 									 void *data);
-
-#endif /* TIMESCALEDB_CATALOG_H */

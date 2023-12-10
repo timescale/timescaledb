@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CROSS_MODULE_FN_H
-#define TIMESCALEDB_CROSS_MODULE_FN_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -220,5 +219,3 @@ typedef struct CrossModuleFunctions
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;
 extern TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default;
-
-#endif /* TIMESCALEDB_CROSS_MODULE_FN_H */

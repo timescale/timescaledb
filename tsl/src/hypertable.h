@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_HYPERTABLE_H
-#define TIMESCALEDB_TSL_HYPERTABLE_H
+#pragma once
 
 #include <hypertable.h>
 #include "dimension.h"
@@ -19,5 +18,3 @@ extern void hypertable_make_distributed(Hypertable *ht, List *data_node_names);
 extern List *hypertable_assign_data_nodes(int32 hypertable_id, List *nodes);
 extern List *hypertable_get_and_validate_data_nodes(ArrayType *nodearr);
 extern Datum hypertable_set_replication_factor(PG_FUNCTION_ARGS);
-
-#endif /* TIMESCALEDB_TSL_HYPERTABLE_H */

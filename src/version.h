@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_VERSION_H
-#define TIMESCALEDB_VERSION_H
+#pragma once
 
 #include <postgres.h>
 
@@ -20,5 +19,3 @@ typedef struct VersionOSInfo
 } VersionOSInfo;
 
 extern bool ts_version_get_os_info(VersionOSInfo *info);
-
-#endif /* TIMESCALEDB_VERSION_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef BGW_JOB_H
-#define BGW_JOB_H
+#pragma once
 
 #include <postgres.h>
 #include <storage/lock.h>
@@ -69,5 +68,3 @@ extern TSDLLEXPORT void ts_bgw_job_validate_schedule_interval(Interval *schedule
 extern TSDLLEXPORT char *ts_bgw_job_validate_timezone(Datum timezone);
 
 extern TSDLLEXPORT bool ts_is_telemetry_job(BgwJob *job);
-
-#endif /* BGW_JOB_H */
