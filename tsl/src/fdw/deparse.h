@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_DEPARSE_H
-#define TIMESCALEDB_TSL_FDW_DEPARSE_H
+#pragma once
 
 #include <postgres.h>
 #include "data_node_chunk_assignment.h"
@@ -55,5 +54,3 @@ extern const char *get_jointype_name(JoinType jointype);
 extern void deparseStringLiteral(StringInfo buf, const char *val);
 extern void deparseAnalyzeSizeSql(StringInfo buf, Relation rel);
 extern void deparseAnalyzeSql(StringInfo buf, Relation rel, List **retrieved_attrs);
-
-#endif /* TIMESCALEDB_TSL_FDW_DEPARSE_H */

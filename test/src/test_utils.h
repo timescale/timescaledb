@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TEST_UTILS_H
-#define TIMESCALEDB_TEST_UTILS_H
+#pragma once
 
 #include <postgres.h>
 #include <access/xact.h>
@@ -95,5 +94,3 @@ strip_path(const char *filename)
 #define TS_TEST_FN(name)                                                                           \
 	TS_FUNCTION_INFO_V1(name);                                                                     \
 	Datum name(PG_FUNCTION_ARGS)
-
-#endif /* TIMESCALEDB_TEST_UTILS_H */

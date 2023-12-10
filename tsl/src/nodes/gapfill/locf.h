@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_NODES_GAPFILL_LOCF_H
-#define TIMESCALEDB_TSL_NODES_GAPFILL_LOCF_H
+#pragma once
 
 #include <postgres.h>
 
@@ -24,5 +22,3 @@ void gapfill_locf_initialize(GapFillLocfColumnState *, GapFillState *, FuncExpr 
 void gapfill_locf_group_change(GapFillLocfColumnState *);
 void gapfill_locf_tuple_returned(GapFillLocfColumnState *, Datum, bool);
 void gapfill_locf_calculate(GapFillLocfColumnState *, GapFillState *, int64, Datum *, bool *);
-
-#endif /* TIMESCALEDB_TSL_NODES_GAPFILL_LOCF_H */

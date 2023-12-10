@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CONN_PLAIN_H
-#define TIMESCALEDB_CONN_PLAIN_H
+#pragma once
 
 typedef struct Connection Connection;
 
@@ -19,5 +18,3 @@ extern int ts_plain_connect(Connection *conn, const char *host, const char *serv
 extern void ts_plain_close(Connection *conn);
 extern int ts_plain_set_timeout(Connection *conn, unsigned long millis);
 extern const char *ts_plain_errmsg(Connection *conn);
-
-#endif /* TIMESCALEDB_CONN_PLAIN_H */

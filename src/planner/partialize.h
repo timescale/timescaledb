@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_PLAN_PARTIALIZE_H
-#define TIMESCALEDB_PLAN_PARTIALIZE_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pathnodes.h>
@@ -14,5 +13,3 @@
 
 void ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel,
 							 RelOptInfo *output_rel, void *extra);
-
-#endif /* TIMESCALEDB_PLAN_PARTIALIZE_H */

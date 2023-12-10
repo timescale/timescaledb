@@ -3,9 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#pragma once
 
-#ifndef TIMESCALEDB_CONTINUOUS_AGG_H
-#define TIMESCALEDB_CONTINUOUS_AGG_H
 #include <postgres.h>
 #include <catalog/pg_type.h>
 #include <nodes/parsenodes.h>
@@ -229,5 +228,3 @@ extern TSDLLEXPORT int64 ts_compute_beginning_of_the_next_bucket_variable(
 	int64 timeval, const ContinuousAggsBucketFunction *bf);
 
 extern TSDLLEXPORT Query *ts_continuous_agg_get_query(ContinuousAgg *cagg);
-
-#endif /* TIMESCALEDB_CONTINUOUS_AGG_H */

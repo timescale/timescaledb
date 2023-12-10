@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_TXN_ID_H
-#define TIMESCALEDB_TSL_REMOTE_TXN_ID_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/fmgrprotos.h>
@@ -58,5 +57,3 @@ extern Datum remote_txn_id_out_pg(PG_FUNCTION_ARGS);
 extern const char *remote_txn_id_prepare_transaction_sql(RemoteTxnId *);
 extern const char *remote_txn_id_commit_prepared_sql(RemoteTxnId *);
 extern const char *remote_txn_id_rollback_prepared_sql(RemoteTxnId *);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_TXN_ID_H */

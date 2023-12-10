@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TYPE_CACHE_H
-#define TIMESCALEDB_TYPE_CACHE_H
+#pragma once
 
 #include <postgres.h>
 #include "compat/compat.h"
@@ -26,5 +25,3 @@ typedef struct CustomTypeInfo
 } CustomTypeInfo;
 
 extern TSDLLEXPORT CustomTypeInfo *ts_custom_type_cache_get(CustomType type);
-
-#endif /* TIMESCALEDB_TYPE_CACHE_H */

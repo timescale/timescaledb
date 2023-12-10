@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_CONNECTION_H
-#define TIMESCALEDB_TSL_REMOTE_CONNECTION_H
+#pragma once
 
 #include <postgres.h>
 #include <foreign/foreign.h>
@@ -208,5 +207,3 @@ extern void remote_connection_get_result_error(const PGresult *res, TSConnection
 
 extern void _remote_connection_init(void);
 extern void _remote_connection_fini(void);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_CONNECTION_H */

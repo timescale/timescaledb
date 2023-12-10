@@ -1,8 +1,7 @@
 /*
  * NOTE: adaptive chunking is still in BETA
  */
-#ifndef TIMESCALEDB_CHUNK_ADAPTIVE_H
-#define TIMESCALEDB_CHUNK_ADAPTIVE_H
+#pragma once
 
 #include <postgres.h>
 
@@ -28,5 +27,3 @@ extern void ts_chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info);
 extern TSDLLEXPORT ChunkSizingInfo *ts_chunk_sizing_info_get_default_disabled(Oid table_relid);
 
 extern TSDLLEXPORT int64 ts_chunk_calculate_initial_chunk_target_size(void);
-
-#endif /* TIMESCALEDB_CHUNK_ADAPTIVE_H */

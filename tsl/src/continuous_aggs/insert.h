@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_INSERT_H
-#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_INSERT_H
+#pragma once
 
 #include <postgres.h>
 
@@ -16,5 +15,3 @@ extern void execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTu
 								 HeapTuple chunk_newtuple, bool update,
 								 bool is_distributed_hypertable_trigger,
 								 int32 parent_hypertable_id);
-
-#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_INSERT_H */

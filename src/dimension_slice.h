@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DIMENSION_SLICE_H
-#define TIMESCALEDB_DIMENSION_SLICE_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pg_list.h>
@@ -115,5 +114,3 @@ extern int ts_dimension_slice_update_by_id(int32 dimension_slice_id,
 
 #define dimension_slice_collision_scan(dimension_id, range_start, range_end)                       \
 	ts_dimension_slice_collision_scan_limit(dimension_id, range_start, range_end, 0)
-
-#endif /* TIMESCALEDB_DIMENSION_SLICE_H */

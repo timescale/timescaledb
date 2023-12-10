@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_SIMPLE8B_RLE_OOB_H
-#define TIMESCALEDB_TSL_SIMPLE8B_RLE_OOB_H
+#pragma once
 
 #include <postgres.h>
 #include <c.h>
@@ -894,5 +893,3 @@ simple8brle_bits_for_value(uint64 v)
 	}
 	return r;
 }
-
-#endif

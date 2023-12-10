@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#pragma once
 
 /*
  * This file contains source code that was copied and/or modified from the

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_NODE_KILLER_H
-#define TIMESCALEDB_TSL_REMOTE_NODE_KILLER_H
+#pragma once
 
 #include <postgres.h>
 #include <libpq-fe.h>
@@ -25,5 +24,3 @@ extern void remote_node_killer_init(RemoteNodeKiller *rnk, const TSConnection *c
 void remote_node_killer_kill(RemoteNodeKiller *rnk);
 
 extern void remote_node_killer_kill_on_event(const char *event);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_NODE_KILLER_H */

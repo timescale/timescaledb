@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CHUNK_DATA_NODE_H
-#define TIMESCALEDB_CHUNK_DATA_NODE_H
+#pragma once
 
 #include "ts_catalog/catalog.h"
 #include "chunk.h"
@@ -40,4 +39,3 @@ extern TSDLLEXPORT void ts_chunk_data_nodes_scan_iterator_set_chunk_id(ScanItera
 																	   int32 chunk_id);
 extern TSDLLEXPORT void ts_chunk_data_nodes_scan_iterator_set_node_name(ScanIterator *it,
 																		const char *node_name);
-#endif /* TIMESCALEDB_CHUNK_DATA_NODE_H */

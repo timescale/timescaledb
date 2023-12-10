@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef BGW_SCHEDULER_H
-#define BGW_SCHEDULER_H
+#pragma once
+
 #include <postgres.h>
 #include <fmgr.h>
 #include "compat/compat.h"
@@ -36,5 +36,3 @@ extern void ts_bgw_scheduler_register_signal_handlers(void);
 extern void ts_bgw_scheduler_setup_mctx(void);
 
 extern BackgroundWorkerHandle *ts_bgw_start_worker(const char *name, const BgwParams *bgw_params);
-
-#endif /* BGW_SCHEDULER_H */

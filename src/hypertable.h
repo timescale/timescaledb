@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_H
-#define TIMESCALEDB_HYPERTABLE_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/primnodes.h>
@@ -202,5 +201,3 @@ extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_n
 	(hypertable_is_distributed(ht) ? RELKIND_FOREIGN_TABLE : RELKIND_RELATION)
 #define hypertable_is_distributed_member(ht)                                                       \
 	((ht)->fd.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)
-
-#endif /* TIMESCALEDB_HYPERTABLE_H */

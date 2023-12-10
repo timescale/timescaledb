@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_BGW_COUNTER_H
-#define TIMESCALEDB_BGW_COUNTER_H
+#pragma once
 
 #include <postgres.h>
 
@@ -22,5 +20,3 @@ extern void ts_bgw_total_workers_decrement(void);
 extern int ts_bgw_total_workers_get(void);
 extern bool ts_bgw_total_workers_increment_by(int increment_by);
 extern void ts_bgw_total_workers_decrement_by(int decrement_by);
-
-#endif /* TIMESCALEDB_BGW_COUNTER_H */

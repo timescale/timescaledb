@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_CACHE_H
-#define TIMESCALEDB_HYPERTABLE_CACHE_H
+#pragma once
 
 #include <postgres.h>
 
@@ -59,5 +58,3 @@ extern TSDLLEXPORT Cache *ts_hypertable_cache_pin(void);
 
 extern void _hypertable_cache_init(void);
 extern void _hypertable_cache_fini(void);
-
-#endif /* TIMESCALEDB_HYPERTABLE_CACHE_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CACHE_H
-#define TIMESCALEDB_CACHE_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/memutils.h>
@@ -71,5 +70,3 @@ extern TSDLLEXPORT int ts_cache_release(Cache *cache);
 
 extern void _cache_init(void);
 extern void _cache_fini(void);
-
-#endif /* TIMESCALEDB_CACHE_H */

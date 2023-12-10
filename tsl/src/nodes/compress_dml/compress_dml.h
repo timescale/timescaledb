@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_COMPRESS_CHUNK_DML_H
-#define TIMESCALEDB_COMPRESS_CHUNK_DML_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
@@ -27,4 +26,3 @@ typedef struct CompressChunkDmlState
 Path *compress_chunk_dml_generate_paths(Path *subpath, Chunk *chunk);
 
 #define COMPRESS_CHUNK_DML_STATE_NAME "CompressChunkDmlState"
-#endif

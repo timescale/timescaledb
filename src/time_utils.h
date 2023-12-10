@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TIME_UTILS_H
-#define TIMESCALEDB_TIME_UTILS_H
+#pragma once
 
 #include <postgres.h>
 
@@ -92,5 +91,3 @@ extern TSDLLEXPORT int64 ts_subtract_integer_from_now_saturating(Oid now_func, i
 #ifdef TS_DEBUG
 extern TSDLLEXPORT Datum ts_get_mock_time_or_current_time(void);
 #endif
-
-#endif /* TIMESCALEDB_TIME_UTILS_H */

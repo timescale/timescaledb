@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DEBUG_POINT_H_
-#define TIMESCALEDB_DEBUG_POINT_H_
+#pragma once
 
 #include <postgres.h>
 #include "export.h"
@@ -25,5 +24,3 @@ extern TSDLLEXPORT void ts_debug_point_raise_error_if_enabled(const char *name);
 #define DEBUG_ERROR_INJECTION(NAME)
 
 #endif
-
-#endif /* TIMESCALEDB_DEBUG_POINT_H_ */

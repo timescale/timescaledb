@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#pragma once
 
 /*
  * This file contains source code that was copied and/or modified from
@@ -10,8 +11,6 @@
  * PostgreSQL License. Please see the NOTICE at the top level
  * directory for a copy of the PostgreSQL License.
  */
-
-#pragma once
 
 #include <postgres.h>
 

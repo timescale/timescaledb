@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERCUBE_H
-#define TIMESCALEDB_HYPERCUBE_H
+#pragma once
 
 #include <postgres.h>
 
@@ -45,5 +44,3 @@ extern TSDLLEXPORT const DimensionSlice *ts_hypercube_get_slice_by_dimension_id(
 extern Hypercube *ts_hypercube_copy(const Hypercube *hc);
 extern bool ts_hypercube_equal(const Hypercube *hc1, const Hypercube *hc2);
 extern void ts_hypercube_slice_sort(Hypercube *hc);
-
-#endif /* TIMESCALEDB_HYPERCUBE_H */

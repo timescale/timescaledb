@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_FINALIZE_H
-#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_FINALIZE_H
+#pragma once
 
 #include <postgres.h>
 
@@ -36,4 +35,3 @@ extern void finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query,
 							   MatTableColumnInfo *mattblinfo);
 extern Query *finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 											 ObjectAddress *mattbladdress, char *relname);
-#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_FINALIZE_H */

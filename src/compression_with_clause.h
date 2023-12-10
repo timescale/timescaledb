@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_COMPRESSION_WITH_CLAUSE_H
-#define TIMESCALEDB_COMPRESSION_WITH_CLAUSE_H
+#pragma once
+
 #include <postgres.h>
 #include <catalog/pg_type.h>
 
@@ -38,5 +38,3 @@ extern TSDLLEXPORT List *ts_compress_hypertable_parse_order_by(WithClauseResult 
 extern TSDLLEXPORT Interval *
 ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_options,
 												 Hypertable *hypertable);
-
-#endif

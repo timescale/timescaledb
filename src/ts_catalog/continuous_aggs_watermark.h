@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_CONTINUOUS_AGGS_WATERMARK_H
-#define TIMESCALEDB_CONTINUOUS_AGGS_WATERMARK_H
+#pragma once
 
 #include <postgres.h>
 
@@ -17,5 +15,3 @@ extern TSDLLEXPORT void ts_cagg_watermark_insert(Hypertable *mat_ht, int64 water
 												 bool watermark_isnull);
 extern TSDLLEXPORT void ts_cagg_watermark_update(Hypertable *mat_ht, int64 watermark,
 												 bool watermark_isnull, bool force_update);
-
-#endif /* TIMESCALEDB_CONTINUOUS_AGGS_WATERMARK_H */

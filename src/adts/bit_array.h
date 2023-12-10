@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_ADT_BITARRAY_H
-#define TIMESCALEDB_ADT_BITARRAY_H
+#pragma once
 
 #include <postgres.h>
 
@@ -54,5 +53,3 @@ static uint64 bit_array_num_bits(const BitArray *array);
 static uint32 bit_array_num_buckets(const BitArray *array);
 static uint64 *bit_array_buckets(const BitArray *array);
 static size_t bit_array_data_bytes_used(const BitArray *array);
-
-#endif

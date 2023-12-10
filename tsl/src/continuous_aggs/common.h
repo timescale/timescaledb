@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_COMMON_H
-#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_COMMON_H
+#pragma once
 
 #include <postgres.h>
 
@@ -133,5 +131,3 @@ extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Qu
 extern void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist);
 extern void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo);
 extern bool function_allowed_in_cagg_definition(Oid funcid);
-
-#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_COMMON_H */
