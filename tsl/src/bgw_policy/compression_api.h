@@ -19,9 +19,6 @@ extern Datum policy_recompression_proc(PG_FUNCTION_ARGS);
 extern Datum policy_compression_check(PG_FUNCTION_ARGS);
 
 int32 policy_compression_get_hypertable_id(const Jsonb *config);
-int64 policy_compression_get_compress_after_int(const Jsonb *config);
-Interval *policy_compression_get_compress_after_interval(const Jsonb *config);
-Interval *policy_compression_get_compress_created_before_interval(const Jsonb *config);
 int32 policy_compression_get_maxchunks_per_job(const Jsonb *config);
 int64 policy_recompression_get_recompress_after_int(const Jsonb *config);
 Interval *policy_recompression_get_recompress_after_interval(const Jsonb *config);
