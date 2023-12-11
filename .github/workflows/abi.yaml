@@ -50,37 +50,37 @@ jobs:
         include:
           - test: 13backward
             pg: 13
-            builder: ${{ fromJson(needs.config.outputs.pg13_latest) }}
-            tester: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}
+            builder: ${{ fromJson(needs.config.outputs.pg13_latest) }}-alpine3.18
+            tester: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}-alpine
           - test: 13forward
             pg: 13
-            builder: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}
-            tester: ${{ fromJson(needs.config.outputs.pg13_latest) }}
+            builder: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}-alpine
+            tester: ${{ fromJson(needs.config.outputs.pg13_latest) }}-alpine3.18
           - test: 14backward
             pg: 14
-            builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}
-            tester: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
+            builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.18
+            tester: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}-alpine
             ignores: memoize
           - test: 14forward
             pg: 14
-            builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}
-            tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}
+            builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}-alpine
+            tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.18
           - test: 15backward
             pg: 15
-            builder: ${{ fromJson(needs.config.outputs.pg15_latest) }}
-            tester: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
+            builder: ${{ fromJson(needs.config.outputs.pg15_latest) }}-alpine3.18
+            tester: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}-alpine
           - test: 15forward
             pg: 15
-            builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}
-            tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}
+            builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}-alpine
+            tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}-alpine3.18
           - test: 16backward
             pg: 16
-            builder: ${{ fromJson(needs.config.outputs.pg16_latest) }}
-            tester: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
+            builder: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.18
+            tester: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
           - test: 16forward
             pg: 16
-            builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}
-            tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}
+            builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
+            tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.18
 
     steps:
 
@@ -89,7 +89,7 @@ jobs:
 
     - name: Build extension
       run: |
-        BUILDER_IMAGE="postgres:${{matrix.builder}}-alpine"
+        BUILDER_IMAGE="postgres:${{matrix.builder}}"
 
         docker pull ${BUILDER_IMAGE}
         docker buildx imagetools inspect ${BUILDER_IMAGE}
@@ -104,7 +104,7 @@ jobs:
           apk add openssl1.1-compat-dev || apk add openssl-dev
           git config --global --add safe.directory /mnt
           cd /mnt
-          BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap -DENABLE_MULTINODE_TESTS=ON
+          BUILD_DIR=build_abi BUILD_FORCE_REMOVE=true ./bootstrap
           make -C build_abi install
           mkdir -p build_abi/install_ext build_abi/install_lib
           cp `pg_config --sharedir`/extension/timescaledb*.{control,sql} build_abi/install_ext
@@ -113,7 +113,7 @@ jobs:
 
     - name: Run tests
       run: |
-        TEST_IMAGE="postgres:${{ matrix.tester }}-alpine"
+        TEST_IMAGE="postgres:${{ matrix.tester }}"
 
         docker pull ${TEST_IMAGE}
         docker buildx imagetools inspect ${TEST_IMAGE}
