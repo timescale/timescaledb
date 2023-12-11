@@ -184,8 +184,6 @@ typedef struct CrossModuleFunctions
 	PGFunction remote_connection_cache_show;
 	void (*create_chunk_on_data_nodes)(const Chunk *chunk, const Hypertable *ht,
 									   const char *remote_chunk_name, List *data_nodes);
-	Path *(*distributed_insert_path_create)(PlannerInfo *root, ModifyTablePath *mtpath,
-											Index hypertable_rti, int subpath_index);
 	uint64 (*distributed_copy)(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums);
 	bool (*set_distributed_id)(Datum id);
 	void (*set_distributed_peer_id)(Datum id);

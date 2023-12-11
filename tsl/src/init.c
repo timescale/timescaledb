@@ -33,7 +33,6 @@
 #include "continuous_aggs/repair.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
-#include "nodes/data_node_dispatch.h"
 #include "data_node.h"
 #include "dist_util.h"
 #include "export.h"
@@ -223,7 +222,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_txn_heal_data_node = remote_txn_heal_data_node,
 	.remote_connection_cache_show = remote_connection_cache_show,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
-	.distributed_insert_path_create = tsl_create_distributed_insert_path,
 	.distributed_copy = remote_distributed_copy,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
