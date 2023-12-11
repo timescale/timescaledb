@@ -29,7 +29,6 @@
 #include <foreign/foreign.h>
 #include <libpq-fe.h>
 
-#include "fdw/fdw.h"
 #include "data_node.h"
 #include "deparse.h"
 #include "remote/dist_commands.h"

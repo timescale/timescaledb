@@ -16,9 +16,6 @@
 #include <miscadmin.h>
 
 #include "async_append.h"
-#include "fdw/scan_plan.h"
-#include "fdw/scan_exec.h"
-#include "fdw/data_node_scan_plan.h"
 #include "planner.h"
 #include "cache.h"
 #include "hypertable.h"
@@ -351,15 +348,7 @@ static CustomPathMethods async_append_path_methods = {
 static bool
 is_data_node_scan_path(Path *path)
 {
-	CustomPath *cpath;
-	if (!IsA(path, CustomPath))
-		return false;
-
-	cpath = castNode(CustomPath, path);
-	if (strcmp(cpath->methods->CustomName, DATA_NODE_SCAN_PATH_NAME) != 0)
-		return false;
-
-	return true;
+	return false;
 }
 
 static void
