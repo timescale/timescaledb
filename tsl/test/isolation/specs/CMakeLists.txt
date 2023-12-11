@@ -17,10 +17,6 @@ list(
   deadlock_drop_chunks_compress.spec
   osm_range_updates_iso.spec)
 
-if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-  list(APPEND TEST_FILES cagg_concurrent_refresh_dist_ht.spec)
-endif()
-
 if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
   list(APPEND TEST_FILES concurrent_decompress_update.spec)
 endif()
@@ -40,20 +36,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
      OR PG_VERSION VERSION_GREATER "13.3"
      OR PG_VERSION VERSION_GREATER_EQUAL "14.0")
     list(APPEND TEST_FILES deadlock_recompress_chunk.spec)
-  endif()
-
-  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-    list(
-      APPEND
-      TEST_FILES
-      cagg_multi_dist_ht.spec
-      cagg_drop_chunks_iso.spec
-      dist_ha_chunk_drop.spec
-      dist_restore_point.spec
-      remote_create_chunk.spec)
-
-    list(APPEND TEST_TEMPLATES_MODULE_DEBUG dist_cmd_exec.spec.in
-         dist_su_copy_chunk.spec.in)
   endif()
 
 endif(CMAKE_BUILD_TYPE MATCHES Debug)

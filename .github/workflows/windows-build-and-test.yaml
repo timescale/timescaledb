@@ -53,19 +53,18 @@ jobs:
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
         ignores: ["chunk_adaptive metadata telemetry"]
-        tsl_ignores: ["compression_algos remote_connection dist_move_chunk dist_param dist_insert dist_backup dist_cagg"]
-        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed cagg_ddl_dist_ht
-          data_fetcher dist_compression dist_remote_error remote_txn"]
+        tsl_ignores: ["compression_algos"]
+        tsl_skips: ["bgw_db_scheduler bgw_db_scheduler_fixed"]
         pg_config: ["-cfsync=off -cstatement_timeout=60s"]
         include:
           - pg: 13
-            tsl_skips_version: dist_grant-13 dist_partial_agg-13 telemetry_stats-13
+            tsl_skips_version: telemetry_stats-13
           - pg: 14
-            tsl_skips_version: dist_partial_agg-14 dist_grant-14 telemetry_stats-14
+            tsl_skips_version: telemetry_stats-14
           - pg: 15
-            tsl_skips_version: dist_partial_agg-15 dist_grant-15 telemetry_stats-15
+            tsl_skips_version: telemetry_stats-15
           - pg: 16
-            tsl_skips_version: dist_partial_agg-16 dist_grant-16 telemetry_stats-16
+            tsl_skips_version: telemetry_stats-16
     env:
       # PostgreSQL configuration
       PGPORT: 55432
