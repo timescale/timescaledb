@@ -67,20 +67,29 @@ jobs:
       - name: Check if the pull request changes the loader
         shell: bash --norc --noprofile {0}
         env:
+          BODY: ${{ github.event.pull_request.body }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Get the list of modified files in this pull request
-          files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path')
+          echo "$BODY" | egrep -qsi '^disable-check:.*\<loader-change\>'
+          if [[ $? -ne 0 ]]; then
+            # Get the list of modified files in this pull request
+            files=$(gh pr view $PR_NUMBER --json files --jq '.files.[].path')
 
-          # Check for loader changes
-          if echo "${files}" | grep -Eq "^src/loader/.+$"; then
-            echo "Warning: This PR changes the loader. Therefore, upgrading to the next TimescaleDB"
-            echo "version requires a restart of PostgreSQL. Please coordinate the release with the"
-            echo "cloud team before merging."
-            echo
-            echo "After the release is coordinated, add the 'upgrade-requires-restart' label"
-            echo "to the PR to acknowledge this warning."
-            exit 1
+            # Check for loader changes
+            if echo "${files}" | grep -Eq "^src/loader/.+$"; then
+              echo "Warning: This PR changes the loader. Therefore, upgrading to the next TimescaleDB"
+              echo "version requires a restart of PostgreSQL. Make sure to bump the loader version if"
+              echo "necessary and coordinate the release with the cloud team before merging."
+              echo
+              echo "After the release is coordinated, add the 'upgrade-requires-restart' label"
+              echo "to the PR to acknowledge this warning."
+              echo
+              echo "To disable this check, add this trailer to pull request message:"
+              echo
+              echo "Disable-check: loader-change"
+              echo
+              exit 1
+            fi
           fi
-      
+
