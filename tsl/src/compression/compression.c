@@ -1425,8 +1425,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 	 */
 	memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
 
-	decompressor.detoaster.mctx = CurrentMemoryContext;
-	decompressor.detoaster.toastrel = NULL;
+	detoaster_init(&decompressor.detoaster, CurrentMemoryContext);
 
 	return decompressor;
 }

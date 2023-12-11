@@ -39,7 +39,10 @@
  * attrsize is the total size of the TOAST value.
  * result is the varlena into which the results should be written.
  *
- * Modified from heap_fetch_toast_slice().
+ * This function is a modified copy of heap_fetch_toast_slice(). The difference
+ * is that it holds the open toast relation, index and other intermediate data
+ * for detoasting in the Detoaster struct, to allow them to be reused over many
+ * input tuples.
  */
 static void
 ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, struct varlena *result)
@@ -214,6 +217,18 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 								 expectedchunk,
 								 valueid,
 								 RelationGetRelationName(detoaster->toastrel))));
+}
+
+/*
+ * The memory context is used to store intermediate data, and is supposed to
+ * live over the calls to detoaster_detoast_attr().
+ * That function itself can be called in a short-lived memory context.
+ */
+void
+detoaster_init(Detoaster *detoaster, MemoryContext mctx)
+{
+	detoaster->toastrel = NULL;
+	detoaster->mctx = mctx;
 }
 
 void

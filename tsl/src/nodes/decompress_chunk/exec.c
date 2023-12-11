@@ -469,8 +469,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			lappend(dcontext->vectorized_quals_constified, constified);
 	}
 
-	dcontext->detoaster.toastrel = NULL;
-	dcontext->detoaster.mctx = CurrentMemoryContext;
+	detoaster_init(&dcontext->detoaster, CurrentMemoryContext);
 }
 
 /*
@@ -627,7 +626,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				tsl_get_decompress_all_function(header->compression_algorithm);
 			Assert(decompress_all != NULL);
 
-			 MemoryContextSwitchTo(dcontext->bulk_decompression_context);
+			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 			arrow = decompress_all(PointerGetDatum(header),
 								   column_description->typid,
