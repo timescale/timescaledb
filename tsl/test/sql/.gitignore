@@ -15,7 +15,6 @@
 /compression_permissions-*.sql
 /continuous_aggs-*.sql
 /continuous_aggs_deprecated-*.sql
-/deparse-*.sql
 /jit-*.sql
 /modify_exclusion-*.sql
 /plan_skip_scan-*.sql

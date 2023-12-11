@@ -114,10 +114,6 @@ set(SOLO_TESTS
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
     move
-    remote_connection_cache
-    remote_copy
-    remote_txn
-    remote_txn_resolve
     reorder
     telemetry_stats-${PG_VERSION_MAJOR})
 
@@ -149,8 +145,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_usage.sql.in
     compression_errors.sql.in
     continuous_aggs.sql.in
-    continuous_aggs_deprecated.sql.in
-    deparse.sql.in)
+    continuous_aggs_deprecated.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
   endif()
