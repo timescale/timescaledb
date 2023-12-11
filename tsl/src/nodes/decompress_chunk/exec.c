@@ -545,6 +545,9 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				break;
 			}
 
+			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
+			MemoryContextReset(batch_state->per_batch_context);
+
 			bool isnull_value, isnull_elements;
 			Datum value = slot_getattr(compressed_slot,
 									   column_description->compressed_scan_attno,
@@ -581,6 +584,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 							(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 							 errmsg("bigint out of range")));
 			}
+			MemoryContextSwitchTo(old_mctx);
 		}
 	}
 	else if (column_description->type == COMPRESSED_COLUMN)
@@ -598,6 +602,9 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				/* All compressed batches are processed. */
 				break;
 			}
+
+			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
+			MemoryContextReset(batch_state->per_batch_context);
 
 			/* Decompress data */
 			bool isnull;
@@ -620,8 +627,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				tsl_get_decompress_all_function(header->compression_algorithm);
 			Assert(decompress_all != NULL);
 
-			MemoryContext context_before_decompression =
-				MemoryContextSwitchTo(dcontext->bulk_decompression_context);
+			 MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 			arrow = decompress_all(PointerGetDatum(header),
 								   column_description->typid,
@@ -630,7 +636,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			Assert(arrow != NULL);
 
 			MemoryContextReset(dcontext->bulk_decompression_context);
-			MemoryContextSwitchTo(context_before_decompression);
+			MemoryContextSwitchTo(batch_state->per_batch_context);
 
 			/* A compressed batch consists of 1000 tuples (see MAX_ROWS_PER_COMPRESSION). The
 			 * attribute value is a int32 with a max value of 2^32. Even if all tuples have the max
@@ -657,6 +663,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				ereport(ERROR,
 						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 						 errmsg("bigint out of range")));
+			MemoryContextSwitchTo(old_mctx);
 		}
 	}
 	else

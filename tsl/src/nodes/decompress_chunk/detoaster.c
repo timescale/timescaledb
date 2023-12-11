@@ -49,9 +49,9 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 	/*
 	 * Open the toast relation and its indexes
 	 */
-	MemoryContext old_mctx = MemoryContextSwitchTo(detoaster->mctx);
 	if (detoaster->toastrel == NULL)
 	{
+		MemoryContext old_mctx = MemoryContextSwitchTo(detoaster->mctx);
 		detoaster->toastrel = table_open(toast_pointer->va_toastrelid, AccessShareLock);
 
 		int num_indexes;
@@ -82,6 +82,7 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 														  &detoaster->SnapshotToast,
 														  1,
 														  &detoaster->toastkey);
+		MemoryContextSwitchTo(old_mctx);
 	}
 	else
 	{
@@ -92,7 +93,6 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 		detoaster->toastkey.sk_argument = ObjectIdGetDatum(valueid);
 		index_rescan(detoaster->toastscan->iscan, &detoaster->toastkey, 1, NULL, 0);
 	}
-	MemoryContextSwitchTo(old_mctx);
 
 	TupleDesc toasttupDesc = detoaster->toastrel->rd_att;
 
