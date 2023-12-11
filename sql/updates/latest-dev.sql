@@ -74,3 +74,7 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable_compressi
 DROP VIEW IF EXISTS timescaledb_information.compression_settings;
 DROP TABLE _timescaledb_catalog.hypertable_compression;
 
+DROP FOREIGN DATA WRAPPER IF EXISTS timescaledb_fdw;
+DROP FUNCTION IF EXISTS @extschema@.timescaledb_fdw_handler();
+DROP FUNCTION IF EXISTS @extschema@.timescaledb_fdw_validator(text[], oid);
+

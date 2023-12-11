@@ -36,8 +36,6 @@
 #include "data_node.h"
 #include "dist_util.h"
 #include "export.h"
-#include "fdw/fdw.h"
-#include "fdw/relinfo.h"
 #include "hypertable.h"
 #include "license_guc.h"
 #include "nodes/decompress_chunk/planner.h"
@@ -214,8 +212,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunks_drop_stale = chunk_drop_stale_chunks,
 	.hypertable_make_distributed = hypertable_make_distributed,
 	.get_and_validate_data_node_list = hypertable_get_and_validate_data_nodes,
-	.timescaledb_fdw_handler = timescaledb_fdw_handler,
-	.timescaledb_fdw_validator = timescaledb_fdw_validator,
 	.remote_txn_id_in = remote_txn_id_in_pg,
 	.remote_txn_id_out = remote_txn_id_out_pg,
 	.remote_txn_heal_data_node = remote_txn_heal_data_node,
@@ -244,7 +240,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.hypertable_distributed_set_replication_factor = hypertable_set_replication_factor,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
 	.health_check = ts_dist_health_check,
-	.mn_get_foreign_join_paths = tsl_mn_get_foreign_join_paths,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,

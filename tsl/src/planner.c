@@ -17,9 +17,6 @@
 #include "compat/compat.h"
 #include "debug_guc.h"
 #include "debug.h"
-#include "fdw/data_node_scan_plan.h"
-#include "fdw/fdw.h"
-#include "fdw/relinfo.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"
@@ -70,19 +67,6 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
 							void *extra)
 {
-	bool dist_ht = false;
-	switch (input_reltype)
-	{
-		case TS_REL_HYPERTABLE:
-		case TS_REL_HYPERTABLE_CHILD:
-			dist_ht = hypertable_is_distributed(ht);
-			if (dist_ht)
-				data_node_scan_create_upper_paths(root, stage, input_rel, output_rel, extra);
-			break;
-		default:
-			break;
-	}
-
 	switch (stage)
 	{
 		case UPPERREL_GROUP_AGG:
@@ -226,24 +210,4 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		 */
 		return;
 	}
-
-	Cache *hcache;
-	Hypertable *ht =
-		ts_hypertable_cache_get_cache_and_entry(rte->relid, CACHE_FLAG_MISSING_OK, &hcache);
-
-	if (rel->fdw_private != NULL && ht != NULL && hypertable_is_distributed(ht))
-	{
-		FdwRoutine *fdw = (FdwRoutine *) DatumGetPointer(
-			DirectFunctionCall1(timescaledb_fdw_handler, PointerGetDatum(NULL)));
-
-		fdw->GetForeignRelSize(root, rel, rte->relid);
-		fdw->GetForeignPaths(root, rel, rte->relid);
-
-#ifdef TS_DEBUG
-		if (ts_debug_optimizer_flags.show_rel)
-			tsl_debug_log_rel_with_paths(root, rel, (UpperRelationKind *) NULL);
-#endif
-	}
-
-	ts_cache_release(hcache);
 }

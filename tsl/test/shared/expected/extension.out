@@ -325,8 +325,6 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  time_bucket_gapfill(interval,timestamp with time zone,timestamp with time zone,timestamp with time zone)
  time_bucket_gapfill(interval,timestamp without time zone,timestamp without time zone,timestamp without time zone)
  time_bucket_gapfill(smallint,smallint,smallint,smallint)
- timescaledb_fdw_handler()
- timescaledb_fdw_validator(text[],oid)
  timescaledb_post_restore()
  timescaledb_pre_restore()
  timescaledb_experimental.add_policies(regclass,boolean,"any","any","any","any")
