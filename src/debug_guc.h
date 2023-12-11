@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DEBUG_GUC_H
-#define TIMESCALEDB_DEBUG_GUC_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -43,5 +42,3 @@ typedef struct DebugOptimizerFlags
 extern TSDLLEXPORT DebugOptimizerFlags ts_debug_optimizer_flags;
 
 extern void ts_debug_init(void);
-
-#endif /* TIMESCALEDB_DEBUG_GUC_H */

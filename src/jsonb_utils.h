@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_JSONB_UTILS_H
-#define TIMESCALEDB_JSONB_UTILS_H
+#pragma once
 
 #include <utils/datetime.h>
 #include <utils/json.h>
@@ -37,5 +36,3 @@ extern TSDLLEXPORT int32 ts_jsonb_get_int32_field(const Jsonb *json, const char 
 												  bool *field_found);
 extern TSDLLEXPORT int64 ts_jsonb_get_int64_field(const Jsonb *json, const char *key,
 												  bool *field_found);
-
-#endif /* TIMESCALEDB_JSONB_UTILS_H */

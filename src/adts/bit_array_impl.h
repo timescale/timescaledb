@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_ADT_BITARRAY_IMPL_H
-#define TIMESCALEDB_ADT_BITARRAY_IMPL_H
+#pragma once
 
 #include <postgres.h>
 
@@ -353,5 +352,3 @@ bit_array_low_bits_mask(uint8 bits_used)
 	else
 		return (UINT64CONST(1) << bits_used) - UINT64CONST(1);
 }
-
-#endif

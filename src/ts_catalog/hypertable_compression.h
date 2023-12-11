@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_COMPRESSION_H
-#define TIMESCALEDB_HYPERTABLE_COMPRESSION_H
+#pragma once
+
 #include <postgres.h>
 #include <catalog/pg_type.h>
 
@@ -22,5 +22,3 @@ extern TSDLLEXPORT bool ts_hypertable_compression_delete_by_hypertable_id(int32 
 extern TSDLLEXPORT bool ts_hypertable_compression_delete_by_pkey(int32 htid, const char *attname);
 extern TSDLLEXPORT void ts_hypertable_compression_rename_column(int32 htid, char *old_column_name,
 																char *new_column_name);
-
-#endif

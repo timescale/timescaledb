@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_PREPARED_STATEMENT_FETCHER_H
-#define TIMESCALEDB_TSL_PREPARED_STATEMENT_FETCHER_H
+#pragma once
 
 #include <postgres.h>
 
@@ -13,5 +12,3 @@
 extern DataFetcher *prepared_statement_fetcher_create_for_scan(TSConnection *conn, const char *stmt,
 															   StmtParams *params,
 															   TupleFactory *tf);
-
-#endif /* TIMESCALEDB_TSL_PREPARED_STATEMENT_FETCHER_H */

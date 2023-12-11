@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_NODES_CHUNK_DISPATCH_H
-#define TIMESCALEDB_NODES_CHUNK_DISPATCH_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/extensible.h>
@@ -93,5 +92,3 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *p, Tupl
 
 extern TSDLLEXPORT Path *ts_chunk_dispatch_path_create(PlannerInfo *root, ModifyTablePath *mtpath,
 													   Index hypertable_rti, int subpath_index);
-
-#endif /* TIMESCALEDB_NODES_CHUNK_DISPATCH_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_SECLABEL_H
-#define TIMESCALEDB_SECLABEL_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -23,5 +22,3 @@
 
 extern bool ts_seclabel_get_dist_uuid(Oid dbid, char **uuid);
 extern void ts_seclabel_init(void);
-
-#endif /* TIMESCALEDB_SECLABEL_H */

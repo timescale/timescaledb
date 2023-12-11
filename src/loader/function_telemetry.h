@@ -4,9 +4,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_LOADER_FUNCTION_TELEMETRY_H
-#define TIMESCALEDB_LOADER_FUNCTION_TELEMETRY_H
+#pragma once
 
 #define RENDEZVOUS_FUNCTION_TELEMENTRY "ts_function_telemetry"
 #define FN_TELEMETRY_LWLOCK_TRANCHE_NAME "ts_fn_telemetry_lwlock_tranche"
@@ -26,5 +24,3 @@ typedef struct FnTelemetryHashEntry
 extern void ts_function_telemetry_shmem_startup(void);
 
 extern void ts_function_telemetry_shmem_alloc(void);
-
-#endif /* TIMESCALEDB_LOADER_FUNCTION_TELEMETRY_H */

@@ -90,8 +90,8 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 	/* parse the segment by list exactly how you would a group by */
 	appendStringInfo(&buf,
 					 "SELECT FROM %s.%s GROUP BY %s",
-					 quote_identifier(hypertable->fd.schema_name.data),
-					 quote_identifier(hypertable->fd.table_name.data),
+					 quote_identifier(NameStr(hypertable->fd.schema_name)),
+					 quote_identifier(NameStr(hypertable->fd.table_name)),
 					 inpstr);
 
 	PG_TRY();
@@ -175,8 +175,8 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 	/* parse the segment by list exactly how you would a order by by */
 	appendStringInfo(&buf,
 					 "SELECT FROM %s.%s ORDER BY %s",
-					 quote_identifier(hypertable->fd.schema_name.data),
-					 quote_identifier(hypertable->fd.table_name.data),
+					 quote_identifier(NameStr(hypertable->fd.schema_name)),
+					 quote_identifier(NameStr(hypertable->fd.table_name)),
 					 inpstr);
 
 	PG_TRY();

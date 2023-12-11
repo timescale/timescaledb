@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_LICENSE_GUC_H
-#define TIMESCALEDB_LICENSE_GUC_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -30,5 +29,3 @@ extern void ts_license_guc_assign_hook(const char *newval, void *extra);
 
 extern TSDLLEXPORT void ts_license_enable_module_loading(void);
 extern bool ts_license_is_apache(void);
-
-#endif /* TIMESCALEDB_LICENSE_GUC_H */

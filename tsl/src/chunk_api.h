@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_CHUNK_API_H
-#define TIMESCALEDB_TSL_CHUNK_API_H
+#pragma once
 
 #include <postgres.h>
 
@@ -26,5 +25,3 @@ extern void chunk_api_call_create_empty_chunk_table(const Hypertable *ht, const 
 													const char *node_name);
 extern void chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name,
 											  Oid serverid);
-
-#endif /* TIMESCALEDB_TSL_CHUNK_API_H */

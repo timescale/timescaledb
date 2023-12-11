@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_MODIFY_EXEC_H
-#define TIMESCALEDB_TSL_FDW_MODIFY_EXEC_H
+#pragma once
 
 #include <postgres.h>
 #include <commands/explain.h>
@@ -32,5 +31,3 @@ extern TupleTableSlot *fdw_exec_foreign_update_or_delete(TsFdwModifyState *fmsta
 extern void fdw_finish_foreign_modify(TsFdwModifyState *fmstate);
 extern void fdw_explain_modify(PlanState *ps, ResultRelInfo *rri, List *fdw_private,
 							   int subplan_index, ExplainState *es);
-
-#endif /* TIMESCALEDB_TSL_FDW_MODIFY_EXEC_H */

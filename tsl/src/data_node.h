@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_DATA_NODE_H
-#define TIMESCALEDB_TSL_DATA_NODE_H
+#pragma once
 
 #include <foreign/foreign.h>
 
@@ -49,5 +48,3 @@ extern HypertableDataNode *data_node_hypertable_get_by_node_name(const Hypertabl
 
 /* This should only be used for testing */
 extern Datum data_node_add_without_dist_id(PG_FUNCTION_ARGS);
-
-#endif /* TIMESCALEDB_TSL_DATA_NODE_H */

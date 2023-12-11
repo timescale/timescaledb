@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_SEGMENT_META_H
-#define TIMESCALEDB_TSL_COMPRESSION_SEGMENT_META_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -35,4 +34,3 @@ Datum segment_meta_min_max_builder_max(SegmentMetaMinMaxBuilder *builder);
 bool segment_meta_min_max_builder_empty(SegmentMetaMinMaxBuilder *builder);
 
 void segment_meta_min_max_builder_reset(SegmentMetaMinMaxBuilder *builder);
-#endif

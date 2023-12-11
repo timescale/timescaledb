@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H
-#define TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H
+#pragma once
 
 #include "hypertable.h"
 
@@ -29,5 +28,3 @@ extern Chunk **ts_hypertable_restrict_info_get_chunks_ordered(HypertableRestrict
 															  Hypertable *ht, Chunk **chunks,
 															  bool reverse, List **nested_oids,
 															  unsigned int *num_chunks);
-
-#endif /* TIMESCALEDB_HYPERTABLE_RESTRICT_INFO_H */

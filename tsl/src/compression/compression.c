@@ -931,7 +931,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 			if (compressed_column_attr->atttypid != compressed_data_type_oid)
 				elog(ERROR,
 					 "expected column '%s' to be a compressed data type",
-					 compression_info->attname.data);
+					 NameStr(compression_info->attname));
 
 			if (compression_info->orderby_column_index > 0)
 			{
@@ -965,7 +965,7 @@ row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_
 			if (column_attr->atttypid != compressed_column_attr->atttypid)
 				elog(ERROR,
 					 "expected segment by column \"%s\" to be same type as uncompressed column",
-					 compression_info->attname.data);
+					 NameStr(compression_info->attname));
 			*column = (PerColumn){
 				.segment_info = segment_info_new(column_attr),
 				.segmentby_column_index = compression_info->segmentby_column_index,
@@ -2764,7 +2764,7 @@ fix_and_reorder_index_filters(Relation comp_chunk_rel, Relation index_rel,
 							   index_rel,
 							   (Var *) newvar,
 							   idx_filters,
-							   sf->column_name.data,
+							   NameStr(sf->column_name),
 							   (Node *) newclause,
 							   opno);
 			}
@@ -2782,7 +2782,7 @@ fix_and_reorder_index_filters(Relation comp_chunk_rel, Relation index_rel,
 								   index_rel,
 								   (Var *) newvar,
 								   idx_filters,
-								   sf->column_name.data,
+								   NameStr(sf->column_name),
 								   (Node *) newclause,
 								   0);
 				}
@@ -2851,7 +2851,7 @@ find_matching_index(Relation comp_chunk_rel, List *index_filters)
 				char *attname = get_attname(RelationGetRelid(comp_chunk_rel), attnum, false);
 				BatchFilter *sf = lfirst(li);
 				/* ensure column exists in index relation */
-				if (!strcmp(attname, sf->column_name.data))
+				if (!strcmp(attname, NameStr(sf->column_name)))
 				{
 					match_count++;
 					break;

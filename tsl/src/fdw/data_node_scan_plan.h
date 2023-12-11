@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H
-#define TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/plannodes.h>
@@ -28,5 +27,3 @@ typedef enum
 	DataNodeScanSystemcol,
 	DataNodeScanFetcherType,
 } DataNodeScanPrivateIndex;
-
-#endif /* TIMESCALEDB_TSL_FDW_DATA_NODE_SCAN_H */

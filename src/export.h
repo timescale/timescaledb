@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_EXPORT_H
-#define TIMESCALEDB_EXPORT_H
+#pragma once
 
 #include <postgres.h>
 
@@ -56,5 +55,3 @@
 #define TS_FUNCTION_INFO_V1(fn)                                                                    \
 	PGDLLEXPORT Datum fn(PG_FUNCTION_ARGS);                                     \
 	PG_FUNCTION_INFO_V1(fn)
-
-#endif /* TIMESCALEDB_EXPORT_H */

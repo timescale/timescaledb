@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_DATA_NODE_CHUNK_ASSIGNMENT
-#define TIMESCALEDB_TSL_DATA_NODE_CHUNK_ASSIGNMENT
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pathnodes.h>
@@ -68,5 +67,3 @@ extern void data_node_chunk_assignments_init(DataNodeChunkAssignments *scas,
 
 extern bool data_node_chunk_assignments_are_overlapping(DataNodeChunkAssignments *scas,
 														int32 partitioning_dimension_id);
-
-#endif /* TIMESCALEDB_TSL_DATA_NODE_CHUNK_ASSIGNMENT */

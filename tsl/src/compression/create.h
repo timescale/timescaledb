@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_CREATE_H
-#define TIMESCALEDB_TSL_COMPRESSION_CREATE_H
+#pragma once
+
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 
@@ -27,5 +27,3 @@ Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid tabl
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
-
-#endif /* TIMESCALEDB_TSL_COMPRESSION_CREATE_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CONSTRAINT_H
-#define TIMESCALEDB_CONSTRAINT_H
+#pragma once
 
 #include <postgres.h>
 #include <access/htup.h>
@@ -28,5 +27,3 @@ typedef enum ConstraintProcessStatus
 
 typedef ConstraintProcessStatus (*constraint_func)(HeapTuple constraint_tuple, void *ctx);
 extern TSDLLEXPORT int ts_constraint_process(Oid relid, constraint_func process_func, void *ctx);
-
-#endif /* TIMESCALEDB_CONSTRAINT_H */

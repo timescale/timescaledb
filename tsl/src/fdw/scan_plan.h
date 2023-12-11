@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_SCAN_PLAN_H
-#define TIMESCALEDB_TSL_FDW_SCAN_PLAN_H
+#pragma once
 
 #include <postgres.h>
 #include <commands/explain.h>
@@ -52,5 +51,3 @@ extern void fdw_create_upper_paths(TsFdwRelInfo *input_fpinfo, PlannerInfo *root
 								   UpperRelationKind stage, RelOptInfo *input_rel,
 								   RelOptInfo *output_rel, void *extra,
 								   CreateUpperPathFunc create_paths);
-
-#endif /* TIMESCALEDB_TSL_FDW_SCAN_PLAN_H */

@@ -417,7 +417,7 @@ create_tuple_from_conn_entry(const ConnectionCacheEntry *entry, const TupleDesc 
 	namestrcpy(&conn_node_name, remote_connection_node_name(entry->conn));
 
 	if (NULL == username)
-		pg_snprintf(conn_user_name.data, NAMEDATALEN, "%u", entry->id.user_id);
+		pg_snprintf(NameStr(conn_user_name), NAMEDATALEN, "%u", entry->id.user_id);
 	else
 		namestrcpy(&conn_user_name, username);
 

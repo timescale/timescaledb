@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_BGW_POLICY_RETENTION_API_H
-#define TIMESCALEDB_TSL_BGW_POLICY_RETENTION_API_H
+#pragma once
 
 #include <postgres.h>
 
@@ -25,4 +23,3 @@ Datum policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_da
 									bool if_not_exists, bool fixed_schedule,
 									TimestampTz initial_start, const char *timezone);
 Datum policy_retention_remove_internal(Oid table_oid, bool if_exists);
-#endif /* TIMESCALEDB_TSL_BGW_POLICY_RETENTION_API_H */

@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_NODES_GAPFILL_H
-#define TIMESCALEDB_TSL_NODES_GAPFILL_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pathnodes.h>
@@ -25,5 +23,3 @@ typedef struct GapFillPath
 	CustomPath cpath;
 	FuncExpr *func; /* time_bucket_gapfill function call */
 } GapFillPath;
-
-#endif /* TIMESCALEDB_TSL_NODES_GAPFILL_H */

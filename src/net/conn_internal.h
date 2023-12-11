@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CONN_INTERNAL_H
-#define TIMESCALEDB_CONN_INTERNAL_H
+#pragma once
 
 #include "conn.h"
 
@@ -21,5 +20,3 @@ typedef struct ConnOps
 } ConnOps;
 
 extern int ts_connection_register(ConnectionType type, ConnOps *ops);
-
-#endif /* TIMESCALEDB_CONN_INTERNAL_H */

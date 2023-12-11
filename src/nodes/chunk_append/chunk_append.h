@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CHUNK_APPEND_H
-#define TIMESCALEDB_CHUNK_APPEND_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/extensible.h>
@@ -40,5 +39,3 @@ extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
 extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
 
 void _chunk_append_init(void);
-
-#endif /* TIMESCALEDB_CHUNK_APPEND_H */

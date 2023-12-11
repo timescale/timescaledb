@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_COMPRESSION_CHUNK_SIZE_H
-#define TIMESCALEDB_COMPRESSION_CHUNK_SIZE_H
+#pragma once
+
 #include <postgres.h>
 #include <compat/compat.h>
 
@@ -22,5 +22,3 @@ typedef struct TotalSizes
 
 extern TSDLLEXPORT TotalSizes ts_compression_chunk_size_totals(void);
 extern TSDLLEXPORT int64 ts_compression_chunk_size_row_count(int32 uncompressed_chunk_id);
-
-#endif

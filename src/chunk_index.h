@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CHUNK_INDEX_H
-#define TIMESCALEDB_CHUNK_INDEX_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
@@ -100,5 +99,3 @@ chunk_index_need_attnos_adjustment(TupleDesc htdesc, TupleDesc chunkdesc)
 {
 	return chunk_index_columns_changed(htdesc->natts, chunkdesc);
 }
-
-#endif /* TIMESCALEDB_CHUNK_INDEX_H */

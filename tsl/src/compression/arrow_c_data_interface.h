@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#pragma once
 
 /*
  * This header describes the Arrow C data interface which is a well-known
@@ -21,8 +22,6 @@
  * Applications and libraries can therefore work with Arrow memory without
  * necessarily using Arrow libraries or reinventing the wheel.
  */
-
-#pragma once
 
 #ifndef ARROW_C_DATA_INTERFACE
 #define ARROW_C_DATA_INTERFACE

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DEBUG_H
-#define TIMESCALEDB_DEBUG_H
+#pragma once
 
 #include <postgres.h>
 #include <lib/stringinfo.h>
@@ -17,5 +16,3 @@
 extern void tsl_debug_log_rel_with_paths(PlannerInfo *root, RelOptInfo *rel,
 										 UpperRelationKind *upper_stage);
 #endif
-
-#endif /* TIMESCALEDB_DEBUG_H */

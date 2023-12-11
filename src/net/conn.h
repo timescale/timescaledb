@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_NET_CONN_H
-#define TIMESCALEDB_NET_CONN_H
+#pragma once
 
 #include <postgres.h>
 
@@ -39,5 +38,3 @@ extern void ts_connection_close(Connection *conn);
 extern void ts_connection_destroy(Connection *conn);
 extern int ts_connection_set_timeout_millis(Connection *conn, unsigned long millis);
 extern const char *ts_connection_get_and_clear_error(Connection *conn);
-
-#endif /* TIMESCALEDB_NET_CONN_H */

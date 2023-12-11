@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_SHIPPABLE_H
-#define TIMESCALEDB_TSL_FDW_SHIPPABLE_H
+#pragma once
 
 #include <postgres.h>
 
@@ -12,5 +11,3 @@ typedef struct TsFdwRelInfo TsFdwRelInfo;
 
 extern bool is_builtin(Oid objectId);
 extern bool is_shippable(Oid objectId, Oid classId, TsFdwRelInfo *fpinfo);
-
-#endif /* TIMESCALEDB_TSL_FDW_SHIPPABLE_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef BGW_TIMER_H
-#define BGW_TIMER_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/timestamp.h>
@@ -26,5 +25,3 @@ extern TSDLLEXPORT TimestampTz ts_timer_get_current_timestamp(void);
 extern void ts_timer_set(const Timer *timer);
 extern const Timer *ts_get_standard_timer(void);
 #endif
-
-#endif /* BGW_TIMER_H */

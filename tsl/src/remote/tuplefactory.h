@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_TUPLEFACTORY_H
-#define TIMESCALEDB_TSL_REMOTE_TUPLEFACTORY_H
+#pragma once
 
 #include <postgres.h>
 #include <funcapi.h>
@@ -32,5 +31,3 @@ extern struct AttConvInMetadata *tuplefactory_get_attconv(TupleFactory *tf);
 extern TupleDesc tuplefactory_get_tupdesc(TupleFactory *tf);
 extern List *tuplefactory_get_retrieved_attrs(TupleFactory *tf);
 extern int tuplefactory_get_nattrs(TupleFactory *tf);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_TUPLEFACTORY_H */

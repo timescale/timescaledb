@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_DATA_NODE_H
-#define TIMESCALEDB_HYPERTABLE_DATA_NODE_H
+#pragma once
 
 #include "ts_catalog/catalog.h"
 #include "export.h"
@@ -26,5 +25,3 @@ ts_hypertable_data_node_delete_by_node_name_and_hypertable_id(const char *node_n
 															  int32 hypertable_id);
 extern TSDLLEXPORT int
 ts_hypertable_data_node_update(const HypertableDataNode *hypertable_data_node);
-
-#endif /* TIMESCALEDB_HYPERTABLE_DATA_NODE_H */

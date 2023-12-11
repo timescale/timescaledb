@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_SCAN_ITERATOR_H
-#define TIMESCALEDB_SCAN_ITERATOR_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/palloc.h>
@@ -127,5 +126,3 @@ ts_scan_iterator_start_or_restart_scan(ScanIterator *iterator)
 #define ts_scanner_foreach(scan_iterator)                                                          \
 	for (ts_scan_iterator_start_scan((scan_iterator));                                             \
 		 ts_scan_iterator_next(scan_iterator) != NULL;)
-
-#endif /* TIMESCALEDB_SCAN_ITERATOR_H */

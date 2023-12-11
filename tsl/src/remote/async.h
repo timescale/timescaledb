@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_ASYNC_H
-#define TIMESCALEDB_TSL_REMOTE_ASYNC_H
+#pragma once
 
 #include <postgres.h>
 #include <libpq-fe.h>
@@ -149,5 +148,3 @@ extern void async_request_discard_response(AsyncRequest *req);
 
 /* Prepared Statements */
 extern void prepared_stmt_close(PreparedStmt *stmt);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_ASYNC_H */

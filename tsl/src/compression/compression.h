@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
-#define TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
+#pragma once
 
 #include <postgres.h>
 #include <executor/tuptable.h>
@@ -407,5 +406,3 @@ consumeCompressedData(StringInfo si, int bytes)
  * We use this limit for sanity checks in case the compressed data is corrupt.
  */
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
-
-#endif
