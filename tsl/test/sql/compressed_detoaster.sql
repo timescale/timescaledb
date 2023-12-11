@@ -9,9 +9,9 @@ select create_hypertable('longstr', 'ts');
 alter table longstr set (timescaledb.compress);
 
 
--- We want to test the case for inline compression which. It is technically
--- possible, but very hard to hit with the usual toast_tuple_target = 128 on
--- compressed chunks. So here we increase the toast_tuple_target to simplify
+-- We want to test the case for inline compression. It is technically possible,
+-- but very hard to hit with the usual toast_tuple_target = 128 on compressed
+-- chunks. So here we increase the toast_tuple_target to simplify
 -- testing.
 select format('%I.%I', schema_name, table_name) compressed_table
 from _timescaledb_catalog.hypertable

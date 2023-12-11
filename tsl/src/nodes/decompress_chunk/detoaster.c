@@ -34,11 +34,6 @@
 /*
  * Fetch a TOAST slice from a heap table.
  *
- * toastrel is the relation from which chunks are to be fetched.
- * valueid identifies the TOAST value from which chunks are being fetched.
- * attrsize is the total size of the TOAST value.
- * result is the varlena into which the results should be written.
- *
  * This function is a modified copy of heap_fetch_toast_slice(). The difference
  * is that it holds the open toast relation, index and other intermediate data
  * for detoasting in the Detoaster struct, to allow them to be reused over many
@@ -245,12 +240,9 @@ detoaster_close(Detoaster *detoaster)
 	}
 }
 
-/* ----------
- * toast_fetch_datum -
- *
- *	Reconstruct an in memory Datum from the chunks saved
- *	in the toast relation
- * ----------
+/*
+ * Copy of Postgres' toast_fetch_datum(): Reconstruct an in memory Datum from
+ * the chunks saved in the toast relation.
  */
 static struct varlena *
 ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster)
@@ -343,15 +335,9 @@ ts_toast_decompress_datum(struct varlena *attr)
 }
 #endif
 
-/* ----------
- * detoast_attr -
- *
- *	Public entry point to get back a toasted value from compression
- *	or external storage.  The result is always non-extended varlena form.
- *
- * Note some callers assume that if the input is an EXTERNAL or COMPRESSED
- * datum, the result will be a pfree'able chunk.
- * ----------
+/*
+ * Modification of Postgres' detoast_attr() where we use the stateful Detoaster
+ * and skip some cases that don't occur for the toasted compressed data.
  */
 struct varlena *
 detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
