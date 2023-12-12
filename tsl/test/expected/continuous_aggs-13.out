@@ -2213,16 +2213,10 @@ AS
 SELECT time_bucket('1day', timec), min(location), sum(temperature), sum(humidity)
 FROM conditions
 GROUP BY time_bucket('1day', timec) WITH NO DATA;
-CREATE MATERIALIZED VIEW conditions_summary_old(timec, minl, sumt, sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-AS
-SELECT time_bucket('1day', timec), min(location), sum(temperature), sum(humidity)
-FROM conditions
-GROUP BY time_bucket('1day', timec) WITH NO DATA;
 \x ON
 SELECT *
 FROM timescaledb_information.continuous_aggregates
-WHERE view_name IN ('conditions_summary_new', 'conditions_summary_old');
+WHERE view_name = 'conditions_summary_new';
 -[ RECORD 1 ]---------------------+---------------------------------------------------------------------
 hypertable_schema                 | public
 hypertable_name                   | conditions
@@ -2240,52 +2234,18 @@ view_definition                   |  SELECT time_bucket('@ 1 day'::interval, con
                                   |    FROM conditions                                                  +
                                   |   GROUP BY (time_bucket('@ 1 day'::interval, conditions.timec));
 finalized                         | t
--[ RECORD 2 ]---------------------+---------------------------------------------------------------------
-hypertable_schema                 | public
-hypertable_name                   | conditions
-view_schema                       | public
-view_name                         | conditions_summary_old
-view_owner                        | default_perm_user
-materialized_only                 | t
-compression_enabled               | f
-materialization_hypertable_schema | _timescaledb_internal
-materialization_hypertable_name   | _materialized_hypertable_62
-view_definition                   |  SELECT time_bucket('@ 1 day'::interval, conditions.timec) AS timec,+
-                                  |     min(conditions.location) AS minl,                               +
-                                  |     sum(conditions.temperature) AS sumt,                            +
-                                  |     sum(conditions.humidity) AS sumh                                +
-                                  |    FROM conditions                                                  +
-                                  |   GROUP BY (time_bucket('@ 1 day'::interval, conditions.timec));
-finalized                         | f
 
 \x OFF
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);
-CALL refresh_continuous_aggregate('conditions_summary_old', NULL, NULL);
 -- Check and compare number of returned rows
-SELECT count(*) FROM conditions_summary_new
-UNION
-SELECT count(*) FROM conditions_summary_old;
+SELECT count(*) FROM conditions_summary_new;
  count 
 -------
      4
 (1 row)
 
--- Should return 4 rows that is the same number of rows above
-SELECT *
-FROM conditions_summary_new
-NATURAL JOIN conditions_summary_old
-ORDER BY timec;
-            timec             | minl | sumt | sumh 
-------------------------------+------+------+------
- Thu Dec 31 16:00:00 2009 PST | SFO  |   55 |   45
- Fri Jan 01 16:00:00 2010 PST | NYC  |  230 |  190
- Wed Oct 31 17:00:00 2018 PDT | NYC  |   45 |   35
- Thu Nov 01 17:00:00 2018 PDT | NYC  |   35 |   15
-(4 rows)
-
 -- Parallel planning test for realtime Continuous Aggregate
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 4 other objects
 NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 2 other objects
 CREATE TABLE conditions (
@@ -2323,25 +2283,25 @@ EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket
                                                                                                                            QUERY PLAN                                                                                                                            
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _materialized_hypertable_64.sum DESC
+   Sort Key: _materialized_hypertable_63.sum DESC
    ->  Sort
-         Sort Key: _materialized_hypertable_64.sum DESC
-         ->  Custom Scan (ChunkAppend) on _materialized_hypertable_64
+         Sort Key: _materialized_hypertable_63.sum DESC
+         ->  Custom Scan (ChunkAppend) on _materialized_hypertable_63
                Chunks excluded during startup: 0
-               ->  Index Scan using _hyper_64_185_chunk__materialized_hypertable_64_time_bucket_idx on _hyper_64_185_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-               ->  Index Scan using _hyper_64_189_chunk__materialized_hypertable_64_time_bucket_idx on _hyper_64_189_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-               ->  Index Scan using _hyper_64_190_chunk__materialized_hypertable_64_time_bucket_idx on _hyper_64_190_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+               ->  Index Scan using _hyper_63_183_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_183_chunk
+                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+               ->  Index Scan using _hyper_63_187_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_187_chunk
+                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+               ->  Index Scan using _hyper_63_188_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_188_chunk
+                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
    ->  Sort
          Sort Key: (sum(conditions.temperature)) DESC
          ->  HashAggregate
                Group Key: time_bucket('@ 1 day'::interval, conditions.timec)
                ->  Custom Scan (ChunkAppend) on conditions
                      Chunks excluded during startup: 26
-                     ->  Index Scan Backward using _hyper_63_184_chunk_conditions_timec_idx on _hyper_63_184_chunk
-                           Index Cond: ((timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(64)), '-infinity'::timestamp with time zone)) AND (timec >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                     ->  Index Scan Backward using _hyper_62_182_chunk_conditions_timec_idx on _hyper_62_182_chunk
+                           Index Cond: ((timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (timec >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
                            Filter: (time_bucket('@ 1 day'::interval, timec) >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone)
 (21 rows)
 

@@ -1,67 +1,50 @@
 -- needed post 1.7.0 to fixup continuous aggregates created in 1.7.0 ---
-DO $$
+DO
+$$
 DECLARE
  vname regclass;
+ mat_ht_id INTEGER;
  materialized_only bool;
- ts_version TEXT;
+ finalized bool;
+ ts_major INTEGER;
+ ts_minor INTEGER;
 BEGIN
-    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-    IF ts_version >= '2.7.0' THEN
-            CREATE PROCEDURE _timescaledb_internal.post_update_cagg_try_repair(
-                cagg_view REGCLASS, force_rebuild boolean
-            ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
+    -- procedures with SET clause cannot execute transaction
+    -- control so we adjust search_path in procedure body
+    SET LOCAL search_path TO pg_catalog, pg_temp;
+
+    SELECT ((string_to_array(extversion,'.'))[1])::int, ((string_to_array(extversion,'.'))[2])::int
+    INTO ts_major, ts_minor
+    FROM pg_extension WHERE extname = 'timescaledb';
+
+    IF ts_major >= 2 AND ts_minor >= 7 THEN
+      CREATE PROCEDURE _timescaledb_functions.post_update_cagg_try_repair(
+        cagg_view REGCLASS, force_rebuild BOOLEAN
+      ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
     END IF;
-    FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
+
+    FOR vname, mat_ht_id, materialized_only, finalized IN
+      SELECT format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.mat_hypertable_id, cagg.materialized_only, cagg.finalized
+      FROM _timescaledb_catalog.continuous_agg cagg
     LOOP
-        -- the cast from oid to text returns
-        -- quote_qualified_identifier (see regclassout).
-        --
-        -- We use the if statement to handle pre-2.0 as well as
-        -- post-2.0.  This could be turned into a procedure if we want
-        -- to have something more generic, but right now it is just
-        -- this case.
-        IF ts_version < '2.0.0' THEN
-            EXECUTE format('ALTER VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
-        ELSIF ts_version < '2.7.0' THEN
-            EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
-        ELSE
-            SET log_error_verbosity TO VERBOSE;
-            CALL _timescaledb_internal.post_update_cagg_try_repair(vname, false);
-        END IF;
+      IF ts_major < 2 THEN
+        EXECUTE format('ALTER VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
+
+      ELSIF ts_major = 2 AND ts_minor < 7 THEN
+        EXECUTE format('ALTER MATERIALIZED VIEW %s SET (timescaledb.materialized_only=%L) ', vname::text, materialized_only);
+
+      ELSIF ts_major = 2 AND ts_minor >= 7 THEN
+        SET log_error_verbosity TO VERBOSE;
+        CALL _timescaledb_functions.post_update_cagg_try_repair(vname, false);
+
+      END IF;
     END LOOP;
-    IF ts_version >= '2.7.0' THEN
-            DROP PROCEDURE IF EXISTS _timescaledb_internal.post_update_cagg_try_repair;
+
+    IF ts_major >= 2 AND ts_minor >= 7 THEN
+      DROP PROCEDURE IF EXISTS _timescaledb_functions.post_update_cagg_try_repair(REGCLASS, BOOLEAN);
     END IF;
-    EXCEPTION WHEN OTHERS THEN RAISE;
 END
-$$;
-
--- For tsdb >= v2.10.0 apply the cagg repair when necessary
-DO $$
-DECLARE
- vname regclass;
- materialized_only bool;
- ts_version TEXT;
-BEGIN
-    SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-     IF ts_version >= '2.10.0' THEN
-	        CREATE PROCEDURE _timescaledb_internal.post_update_cagg_try_repair(
-	            cagg_view REGCLASS, force_rebuild BOOLEAN
-	        ) AS '@MODULE_PATHNAME@', 'ts_cagg_try_repair' LANGUAGE C;
-
-	        FOR vname, materialized_only IN select format('%I.%I', cagg.user_view_schema, cagg.user_view_name)::regclass, cagg.materialized_only from _timescaledb_catalog.continuous_agg cagg
-	        LOOP
-	            IF ts_version >= '2.10.0' THEN
-	                SET log_error_verbosity TO VERBOSE;
-	                CALL _timescaledb_internal.post_update_cagg_try_repair(vname, true);
-	            END IF;
-	        END LOOP;
-
-	        DROP PROCEDURE IF EXISTS _timescaledb_internal.post_update_cagg_try_repair(REGCLASS, BOOLEAN);
-	    END IF;
-    EXCEPTION WHEN OTHERS THEN RAISE;
-END
-$$;
+$$ LANGUAGE PLPGSQL;
 
 -- can only be dropped after views have been rebuilt
 DROP FUNCTION IF EXISTS _timescaledb_internal.cagg_watermark(oid);
@@ -152,12 +135,12 @@ BEGIN
 END $$;
 
 -- Create dimension partition information for existing space-partitioned hypertables
-CREATE FUNCTION _timescaledb_internal.update_dimension_partition(hypertable REGCLASS) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_partition_update' LANGUAGE C VOLATILE;
-SELECT _timescaledb_internal.update_dimension_partition(format('%I.%I', h.schema_name, h.table_name))
+CREATE FUNCTION _timescaledb_functions.update_dimension_partition(hypertable REGCLASS) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_dimension_partition_update' LANGUAGE C VOLATILE;
+SELECT _timescaledb_functions.update_dimension_partition(format('%I.%I', h.schema_name, h.table_name))
 FROM _timescaledb_catalog.hypertable h
 INNER JOIN _timescaledb_catalog.dimension d ON (d.hypertable_id = h.id)
 WHERE d.interval_length IS NULL;
-DROP FUNCTION _timescaledb_internal.update_dimension_partition;
+DROP FUNCTION _timescaledb_functions.update_dimension_partition;
 
 -- Report warning when partial aggregates are used
 DO $$

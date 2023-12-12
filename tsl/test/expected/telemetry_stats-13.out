@@ -70,16 +70,6 @@ FROM
   hyper
 GROUP BY hour, device;
 NOTICE:  continuous aggregate "contagg" is already up-to-date
-CREATE MATERIALIZED VIEW contagg_old
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-  time_bucket('1 hour', time) AS hour,
-  device,
-  min(time)
-FROM
-  hyper
-GROUP BY hour, device;
-NOTICE:  continuous aggregate "contagg_old" is already up-to-date
 -- Create another view (already have the "relations" view)
 CREATE VIEW devices AS
 SELECT DISTINCT ON (device) device
@@ -153,12 +143,12 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          },                                              +
          "indexes_size": 0,                              +
          "num_children": 0,                              +
-         "num_relations": 2,                             +
+         "num_relations": 1,                             +
          "num_reltuples": 0,                             +
          "num_caggs_nested": 0,                          +
          "num_caggs_finalized": 1,                       +
          "num_caggs_on_distributed_hypertables": 0,      +
-         "num_caggs_using_real_time_aggregation": 2      +
+         "num_caggs_using_real_time_aggregation": 1      +
      },                                                  +
      "distributed_hypertables_data_node": {              +
          "heap_size": 0,                                 +
@@ -216,7 +206,6 @@ SELECT * FROM normal;
 INSERT INTO part
 SELECT * FROM normal;
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
-CALL refresh_continuous_aggregate('contagg_old', NULL, NULL);
 -- ANALYZE to get updated reltuples stats
 ANALYZE normal, hyper, part;
 SELECT count(c) FROM show_chunks('hyper') c;
@@ -226,12 +215,6 @@ SELECT count(c) FROM show_chunks('hyper') c;
 (1 row)
 
 SELECT count(c) FROM show_chunks('contagg') c;
- count 
--------
-     2
-(1 row)
-
-SELECT count(c) FROM show_chunks('contagg_old') c;
  count 
 -------
      2
@@ -289,8 +272,8 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                            +
      },                                                  +
      "continuous_aggregates": {                          +
-         "heap_size": 188416,                            +
-         "toast_size": 16384,                            +
+         "heap_size": 90112,                             +
+         "toast_size": 0,                                +
          "compression": {                                +
              "compressed_heap_size": 0,                  +
              "compressed_row_count": 0,                  +
@@ -304,14 +287,14 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "uncompressed_indexes_size": 0,             +
              "compressed_row_count_frozen_immediately": 0+
          },                                              +
-         "indexes_size": 229376,                         +
-         "num_children": 4,                              +
-         "num_relations": 2,                             +
+         "indexes_size": 114688,                         +
+         "num_children": 2,                              +
+         "num_relations": 1,                             +
          "num_reltuples": 0,                             +
          "num_caggs_nested": 0,                          +
          "num_caggs_finalized": 1,                       +
          "num_caggs_on_distributed_hypertables": 0,      +
-         "num_caggs_using_real_time_aggregation": 2      +
+         "num_caggs_using_real_time_aggregation": 1      +
      },                                                  +
      "distributed_hypertables_data_node": {              +
          "heap_size": 0,                                 +
@@ -446,8 +429,8 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                             +
      },                                                   +
      "continuous_aggregates": {                           +
-         "heap_size": 180224,                             +
-         "toast_size": 24576,                             +
+         "heap_size": 81920,                              +
+         "toast_size": 8192,                              +
          "compression": {                                 +
              "compressed_heap_size": 40960,               +
              "compressed_row_count": 10,                  +
@@ -461,14 +444,14 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "uncompressed_indexes_size": 81920,          +
              "compressed_row_count_frozen_immediately": 10+
          },                                               +
-         "indexes_size": 180224,                          +
-         "num_children": 4,                               +
-         "num_relations": 2,                              +
+         "indexes_size": 65536,                           +
+         "num_children": 2,                               +
+         "num_relations": 1,                              +
          "num_reltuples": 0,                              +
          "num_caggs_nested": 0,                           +
          "num_caggs_finalized": 1,                        +
          "num_caggs_on_distributed_hypertables": 0,       +
-         "num_caggs_using_real_time_aggregation": 1       +
+         "num_caggs_using_real_time_aggregation": 0       +
      },                                                   +
      "distributed_hypertables_data_node": {               +
          "heap_size": 0,                                  +
@@ -560,24 +543,18 @@ select add_continuous_aggregate_policy('contagg', interval '3 weeks', NULL, inte
                             1002
 (1 row)
 
-select add_continuous_aggregate_policy('contagg_old', interval '3 weeks', NULL, interval '3 weeks', initial_start => now()); -- fixed
- add_continuous_aggregate_policy 
----------------------------------
-                            1003
-(1 row)
-
 -- add retention policy, fixed
 select add_retention_policy('hyper', interval '1 year', initial_start => now());
  add_retention_policy 
 ----------------------
-                 1004
+                 1003
 (1 row)
 
 -- add compression policy
 select add_compression_policy('hyper', interval '3 weeks', initial_start => now());
  add_compression_policy 
 ------------------------
-                   1005
+                   1004
 (1 row)
 
 select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_actions' AS UDA_drifting FROM get_telemetry_report() r;
@@ -589,7 +566,7 @@ select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_ac
 select r->'num_continuous_aggs_policies_fixed' as contagg_fixed, r->'num_continuous_aggs_policies' as contagg_drifting FROM get_telemetry_report() r;
  contagg_fixed | contagg_drifting 
 ---------------+------------------
- 1             | 1
+ 0             | 1
 (1 row)
 
 select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_policies_fixed' as retention_fixed FROM get_telemetry_report() r;
@@ -711,7 +688,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
     create_hypertable    
 -------------------------
- (6,public,conditions,t)
+ (5,public,conditions,t)
 (1 row)
 
 CREATE MATERIALIZED VIEW conditions_summary_hourly_1
