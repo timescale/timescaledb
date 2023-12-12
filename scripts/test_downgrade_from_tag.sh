@@ -11,7 +11,6 @@ TEST_TMPDIR=${TEST_TMPDIR:-$(mktemp -d 2>/dev/null || mktemp -d -t 'timescaledb_
 UPDATE_PG_PORT=${UPDATE_PG_PORT:-6432}
 CLEAN_PG_PORT=${CLEAN_PG_PORT:-6433}
 PG_VERSION=${PG_VERSION:-14.3}
-PG_VERSION_MAJOR=$(echo "${PG_VERSION}" | awk '{split($0,v,"."); print v[1]}')
 GIT_ID=$(git -C ${BASE_DIR} describe --dirty --always | sed -e "s|/|_|g")
 UPDATE_FROM_IMAGE=${UPDATE_FROM_IMAGE:-timescale/timescaledb}
 UPDATE_FROM_TAG=${UPDATE_FROM_TAG:-0.1.0}
