@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_TXN_STORE_H
-#define TIMESCALEDB_TSL_REMOTE_TXN_STORE_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/hsearch.h>
@@ -33,5 +32,3 @@ extern void remote_txn_store_destroy(RemoteTxnStore *store);
 #define remote_txn_store_foreach(store, remote_txn)                                                \
 	for (hash_seq_init(&store->scan, store->hashtable);                                            \
 		 NULL != (remote_txn = (RemoteTxn *) hash_seq_search(&store->scan));)
-
-#endif /* TIMESCALEDB_TSL_REMOTE_TXN_STORE_H */

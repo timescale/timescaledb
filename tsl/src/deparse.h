@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DEPARSE_H
-#define TIMESCALEDB_DEPARSE_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pg_list.h>
@@ -52,5 +51,3 @@ const char *deparse_func_call(FunctionCallInfo fcinfo);
 const char *deparse_oid_function_call_coll(Oid funcid, Oid collation, unsigned int num_args, ...);
 const char *deparse_grant_revoke_on_database(const GrantStmt *stmt, const char *dbname);
 const char *deparse_create_trigger(CreateTrigStmt *stmt);
-
-#endif

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_PARTITIONING_H
-#define TIMESCALEDB_PARTITIONING_H
+#pragma once
 
 #define KEYSPACE_PT_NO_PARTITIONING -1
 
@@ -58,5 +57,3 @@ extern TSDLLEXPORT Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid
  */
 extern TSDLLEXPORT Datum ts_partitioning_func_apply_slot(PartitioningInfo *pinfo,
 														 TupleTableSlot *slot, bool *isnull);
-
-#endif /* TIMESCALEDB_PARTITIONING_H */

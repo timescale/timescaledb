@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_WITH_CLAUSE_PARSER_H
-#define TIMESCALEDB_WITH_CLAUSE_PARSER_H
+#pragma once
+
 #include <postgres.h>
 
 #include <nodes/parsenodes.h>
@@ -33,4 +33,3 @@ extern TSDLLEXPORT WithClauseResult *
 ts_with_clauses_parse(const List *def_elems, const WithClauseDefinition *args, Size nargs);
 
 extern TSDLLEXPORT char *ts_with_clause_result_deparse_value(const WithClauseResult *result);
-#endif /* TIMESCALEDB_WITH_CLAUSE_PARSER_H */

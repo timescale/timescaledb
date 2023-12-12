@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_TXN_RESOLVE_H
-#define TIMESCALEDB_TSL_REMOTE_TXN_RESOLVE_H
+#pragma once
+
 #include <postgres.h>
 
 #include "txn_id.h"
@@ -83,5 +83,3 @@ typedef enum RemoteTxnResolution
 extern RemoteTxnResolution remote_txn_resolution(Oid foreign_server,
 												 const RemoteTxnId *transaction_id);
 extern Datum remote_txn_heal_data_node(PG_FUNCTION_ARGS);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_TXN_RESOLVE_H */

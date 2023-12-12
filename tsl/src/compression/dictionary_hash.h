@@ -3,6 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#pragma once
+
 /*
  * The Dictionary compressions scheme can store any type of data but is optimized for
  * low-cardinality data sets. The dictionary of distinct items is stored as an `array` compressed
@@ -10,9 +12,6 @@
  * dictionary array ordered by row number (called dictionary_indexes; compressed using
  * `simple8b_rle`).
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_DICTIONARY_HASH_H
-#define TIMESCALEDB_TSL_COMPRESSION_DICTIONARY_HASH_H
-
 #include <postgres.h>
 #include <funcapi.h>
 #include <utils/typcache.h>
@@ -106,5 +105,3 @@ dictionary_hash_alloc(TypeCacheEntry *tentry)
 
 	return dictionary_create(CurrentMemoryContext, 10, meta);
 }
-
-#endif

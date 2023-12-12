@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DECOMPRESS_CHUNK_H
-#define TIMESCALEDB_DECOMPRESS_CHUNK_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/bitmapset.h>
@@ -120,5 +119,3 @@ FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_com
 															char *column_name);
 
 extern bool ts_is_decompress_chunk_path(Path *path);
-
-#endif /* TIMESCALEDB_DECOMPRESS_CHUNK_H */

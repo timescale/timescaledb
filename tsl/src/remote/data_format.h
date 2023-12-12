@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_DATA_FORMAT_H
-#define TIMESCALEDB_TSL_REMOTE_DATA_FORMAT_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -28,5 +27,3 @@ extern AttConvInMetadata *data_format_create_att_conv_in_metadata(TupleDesc tupd
 extern Oid data_format_get_type_output_func(Oid type, bool *is_binary, bool force_text);
 extern Oid data_format_get_type_input_func(Oid type, bool *is_binary, bool force_text,
 										   Oid *type_io_param);
-
-#endif

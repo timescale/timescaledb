@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_NET_HTTP_H
-#define TIMESCALEDB_NET_HTTP_H
+#pragma once
 
 #include <postgres.h>
 
@@ -100,5 +99,3 @@ extern bool ts_http_response_state_parse(HttpResponseState *state, size_t bytes)
 extern const char *ts_http_strerror(HttpError http_errno);
 extern HttpError ts_http_send_and_recv(Connection *conn, HttpRequest *req,
 									   HttpResponseState *state);
-
-#endif /* TIMESCALEDB_HTTP_H */

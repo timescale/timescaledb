@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_COMPAT_MSVC_ENTER_H
-#define TIMESCALEDB_COMPAT_MSVC_ENTER_H
+#pragma once
 
 #include <postgres.h>
 
@@ -43,5 +42,3 @@
 #endif
 
 #endif /* _MSC_VER */
-
-#endif /* TIMESCALEDB_COMPAT_MSVC_ENTER_H */

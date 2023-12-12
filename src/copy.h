@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_COPY_H
-#define TIMESCALEDB_COPY_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/parsenodes.h>
@@ -35,5 +34,3 @@ typedef struct CopyChunkState
 extern void timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *processed,
 							   Hypertable *ht);
 extern void timescaledb_move_from_table_to_chunks(Hypertable *ht, LOCKMODE lockmode);
-
-#endif /* TIMESCALEDB_COPY_H */

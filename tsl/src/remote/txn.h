@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_TXN_H
-#define TIMESCALEDB_TSL_REMOTE_TXN_H
+#pragma once
 
 #include <postgres.h>
 #include <access/xact.h>
@@ -57,5 +56,3 @@ extern int remote_txn_persistent_record_delete_for_data_node(Oid foreign_server_
 /* Debugging functions used in testing */
 extern void remote_txn_check_for_leaked_prepared_statements(RemoteTxn *entry);
 #endif
-
-#endif /* TIMESCALEDB_TSL_REMOTE_TXN_H */

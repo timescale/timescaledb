@@ -3,14 +3,14 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#pragma once
+
 /*
  * The `array` compression method can store any type of data. It simply puts it into an
  * array-like structure and does not compress it. TOAST-based compression should be applied on top.
  *
  * Array compression is are also used as a building block for dictionary compression.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_ARRAY_H
-#define TIMESCALEDB_TSL_COMPRESSION_ARRAY_H
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -80,5 +80,3 @@ ArrowArray *text_array_decompress_all_serialized_no_header(StringInfo si, bool h
 		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
 		.decompress_all = tsl_text_array_decompress_all,                                           \
 	}
-
-#endif

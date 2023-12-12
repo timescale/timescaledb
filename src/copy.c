@@ -1379,11 +1379,6 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	if (stmt->whereClause)
 	{
-		if (hypertable_is_distributed(ht))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("COPY WHERE clauses are not supported on distributed hypertables")));
-
 		where_clause = transformExpr(pstate, stmt->whereClause, EXPR_KIND_COPY_WHERE);
 
 		where_clause = coerce_to_boolean(pstate, where_clause, "WHERE");
@@ -1398,19 +1393,14 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate, NULL);
 	ccstate->where_clause = where_clause;
 
-	if (hypertable_is_distributed(ht))
-		*processed = ts_cm_functions->distributed_copy(stmt, ccstate, attnums);
-	else
-	{
 #if PG14_GE
-		/* Take the copy memory context from cstate, if we can access the struct (PG>=14) */
-		copycontext = cstate->copycontext;
+	/* Take the copy memory context from cstate, if we can access the struct (PG>=14) */
+	copycontext = cstate->copycontext;
 #else
-		/* Or create a new memory context. */
-		copycontext = AllocSetContextCreate(CurrentMemoryContext, "COPY", ALLOCSET_DEFAULT_SIZES);
+	/* Or create a new memory context. */
+	copycontext = AllocSetContextCreate(CurrentMemoryContext, "COPY", ALLOCSET_DEFAULT_SIZES);
 #endif
-		*processed = copyfrom(ccstate, pstate, ht, copycontext, CopyFromErrorCallback, cstate);
-	}
+	*processed = copyfrom(ccstate, pstate, ht, copycontext, CopyFromErrorCallback, cstate);
 
 	copy_chunk_state_destroy(ccstate);
 	EndCopyFrom(cstate);

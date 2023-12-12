@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_ERROR_UTILS_H
-#define TIMESCALEDB_ERROR_UTILS_H
+#pragma once
 
 #define GETARG_NOTNULL_OID(var, arg, name)                                                         \
 	{                                                                                              \
@@ -32,5 +31,3 @@
 					 errmsg("%s cannot be NULL", name)));                                          \
 		var = PG_GETARG_##type(arg);                                                               \
 	}
-
-#endif /* TIMESCALEDB_ERROR_UTILS_H */

@@ -232,8 +232,8 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	{
 		elog(NOTICE,
 			 "no chunks need reordering for hypertable %s.%s",
-			 policy.hypertable->fd.schema_name.data,
-			 policy.hypertable->fd.table_name.data);
+			 NameStr(policy.hypertable->fd.schema_name),
+			 NameStr(policy.hypertable->fd.table_name));
 		return true;
 	}
 
@@ -243,12 +243,15 @@ policy_reorder_execute(int32 job_id, Jsonb *config)
 	 * chunk.
 	 */
 	chunk = ts_chunk_get_by_id(chunk_id, false);
-	elog(DEBUG1, "reordering chunk %s.%s", chunk->fd.schema_name.data, chunk->fd.table_name.data);
+	elog(DEBUG1,
+		 "reordering chunk %s.%s",
+		 NameStr(chunk->fd.schema_name),
+		 NameStr(chunk->fd.table_name));
 	reorder_chunk(chunk->table_id, policy.index_relid, false, InvalidOid, InvalidOid, InvalidOid);
 	elog(DEBUG1,
 		 "completed reordering chunk %s.%s",
-		 chunk->fd.schema_name.data,
-		 chunk->fd.table_name.data);
+		 NameStr(chunk->fd.schema_name),
+		 NameStr(chunk->fd.table_name));
 
 	/* Now update chunk_stats table */
 	ts_bgw_policy_chunk_stats_record_job_run(job_id, chunk_id, ts_timer_get_current_timestamp());
@@ -548,8 +551,8 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	{
 		elog(NOTICE,
 			 "no chunks for hypertable \"%s.%s\" that satisfy recompress chunk policy",
-			 policy_data.hypertable->fd.schema_name.data,
-			 policy_data.hypertable->fd.table_name.data);
+			 NameStr(policy_data.hypertable->fd.schema_name),
+			 NameStr(policy_data.hypertable->fd.table_name));
 		ts_cache_release(policy_data.hcache);
 		if (!used_portalcxt)
 			MemoryContextDelete(multitxn_cxt);

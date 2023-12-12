@@ -109,7 +109,6 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 														  hypertable_tuple_found,
 														  query->result,
 														  AccessShareLock,
-														  false,
 														  ts_cache_memory_ctx(cache));
 
 	switch (number_found)
@@ -119,10 +118,12 @@ hypertable_cache_create_entry(Cache *cache, CacheQuery *query)
 			cache_entry->hypertable = NULL;
 			break;
 		case 1:
-			Assert(strncmp(cache_entry->hypertable->fd.schema_name.data, hq->schema, NAMEDATALEN) ==
-				   0);
-			Assert(strncmp(cache_entry->hypertable->fd.table_name.data, hq->table, NAMEDATALEN) ==
-				   0);
+			Assert(strncmp(NameStr(cache_entry->hypertable->fd.schema_name),
+						   hq->schema,
+						   NAMEDATALEN) == 0);
+			Assert(strncmp(NameStr(cache_entry->hypertable->fd.table_name),
+						   hq->table,
+						   NAMEDATALEN) == 0);
 			break;
 		default:
 			elog(ERROR, "got an unexpected number of records: %d", number_found);

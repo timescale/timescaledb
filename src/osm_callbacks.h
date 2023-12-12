@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_OSM_CALLBACKS_H
-#define TIMESCALEDB_OSM_CALLBACKS_H
+#pragma once
 
 #include <postgres.h>
 #include <catalog/objectaddress.h>
@@ -43,5 +42,3 @@ typedef struct
 extern chunk_insert_check_hook_type ts_get_osm_chunk_insert_hook(void);
 extern hypertable_drop_hook_type ts_get_osm_hypertable_drop_hook(void);
 extern hypertable_drop_chunks_hook_type ts_get_osm_hypertable_drop_chunks_hook(void);
-
-#endif /* TIMESCALEDB_OSM_CALLBACKS_H */

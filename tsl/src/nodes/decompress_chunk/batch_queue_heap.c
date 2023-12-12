@@ -3,34 +3,37 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <nodes/bitmapset.h>
 #include <lib/binaryheap.h>
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/batch_array.h"
-#include "nodes/decompress_chunk/batch_queue_heap.h"
+#include "nodes/decompress_chunk/batch_queue.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
-#include "nodes/decompress_chunk/exec.h"
 
-/* Initial amount of batch states */
-#define INITIAL_BATCH_CAPACITY 16
+typedef struct BatchQueueHeap
+{
+	BatchQueue bq;
+	binaryheap *merge_heap; /* Binary heap of slot indices */
+	TupleTableSlot *last_batch_first_tuple;
+	SortSupport sortkeys;
+	int nkeys;
+} BatchQueueHeap;
 
 /*
  * Compare the tuples of two given slots.
  */
 static int32
 decompress_binaryheap_compare_slots(TupleTableSlot *tupleA, TupleTableSlot *tupleB,
-									DecompressChunkState *chunk_state)
+									const SortSupport sortkeys, int nkeys)
 {
 	Assert(!TupIsNull(tupleA));
 	Assert(!TupIsNull(tupleB));
-	Assert(chunk_state != NULL);
 
-	for (int nkey = 0; nkey < chunk_state->n_sortkeys; nkey++)
+	for (int nkey = 0; nkey < nkeys; nkey++)
 	{
-		SortSupportData *sortKey = &chunk_state->sortkeys[nkey];
+		SortSupport sortKey = &sortkeys[nkey];
 		Assert(sortKey != NULL);
 		AttrNumber attno = sortKey->ssup_attno;
 
@@ -57,8 +60,8 @@ decompress_binaryheap_compare_slots(TupleTableSlot *tupleA, TupleTableSlot *tupl
 static int32
 decompress_binaryheap_compare_heap_pos(Datum a, Datum b, void *arg)
 {
-	DecompressChunkState *chunk_state = (DecompressChunkState *) arg;
-	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
+	BatchQueueHeap *bqh = (BatchQueueHeap *) arg;
+	BatchArray *batch_array = &bqh->bq.batch_array;
 	int batchA = DatumGetInt32(a);
 	Assert(batchA <= batch_array->n_batch_states);
 
@@ -68,7 +71,7 @@ decompress_binaryheap_compare_heap_pos(Datum a, Datum b, void *arg)
 	TupleTableSlot *tupleA = batch_array_get_at(batch_array, batchA)->decompressed_scan_slot;
 	TupleTableSlot *tupleB = batch_array_get_at(batch_array, batchB)->decompressed_scan_slot;
 
-	return decompress_binaryheap_compare_slots(tupleA, tupleB, chunk_state);
+	return decompress_binaryheap_compare_slots(tupleA, tupleB, bqh->sortkeys, bqh->nkeys);
 }
 
 /* Add a new datum to the heap and perform an automatic resizing if needed. In contrast to
@@ -92,52 +95,55 @@ binaryheap_add_unordered_autoresize(binaryheap *heap, Datum d)
 	return heap;
 }
 
-void
-batch_queue_heap_pop(DecompressChunkState *chunk_state)
+static void
+batch_queue_heap_pop(BatchQueue *bq, DecompressContext *dcontext)
 {
-	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
+	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
+	BatchArray *batch_array = &bq->batch_array;
 
-	if (binaryheap_empty(chunk_state->merge_heap))
+	if (binaryheap_empty(bqh->merge_heap))
 	{
 		/* Allow this function to be called on the initial empty heap. */
 		return;
 	}
 
-	const int top_batch_index = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
+	const int top_batch_index = DatumGetInt32(binaryheap_first(bqh->merge_heap));
 	DecompressBatchState *top_batch = batch_array_get_at(batch_array, top_batch_index);
 
-	compressed_batch_advance(chunk_state, top_batch);
+	compressed_batch_advance(dcontext, top_batch);
 
 	if (TupIsNull(top_batch->decompressed_scan_slot))
 	{
 		/* Batch is exhausted, recycle batch_state */
-		(void) binaryheap_remove_first(chunk_state->merge_heap);
+		(void) binaryheap_remove_first(bqh->merge_heap);
 		batch_array_clear_at(batch_array, top_batch_index);
 	}
 	else
 	{
 		/* Put the next tuple from this batch on the heap */
-		binaryheap_replace_first(chunk_state->merge_heap, Int32GetDatum(top_batch_index));
+		binaryheap_replace_first(bqh->merge_heap, Int32GetDatum(top_batch_index));
 	}
 }
 
-bool
-batch_queue_heap_needs_next_batch(DecompressChunkState *chunk_state)
+static bool
+batch_queue_heap_needs_next_batch(BatchQueue *bq)
 {
-	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
+	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
+	BatchArray *batch_array = &bq->batch_array;
 
-	if (binaryheap_empty(chunk_state->merge_heap))
+	if (binaryheap_empty(bqh->merge_heap))
 	{
 		return true;
 	}
 
-	const int top_batch_index = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
+	const int top_batch_index = DatumGetInt32(binaryheap_first(bqh->merge_heap));
 	DecompressBatchState *top_batch = batch_array_get_at(batch_array, top_batch_index);
 
 	const int comparison_result =
 		decompress_binaryheap_compare_slots(top_batch->decompressed_scan_slot,
-											chunk_state->last_batch_first_tuple,
-											chunk_state);
+											bqh->last_batch_first_tuple,
+											bqh->sortkeys,
+											bqh->nkeys);
 
 	/*
 	 * The invariant we have to preserve is that either:
@@ -153,20 +159,20 @@ batch_queue_heap_needs_next_batch(DecompressChunkState *chunk_state)
 	return comparison_result <= 0;
 }
 
-void
-batch_queue_heap_push_batch(DecompressChunkState *chunk_state, TupleTableSlot *compressed_slot)
+static void
+batch_queue_heap_push_batch(BatchQueue *bq, DecompressContext *dcontext,
+							TupleTableSlot *compressed_slot)
 {
-	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
+	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
+	BatchArray *batch_array = &bq->batch_array;
 
 	Assert(!TupIsNull(compressed_slot));
 
 	const int new_batch_index = batch_array_get_unused_slot(batch_array);
 	DecompressBatchState *batch_state = batch_array_get_at(batch_array, new_batch_index);
 
-	compressed_batch_set_compressed_tuple(chunk_state, batch_state, compressed_slot);
-	compressed_batch_save_first_tuple(chunk_state,
-									  batch_state,
-									  chunk_state->last_batch_first_tuple);
+	compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+	compressed_batch_save_first_tuple(dcontext, batch_state, bqh->last_batch_first_tuple);
 
 	if (TupIsNull(batch_state->decompressed_scan_slot))
 	{
@@ -175,65 +181,122 @@ batch_queue_heap_push_batch(DecompressChunkState *chunk_state, TupleTableSlot *c
 		return;
 	}
 
-	chunk_state->merge_heap =
-		binaryheap_add_unordered_autoresize(chunk_state->merge_heap, new_batch_index);
+	bqh->merge_heap = binaryheap_add_unordered_autoresize(bqh->merge_heap, new_batch_index);
 }
 
-TupleTableSlot *
-batch_queue_heap_top_tuple(DecompressChunkState *chunk_state)
+static TupleTableSlot *
+batch_queue_heap_top_tuple(BatchQueue *bq)
 {
-	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
+	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
+	BatchArray *batch_array = &bq->batch_array;
 
-	if (binaryheap_empty(chunk_state->merge_heap))
+	if (binaryheap_empty(bqh->merge_heap))
 	{
 		return NULL;
 	}
 
-	const int top_batch_index = DatumGetInt32(binaryheap_first(chunk_state->merge_heap));
+	const int top_batch_index = DatumGetInt32(binaryheap_first(bqh->merge_heap));
 	DecompressBatchState *top_batch = batch_array_get_at(batch_array, top_batch_index);
 	Assert(!TupIsNull(top_batch->decompressed_scan_slot));
 	return top_batch->decompressed_scan_slot;
 }
 
-void
-batch_queue_heap_create(DecompressChunkState *chunk_state)
+static void
+batch_queue_heap_reset(BatchQueue *bq)
 {
-	DecompressContext *dcontext = &chunk_state->decompress_context;
-
-	batch_array_init(&dcontext->batch_array,
-					 INITIAL_BATCH_CAPACITY,
-					 chunk_state->num_compressed_columns,
-					 dcontext->batch_memory_context_bytes);
-
-	chunk_state->merge_heap = binaryheap_allocate(INITIAL_BATCH_CAPACITY,
-												  decompress_binaryheap_compare_heap_pos,
-												  chunk_state);
-
-	Assert(chunk_state->last_batch_first_tuple == NULL);
-	chunk_state->last_batch_first_tuple =
-		MakeSingleTupleTableSlot(chunk_state->csstate.ss.ss_ScanTupleSlot->tts_tupleDescriptor,
-								 &TTSOpsVirtual);
-}
-
-void
-batch_queue_heap_reset(DecompressChunkState *chunk_state)
-{
-	binaryheap_reset(chunk_state->merge_heap);
+	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
+	binaryheap_reset(bqh->merge_heap);
 }
 
 /*
  * Free the binary heap.
  */
-void
-batch_queue_heap_free(DecompressChunkState *chunk_state)
+static void
+batch_queue_heap_free(BatchQueue *bq)
 {
-	BatchArray *batch_array = &chunk_state->decompress_context.batch_array;
+	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
+	BatchArray *batch_array = &bq->batch_array;
 
-	elog(DEBUG3, "Heap has capacity of %d", chunk_state->merge_heap->bh_space);
-	elog(DEBUG3, "Created batch states %d", batch_array->n_batch_states);
-	binaryheap_free(chunk_state->merge_heap);
-	chunk_state->merge_heap = NULL;
-	ExecDropSingleTupleTableSlot(chunk_state->last_batch_first_tuple);
-
+	elog(DEBUG3, "heap has capacity of %d", bqh->merge_heap->bh_space);
+	elog(DEBUG3, "created batch states %d", batch_array->n_batch_states);
+	batch_array_clear_all(&bq->batch_array);
+	binaryheap_free(bqh->merge_heap);
+	bqh->merge_heap = NULL;
+	pfree(bqh->sortkeys);
+	ExecDropSingleTupleTableSlot(bqh->last_batch_first_tuple);
 	batch_array_destroy(batch_array);
+	pfree(bq);
+}
+
+const struct BatchQueueFunctions BatchQueueFunctionsHeap = {
+	.free = batch_queue_heap_free,
+	.needs_next_batch = batch_queue_heap_needs_next_batch,
+	.pop = batch_queue_heap_pop,
+	.push_batch = batch_queue_heap_push_batch,
+	.reset = batch_queue_heap_reset,
+	.top_tuple = batch_queue_heap_top_tuple,
+};
+
+static SortSupport
+build_batch_sorted_merge_info(const List *sortinfo, int *nkeys)
+{
+	Assert(sortinfo != NULL);
+
+	List *sort_col_idx = linitial(sortinfo);
+	List *sort_ops = lsecond(sortinfo);
+	List *sort_collations = lthird(sortinfo);
+	List *sort_nulls = lfourth(sortinfo);
+
+	*nkeys = list_length(linitial((sortinfo)));
+
+	Assert(list_length(sort_col_idx) == list_length(sort_ops));
+	Assert(list_length(sort_ops) == list_length(sort_collations));
+	Assert(list_length(sort_collations) == list_length(sort_nulls));
+	Assert(*nkeys > 0);
+
+	SortSupportData *sortkeys = palloc0(sizeof(SortSupportData) * *nkeys);
+
+	/* Inspired by nodeMergeAppend.c */
+	for (int i = 0; i < *nkeys; i++)
+	{
+		SortSupportData *sortkey = &sortkeys[i];
+
+		sortkey->ssup_cxt = CurrentMemoryContext;
+		sortkey->ssup_collation = list_nth_oid(sort_collations, i);
+		sortkey->ssup_nulls_first = list_nth_oid(sort_nulls, i);
+		sortkey->ssup_attno = list_nth_oid(sort_col_idx, i);
+
+		/*
+		 * It isn't feasible to perform abbreviated key conversion, since
+		 * tuples are pulled into mergestate's binary heap as needed.  It
+		 * would likely be counter-productive to convert tuples into an
+		 * abbreviated representation as they're pulled up, so opt out of that
+		 * additional optimization entirely.
+		 */
+		sortkey->abbreviate = false;
+		PrepareSortSupportFromOrderingOp(list_nth_oid(sort_ops, i), sortkey);
+	}
+
+	return sortkeys;
+}
+
+BatchQueue *
+batch_queue_heap_create(int num_compressed_cols, Size batch_memory_context_bytes,
+						const List *sortinfo, const TupleDesc result_tupdesc,
+						const BatchQueueFunctions *funcs)
+{
+	BatchQueueHeap *bqh = palloc0(sizeof(BatchQueueHeap));
+
+	batch_array_init(&bqh->bq.batch_array,
+					 INITIAL_BATCH_CAPACITY,
+					 num_compressed_cols,
+					 batch_memory_context_bytes);
+
+	bqh->sortkeys = build_batch_sorted_merge_info(sortinfo, &bqh->nkeys);
+	bqh->merge_heap =
+		binaryheap_allocate(INITIAL_BATCH_CAPACITY, decompress_binaryheap_compare_heap_pos, bqh);
+	bqh->last_batch_first_tuple = MakeSingleTupleTableSlot(result_tupdesc, &TTSOpsVirtual);
+	bqh->bq.funcs = funcs;
+
+	return &bqh->bq;
 }

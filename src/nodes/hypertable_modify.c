@@ -669,16 +669,7 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 #endif
 	)
 	{
-		if (hypertable_is_distributed(ht) && ts_guc_max_insert_batch_size > 0)
-		{
-			/* Remember that this will become a data node dispatch/copy
-			 * plan. We need to know later whether or not to plan this
-			 * using the FDW API. */
-			distributed_insert_plans = bms_add_member(distributed_insert_plans, i);
-			subpath = ts_cm_functions->distributed_insert_path_create(root, mtpath, rti, i);
-		}
-		else
-			subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
+		subpath = ts_chunk_dispatch_path_create(root, mtpath, rti, i);
 	}
 
 	hmpath = palloc0(sizeof(HypertableModifyPath));

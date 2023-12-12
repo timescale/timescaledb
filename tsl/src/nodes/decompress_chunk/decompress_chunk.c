@@ -31,7 +31,7 @@
 #include "import/planner.h"
 #include "import/allpaths.h"
 #include "compression/create.h"
-#include "nodes/decompress_chunk/batch_queue_heap.h"
+#include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
@@ -1273,7 +1273,7 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 			get_column_compressioninfo(context->hypertable_compression_info, column_name);
 
 		compressed_attno =
-			get_attnum(context->compressed_rte->relid, compressioninfo->attname.data);
+			get_attnum(context->compressed_rte->relid, NameStr(compressioninfo->attname));
 		compress_var->varno = context->compressed_rel->relid;
 		compress_var->varattno = compressed_attno;
 

@@ -66,52 +66,6 @@ policy_compression_get_hypertable_id(const Jsonb *config)
 }
 
 int64
-policy_compression_get_compress_after_int(const Jsonb *config)
-{
-	bool found;
-	int64 compress_after =
-		ts_jsonb_get_int64_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER, &found);
-
-	if (!found)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job",
-						POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER)));
-
-	return compress_after;
-}
-
-Interval *
-policy_compression_get_compress_after_interval(const Jsonb *config)
-{
-	Interval *interval =
-		ts_jsonb_get_interval_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER);
-
-	if (interval == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job",
-						POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER)));
-
-	return interval;
-}
-
-Interval *
-policy_compression_get_compress_created_before_interval(const Jsonb *config)
-{
-	Interval *interval =
-		ts_jsonb_get_interval_field(config, POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE);
-
-	if (interval == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("could not find %s in config for job",
-						POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE)));
-
-	return interval;
-}
-
-int64
 policy_recompression_get_recompress_after_int(const Jsonb *config)
 {
 	bool found;

@@ -3,6 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#pragma once
+
 /*
  * The Dictionary compressions scheme can store any type of data but is optimized for
  * low-cardinality data sets. The dictionary of distinct items is stored as an `array` compressed
@@ -10,8 +12,6 @@
  * dictionary array ordered by row number (called dictionary_indexes; compressed using
  * `simple8b_rle`).
  */
-#ifndef TIMESCALEDB_TSL_DICTIONARY_COMPRESSION_H
-#define TIMESCALEDB_TSL_DICTIONARY_COMPRESSION_H
 
 #include <postgres.h>
 #include <lib/stringinfo.h>
@@ -63,5 +63,3 @@ ArrowArray *tsl_text_dictionary_decompress_all(Datum compressed, Oid element_typ
 		.compressed_data_storage = TOAST_STORAGE_EXTENDED,                                         \
 		.decompress_all = tsl_text_dictionary_decompress_all,                                      \
 	}
-
-#endif

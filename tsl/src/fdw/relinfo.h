@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_FDW_RELINFO_H
-#define TIMESCALEDB_TSL_FDW_RELINFO_H
+#pragma once
 
 #include <postgres.h>
 #include <foreign/foreign.h>
@@ -166,5 +165,3 @@ extern TsFdwRelInfo *fdw_relinfo_create(PlannerInfo *root, RelOptInfo *rel, Oid 
 extern TsFdwRelInfo *fdw_relinfo_alloc_or_get(RelOptInfo *rel);
 extern TsFdwRelInfo *fdw_relinfo_get(RelOptInfo *rel);
 extern void apply_fdw_and_server_options(TsFdwRelInfo *fpinfo);
-
-#endif /* TIMESCALEDB_TSL_FDW_RELINFO_H */

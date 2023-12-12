@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TELEMETRY_TELEMETRY_H
-#define TIMESCALEDB_TELEMETRY_TELEMETRY_H
+#pragma once
+
 #include <postgres.h>
 #include <fmgr.h>
 #include <utils/builtins.h>
@@ -58,5 +58,3 @@ extern void ts_check_version_response(const char *json);
 extern bool ts_telemetry_main(const char *host, const char *path, const char *service);
 extern TSDLLEXPORT bool ts_telemetry_main_wrapper(void);
 extern TSDLLEXPORT Datum ts_telemetry_get_report_jsonb(PG_FUNCTION_ARGS);
-
-#endif /* TIMESCALEDB_TELEMETRY_TELEMETRY_H */

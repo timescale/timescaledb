@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DIMENSION_PARTITION_H
-#define TIMESCALEDB_DIMENSION_PARTITION_H
+#pragma once
 
 #include <postgres.h>
 
@@ -31,5 +30,3 @@ extern TSDLLEXPORT DimensionPartitionInfo *
 ts_dimension_partition_info_recreate(int32 dimension_id, unsigned int num_partitions,
 									 List *data_nodes, int replication_factor);
 extern void ts_dimension_partition_info_delete(int dimension_id);
-
-#endif /* TIMESCALEDB_DIMENSION_PARTITION_H */

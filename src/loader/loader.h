@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_LOADER_H
-#define TIMESCALEDB_LOADER_H
+#pragma once
 
 #include <postgres.h>
 
@@ -24,5 +23,3 @@ extern void ts_loader_extension_check(void);
 
 /* GUC to control launcher timeout */
 extern int ts_guc_bgw_launcher_poll_time;
-
-#endif /* TIMESCALEDB_LOADER_H */

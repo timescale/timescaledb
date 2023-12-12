@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TABLESPACE_H
-#define TIMESCALEDB_TABLESPACE_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/parsenodes.h>
@@ -34,5 +33,3 @@ extern int ts_tablespace_delete(int32 hypertable_id, const char *tspcname, Oid t
 extern int ts_tablespace_count_attached(const char *tspcname);
 extern void ts_tablespace_validate_revoke(GrantStmt *stmt);
 extern void ts_tablespace_validate_revoke_role(GrantRoleStmt *stmt);
-
-#endif /* TIMESCALEDB_TABLESPACE_H */
