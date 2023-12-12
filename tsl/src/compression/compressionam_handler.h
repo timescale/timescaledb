@@ -14,6 +14,11 @@
 
 #include "hypertable.h"
 
+/* Scan key flag (skey.h) to indicate that a table scan should only return
+ * tuples from the non-compressed relation. Bits 16-31 are reserved for
+ * individual access methods, so use bit 16. */
+#define SK_NO_COMPRESSED 0x8000
+
 extern const TableAmRoutine *compressionam_routine(void);
 extern void compressionam_handler_start_conversion(Oid relid, bool to_other_am);
 extern void compressionam_alter_access_method_begin(Oid relid, bool to_other_am);
