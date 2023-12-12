@@ -1841,9 +1841,9 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
 	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
 	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
-	bool replication_factor_is_null = PG_ARGISNULL(14);
-	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
-	ArrayType *data_node_arr = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
+	bool replication_factor_is_null = true;
+	int32 replication_factor_in = 0;
+	ArrayType *data_node_arr = NULL;
 
 	bool distributed_is_null;
 	bool distributed;
@@ -1857,18 +1857,8 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("partition column cannot be NULL")));
 
-	/* create_distributed_hypertable() does not have explicit
-	 * distributed argument */
-	if (!is_dist_call)
-	{
-		distributed_is_null = PG_ARGISNULL(16);
-		distributed = distributed_is_null ? false : PG_GETARG_BOOL(16);
-	}
-	else
-	{
-		distributed_is_null = false;
-		distributed = true;
-	}
+	distributed_is_null = true;
+	distributed = false;
 
 	DimensionInfo *open_dim_info =
 		ts_dimension_info_create_open(table_relid,
