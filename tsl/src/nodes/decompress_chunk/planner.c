@@ -217,7 +217,8 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 		Oid typoid = get_atttype(path->info->chunk_rte->relid, chunk_attno);
 		const bool bulk_decompression_possible =
 			!is_segment && destination_attno_in_uncompressed_chunk > 0 &&
-			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) != NULL;
+			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
+				NULL;
 		path->have_bulk_decompression_columns |= bulk_decompression_possible;
 		path->bulk_decompression_column =
 			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
