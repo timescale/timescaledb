@@ -117,12 +117,14 @@ arrow_column_cache_release(ArrowColumnCache *acache)
 }
 
 ArrowColumnCacheEntry *
-arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
+arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts)
 {
 	ArrowColumnCache *acache = &aslot->arrow_cache;
 	const ItemPointer compressed_tid = &aslot->compressed_slot->tts_tid;
+	const TupleDesc tupdesc = aslot->base.base.tts_tupleDescriptor;
 	const TupleDesc compressed_tupdesc = aslot->compressed_slot->tts_tupleDescriptor;
 	const ArrowColumnKey key = { .ctid = *compressed_tid };
+	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
 	bool found;
 
 	ArrowColumnCacheEntry *restrict entry = hash_search(acache->htab, &key, HASH_FIND, &found);
@@ -164,9 +166,11 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 							pfree((void *) arr->buffers[j]);
 					}
 					pfree(entry->arrow_columns[i]);
+					entry->arrow_columns[i] = NULL;
 				}
 			}
 			pfree((void *) entry->arrow_columns);
+			entry->arrow_columns = NULL;
 		}
 
 		/* Allocate a new entry in the hash table. */
@@ -191,8 +195,9 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	if (!found)
 	{
 		entry->nvalid = 0;
-		entry->arrow_columns = (ArrowArray **)
-			MemoryContextAllocZero(acache->mcxt, sizeof(ArrowArray *) * compressed_tupdesc->natts);
+		entry->arrow_columns =
+			(ArrowArray **) MemoryContextAllocZero(acache->mcxt,
+												   sizeof(ArrowArray *) * tupdesc->natts);
 		if (decompress_cache_print)
 			decompress_cache_misses++;
 	}
@@ -204,19 +209,23 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 			decompress_cache_hits++;
 	}
 
-	const int16 *attrs_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
-
 	/*
 	 * Fill in missing columns in the cache entry.
 	 *
 	 * Note that this will skip columns that are already dealt with before
 	 * and stored in the cache.
 	 */
-	for (; entry->nvalid < attnum; entry->nvalid++)
+	for (int i = entry->nvalid; i < natts; i++)
 	{
-		const int16 cattoff = attrs_map[entry->nvalid];
-		const AttrNumber attno = AttrOffsetGetAttrNumber(entry->nvalid);
+		if (TupleDescAttr(tupdesc, i)->attisdropped)
+			continue;
+
+		const int16 cattoff = attrs_offset_map[i];
+		const AttrNumber attno = AttrOffsetGetAttrNumber(i);
 		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
+
+		Assert(namestrcmp(&TupleDescAttr(tupdesc, i)->attname,
+						  NameStr(TupleDescAttr(compressed_tupdesc, cattoff)->attname)) == 0);
 
 		/*
 		 * Only decompress columns that are actually needed, but only if the
@@ -226,7 +235,7 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 		 * decompression columns are not set up at all and in these cases we
 		 * should read all columns up to the attribute number.
 		 */
-		if (is_compressed_col(compressed_tupdesc, cattno) &&
+		if (entry->arrow_columns[i] == NULL && is_compressed_col(compressed_tupdesc, cattno) &&
 			(!aslot->referenced_attrs || bms_is_member(attno, aslot->referenced_attrs)))
 		{
 			bool isnull;
@@ -234,13 +243,14 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 
 			if (!isnull)
 			{
-				const TupleDesc tupdesc = aslot->base.base.tts_tupleDescriptor;
-				const Form_pg_attribute attr = TupleDescAttr(tupdesc, entry->nvalid);
-				entry->arrow_columns[entry->nvalid] =
+				const Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+				entry->arrow_columns[i] =
 					arrow_column_cache_decompress(acache, attr->atttypid, value);
 			}
 		}
 	}
+
+	entry->nvalid = natts;
 
 	return entry;
 }
