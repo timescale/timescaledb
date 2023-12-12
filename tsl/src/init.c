@@ -51,7 +51,6 @@
 #include "remote/connection_cache.h"
 #include "remote/connection.h"
 #include "remote/dist_commands.h"
-#include "remote/dist_copy.h"
 #include "remote/dist_txn.h"
 #include "remote/healthcheck.h"
 #include "remote/txn_id.h"
@@ -222,7 +221,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_txn_heal_data_node = remote_txn_heal_data_node,
 	.remote_connection_cache_show = remote_connection_cache_show,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
-	.distributed_copy = remote_distributed_copy,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.sql_drop = tsl_sql_drop,
