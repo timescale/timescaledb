@@ -380,7 +380,7 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
 #define CheckCompressedData(X)                                                                     \
 	if (unlikely(!(X)))                                                                            \
-	ereport(ERROR, CORRUPT_DATA_MESSAGE)
+	ereport(ERROR, CORRUPT_DATA_MESSAGE, errdetail(#X))
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)

@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: [ { algo: gorilla, type: float8 }, { algo: deltadelta, type: int8 } ]
+        case: [ { algo: gorilla, type: float8 }, { algo: deltadelta, type: int8 },
+            { algo: array, type: text }, { algo: dictionary, type: text } ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.type }}
     runs-on: ubuntu-22.04
@@ -89,6 +90,10 @@ jobs:
 
         export LIBFUZZER_PATH=$(dirname "$(find $(llvm-config --libdir) -name libclang_rt.fuzzer_no_main-x86_64.a | head -1)")
 
+        # Some pointers for the next time we have linking/undefined symbol problems:
+        # http://web.archive.org/web/20200926071757/https://github.com/google/sanitizers/issues/111
+        # http://web.archive.org/web/20231101091231/https://github.com/cms-sw/cmssw/issues/40680
+
         cmake -B build -S . -DASSERTIONS=ON -DLINTER=OFF -DCMAKE_VERBOSE_MAKEFILE=1 \
             -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
             -DCMAKE_C_FLAGS="-fsanitize=fuzzer-no-link -lstdc++ -L$LIBFUZZER_PATH -l:libclang_rt.fuzzer_no_main-x86_64.a -static-libsan" \
@@ -141,19 +146,23 @@ jobs:
 
         # Create the fuzzing function
         export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
-        psql -a -c "create or replace function fuzz(algo cstring, type regtype, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+        psql -a -c "create or replace function fuzz(algo cstring, type regtype, kind cstring, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+
+        # array has a peculiar recv function that recompresses all input, so
+        # fuzzing it is much slower.
+        runs=${{ matrix.case.algo == 'array' && 1000000 || 100000000 }}
 
         # Start more fuzzing processes in the background. We won't even monitor
         # their progress, because the server will panic if they find an error.
         for x in {2..$(nproc)}
         do
-          psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}', '${{ matrix.case.type }}', 100000000);" &
+          psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}', '${{ matrix.case.type }}', 'rowbyrow', $runs);" &
         done
 
         # Start the one fuzzing process that we will monitor, in foreground.
         # The LLVM fuzzing driver calls exit(), so we expect to lose the connection.
         ret=0
-        psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}', '${{ matrix.case.type }}', 100000000);" || ret=$?
+        psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}', '${{ matrix.case.type }}', 'rowbyrow', $runs);" || ret=$?
         if ! [ $ret -eq 2 ]
         then
             >&2 echo "Unexpected psql exit code $ret"

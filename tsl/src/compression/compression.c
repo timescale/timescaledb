@@ -2244,48 +2244,72 @@ get_compression_algorithm(char *name)
 	{
 		return COMPRESSION_ALGORITHM_GORILLA;
 	}
+	else if (pg_strcasecmp(name, "array") == 0)
+	{
+		return COMPRESSION_ALGORITHM_ARRAY;
+	}
+	else if (pg_strcasecmp(name, "dictionary") == 0)
+	{
+		return COMPRESSION_ALGORITHM_DICTIONARY;
+	}
 
 	ereport(ERROR, (errmsg("unknown comrpession algorithm %s", name)));
 	return _INVALID_COMPRESSION_ALGORITHM;
 }
 
-#define ALGO gorilla
+typedef enum
+{
+	DTT_BulkFuzzing,
+	DTT_RowByRowFuzzing,
+	DTT_RowByRow,
+	DTT_Bulk
+} DecompressionTestType;
+
+#define ALGO GORILLA
 #define CTYPE float8
-#define PGTYPE FLOAT8OID
+#define PG_TYPE_PREFIX FLOAT8
 #define DATUM_TO_CTYPE DatumGetFloat8
-#include "decompress_test_impl.c"
+#include "decompress_arithmetic_test_impl.c"
 #undef ALGO
 #undef CTYPE
-#undef PGTYPE
+#undef PG_TYPE_PREFIX
 #undef DATUM_TO_CTYPE
 
-#define ALGO deltadelta
+#define ALGO DELTADELTA
 #define CTYPE int64
-#define PGTYPE INT8OID
+#define PG_TYPE_PREFIX INT8
 #define DATUM_TO_CTYPE DatumGetInt64
-#include "decompress_test_impl.c"
+#include "decompress_arithmetic_test_impl.c"
 #undef ALGO
 #undef CTYPE
-#undef PGTYPE
+#undef PG_TYPE_PREFIX
 #undef DATUM_TO_CTYPE
+
+#include "decompress_text_test_impl.c"
+
+#define APPLY_FOR_TYPES(X) \
+	X(GORILLA,    FLOAT8, RowByRow) \
+	X(GORILLA,    FLOAT8, Bulk) \
+	X(DELTADELTA, INT8, RowByRow) \
+	X(DELTADELTA, INT8, Bulk) \
+	X(ARRAY,      TEXT, RowByRow) \
+	X(DICTIONARY, TEXT, RowByRow) \
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size,
-													bool extra_checks)
+													DecompressionTestType test_type)
 {
-	if (algo == COMPRESSION_ALGORITHM_GORILLA && type == FLOAT8OID)
-	{
-		return decompress_gorilla_float8;
-	}
-	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA && type == INT8OID)
-	{
-		return decompress_deltadelta_int64;
-	}
+#define DISPATCH(ALGO, PGTYPE, KIND) \
+	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID) \
+	{ return decompress_##ALGO##_##PGTYPE; }
+
+	APPLY_FOR_TYPES(DISPATCH)
 
 	elog(ERROR,
 		 "no decompression function for compression algorithm %d with element type %d",
 		 algo,
 		 type);
 	pg_unreachable();
+#undef DISPATCH
 }
 
 /*
@@ -2295,13 +2319,15 @@ static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Si
  * if we error out later.
  */
 static void
-read_compressed_data_file_impl(int algo, Oid type, const char *path, volatile int *bytes, int *rows)
+read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, volatile int *bytes,
+							   int *rows)
 {
 	FILE *f = fopen(path, "r");
 
 	if (!f)
 	{
-		elog(ERROR, "could not open the file '%s'", path);
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_FILE), errmsg("could not open the file '%s'", path)));
 	}
 
 	fseek(f, 0, SEEK_END);
@@ -2325,14 +2351,16 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, volatile in
 
 	if (elements_read != 1)
 	{
-		elog(ERROR, "failed to read file '%s'", path);
+		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_FILE), errmsg("failed to read file '%s'", path)));
 	}
 
 	fclose(f);
 
 	string[fsize] = 0;
 
-	*rows = get_decompress_fn(algo, type)((const uint8 *) string, fsize, /* extra_checks = */ true);
+	*rows = get_decompress_fn(algo, type)((const uint8 *) string,
+										  fsize,
+										  /* test_type = */ bulk ? DTT_Bulk : DTT_RowByRow);
 }
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
@@ -2346,6 +2374,7 @@ ts_read_compressed_data_file(PG_FUNCTION_ARGS)
 	read_compressed_data_file_impl(get_compression_algorithm(PG_GETARG_CSTRING(0)),
 								   PG_GETARG_OID(1),
 								   PG_GETARG_CSTRING(2),
+								   PG_GETARG_BOOL(3),
 								   &bytes,
 								   &rows);
 	PG_RETURN_INT32(rows);
@@ -2447,7 +2476,12 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 		volatile int bytes = 0;
 		PG_TRY();
 		{
-			read_compressed_data_file_impl(algo, PG_GETARG_OID(1), path, &bytes, &rows);
+			read_compressed_data_file_impl(algo,
+										   PG_GETARG_OID(1),
+										   path,
+										   PG_GETARG_BOOL(3),
+										   &bytes,
+										   &rows);
 			values[out_rows] = Int32GetDatum(rows);
 			nulls[out_rows] = false;
 		}
@@ -2488,41 +2522,61 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 
 #ifdef TS_COMPRESSION_FUZZING
 
+static DecompressionTestType
+get_fuzzing_kind(const char* s)
+{
+	if (strcmp(s, "bulk") == 0)
+	{
+		return DTT_BulkFuzzing;
+	}
+	else if (strcmp(s, "rowbyrow") == 0)
+	{
+		return DTT_RowByRowFuzzing;
+	}
+	else
+	{
+		elog(ERROR, "unknown fuzzing type '%s'", s);
+	}
+}
+
 /*
  * This is our test function that will be called by the libfuzzer driver. It
  * has to catch the postgres exceptions normally produced for corrupt data.
  */
 static int
-llvm_fuzz_target_generic(int (*target)(const uint8_t *Data, size_t Size, bool extra_checks),
-						 const uint8_t *Data, size_t Size)
+target_generic(int (*test_fn)(const uint8_t *, size_t, DecompressionTestType),
+						 const uint8_t *Data, size_t Size, DecompressionTestType test_type)
 {
 	MemoryContextReset(CurrentMemoryContext);
 
+	int res = 0;
 	PG_TRY();
 	{
 		CHECK_FOR_INTERRUPTS();
-		target(Data, Size, /* extra_checks = */ false);
+		res = test_fn(Data, Size, test_type);
 	}
 	PG_CATCH();
 	{
+		/* EmitErrorReport(); */
 		FlushErrorState();
 	}
 	PG_END_TRY();
 
-	/* We always return 0, and -1 would mean "don't include it into corpus". */
-	return 0;
+	/*
+	 * -1 means "don't include it into corpus", return it if the test function
+	 * says so, otherwise return 0. The test function also returns the number
+	 * of rows for the correct data, the fuzzer doesn't understand these values.
+	 */
+	return res == -1 ? -1 : 0;
 }
 
-static int
-llvm_fuzz_target_gorilla_float8(const uint8_t *Data, size_t Size)
-{
-	return llvm_fuzz_target_generic(decompress_gorilla_float8, Data, Size);
-}
-static int
-llvm_fuzz_target_deltadelta_int64(const uint8_t *Data, size_t Size)
-{
-	return llvm_fuzz_target_generic(decompress_deltadelta_int64, Data, Size);
-}
+#define DECLARE_TARGET(ALGO, PGTYPE, KIND) \
+static int target_##ALGO##_##PGTYPE##_##KIND (const uint8_t *D, size_t S) { return target_generic(decompress_##ALGO##_##PGTYPE, D, S, DTT_##KIND##Fuzzing); }
+
+APPLY_FOR_TYPES(DECLARE_TARGET)
+
+#undef DECLARE_TARGET
+
 
 /*
  * libfuzzer fuzzing driver that we import from LLVM libraries. It will run our
@@ -2560,7 +2614,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 						 //"-print_full_coverage=1",
 						 //"-print_final_stats=1",
 						 //"-help=1",
-						 psprintf("-runs=%d", PG_GETARG_INT32(2)),
+						 psprintf("-runs=%d", PG_GETARG_INT32(3)),
 						 "corpus" /* in the database directory */,
 						 NULL };
 	char **argv = argvdata;
@@ -2568,16 +2622,18 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 
 	int algo = get_compression_algorithm(PG_GETARG_CSTRING(0));
 	Oid type = PG_GETARG_OID(1);
-	int (*target)(const uint8_t *, size_t);
-	if (algo == COMPRESSION_ALGORITHM_GORILLA && type == FLOAT8OID)
-	{
-		target = llvm_fuzz_target_gorilla_float8;
-	}
-	else if (algo == COMPRESSION_ALGORITHM_DELTADELTA && type == INT8OID)
-	{
-		target = llvm_fuzz_target_deltadelta_int64;
-	}
-	else
+	int kind = get_fuzzing_kind(PG_GETARG_CSTRING(2));
+
+	int (*target)(const uint8_t *, size_t) = NULL;
+
+#define DISPATCH(ALGO, PGTYPE, KIND) \
+if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID && kind == DTT_##KIND##Fuzzing) \
+{ target = target_##ALGO##_##PGTYPE##_##KIND ; }
+
+
+APPLY_FOR_TYPES(DISPATCH)
+
+	if (target == NULL)
 	{
 		elog(ERROR, "no llvm fuzz target for compression algorithm %d and type %d", algo, type);
 	}

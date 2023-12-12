@@ -20,6 +20,8 @@
 #include "datum_serialize.h"
 #include "compat/compat.h"
 
+#include "compression.h"
+
 typedef struct DatumSerializer
 {
 	Oid type_oid;
@@ -305,6 +307,15 @@ bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 
 	*ptr =
 		(Pointer) att_align_pointer(*ptr, deserializer->type_align, deserializer->type_len, *ptr);
+	if (deserializer->type_len == -1)
+	{
+		/*
+		 * Check for potentially corrupt varlena headers since we're reading them
+		 * directly from compressed data. We can only have a plain datum
+		 * with 1-byte or 4-byte header here, no TOAST or compressed data.
+		 */
+		CheckCompressedData(VARATT_IS_4B_U(*ptr) || (VARATT_IS_1B(*ptr) && !VARATT_IS_1B_E(*ptr)));
+	}
 	res = fetch_att(*ptr, deserializer->type_by_val, deserializer->type_len);
 	*ptr = att_addlength_pointer(*ptr, deserializer->type_len, *ptr);
 	return res;
