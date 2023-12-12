@@ -33,6 +33,7 @@
 #include "cache.h"
 #include "chunk.h"
 #include "compression.h"
+#include "compressionam_handler.h"
 #include "create.h"
 #include "debug_point.h"
 #include "error_utils.h"
@@ -978,8 +979,13 @@ fetch_unmatched_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tuples
 	TableScanDesc scan;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 	Snapshot snapshot = GetLatestSnapshot();
+	ScanKeyData scankey = {
+		/* Let compression TAM know it should only return tuples from the
+		 * non-compressed relation. No actual scankey necessary */
+		.sk_flags = SK_NO_COMPRESSED,
+	};
 
-	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, NULL);
+	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, &scankey);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -1004,6 +1010,7 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	Snapshot snapshot;
 	int index = 0;
 	int nsegbycols_nonnull = 0;
+	int num_scankeys = 1;
 	Bitmapset *null_segbycols = NULL;
 	bool matching_exist = false;
 
@@ -1019,8 +1026,10 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 		}
 	}
 
-	ScanKeyData *scankey =
-		(nsegbycols_nonnull > 0) ? palloc0(sizeof(*scankey) * nsegbycols_nonnull) : NULL;
+	if (nsegbycols_nonnull > 0)
+		num_scankeys = nsegbycols_nonnull;
+
+	ScanKeyData *scankey = palloc0(sizeof(*scankey) * num_scankeys);
 
 	for (int seg_col = 0; seg_col < nsegmentby_cols; seg_col++)
 	{
@@ -1043,6 +1052,9 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	}
 
 	snapshot = GetLatestSnapshot();
+	/* Let compression TAM know it should only return tuples from the
+	 * non-compressed relation. */
+	scankey->sk_flags = SK_NO_COMPRESSED;
 	scan = table_beginscan(uncompressed_chunk_rel, snapshot, nsegbycols_nonnull, scankey);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
@@ -1075,8 +1087,8 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	if (null_segbycols != NULL)
 		pfree(null_segbycols);
 
-	if (scankey != NULL)
-		pfree(scankey);
+	pfree(scankey);
+
 	return matching_exist;
 }
 

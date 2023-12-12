@@ -1654,7 +1654,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 								 RelOptInfo *chunk_rel, bool needs_sequence_num)
 {
 	Index compressed_index = root->simple_rel_array_size;
-	FormData_chunk compressed_fd = ts_chunk_get_formdata(chunk->fd.compressed_chunk_id);
+	FormData_chunk compressed_fd = ts_chunk_get_formdata(chunk->fd.compressed_chunk_id, false);
 	Oid compressed_reloid = ts_get_relation_relid(NameStr(compressed_fd.schema_name),
 												  NameStr(compressed_fd.table_name),
 												  /* return_invalid = */ false);

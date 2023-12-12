@@ -18,6 +18,7 @@ ALTER TABLE readings SET (
 	  timescaledb.compress_segmentby = 'device'
 );
 
+-- Set a test chunk as a global variable
 SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk
   FROM timescaledb_information.chunks
  WHERE format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
@@ -50,7 +51,7 @@ SELECT c.relname, a.amname FROM pg_class c
 INNER JOIN pg_am a ON (c.relam = a.oid)
 WHERE c.oid = :'chunk'::regclass;
 
--- This should compress the chunk
+-- This should show the chunk as compressed
 SELECT chunk_name FROM chunk_compression_stats('readings') WHERE compression_status='Compressed';
 
 -- Should give the same result as above
@@ -107,7 +108,6 @@ SELECT * FROM readings WHERE time BETWEEN '2022-06-01'::timestamptz AND '2022-06
 INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
 INSERT INTO readings VALUES ('2022-06-01 00:00:03'::timestamptz, 1, 1, 1.0, 1.0);
 \set ON_ERROR_STOP 1
-
 SELECT device, count(*) FROM readings WHERE device=1 GROUP BY device;
 -- Speculative insert when conflicting row is in the non-compressed part
 INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 2, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 11;
@@ -203,8 +203,21 @@ INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
 WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
 
 SELECT device, count(*) INTO num_rows_before FROM :chunk GROUP BY device;
+
+SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
+FROM _timescaledb_catalog.chunk c1
+INNER JOIN _timescaledb_catalog.chunk c2
+ON (c1.compressed_chunk_id = c2.id);
+
 ALTER TABLE :chunk SET ACCESS METHOD heap;
 SET timescaledb.enable_transparent_decompression TO true;
+
+-- The compressed chunk should no longer exist
+SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
+FROM _timescaledb_catalog.chunk c1
+INNER JOIN _timescaledb_catalog.chunk c2
+ON (c1.compressed_chunk_id = c2.id);
+
 SELECT device, count(*) INTO num_rows_after FROM :chunk GROUP BY device;
 SELECT device, num_rows_after.count AS after,
 	   num_rows_before.count AS before,
@@ -215,6 +228,14 @@ WHERE num_rows_after.count != num_rows_before.count;
 SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
 INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
 WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
+
+SELECT compress_chunk(:'chunk');
+
+-- A new compressed chunk should be created
+SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
+FROM _timescaledb_catalog.chunk c1
+INNER JOIN _timescaledb_catalog.chunk c2
+ON (c1.compressed_chunk_id = c2.id);
 
 -- Show same output as first query above but for heap
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
@@ -234,3 +255,35 @@ FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
 -- Convert back to tscompression to check that metadata was cleaned up
 -- from last time this table used tscompression
 ALTER TABLE :chunk SET ACCESS METHOD tscompression;
+SET timescaledb.enable_transparent_decompression TO false;
+
+-- Get the chunk's corresponding compressed chunk
+SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
+FROM _timescaledb_catalog.chunk c1
+INNER JOIN _timescaledb_catalog.chunk c2
+ON (c1.compressed_chunk_id = c2.id) LIMIT 1 \gset
+
+SELECT range_start, range_end
+FROM timescaledb_information.chunks
+WHERE format('%I.%I', chunk_schema, chunk_name)::regclass = :'chunk'::regclass;
+
+-- insert some new (non-compressed) data into the chunk in order to
+-- test recompression
+INSERT INTO :chunk (time, location, device, temp, humidity)
+SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+FROM generate_series('2022-06-01 00:06:14'::timestamptz, '2022-06-01 16:59', '5s') t;
+
+-- Show counts in compressed chunk prior to recompression
+SELECT sum(_ts_meta_count) FROM :cchunk;
+CALL recompress_chunk(:'chunk');
+
+\set ON_ERROR_STOP 0
+-- Can't recompress twice without new non-compressed rows
+CALL recompress_chunk(:'chunk');
+\set ON_ERROR_STOP 1
+
+-- Compressed count after recompression
+SELECT sum(_ts_meta_count) FROM :cchunk;
+
+-- A count on the chunk should return the same count
+SELECT count(*) FROM :chunk;
