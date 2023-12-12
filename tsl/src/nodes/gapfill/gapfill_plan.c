@@ -135,7 +135,18 @@ window_function_walker(Node *node, gapfill_walker_context *context)
 static bool
 gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 {
-	if (list_length(subpath->pathkeys) != list_length(root->group_pathkeys))
+	int num_groupby_pathkeys;
+#if PG16_LT
+	num_groupby_pathkeys = list_length(root->group_pathkeys);
+#else
+	/* In PG16 group_pathkeys can contain additional pathkeys
+	 * used for optimization on ordered aggregates.
+	 * We only want to deal with group by elements only here.
+	 */
+	num_groupby_pathkeys = root->num_groupby_pathkeys;
+#endif
+
+	if (list_length(subpath->pathkeys) != num_groupby_pathkeys)
 		return false;
 
 	if (list_length(subpath->pathkeys) > 0)
@@ -147,12 +158,11 @@ gapfill_correct_order(PlannerInfo *root, Path *subpath, FuncExpr *func)
 		if (BTLessStrategyNumber == pk->pk_strategy && IsA(em->em_expr, FuncExpr) &&
 			((FuncExpr *) em->em_expr)->funcid == func->funcid)
 		{
-			ListCell *lc;
-
-			/* check all groups are part of subpath pathkeys */
-			foreach (lc, root->group_pathkeys)
+			int i;
+			/* check all groupby pathkeys are part of subpath pathkeys */
+			for (i = 0; i < num_groupby_pathkeys; i++)
 			{
-				if (!list_member(subpath->pathkeys, lfirst(lc)))
+				if (!list_member(subpath->pathkeys, list_nth(root->group_pathkeys, i)))
 					return false;
 			}
 			return true;
@@ -358,13 +368,22 @@ gapfill_path_create(PlannerInfo *root, Path *subpath, FuncExpr *func)
 	if (!gapfill_correct_order(root, subpath, func))
 	{
 		List *new_order = NIL;
-		ListCell *lc;
 		PathKey *pk_func = NULL;
-
+		int num_groupby_pathkeys;
+#if PG16_LT
+		num_groupby_pathkeys = list_length(root->group_pathkeys);
+#else
+		/* In PG16 group_pathkeys can contain additional pathkeys
+		 * used for optimization on ordered aggregates.
+		 * We only want to deal with group by elements only here.
+		 */
+		num_groupby_pathkeys = root->num_groupby_pathkeys;
+#endif
+		int i;
 		/* subpath does not have correct order */
-		foreach (lc, root->group_pathkeys)
+		for (i = 0; i < num_groupby_pathkeys; i++)
 		{
-			PathKey *pk = lfirst(lc);
+			PathKey *pk = list_nth(root->group_pathkeys, i);
 			EquivalenceMember *em = linitial(pk->pk_eclass->ec_members);
 
 			if (!pk_func && IsA(em->em_expr, FuncExpr) &&
