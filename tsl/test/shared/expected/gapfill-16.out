@@ -3394,3 +3394,59 @@ GROUP BY 1;
 (7 rows)
 
 DROP TABLE month_timezone;
+-- Test gapfill with additional group pathkeys added for optimization (#6396)
+CREATE TABLE stocks_real_time (
+  time TIMESTAMPTZ NOT NULL,
+  symbol TEXT NOT NULL,
+  price DOUBLE PRECISION NULL,
+  day_volume INT NULL
+);
+INSERT INTO stocks_real_time
+  VALUES
+    (NOW(), 's1', 70.0, 50),
+    (NOW(), 's2', 66.5, 60),
+    (NOW(), 's3', 77.0, 65);
+SELECT
+  time_bucket_gapfill('1 day', time) AS day,
+  COUNT(DISTINCT symbol) AS symbol_count
+FROM stocks_real_time
+WHERE time > '2023-12-01'
+  AND time < '2023-12-10'
+GROUP BY 1;
+             day              | symbol_count 
+------------------------------+--------------
+ Thu Nov 30 16:00:00 2023 PST |             
+ Fri Dec 01 16:00:00 2023 PST |             
+ Sat Dec 02 16:00:00 2023 PST |             
+ Sun Dec 03 16:00:00 2023 PST |             
+ Mon Dec 04 16:00:00 2023 PST |             
+ Tue Dec 05 16:00:00 2023 PST |             
+ Wed Dec 06 16:00:00 2023 PST |             
+ Thu Dec 07 16:00:00 2023 PST |             
+ Fri Dec 08 16:00:00 2023 PST |             
+ Sat Dec 09 16:00:00 2023 PST |             
+(10 rows)
+
+SELECT
+  time_bucket_gapfill('1 day', time) AS day,
+  COUNT(DISTINCT symbol) AS symbol_count
+FROM stocks_real_time
+WHERE time > '2023-12-01'
+  AND time < '2023-12-10'
+GROUP BY 1
+ORDER BY 1 DESC;
+             day              | symbol_count 
+------------------------------+--------------
+ Sat Dec 09 16:00:00 2023 PST |             
+ Fri Dec 08 16:00:00 2023 PST |             
+ Thu Dec 07 16:00:00 2023 PST |             
+ Wed Dec 06 16:00:00 2023 PST |             
+ Tue Dec 05 16:00:00 2023 PST |             
+ Mon Dec 04 16:00:00 2023 PST |             
+ Sun Dec 03 16:00:00 2023 PST |             
+ Sat Dec 02 16:00:00 2023 PST |             
+ Fri Dec 01 16:00:00 2023 PST |             
+ Thu Nov 30 16:00:00 2023 PST |             
+(10 rows)
+
+DROP TABLE stocks_real_time;
