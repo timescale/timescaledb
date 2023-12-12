@@ -357,14 +357,6 @@ create_chunk_on_data_nodes_default(const Chunk *chunk, const Hypertable *ht,
 	error_no_default_fn_community();
 }
 
-static uint64
-distributed_copy_default(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums)
-{
-	error_no_default_fn_community();
-
-	return 0;
-}
-
 static bool
 set_distributed_id_default(Datum d)
 {
@@ -542,7 +534,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.remote_txn_id_out = error_no_default_fn_pg_community,
 	.remote_txn_heal_data_node = error_no_default_fn_pg_community,
 	.remote_connection_cache_show = error_no_default_fn_pg_community,
-	.distributed_copy = distributed_copy_default,
 	.set_distributed_id = set_distributed_id_default,
 	.set_distributed_peer_id = set_distributed_peer_id_default,
 	.is_access_node_session = error_no_default_fn_bool_void_community,
