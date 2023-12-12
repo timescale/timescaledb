@@ -64,7 +64,7 @@ static List *partially_compressed_relids = NIL; /* Relids that needs to have
 static List *analyze_relids = NIL;
 
 #define COMPRESSION_AM_INFO_SIZE(natts)                                                            \
-	(sizeof(CompressionAmInfo) + sizeof(ColumnCompressionSettings) * (natts))
+	(sizeof(CompressionAmInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
 
 void
 compressionam_set_analyze_relid(Oid relid)
@@ -120,6 +120,15 @@ lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
 	{
 		const Form_pg_attribute attr = &tupdesc->attrs[i];
 		ColumnCompressionSettings *colsettings = &caminfo->columns[i];
+
+		if (attr->attisdropped)
+		{
+			colsettings->attnum = InvalidAttrNumber;
+			colsettings->cattnum = InvalidAttrNumber;
+			colsettings->is_dropped = true;
+			continue;
+		}
+
 		const char *attname = NameStr(attr->attname);
 		int segmentby_pos = ts_array_position(settings->fd.segmentby, attname);
 		int orderby_pos = ts_array_position(settings->fd.orderby, attname);
