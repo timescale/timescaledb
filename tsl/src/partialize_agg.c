@@ -52,7 +52,6 @@ is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
 
 	/* Hypertable compression info is already fetched from the catalog */
 	Assert(decompress_path->info != NULL);
-	Assert(decompress_path->info->hypertable_compression_info != NULL);
 #endif
 
 	/* No filters on the compressed attributes are supported at the moment */

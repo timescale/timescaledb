@@ -32,10 +32,9 @@ update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_transparent_decompression to OFF;
 
-select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from
-_timescaledb_catalog.hypertable order by id;
-select * from _timescaledb_catalog.hypertable_compression order by hypertable_id, attname;
-select * from timescaledb_information.compression_settings ORDER BY hypertable_name;
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
+SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
 
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
@@ -126,12 +125,8 @@ select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 
-select hypertable_id, attname, compression_algorithm_id , al.name
-from _timescaledb_catalog.hypertable_compression hc,
-     _timescaledb_catalog.hypertable ht,
-      _timescaledb_catalog.compression_algorithm al
-where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id
-ORDER BY hypertable_id, attname;
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
 where cl.oid = at.attrelid and  at.attnum > 0
@@ -326,13 +321,8 @@ INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
 
-SELECT
-  attname, alg.name
-FROM _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable_compression htc ON ht.id=htc.hypertable_id
-  INNER JOIN _timescaledb_catalog.compression_algorithm alg ON alg.id=htc.compression_algorithm_id
-WHERE ht.table_name='datatype_test'
-ORDER BY attname;
+select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
 
 --TEST try to compress a hypertable that has a continuous aggregate
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
