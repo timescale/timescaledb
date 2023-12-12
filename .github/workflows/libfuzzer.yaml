@@ -17,12 +17,14 @@ jobs:
       fail-fast: false
       matrix:
         case: [
-            { algo: gorilla   , pgtype: float8, kind: rowbyrow },
-            { algo: deltadelta, pgtype: int8  , kind: rowbyrow },
-            { algo: gorilla   , pgtype: float8, kind: bulk     },
-            { algo: deltadelta, pgtype: int8  , kind: bulk     },
-            { algo: array     , pgtype: text  , kind: rowbyrow },
-            { algo: dictionary, pgtype: text  , kind: rowbyrow },
+            { algo: gorilla   , pgtype: float8, kind: rowbyrow, runs:  500000000 },
+            { algo: deltadelta, pgtype: int8  , kind: rowbyrow, runs:  500000000 },
+            { algo: gorilla   , pgtype: float8, kind: bulk    , runs: 1000000000 },
+            { algo: deltadelta, pgtype: int8  , kind: bulk    , runs: 1000000000 },
+            # array has a peculiar recv function that recompresses all input, so
+            # fuzzing it is much slower. The dictionary recv also uses it.
+            { algo: array     , pgtype: text  , kind: rowbyrow, runs:   10000000 },
+            { algo: dictionary, pgtype: text  , kind: rowbyrow, runs:   10000000 },
             ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.kind }}
@@ -154,23 +156,20 @@ jobs:
         export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
         psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype, kind cstring, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
 
-        # array has a peculiar recv function that recompresses all input, so
-        # fuzzing it is much slower. dictionary recv also uses it.
-        runs=${{ (matrix.case.algo == 'array' || matrix.case.algo == 'dictionary') && 1000000 || 100000000 }}
 
         # Start more fuzzing processes in the background. We won't even monitor
         # their progress, because the server will panic if they find an error.
         for x in {2..$(nproc)}
         do
           psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}',
-            '${{ matrix.case.pgtype }}', '${{ matrix.case.kind }}', $runs);" &
+            '${{ matrix.case.pgtype }}', '${{ matrix.case.kind }}', ${{ matrix.case.runs }});" &
         done
 
         # Start the one fuzzing process that we will monitor, in foreground.
         # The LLVM fuzzing driver calls exit(), so we expect to lose the connection.
         ret=0
         psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}',
-            '${{ matrix.case.pgtype }}', '${{ matrix.case.kind }}', $runs);" || ret=$?
+            '${{ matrix.case.pgtype }}', '${{ matrix.case.kind }}', ${{ matrix.case.runs }});" || ret=$?
         if ! [ $ret -eq 2 ]
         then
             >&2 echo "Unexpected psql exit code $ret"
@@ -195,14 +194,14 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: PostgreSQL log for ${{ matrix.case.algo }} ${{ matrix.case.type }}
+        name: PostgreSQL log for ${{ matrix.case }}
         path: postgres.log
 
     - name: Save fuzzer-generated crash cases
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: Crash cases for ${{ matrix.case.algo }} ${{ matrix.case.type }}
+        name: Crash cases for ${{ matrix.case }}
         path: db/crash-*
 
     # We use separate restore/save actions, because the default action won't
@@ -241,5 +240,5 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v3
       with:
-        name: Coredumps for ${{ matrix.case.algo }} ${{ matrix.case.type }}
+        name: Coredumps for ${{ matrix.case }}
         path: coredumps
