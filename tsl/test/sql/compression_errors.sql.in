@@ -40,7 +40,7 @@ select table_name from create_hypertable('with_rls', 'a', chunk_time_interval=> 
 ALTER TABLE with_rls set (timescaledb.compress, timescaledb.compress_orderby='a');
 
 --note that the time column "a" should be added to the end of the orderby list
-select * from _timescaledb_catalog.hypertable_compression order by attname;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::text;
 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d DeSc NullS lAsT');
 --shold allow alter since segment by was empty
@@ -115,7 +115,7 @@ ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
 
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
-select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
 
 SELECT decompress_chunk(ch) FROM show_chunks('foo') ch limit 1;
 
@@ -149,7 +149,7 @@ SELECT decompress_chunk(ch, true) FROM show_chunks('foo') ch;
 --should succeed
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
 
-select hc.* from _timescaledb_catalog.hypertable_compression hc inner join _timescaledb_catalog.hypertable h on (h.id = hc.hypertable_id) where h.table_name = 'foo' order by attname;
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
 
 SELECT comp_hyper.schema_name|| '.' || comp_hyper.table_name as "COMPRESSED_HYPER_NAME"
 FROM _timescaledb_catalog.hypertable comp_hyper

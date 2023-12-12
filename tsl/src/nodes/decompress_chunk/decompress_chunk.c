@@ -27,7 +27,7 @@
 #include "compat/compat.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
-#include "ts_catalog/hypertable_compression.h"
+#include "ts_catalog/array_utils.h"
 #include "import/planner.h"
 #include "import/allpaths.h"
 #include "compression/create.h"
@@ -268,7 +268,6 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 static CompressionInfo *
 build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 {
-	ListCell *lc;
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
 
@@ -276,6 +275,8 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+
+	info->settings = ts_compression_settings_get(ht->main_table_relid);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
@@ -293,19 +294,20 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 
 	info->hypertable_id = ht->fd.id;
 
-	info->hypertable_compression_info = ts_hypertable_compression_get(ht->fd.id);
+	info->num_orderby_columns = ts_array_length(info->settings->fd.orderby);
+	info->num_segmentby_columns = ts_array_length(info->settings->fd.segmentby);
 
-	foreach (lc, info->hypertable_compression_info)
+	if (info->num_segmentby_columns)
 	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (fd->orderby_column_index > 0)
-			info->num_orderby_columns++;
-		if (fd->segmentby_column_index > 0)
+		ArrayIterator it = array_create_iterator(info->settings->fd.segmentby, 0, NULL);
+		Datum datum;
+		bool isnull;
+		while (array_iterate(it, &datum, &isnull))
 		{
-			AttrNumber chunk_attno = get_attnum(info->chunk_rte->relid, NameStr(fd->attname));
+			Ensure(!isnull, "NULL element in catalog array");
+			AttrNumber chunk_attno = get_attnum(info->chunk_rte->relid, TextDatumGetCString(datum));
 			info->chunk_segmentby_attnos =
 				bms_add_member(info->chunk_segmentby_attnos, chunk_attno);
-			info->num_segmentby_columns++;
 		}
 	}
 
@@ -526,7 +528,6 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 	Expr *expr;
 	char *column_name;
 	List *pathkeys = root->query_pathkeys;
-	FormData_hypertable_compression *ci;
 	MergeBatchResult merge_result = SCAN_FORWARD;
 
 	/* Ensure that we have path keys and the chunk is ordered */
@@ -553,28 +554,32 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 			return MERGE_NOT_POSSIBLE;
 
 		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-		ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
+		int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
 
-		if (ci->orderby_column_index != pk_index + 1)
+		if (orderby_index != pk_index + 1)
 			return MERGE_NOT_POSSIBLE;
 
 		/* Check order, if the order of the first column do not match, switch to backward scan */
 		Assert(pk->pk_strategy == BTLessStrategyNumber ||
 			   pk->pk_strategy == BTGreaterStrategyNumber);
 
+		bool orderby_desc =
+			ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+		bool orderby_nullsfirst =
+			ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
+
 		if (pk->pk_strategy != BTLessStrategyNumber)
 		{
 			/* Test that ORDER BY and NULLS first/last do match in forward scan */
-			if (!ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first &&
+			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first &&
 				merge_result == SCAN_FORWARD)
 				continue;
 			/* Exact opposite in backward scan */
-			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first &&
 					 merge_result == SCAN_BACKWARD)
 				continue;
 			/* Switch scan direction on exact opposite order for first attribute */
-			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
-					 pk_index == 0)
+			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
 				merge_result = SCAN_BACKWARD;
 			else
 				return MERGE_NOT_POSSIBLE;
@@ -582,16 +587,15 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 		else
 		{
 			/* Test that ORDER BY and NULLS first/last do match in forward scan */
-			if (ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first &&
+			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first &&
 				merge_result == SCAN_FORWARD)
 				continue;
 			/* Exact opposite in backward scan */
-			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first &&
 					 merge_result == SCAN_BACKWARD)
 				continue;
 			/* Switch scan direction on exact opposite order for first attribute */
-			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
-					 pk_index == 0)
+			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
 				merge_result = SCAN_BACKWARD;
 			else
 				return MERGE_NOT_POSSIBLE;
@@ -712,9 +716,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root,
+				   compression_info->settings,
 				   chunk_rel,
 				   compressed_rel,
-				   compression_info->hypertable_compression_info,
 				   ts_chunk_is_partial(chunk));
 	set_baserel_size_estimates(root, compressed_rel);
 	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
@@ -1135,7 +1139,6 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 		List *chunk_vars = pull_var_clause(lfirst(lc), PVC_RECURSE_PLACEHOLDERS);
 		foreach (lc2, chunk_vars)
 		{
-			FormData_hypertable_compression *column_info;
 			char *column_name;
 			Var *chunk_var = castNode(Var, lfirst(lc2));
 
@@ -1156,20 +1159,15 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 			}
 
 			column_name = get_attname(info->chunk_rte->relid, chunk_var->varattno, false);
-			column_info =
-				get_column_compressioninfo(info->hypertable_compression_info, column_name);
-
-			Assert(column_info != NULL);
-
 			compressed_reltarget_add_var_for_column(compressed_rel,
 													compressed_relid,
 													column_name,
 													&attrs_used);
 
 			/* if the column is an orderby, add it's metadata columns too */
-			if (column_info->orderby_column_index > 0)
+			int16 index;
+			if ((index = ts_array_position(info->settings->fd.orderby, column_name)))
 			{
-				int16 index = column_info->orderby_column_index;
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
 														column_segment_min_name(index),
@@ -1264,16 +1262,11 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		Var *compress_var = copyObject(var);
 		char *column_name;
 		AttrNumber compressed_attno;
-		FormData_hypertable_compression *compressioninfo;
 		if ((Index) var->varno != context->chunk_rel->relid)
 			return (Node *) var;
 
 		column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
-		compressioninfo =
-			get_column_compressioninfo(context->hypertable_compression_info, column_name);
-
-		compressed_attno =
-			get_attnum(context->compressed_rte->relid, NameStr(compressioninfo->attname));
+		compressed_attno = get_attnum(context->compressed_rte->relid, column_name);
 		compress_var->varno = context->compressed_rel->relid;
 		compress_var->varattno = compressed_attno;
 
@@ -1415,65 +1408,18 @@ compressed_rel_setup_joininfo(RelOptInfo *compressed_rel, CompressionInfo *info)
 
 typedef struct EMCreationContext
 {
-	List *compression_info;
 	Oid uncompressed_relid;
 	Oid compressed_relid;
 	Index uncompressed_relid_idx;
 	Index compressed_relid_idx;
-	FormData_hypertable_compression *current_col_info;
+	CompressionSettings *settings;
 } EMCreationContext;
 
-/* get the compression info for an EquivalenceMember (EM) expr,
- * or return NULL if it's not one we can create an EM for
- * This is applicable to segment by and compressed columns
- * of the compressed table.
- */
-static FormData_hypertable_compression *
-get_compression_info_for_em(Node *node, EMCreationContext *context)
-{
-	/* based on adjust_appendrel_attrs_mutator */
-	if (node == NULL)
-		return NULL;
-
-	Assert(!IsA(node, Query));
-
-	if (IsA(node, Var))
-	{
-		FormData_hypertable_compression *col_info;
-		char *column_name;
-		Var *var = castNode(Var, node);
-		if ((Index) var->varno != context->uncompressed_relid_idx)
-			return NULL;
-
-		/* we can't add an EM for system attributes or whole-row refs */
-		if (var->varattno <= 0)
-			return NULL;
-
-		column_name = get_attname(context->uncompressed_relid, var->varattno, true);
-		if (column_name == NULL)
-			return NULL;
-
-		col_info = get_column_compressioninfo(context->compression_info, column_name);
-
-		if (col_info == NULL)
-			return NULL;
-
-		return col_info;
-	}
-
-	/*
-	 * we currently ignore non-Var expressions; the EC we care about
-	 * (the one relating Hypertable columns to chunk columns)
-	 * should not have any
-	 */
-	return NULL;
-}
-
 static Node *
-create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *context)
+create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *context,
+											 const char *attname)
 {
 	/* based on adjust_appendrel_attrs_mutator */
-	Assert(context->current_col_info != NULL);
 	Assert((Index) var->varno == context->uncompressed_relid_idx);
 	Assert(var->varattno > 0);
 
@@ -1482,8 +1428,7 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	if (var->varlevelsup == 0)
 	{
 		var->varno = context->compressed_relid_idx;
-		var->varattno =
-			get_attnum(context->compressed_relid, NameStr(context->current_col_info->attname));
+		var->varattno = get_attnum(context->compressed_relid, attname);
 		var->varnosyn = var->varno;
 		var->varattnosyn = var->varattno;
 
@@ -1528,22 +1473,12 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		 * be set on the em */
 		Assert(bms_overlap(cur_em->em_relids, uncompressed_chunk_relids));
 
-		context->current_col_info = get_compression_info_for_em((Node *) var, context);
-		if (context->current_col_info == NULL)
+		const char *attname = get_attname(info->chunk_rte->relid, var->varattno, false);
+
+		if (!ts_array_is_member(context->settings->fd.segmentby, attname))
 			continue;
 
-		if (!COMPRESSIONCOL_IS_SEGMENT_BY(context->current_col_info))
-		{
-			/*
-			 * This EM is not a segmentby column. Technically we can have a
-			 * query which equates a segmentby column to a compressed column,
-			 * and therefore has an EC with such members, so we still have to
-			 * check other EMs, maybe they are segmentby.
-			 */
-			continue;
-		}
-
-		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context);
+		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context, attname);
 		if (child_expr == NULL)
 			continue;
 
@@ -1636,13 +1571,12 @@ static void
 compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *info)
 {
 	EMCreationContext context = {
-		.compression_info = info->hypertable_compression_info,
-
 		.uncompressed_relid = info->chunk_rte->relid,
 		.compressed_relid = info->compressed_rte->relid,
 
 		.uncompressed_relid_idx = info->chunk_rel->relid,
 		.compressed_relid_idx = info->compressed_rel->relid,
+		.settings = info->settings,
 	};
 
 	Assert(info->chunk_rte->relid != info->compressed_rel->relid);
@@ -1724,19 +1658,21 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
-	ListCell *lc;
-	foreach (lc, info->hypertable_compression_info)
+
+	Relation r = table_open(info->compressed_rte->relid, AccessShareLock);
+
+	for (int i = 0; i < r->rd_att->natts; i++)
 	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (fd->segmentby_column_index <= 0)
-		{
-			/* store attnos for the compressed chunk here */
-			AttrNumber compressed_chunk_attno =
-				get_attnum(info->compressed_rte->relid, NameStr(fd->attname));
-			info->compressed_attnos_in_compressed_chunk =
-				bms_add_member(info->compressed_attnos_in_compressed_chunk, compressed_chunk_attno);
-		}
+		Form_pg_attribute attr = TupleDescAttr(r->rd_att, i);
+
+		if (attr->attisdropped || attr->atttypid != info->compresseddata_oid)
+			continue;
+
+		info->compressed_attnos_in_compressed_chunk =
+			bms_add_member(info->compressed_attnos_in_compressed_chunk, attr->attnum);
 	}
+	table_close(r, NoLock);
+
 	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
@@ -1935,22 +1871,6 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
 	return rte;
 }
 
-FormData_hypertable_compression *
-get_column_compressioninfo(List *hypertable_compression_info, char *column_name)
-{
-	ListCell *lc;
-
-	foreach (lc, hypertable_compression_info)
-	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (namestrcmp(&fd->attname, column_name) == 0)
-			return fd;
-	}
-	elog(ERROR, "No compression information for column \"%s\" found.", column_name);
-
-	pg_unreachable();
-}
-
 /*
  * Find segmentby columns that are equated to a constant by a toplevel
  * baserestrictinfo.
@@ -2029,7 +1949,6 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 	Var *var;
 	Expr *expr;
 	char *column_name;
-	FormData_hypertable_compression *ci;
 	ListCell *lc = list_head(pathkeys);
 	SortInfo sort_info = { .can_pushdown_sort = false, .needs_sequence_num = false };
 
@@ -2067,10 +1986,9 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 				break;
 
 			column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-			ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
-
-			if (ci->segmentby_column_index <= 0)
+			if (!ts_array_is_member(info->settings->fd.segmentby, column_name))
 				break;
+
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
 		}
 
@@ -2108,10 +2026,15 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 			return sort_info;
 
 		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-		ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
+		int orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
 
-		if (ci->orderby_column_index != pk_index)
+		if (orderby_index != pk_index)
 			return sort_info;
+
+		bool orderby_desc =
+			ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+		bool orderby_nullsfirst =
+			ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
 
 		/*
 		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
@@ -2119,18 +2042,18 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 		 */
 		if (pk->pk_strategy == BTLessStrategyNumber)
 		{
-			if (ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first)
+			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 				reverse = false;
-			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first)
+			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
 				reverse = true;
 			else
 				return sort_info;
 		}
 		else if (pk->pk_strategy == BTGreaterStrategyNumber)
 		{
-			if (!ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first)
+			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 				reverse = false;
-			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first)
+			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
 				reverse = true;
 			else
 				return sort_info;

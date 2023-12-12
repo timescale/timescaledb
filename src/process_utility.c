@@ -60,7 +60,9 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/hypertable_data_node.h"
+#include "ts_catalog/array_utils.h"
 #include "dimension_vector.h"
 #include "indexing.h"
 #include "scan_iterator.h"
@@ -1952,11 +1954,11 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	Dimension *dim;
 
-	if (NULL == ht)
+	if (!ht)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
-		if (NULL != chunk)
+		if (chunk)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot rename column \"%s\" of hypertable chunk \"%s\"",
@@ -2019,6 +2021,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	 * we don't do anything. */
 	if (ht)
 	{
+		ts_compression_settings_rename_column(ht->main_table_relid, stmt->subname, stmt->newname);
 		add_hypertable_to_process_args(args, ht);
 		dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space,
 														  DIMENSION_TYPE_ANY,

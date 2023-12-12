@@ -201,6 +201,7 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | chunk_index                                      | table | super_user
  _timescaledb_catalog | compression_algorithm                            | table | super_user
  _timescaledb_catalog | compression_chunk_size                           | table | super_user
+ _timescaledb_catalog | compression_settings                             | table | super_user
  _timescaledb_catalog | continuous_agg                                   | table | super_user
  _timescaledb_catalog | continuous_agg_migrate_plan                      | table | super_user
  _timescaledb_catalog | continuous_agg_migrate_plan_step                 | table | super_user
@@ -213,7 +214,6 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | dimension_partition                              | table | super_user
  _timescaledb_catalog | dimension_slice                                  | table | super_user
  _timescaledb_catalog | hypertable                                       | table | super_user
- _timescaledb_catalog | hypertable_compression                           | table | super_user
  _timescaledb_catalog | hypertable_data_node                             | table | super_user
  _timescaledb_catalog | metadata                                         | table | super_user
  _timescaledb_catalog | remote_txn                                       | table | super_user

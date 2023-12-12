@@ -29,7 +29,6 @@ set(PRE_INSTALL_FUNCTION_FILES
 set(SOURCE_FILES
     hypertable.sql
     chunk.sql
-    data_node.sql
     ddl_internal.sql
     ddl_experimental.sql
     util_time.sql
@@ -47,7 +46,6 @@ set(SOURCE_FILES
     histogram.sql
     bgw_scheduler.sql
     metadata.sql
-    dist_internal.sql
     views.sql
     views_experimental.sql
     gapfill.sql

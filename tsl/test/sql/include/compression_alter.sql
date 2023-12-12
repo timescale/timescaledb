@@ -21,9 +21,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 ALTER TABLE test1 ADD COLUMN new_coli integer;
 ALTER TABLE test1 ADD COLUMN new_colv varchar(30);
 
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-ORDER BY attname;
-
 SELECT count(*) from test1 where new_coli is not null;
 SELECT count(*) from test1 where new_colv is null;
 
@@ -47,22 +44,19 @@ SELECT count(*) from test1 where new_colv  = '101t';
 CREATE INDEX new_index ON test1(new_colv);
 
 -- TEST 2:  ALTER TABLE rename column
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-WHERE attname = 'new_coli' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
-                       WHERE table_name = 'test1' );
+SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
 
 ALTER TABLE test1 RENAME new_coli TO coli;
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-WHERE attname = 'coli' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
-                       WHERE table_name = 'test1' );
+SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
+
 SELECT count(*) from test1 where coli  = 100;
 
 --rename segment by column name
 ALTER TABLE test1 RENAME bntcol TO  bigintcol  ;
 
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-WHERE attname = 'bigintcol' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
-                       WHERE table_name = 'test1' );
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
 
 --query by segment by column name
 SELECT * from test1 WHERE bigintcol = 100;
@@ -102,6 +96,7 @@ FROM ( SELECT attrelid::regclass, attname FROM pg_attribute
 ALTER TABLE test1 RENAME  bigintcol TO
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc;
 
+SELECT * from _timescaledb_catalog.compression_settings WHERE relid = 'test1'::regclass;
 SELECT * from timescaledb_information.compression_settings
 WHERE hypertable_name = 'test1' and attname like 'ccc%';
 
@@ -194,11 +189,8 @@ RESET client_min_messages;
 SELECT * FROM test_drop ORDER BY 1;
 
 -- check dropped columns got removed from catalog
--- only c2 should be left in metadata
-SELECT attname
-FROM _timescaledb_catalog.hypertable_compression htc
-INNER JOIN _timescaledb_catalog.hypertable ht
-  ON ht.id=htc.hypertable_id AND ht.table_name='test_drop'
-WHERE attname NOT IN ('time','device','o1','o2')
-ORDER BY 1;
+-- only segmentby and orderby are in catalog which we dont support removing
+-- atm, so nothing to see here
+SELECT * FROM _timescaledb_catalog.hypertable WHERE table_name = 'test_drop';
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_drop'::regclass;
 
