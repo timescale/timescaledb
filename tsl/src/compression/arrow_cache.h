@@ -86,6 +86,6 @@ typedef struct ArrowTupleTableSlot ArrowTupleTableSlot;
 
 extern void arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt);
 extern void arrow_column_cache_release(ArrowColumnCache *acache);
-extern ArrowColumnCacheEntry *arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum);
+extern ArrowColumnCacheEntry *arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts);
 
 #endif /* COMPRESSION_ARROW_CACHE_H_ */

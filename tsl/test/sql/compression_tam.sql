@@ -349,10 +349,32 @@ SELECT range_start, range_end
 FROM timescaledb_information.chunks
 WHERE format('%I.%I', chunk_schema, chunk_name)::regclass = :'chunk'::regclass;
 
+--
+-- ADD COLUMN
+--
+-- Check that adding a column works across recompression.  First save
+-- some sample data from the table that will be used as a comparison
+-- to ensure adding a column doesn't mess up the data or column
+-- mapping.
+CREATE TEMP TABLE sample_readings AS
+SELECT * FROM readings
+WHERE time BETWEEN '2022-06-01 00:00:01' AND '2022-06-01 00:00:10'::timestamptz;
+
+SELECT count(*) FROM sample_readings;
+
+-- Now add the column
+ALTER TABLE readings ADD COLUMN pressure float;
+
+-- Check that the sample data remains the same in the modified
+-- table. Should return the same count as above if everything is the
+-- same.
+SELECT count(*) FROM readings r
+JOIN sample_readings s USING (time, location, device, temp, humidity);
+
 -- insert some new (non-compressed) data into the chunk in order to
 -- test recompression
-INSERT INTO :chunk (time, location, device, temp, humidity)
-SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+INSERT INTO :chunk (time, location, device, temp, humidity, pressure)
+SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, random() * 30
 FROM generate_series('2022-06-01 00:06:14'::timestamptz, '2022-06-01 16:59', '5s') t;
 
 -- Check that new data is returned
@@ -368,7 +390,22 @@ SELECT sum(_ts_meta_count) FROM :cchunk;
 CALL recompress_chunk(:'chunk');
 
 -- Data should be returned even after recompress, but now from the
--- compressed relation
+-- compressed relation. Still using index scan.
+EXPLAIN (verbose, costs off)
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+
+-- Drop column and add again
+ALTER TABLE readings DROP COLUMN pressure;
+
+EXPLAIN (verbose, costs off)
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+
+ALTER TABLE readings ADD COLUMN pressure float;
+
+EXPLAIN (verbose, costs off)
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
 
 \set ON_ERROR_STOP 0
