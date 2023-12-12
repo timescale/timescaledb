@@ -129,7 +129,7 @@ DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorith
 }
 
 DecompressAllFunction
-tsl_get_decompress_all_function(CompressionAlgorithm algorithm)
+tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
