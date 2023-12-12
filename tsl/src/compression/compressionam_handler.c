@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include "chunk.h"
 #include <access/attnum.h>
 #include <access/heapam.h>
 #include <access/hio.h>
@@ -54,6 +55,9 @@
 
 static const TableAmRoutine compressionam_methods;
 static void convert_to_compressionam_finish(Oid relid);
+static List *partially_compressed_relids = NIL; /* Relids that needs to have
+												 * updated status set at end of
+												 * transcation */
 
 typedef struct ColumnCompressionSettings
 {
@@ -89,13 +93,6 @@ typedef struct CompressionAmInfo
 	(sizeof(CompressionAmInfo) + sizeof(ColumnCompressionSettings) * (natts))
 
 static int32
-get_compressed_chunk_id(Oid chunk_relid)
-{
-	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
-	return chunk->fd.compressed_chunk_id;
-}
-
-static int32
 get_chunk_id_from_relid(Oid relid)
 {
 	int32 chunk_id;
@@ -107,74 +104,71 @@ get_chunk_id_from_relid(Oid relid)
 }
 
 static CompressionAmInfo *
-lazy_build_compressionam_info_cache(Relation rel, bool include_compressed_relinfo)
+lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
 {
-	CompressionAmInfo *caminfo = rel->rd_amcache;
+	CompressionAmInfo *caminfo;
+	TupleDesc tupdesc = RelationGetDescr(rel);
+	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
+	Oid hyper_relid = ts_hypertable_id_to_relid(hyper_id, false);
+	CompressionSettings *settings = ts_compression_settings_get(hyper_relid);
 
-	if (NULL == caminfo)
+	Ensure(settings,
+		   "no compression settings for relation %s",
+		   get_rel_name(RelationGetRelid(rel)));
+
+	/* Anything put in rel->rd_amcache must be a single memory chunk
+	 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
+	 * to free it with a single pfree(). */
+	caminfo = MemoryContextAllocZero(CacheMemoryContext, COMPRESSION_AM_INFO_SIZE(tupdesc->natts));
+	caminfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
+	caminfo->compressed_relid = InvalidOid;
+	caminfo->num_columns = tupdesc->natts;
+	caminfo->hypertable_id = hyper_id;
+
+	for (int i = 0; i < caminfo->num_columns; i++)
 	{
-		TupleDesc tupdesc = RelationGetDescr(rel);
-		int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
-		Oid hyper_relid = ts_hypertable_id_to_relid(hyper_id, false);
-		CompressionSettings *settings = ts_compression_settings_get(hyper_relid);
+		const Form_pg_attribute attr = &tupdesc->attrs[i];
+		ColumnCompressionSettings *colsettings = &caminfo->columns[i];
+		const char *attname = NameStr(attr->attname);
+		int segmentby_pos = ts_array_position(settings->fd.segmentby, attname);
+		int orderby_pos = ts_array_position(settings->fd.orderby, attname);
 
-		Ensure(settings,
-			   "no compression settings for relation %s",
-			   get_rel_name(RelationGetRelid(rel)));
+		namestrcpy(&colsettings->attname, attname);
+		colsettings->attnum = attr->attnum;
+		colsettings->is_segmentby = segmentby_pos > 0;
+		colsettings->is_orderby = orderby_pos > 0;
 
-		/* Anything put in rel->rd_amcache must be a single memory chunk
-		 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
-		 * to free it with a single pfree(). */
-		caminfo =
-			MemoryContextAllocZero(CacheMemoryContext, COMPRESSION_AM_INFO_SIZE(tupdesc->natts));
-		caminfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
-		caminfo->compressed_relid = InvalidOid;
-		caminfo->num_columns = tupdesc->natts;
-		caminfo->hypertable_id = hyper_id;
+		if (colsettings->is_segmentby)
+			caminfo->num_segmentby += 1;
 
-		for (int i = 0; i < caminfo->num_columns; i++)
+		if (colsettings->is_orderby)
 		{
-			const Form_pg_attribute attr = &tupdesc->attrs[i];
-			ColumnCompressionSettings *colsettings = &caminfo->columns[i];
-			const char *attname = NameStr(attr->attname);
-			int segmentby_pos = ts_array_position(settings->fd.segmentby, attname);
-			int orderby_pos = ts_array_position(settings->fd.orderby, attname);
-
-			namestrcpy(&colsettings->attname, attname);
-			colsettings->attnum = attr->attnum;
-			colsettings->is_segmentby = segmentby_pos > 0;
-			colsettings->is_orderby = orderby_pos > 0;
-
-			if (colsettings->is_segmentby)
-				caminfo->num_segmentby += 1;
-
-			if (colsettings->is_orderby)
-			{
-				caminfo->num_orderby += 1;
-				colsettings->orderby_desc =
-					ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
-				colsettings->nulls_first =
-					ts_array_get_element_bool(settings->fd.orderby_nullsfirst, orderby_pos);
-			}
-
-			if (colsettings->is_segmentby || colsettings->is_orderby)
-				caminfo->num_keys += 1;
+			caminfo->num_orderby += 1;
+			colsettings->orderby_desc =
+				ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
+			colsettings->nulls_first =
+				ts_array_get_element_bool(settings->fd.orderby_nullsfirst, orderby_pos);
 		}
 
-		Assert(caminfo->num_segmentby == ts_array_length(settings->fd.segmentby));
-		Assert(caminfo->num_orderby == ts_array_length(settings->fd.orderby));
+		if (colsettings->is_segmentby || colsettings->is_orderby)
+			caminfo->num_keys += 1;
 	}
+
+	Assert(caminfo->num_segmentby == ts_array_length(settings->fd.segmentby));
+	Assert(caminfo->num_orderby == ts_array_length(settings->fd.orderby));
 
 	Ensure(caminfo->relation_id > 0, "invalid chunk ID");
 
 	/* Only optionally include information about the compressed chunk because
 	 * it might not exist when this cache is built. The information will be
 	 * added the next time the function is called instead. */
-	if (!OidIsValid(caminfo->compressed_relid) && include_compressed_relinfo)
-	{
-		caminfo->compressed_relation_id = get_compressed_chunk_id(rel->rd_id);
+	FormData_chunk form = ts_chunk_get_formdata(caminfo->relation_id);
+	caminfo->compressed_relation_id = form.compressed_chunk_id;
+
+	if (caminfo->compressed_relation_id > 0)
 		caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
-	}
+	else
+		caminfo->compressed_relid = InvalidOid;
 
 	return caminfo;
 }
@@ -182,7 +176,10 @@ lazy_build_compressionam_info_cache(Relation rel, bool include_compressed_relinf
 static inline CompressionAmInfo *
 RelationGetCompressionAmInfo(Relation rel)
 {
-	return lazy_build_compressionam_info_cache(rel, true);
+	if (NULL == rel->rd_amcache)
+		rel->rd_amcache = lazy_build_compressionam_info_cache(rel, false);
+
+	return rel->rd_amcache;
 }
 
 static void
@@ -233,7 +230,8 @@ typedef struct CompressionScanDescData
 	Relation compressed_rel;
 	TableScanDesc cscan_desc; /* scan descriptor for compressed relation */
 	uint16 compressed_tuple_index;
-	int64 returned_row_count;
+	int64 returned_noncompressed_count;
+	int64 returned_compressed_count;
 	int32 compressed_row_count;
 	AttrNumber count_colattno;
 	int16 *attrs_map;
@@ -338,14 +336,19 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->rs_base.rs_parallel = parallel_scan;
 	scan->compressed_rel = table_open(caminfo->compressed_relid, AccessShareLock);
 	scan->compressed_tuple_index = 1;
-	scan->returned_row_count = 0;
+	scan->returned_noncompressed_count = 0;
+	scan->returned_compressed_count = 0;
 	scan->compressed_row_count = 0;
 
-	/* Disable reading of compressed data if transparent decompression is
-	 * enabled, since that that scan node reads compressed data directly form
-	 * the compressed chunk. If we also read the compressed data via this TAM,
-	 * then the compressed data will be returned twice. */
-	scan->compressed_read_done = ts_guc_enable_transparent_decompression;
+	/*
+	 * Don't read compressed data if transparent decompression is enabled or
+	 * it is requested by the scan.
+	 *
+	 * Transparent decompression reads compressed data itself, directly form
+	 * the compressed chunk, so avoid reading it again here.
+	 */
+	scan->compressed_read_done =
+		ts_guc_enable_transparent_decompression || (keys && keys->sk_flags & SK_NO_COMPRESSED);
 
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
@@ -396,6 +399,14 @@ compressionam_endscan(TableScanDesc sscan)
 	table_close(scan->compressed_rel, AccessShareLock);
 	heapam->scan_end(scan->uscan_desc);
 
+	elog(DEBUG2,
+		 "scanned " INT64_FORMAT " tuples (" INT64_FORMAT " compressed, " INT64_FORMAT
+		 " noncompressed) in rel %s",
+		 scan->returned_compressed_count + scan->returned_noncompressed_count,
+		 scan->returned_compressed_count,
+		 scan->returned_noncompressed_count,
+		 RelationGetRelationName(sscan->rs_rd));
+
 	if (scan->rs_base.rs_key)
 		pfree(scan->rs_base.rs_key);
 
@@ -419,7 +430,10 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		bool result = heapam->scan_getnextslot(scan->uscan_desc, direction, child_slot);
 
 		if (result)
+		{
+			scan->returned_noncompressed_count++;
 			ExecStoreArrowTuple(slot, InvalidTupleIndex);
+		}
 
 		return result;
 	}
@@ -446,11 +460,13 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		Assert(!isnull);
 		scan->compressed_row_count = DatumGetInt32(count);
 		scan->compressed_tuple_index = 1;
+		scan->returned_compressed_count++;
 		ExecStoreArrowTuple(slot, scan->compressed_tuple_index);
 	}
 	else
 	{
 		scan->compressed_tuple_index++;
+		scan->returned_compressed_count++;
 		ExecStoreArrowTuple(slot, scan->compressed_tuple_index);
 	}
 
@@ -472,6 +488,11 @@ compressionam_multi_insert(Relation relation, TupleTableSlot **slots, int ntuple
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	/* Inserts only supported in non-compressed relation, so simply forward to the heap AM */
 	heapam->multi_insert(relation, slots, ntuples, cid, options, bistate);
+
+	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
+	partially_compressed_relids =
+		list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
+	MemoryContextSwitchTo(oldmcxt);
 }
 
 typedef struct IndexFetchComprData
@@ -931,12 +952,25 @@ compressionam_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId ci
 						   BulkInsertStateData *bistate)
 {
 	if (conversionstate)
-		tuplesort_puttupleslot(conversionstate->tuplesortstate, slot);
-	else
 	{
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-		heapam->tuple_insert(relation, slot, cid, options, bistate);
+		if (conversionstate->tuplesortstate)
+		{
+			tuplesort_puttupleslot(conversionstate->tuplesortstate, slot);
+			return;
+		}
+
+		/* If no tuplesortstate is set, conversion is happening from legacy
+		 * compression where a compressed relation already exists. Therefore,
+		 * there is no need to recompress; just insert the non-compressed data
+		 * into the new heap. */
 	}
+
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	heapam->tuple_insert(relation, slot, cid, options, bistate);
+	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
+	partially_compressed_relids =
+		list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
+	MemoryContextSwitchTo(oldmcxt);
 }
 
 static void
@@ -1538,15 +1572,25 @@ convert_to_compressionam(Oid relid)
 	ConversionState *state = palloc0(sizeof(ConversionState));
 	Relation relation = table_open(relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
-	CompressionAmInfo *caminfo = lazy_build_compressionam_info_cache(relation, false);
+	CompressionAmInfo *caminfo = lazy_build_compressionam_info_cache(relation, true);
+
+	state->relid = relid;
+
+	if (OidIsValid(caminfo->compressed_relation_id))
+	{
+		/* A compressed relation already exists, so converting from legacy
+		 * compression. It is only necessary to write the non-compressed data
+		 * to the new heap. */
+		table_close(relation, AccessShareLock);
+		return;
+	}
+
 	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * caminfo->num_keys);
 	Oid *sort_operators = palloc0(sizeof(*sort_operators) * caminfo->num_keys);
 	Oid *sort_collations = palloc0(sizeof(*sort_collations) * caminfo->num_keys);
 	bool *nulls_first = palloc0(sizeof(*nulls_first) * caminfo->num_keys);
 	int segmentby_pos = 0;
 	int orderby_pos = 0;
-
-	state->relid = relid;
 
 	for (int i = 0; i < caminfo->num_columns; i++)
 	{
@@ -1596,45 +1640,83 @@ convert_to_compressionam(Oid relid)
 												 NULL,
 												 false /*=randomAccess*/);
 
-	relation_close(relation, AccessShareLock);
+	table_close(relation, AccessShareLock);
 	conversionstate = state;
 	MemoryContextSwitchTo(oldcxt);
 }
 
 /*
- * List of relation IDs of compressed relations to truncate. Used to clean up
- * the compressed relation when converting from compression TAM to another TAM
- * (typically heap).
+ * List of relation IDs used to clean up the compressed relation when
+ * converting from compression TAM to another TAM (typically heap).
  */
-static List *truncate_relids = NIL;
+static List *cleanup_relids = NIL;
 
 static void
 cleanup_compression_relations(void)
 {
-	if (truncate_relids != NIL)
+	if (cleanup_relids != NIL)
 	{
-		heap_truncate(truncate_relids);
-		list_free(truncate_relids);
-		truncate_relids = NIL;
+		ListCell *lc;
+
+		foreach (lc, cleanup_relids)
+		{
+			Oid relid = lfirst_oid(lc);
+			Chunk *chunk = ts_chunk_get_by_relid(relid, true);
+			Chunk *compress_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, false);
+
+			ts_chunk_clear_compressed_chunk(chunk);
+
+			if (compress_chunk)
+				ts_chunk_drop(compress_chunk, DROP_RESTRICT, -1);
+		}
+
+		list_free(cleanup_relids);
+		cleanup_relids = NIL;
 	}
 }
 
 void
 compressionam_xact_event(XactEvent event, void *arg)
 {
+	switch (event)
+	{
+		case XACT_EVENT_PRE_COMMIT:
+		{
+			ListCell *lc;
+			/* Check for relations that are now partially compressed and
+			 * update their status */
+			foreach (lc, partially_compressed_relids)
+			{
+				Oid relid = lfirst_oid(lc);
+				Chunk *chunk = ts_chunk_get_by_relid(relid, true);
+				ts_chunk_set_partial(chunk);
+			}
+			break;
+		}
+		default:
+			break;
+	}
+
+	if (partially_compressed_relids != NIL)
+	{
+		list_free(partially_compressed_relids);
+		partially_compressed_relids = NIL;
+	}
+
 	/*
 	 * Cleanup in case of aborted transcation. Need not explicitly check for
 	 * abort since the states should only exist if it is an abort.
 	 */
-	if (truncate_relids)
+	if (cleanup_relids != NIL)
 	{
-		list_free(truncate_relids);
-		truncate_relids = NIL;
+		list_free(cleanup_relids);
+		cleanup_relids = NIL;
 	}
 
 	if (conversionstate)
 	{
-		tuplesort_end(conversionstate->tuplesortstate);
+		if (conversionstate->tuplesortstate)
+			tuplesort_end(conversionstate->tuplesortstate);
 		pfree(conversionstate);
 		conversionstate = NULL;
 	}
@@ -1643,6 +1725,14 @@ compressionam_xact_event(XactEvent event, void *arg)
 static void
 convert_to_compressionam_finish(Oid relid)
 {
+	if (!conversionstate->tuplesortstate)
+	{
+		/* Without a tuple sort state, conversion happens from legacy
+		 * compression where a compressed relation (chunk) already
+		 * exists. There's nothing more to do. */
+		return;
+	}
+
 	Chunk *chunk = ts_chunk_get_by_relid(conversionstate->relid, true);
 	Relation relation = table_open(conversionstate->relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
@@ -1707,13 +1797,11 @@ static void
 convert_from_compressionam(Oid relid)
 {
 	int32 chunk_id = get_chunk_id_from_relid(relid);
-	int32 compressed_chunk_id = get_compressed_chunk_id(relid);
-	Oid compressed_relid = ts_chunk_get_relid(compressed_chunk_id, false);
 	ts_compression_chunk_size_delete(chunk_id);
 
 	/* Need to truncate the compressed relation after converting from compression TAM */
-	MemoryContext oldmcxt = MemoryContextSwitchTo(CacheMemoryContext);
-	truncate_relids = lappend_oid(truncate_relids, compressed_relid);
+	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
+	cleanup_relids = lappend_oid(cleanup_relids, relid);
 	MemoryContextSwitchTo(oldmcxt);
 }
 
