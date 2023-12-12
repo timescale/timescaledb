@@ -685,16 +685,44 @@ WHERE format('%I.%I', chunk_schema, chunk_name)::regclass = :'chunk'::regclass;
  Wed May 25 17:00:00 2022 PDT | Wed Jun 01 17:00:00 2022 PDT
 (1 row)
 
+--
+-- ADD COLUMN
+--
+-- Check that adding a column works across recompression.  First save
+-- some sample data from the table that will be used as a comparison
+-- to ensure adding a column doesn't mess up the data or column
+-- mapping.
+CREATE TEMP TABLE sample_readings AS
+SELECT * FROM readings
+WHERE time BETWEEN '2022-06-01 00:00:01' AND '2022-06-01 00:00:10'::timestamptz;
+SELECT count(*) FROM sample_readings;
+ count 
+-------
+     6
+(1 row)
+
+-- Now add the column
+ALTER TABLE readings ADD COLUMN pressure float;
+-- Check that the sample data remains the same in the modified
+-- table. Should return the same count as above if everything is the
+-- same.
+SELECT count(*) FROM readings r
+JOIN sample_readings s USING (time, location, device, temp, humidity);
+ count 
+-------
+     6
+(1 row)
+
 -- insert some new (non-compressed) data into the chunk in order to
 -- test recompression
-INSERT INTO :chunk (time, location, device, temp, humidity)
-SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+INSERT INTO :chunk (time, location, device, temp, humidity, pressure)
+SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, random() * 30
 FROM generate_series('2022-06-01 00:06:14'::timestamptz, '2022-06-01 16:59', '5s') t;
 -- Check that new data is returned
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
-             time             | location | device |      temp       |     humidity     
-------------------------------+----------+--------+-----------------+------------------
- Wed Jun 01 00:06:14 2022 PDT |        4 |     14 | 25.436597755153 | 25.1660100601806
+             time             | location | device |      temp       |     humidity     |     pressure     
+------------------------------+----------+--------+-----------------+------------------+------------------
+ Wed Jun 01 00:06:14 2022 PDT |        4 |     14 | 25.436597755153 | 25.1660100601806 | 13.7277476339543
 (1 row)
 
 -- Want to check that index scans work after recompression, so the
@@ -704,7 +732,7 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
                                              QUERY PLAN                                             
 ----------------------------------------------------------------------------------------------------
  Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
-   Output: "time", location, device, temp, humidity
+   Output: "time", location, device, temp, humidity, pressure
    Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:14 2022 PDT'::timestamp with time zone)
 (3 rows)
 
@@ -718,11 +746,53 @@ SELECT sum(_ts_meta_count) FROM :cchunk;
 CALL recompress_chunk(:'chunk');
 WARNING:  procedure public.recompress_chunk(regclass,boolean) is deprecated and the functionality is now included in public.compress_chunk. this compatibility function will be removed in a future version.
 -- Data should be returned even after recompress, but now from the
--- compressed relation
+-- compressed relation. Still using index scan.
+EXPLAIN (verbose, costs off)
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
+   Output: "time", location, device, temp, humidity, pressure
+   Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:14 2022 PDT'::timestamp with time zone)
+(3 rows)
+
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+             time             | location | device |      temp       |     humidity     |     pressure     
+------------------------------+----------+--------+-----------------+------------------+------------------
+ Wed Jun 01 00:06:14 2022 PDT |        4 |     14 | 25.436597755153 | 25.1660100601806 | 13.7277476339543
+(1 row)
+
+-- Drop column and add again
+ALTER TABLE readings DROP COLUMN pressure;
+EXPLAIN (verbose, costs off)
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
+   Output: "time", location, device, temp, humidity
+   Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:14 2022 PDT'::timestamp with time zone)
+(3 rows)
+
 SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
              time             | location | device |      temp       |     humidity     
 ------------------------------+----------+--------+-----------------+------------------
  Wed Jun 01 00:06:14 2022 PDT |        4 |     14 | 25.436597755153 | 25.1660100601806
+(1 row)
+
+ALTER TABLE readings ADD COLUMN pressure float;
+EXPLAIN (verbose, costs off)
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
+ Index Scan using "1_1_readings_time_key" on _timescaledb_internal._hyper_1_1_chunk
+   Output: "time", location, device, temp, humidity, pressure
+   Index Cond: (_hyper_1_1_chunk."time" = 'Wed Jun 01 00:06:14 2022 PDT'::timestamp with time zone)
+(3 rows)
+
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+             time             | location | device |      temp       |     humidity     | pressure 
+------------------------------+----------+--------+-----------------+------------------+----------
+ Wed Jun 01 00:06:14 2022 PDT |        4 |     14 | 25.436597755153 | 25.1660100601806 |         
 (1 row)
 
 \set ON_ERROR_STOP 0
