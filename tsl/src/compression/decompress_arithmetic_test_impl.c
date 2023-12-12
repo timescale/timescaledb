@@ -75,7 +75,7 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
  */
 static int
 FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
-										DecompressionTestType test_type)
+												 DecompressionTestType test_type)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -120,7 +120,8 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	/*
 	 * Test row-by-row decompression.
 	 */
-	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, PG_TYPE_OID);
+	DecompressionIterator *iter =
+		definitions[algo].iterator_init_forward(compressed_data, PG_TYPE_OID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))

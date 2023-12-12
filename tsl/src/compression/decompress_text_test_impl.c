@@ -14,7 +14,10 @@ static int
 decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType test_type,
 						int requested_algo)
 {
-	Assert(test_type == DTT_RowByRow || test_type == DTT_RowByRowFuzzing);
+	if (!(test_type == DTT_RowByRow || test_type == DTT_RowByRowFuzzing))
+	{
+		elog(ERROR, "decompression test type %d not supported for text", test_type);
+	}
 
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -38,7 +41,8 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	{
 		DecompressionIterator *iter =
 			definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter));
+		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+			;
 		return 0;
 	}
 

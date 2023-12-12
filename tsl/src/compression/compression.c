@@ -2287,20 +2287,22 @@ typedef enum
 
 #include "decompress_text_test_impl.c"
 
-#define APPLY_FOR_TYPES(X) \
-	X(GORILLA,    FLOAT8, RowByRow) \
-	X(GORILLA,    FLOAT8, Bulk) \
-	X(DELTADELTA, INT8, RowByRow) \
-	X(DELTADELTA, INT8, Bulk) \
-	X(ARRAY,      TEXT, RowByRow) \
-	X(DICTIONARY, TEXT, RowByRow) \
+#define APPLY_FOR_TYPES(X)                                                                         \
+	X(GORILLA, FLOAT8, RowByRow)                                                                   \
+	X(GORILLA, FLOAT8, Bulk)                                                                       \
+	X(DELTADELTA, INT8, RowByRow)                                                                  \
+	X(DELTADELTA, INT8, Bulk)                                                                      \
+	X(ARRAY, TEXT, RowByRow)                                                                       \
+	X(DICTIONARY, TEXT, RowByRow)
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size,
 													DecompressionTestType test_type)
 {
-#define DISPATCH(ALGO, PGTYPE, KIND) \
-	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID) \
-	{ return decompress_##ALGO##_##PGTYPE; }
+#define DISPATCH(ALGO, PGTYPE, KIND)                                                               \
+	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID)                               \
+	{                                                                                              \
+		return decompress_##ALGO##_##PGTYPE;                                                       \
+	}
 
 	APPLY_FOR_TYPES(DISPATCH)
 
@@ -2523,7 +2525,7 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 #ifdef TS_COMPRESSION_FUZZING
 
 static DecompressionTestType
-get_fuzzing_kind(const char* s)
+get_fuzzing_kind(const char *s)
 {
 	if (strcmp(s, "bulk") == 0)
 	{
@@ -2544,8 +2546,8 @@ get_fuzzing_kind(const char* s)
  * has to catch the postgres exceptions normally produced for corrupt data.
  */
 static int
-target_generic(int (*test_fn)(const uint8_t *, size_t, DecompressionTestType),
-						 const uint8_t *Data, size_t Size, DecompressionTestType test_type)
+target_generic(int (*test_fn)(const uint8_t *, size_t, DecompressionTestType), const uint8_t *Data,
+			   size_t Size, DecompressionTestType test_type)
 {
 	MemoryContextReset(CurrentMemoryContext);
 
@@ -2570,13 +2572,15 @@ target_generic(int (*test_fn)(const uint8_t *, size_t, DecompressionTestType),
 	return res == -1 ? -1 : 0;
 }
 
-#define DECLARE_TARGET(ALGO, PGTYPE, KIND) \
-static int target_##ALGO##_##PGTYPE##_##KIND (const uint8_t *D, size_t S) { return target_generic(decompress_##ALGO##_##PGTYPE, D, S, DTT_##KIND##Fuzzing); }
+#define DECLARE_TARGET(ALGO, PGTYPE, KIND)                                                         \
+	static int target_##ALGO##_##PGTYPE##_##KIND(const uint8_t *D, size_t S)                       \
+	{                                                                                              \
+		return target_generic(decompress_##ALGO##_##PGTYPE, D, S, DTT_##KIND##Fuzzing);            \
+	}
 
 APPLY_FOR_TYPES(DECLARE_TARGET)
 
 #undef DECLARE_TARGET
-
 
 /*
  * libfuzzer fuzzing driver that we import from LLVM libraries. It will run our
@@ -2626,12 +2630,14 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 
 	int (*target)(const uint8_t *, size_t) = NULL;
 
-#define DISPATCH(ALGO, PGTYPE, KIND) \
-if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID && kind == DTT_##KIND##Fuzzing) \
-{ target = target_##ALGO##_##PGTYPE##_##KIND ; }
+#define DISPATCH(ALGO, PGTYPE, KIND)                                                               \
+	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID &&                             \
+		kind == DTT_##KIND##Fuzzing)                                                               \
+	{                                                                                              \
+		target = target_##ALGO##_##PGTYPE##_##KIND;                                                \
+	}
 
-
-APPLY_FOR_TYPES(DISPATCH)
+	APPLY_FOR_TYPES(DISPATCH)
 
 	if (target == NULL)
 	{

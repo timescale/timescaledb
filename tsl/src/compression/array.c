@@ -406,12 +406,12 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 			.is_done = true,
 		};
 
-	Assert(iter->data_offset + datum_size.val <= iter->num_data_bytes);
+	CheckCompressedData(iter->data_offset + datum_size.val <= iter->num_data_bytes);
 
 	start_pointer = iter->data + iter->data_offset;
 	val = bytes_to_datum_and_advance(iter->deserializer, &start_pointer);
 	iter->data_offset += datum_size.val;
-	Assert(iter->data + iter->data_offset == start_pointer);
+	CheckCompressedData(iter->data + iter->data_offset == start_pointer);
 
 	return (DecompressResult){
 		.val = val,
