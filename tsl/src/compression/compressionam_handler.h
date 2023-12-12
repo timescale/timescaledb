@@ -35,6 +35,7 @@ typedef struct ColumnCompressionSettings
 	Oid typid;
 	bool is_orderby;
 	bool is_segmentby;
+	bool is_dropped;
 	bool orderby_desc;
 	bool nulls_first;
 } ColumnCompressionSettings;

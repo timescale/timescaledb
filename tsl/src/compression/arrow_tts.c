@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
 #include <executor/execdebug.h>
 #include <executor/tuptable.h>
@@ -13,6 +14,7 @@
 #include "arrow_cache.h"
 #include "arrow_tts.h"
 #include "compression.h"
+#include "compression/compressionam_handler.h"
 #include "custom_type_cache.h"
 #include "utils/palloc.h"
 
@@ -30,14 +32,38 @@ arrow_slot_get_attribute_offset_map(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 	const TupleDesc tupdesc = slot->tts_tupleDescriptor;
-	const TupleDesc ctupdesc = aslot->compressed_slot->tts_tupleDescriptor;
+	Oid relid =
+		OidIsValid(slot->tts_tableOid) ? slot->tts_tableOid : TupleDescAttr(tupdesc, 0)->attrelid;
 
-	if (NULL == aslot->attrs_offset_map)
+	if (aslot->attrs_offset_map)
+		return aslot->attrs_offset_map;
+
+	Ensure(OidIsValid(relid), "invalid relation for ArrowTupleTableSlot");
+
+	aslot->attrs_offset_map =
+		MemoryContextAllocZero(slot->tts_mcxt, sizeof(int16) * tupdesc->natts);
+
+	/* Get the mappings from the relation cache, but put them in the slot's
+	 * memory context since the cache might become invalidated and rebuilt. */
+	const Relation rel = RelationIdGetRelation(relid);
+	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+
+	for (int i = 0; i < caminfo->num_columns; i++)
 	{
-		MemoryContext oldmcxt = MemoryContextSwitchTo(slot->tts_mcxt);
-		aslot->attrs_offset_map = build_attribute_offset_map(tupdesc, ctupdesc, NULL);
-		MemoryContextSwitchTo(oldmcxt);
+		if (caminfo->columns[i].is_dropped)
+		{
+			Assert(TupleDescAttr(tupdesc, i)->attisdropped);
+			aslot->attrs_offset_map[i] = -1;
+		}
+		else
+		{
+			Assert(caminfo->columns[i].attnum == TupleDescAttr(tupdesc, i)->attnum);
+			Assert(caminfo->columns[i].cattnum != InvalidAttrNumber);
+			aslot->attrs_offset_map[i] = AttrNumberGetAttrOffset(caminfo->columns[i].cattnum);
+		}
 	}
+
+	RelationClose(rel);
 
 	return aslot->attrs_offset_map;
 }
@@ -55,7 +81,8 @@ tts_arrow_init(TupleTableSlot *slot)
 
 	aslot->arrow_columns = NULL;
 	aslot->segmentby_attrs = NULL;
-	aslot->valid_columns = NULL;
+	aslot->valid_attrs = NULL;
+	aslot->attrs_offset_map = NULL;
 	aslot->tuple_index = InvalidTupleIndex;
 	aslot->total_row_count = 0;
 	/*
@@ -110,9 +137,9 @@ static Bitmapset *
 build_segmentby_attrs(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-	const int16 *attrs_map = arrow_slot_get_attribute_offset_map(slot);
 	const TupleDesc tupdesc = slot->tts_tupleDescriptor;
 	const TupleDesc ctupdesc = aslot->compressed_slot->tts_tupleDescriptor;
+	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
 	Bitmapset *segmentby_attrs = NULL;
 
 	/*
@@ -122,12 +149,14 @@ build_segmentby_attrs(TupleTableSlot *slot)
 	 */
 	for (int i = 0; i < tupdesc->natts; i++)
 	{
-		const int16 cattoff = attrs_map[i];
-		const AttrNumber attno = AttrOffsetGetAttrNumber(i);
-		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
+		if (!TupleDescAttr(tupdesc, i)->attisdropped)
+		{
+			const AttrNumber attno = AttrOffsetGetAttrNumber(i);
+			const AttrNumber cattno = AttrOffsetGetAttrNumber(attrs_offset_map[i]);
 
-		if (!is_compressed_col(ctupdesc, cattno))
-			segmentby_attrs = bms_add_member(segmentby_attrs, attno);
+			if (!is_compressed_col(ctupdesc, cattno))
+				segmentby_attrs = bms_add_member(segmentby_attrs, attno);
+		}
 	}
 
 	return segmentby_attrs;
@@ -279,10 +308,10 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;
 
-	if (aslot->valid_columns != NULL)
+	if (aslot->valid_attrs != NULL)
 	{
-		pfree(aslot->valid_columns);
-		aslot->valid_columns = NULL;
+		pfree(aslot->valid_attrs);
+		aslot->valid_attrs = NULL;
 	}
 	aslot->child_slot = child_slot;
 	aslot->tuple_index = tuple_index;
@@ -387,24 +416,31 @@ is_compressed_col(const TupleDesc tupdesc, AttrNumber attno)
 }
 
 static void
-set_attr_value(TupleTableSlot *slot, AttrNumber attno)
+set_attr_value(TupleTableSlot *slot, const AttrNumber attnum)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-	const int16 *attrs_map = arrow_slot_get_attribute_offset_map(slot);
-	const int16 attoff = AttrNumberGetAttrOffset(attno);
-	const int16 cattoff = attrs_map[attoff];
-	const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
+	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
+	const int16 attoff = AttrNumberGetAttrOffset(attnum);
+	const int16 cattoff = attrs_offset_map[attoff]; /* offset in compressed tuple */
+	const AttrNumber cattnum = AttrOffsetGetAttrNumber(cattoff);
+
+	/* Nothing to do for dropped attribute */
+	if (attrs_offset_map[attoff] == -1)
+	{
+		Assert(TupleDescAttr(slot->tts_tupleDescriptor, attoff)->attisdropped);
+		return;
+	}
 
 	/* Check if value is already set */
-	if (bms_is_member(attno, aslot->valid_columns))
+	if (bms_is_member(attnum, aslot->valid_attrs))
 		return;
 
-	if (bms_is_member(attno, aslot->segmentby_attrs))
+	if (bms_is_member(attnum, aslot->segmentby_attrs))
 	{
 		/* Segment-by column. Value is not compressed so get directly from
 		 * child slot. */
 		slot->tts_values[attoff] =
-			slot_getattr(aslot->child_slot, cattno, &slot->tts_isnull[attoff]);
+			slot_getattr(aslot->child_slot, cattnum, &slot->tts_isnull[attoff]);
 	}
 	else if (aslot->arrow_columns[attoff] == NULL)
 	{
@@ -412,13 +448,14 @@ set_attr_value(TupleTableSlot *slot, AttrNumber attno)
 		 * decompressed data, the column must be NULL. Use the default
 		 * value. */
 		slot->tts_values[attoff] =
-			getmissingattr(slot->tts_tupleDescriptor, attno, &slot->tts_isnull[attoff]);
+			getmissingattr(slot->tts_tupleDescriptor, attnum, &slot->tts_isnull[attoff]);
 	}
 	else
 	{
 		const char *restrict values = aslot->arrow_columns[attoff]->buffers[1];
 		const uint64 *restrict validity = aslot->arrow_columns[attoff]->buffers[0];
-		int16 value_bytes = get_typlen(slot->tts_tupleDescriptor->attrs[attoff].atttypid);
+		int16 value_bytes = get_typlen(TupleDescAttr(slot->tts_tupleDescriptor, attoff)->atttypid);
+		int16 value_index = aslot->tuple_index - 1;
 
 		/*
 		 * The conversion of Datum to more narrow types will truncate
@@ -427,7 +464,7 @@ set_attr_value(TupleTableSlot *slot, AttrNumber attno)
 		 * reads, so technically we have to do memcpy.
 		 */
 		uint64 value;
-		memcpy(&value, &values[value_bytes * (aslot->tuple_index - 1)], 8);
+		memcpy(&value, &values[value_bytes * value_index], 8);
 
 #ifdef USE_FLOAT8_BYVAL
 		Datum datum = Int64GetDatum(value);
@@ -439,34 +476,39 @@ set_attr_value(TupleTableSlot *slot, AttrNumber attno)
 		Datum datum = (value_bytes <= 4) ? Int32GetDatum((uint32) value) : Int64GetDatum(value);
 #endif
 		slot->tts_values[attoff] = datum;
-		slot->tts_isnull[attoff] = !arrow_row_is_valid(validity, (aslot->tuple_index - 1));
+		slot->tts_isnull[attoff] = !arrow_row_is_valid(validity, value_index);
 	}
 
 	TS_WITH_MEMORY_CONTEXT(slot->tts_mcxt,
-						   { aslot->valid_columns = bms_add_member(aslot->valid_columns, attno); });
+						   { aslot->valid_attrs = bms_add_member(aslot->valid_attrs, attnum); });
 }
 
 static void
-tts_arrow_getsomeattrs(TupleTableSlot *slot, int attnum)
+tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 	const int16 *attrs_map;
 	int cattnum = -1;
 
-	if (attnum < 1 || attnum > slot->tts_tupleDescriptor->natts)
-		elog(ERROR, "invalid number of attributes requested");
+	Ensure((natts >= 1), "invalid number of attributes requested");
+
+	/* According to the TupleTableSlot API, getsomeattrs() can be called with
+	 * a natts higher than the available attributes, in which case tts_nvalid
+	 * should be set to the number of returned columns */
+	if (natts > slot->tts_tupleDescriptor->natts)
+		natts = slot->tts_tupleDescriptor->natts;
 
 	/* Check if attributes are already retrieved */
-	if (attnum <= slot->tts_nvalid)
+	if (natts <= slot->tts_nvalid)
 		return;
 
 	if (aslot->tuple_index == InvalidTupleIndex)
 	{
-		slot_getsomeattrs(aslot->child_slot, attnum);
+		slot_getsomeattrs(aslot->child_slot, natts);
 
 		/* The child slot points to an non-compressed tuple, so just copy over
 		 * the values from the child. */
-		copy_slot_values(aslot->child_slot, slot, attnum);
+		copy_slot_values(aslot->child_slot, slot, natts);
 		return;
 	}
 
@@ -475,9 +517,9 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int attnum)
 	/* Find highest attribute number/offset in compressed relation in order to
 	 * make slot_getsomeattrs() get all the required attributes in the
 	 * compressed tuple. */
-	for (int i = 0; i < attnum; i++)
+	for (int i = 0; i < natts; i++)
 	{
-		int16 coff = attrs_map[AttrNumberGetAttrOffset(attnum)];
+		int16 coff = attrs_map[i];
 
 		if (AttrOffsetGetAttrNumber(coff) > cattnum)
 			cattnum = AttrOffsetGetAttrNumber(coff);
@@ -487,16 +529,16 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int attnum)
 	slot_getsomeattrs(aslot->child_slot, cattnum);
 
 	/* The child slot points to a compressed tuple, so read the tuple. */
-	ArrowColumnCacheEntry *restrict entry = arrow_column_cache_read(aslot, attnum);
+	ArrowColumnCacheEntry *restrict entry = arrow_column_cache_read(aslot, natts);
 
 	/* Copy over cached data references to the slot */
 	aslot->arrow_columns = entry->arrow_columns;
 
 	/* Build the non-compressed tuple values array from the cached data. */
-	for (int i = 0; i < attnum; i++)
+	for (int i = 0; i < natts; i++)
 		set_attr_value(slot, AttrOffsetGetAttrNumber(i));
 
-	slot->tts_nvalid = attnum;
+	slot->tts_nvalid = natts;
 }
 
 /*
@@ -683,7 +725,6 @@ arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
 	if (aslot->arrow_columns == NULL)
 	{
 		ArrowColumnCacheEntry *restrict entry = arrow_column_cache_read(aslot, attno);
-
 		aslot->arrow_columns = entry->arrow_columns;
 		set_attr_value(slot, attno);
 	}
