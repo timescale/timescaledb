@@ -2,32 +2,22 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+-- Setup some variables
+SELECT
+    format('\! zcat include/data/cagg_migrate_%1$s.sql.gz > %2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "ZCAT_CMD",
+    format('%2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "TEST_SCHEMA_FILE"
+\gset
 
-\if :IS_DISTRIBUTED
-\echo 'Running distributed hypertable tests'
-\else
-\echo 'Running local hypertable tests'
-\endif
+-- decompress dump file
+:ZCAT_CMD
 
-CREATE TABLE conditions (
-    "time" :TIME_DIMENSION_DATATYPE NOT NULL,
-    temperature NUMERIC
-);
+-- restore dump
+SELECT timescaledb_pre_restore();
+\ir :TEST_SCHEMA_FILE
+SELECT timescaledb_post_restore();
 
-\if :IS_DISTRIBUTED
-    \if :IS_TIME_DIMENSION
-        SELECT table_name FROM create_distributed_hypertable('conditions', 'time', replication_factor => 2);
-    \else
-        SELECT table_name FROM create_distributed_hypertable('conditions', 'time', chunk_time_interval => 10, replication_factor => 2);
-    \endif
-\else
-    \if :IS_TIME_DIMENSION
-        SELECT table_name FROM create_hypertable('conditions', 'time');
-    \else
-        SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => 10);
-    \endif
-\endif
+-- Make sure no scheduled job will be executed during the regression tests
+SELECT _timescaledb_functions.stop_background_workers();
 
 \if :IS_TIME_DIMENSION
     INSERT INTO conditions ("time", temperature)
@@ -42,85 +32,24 @@ CREATE TABLE conditions (
         FROM public.conditions
     $$;
 
-    \if :IS_DISTRIBUTED
-        SELECT
-            'CREATE OR REPLACE FUNCTION integer_now() RETURNS '||:'TIME_DIMENSION_DATATYPE'||' LANGUAGE SQL STABLE AS $$ SELECT coalesce(max(time), 0) FROM public.conditions $$;' AS "STMT"
-            \gset
-        CALL distributed_exec (:'STMT');
-    \endif
-
-    SELECT set_integer_now_func('conditions', 'integer_now');
-
     INSERT INTO conditions ("time", temperature)
     SELECT
         generate_series(1, 1000, 1),
         0.25;
 \endif
 
--- new cagg format (finalized=true)
-CREATE MATERIALIZED VIEW conditions_summary_daily_new
-WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
-SELECT
-\if :IS_TIME_DIMENSION
-    time_bucket(INTERVAL '1 day', "time") AS bucket,
-\else
-    time_bucket(INTEGER '24', "time") AS bucket,
-\endif
-    MIN(temperature),
-    MAX(temperature),
-    AVG(temperature),
-    SUM(temperature)
-FROM
-    conditions
-GROUP BY
-    bucket
-WITH NO DATA;
-
--- older continuous aggregate to be migrated
-CREATE MATERIALIZED VIEW conditions_summary_daily
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-\if :IS_TIME_DIMENSION
-    time_bucket(INTERVAL '1 day', "time") AS bucket,
-\else
-    time_bucket(INTEGER '24', "time") AS bucket,
-\endif
-    MIN(temperature),
-    MAX(temperature),
-    AVG(temperature),
-    SUM(temperature)
-FROM
-    conditions
-GROUP BY
-    bucket;
-
--- for permission tests
-CREATE MATERIALIZED VIEW conditions_summary_weekly
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-\if :IS_TIME_DIMENSION
-    time_bucket(INTERVAL '1 week', "time") AS bucket,
-\else
-    time_bucket(INTEGER '168', "time") AS bucket,
-\endif
-    MIN(temperature),
-    MAX(temperature),
-    AVG(temperature),
-    SUM(temperature)
-FROM
-    conditions
-GROUP BY
-    bucket;
+CALL refresh_continuous_aggregate('conditions_summary_daily', NULL, NULL);
+CALL refresh_continuous_aggregate('conditions_summary_weekly', NULL, NULL);
 
 \set ON_ERROR_STOP 0
 -- should fail because we don't need to migrate finalized caggs
 CALL cagg_migrate('conditions_summary_daily_new');
-\set ON_ERROR_STOP 1
 
-\set ON_ERROR_STOP 0
 -- should fail relation does not exist
 CALL cagg_migrate('conditions_summary_not_cagg');
+
 CREATE TABLE conditions_summary_not_cagg();
+
 -- should fail continuous agg does not exist
 CALL cagg_migrate('conditions_summary_not_cagg');
 \set ON_ERROR_STOP 1
@@ -376,3 +305,5 @@ TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCA
 DROP MATERIALIZED VIEW conditions_summary_daily;
 DROP MATERIALIZED VIEW conditions_summary_weekly;
 DROP TABLE conditions;
+
+SELECT _timescaledb_functions.start_background_workers();

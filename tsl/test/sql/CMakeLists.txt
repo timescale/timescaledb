@@ -139,13 +139,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_TEMPLATES
     cagg_bgw.sql.in
     cagg_ddl.sql.in
-    cagg_errors_deprecated.sql.in
     cagg_query.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_errors.sql.in
-    continuous_aggs.sql.in
-    continuous_aggs_deprecated.sql.in)
+    continuous_aggs.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
   endif()
