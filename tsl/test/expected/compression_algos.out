@@ -1607,7 +1607,7 @@ group by 2 order by 1 desc
 ;
  count | rowbyrow_result 
 -------+-----------------
-     4 | XX001
+     5 | XX001
      1 | true
 (2 rows)
 
