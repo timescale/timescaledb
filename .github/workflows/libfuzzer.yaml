@@ -155,8 +155,8 @@ jobs:
         psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype, kind cstring, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
 
         # array has a peculiar recv function that recompresses all input, so
-        # fuzzing it is much slower.
-        runs=${{ matrix.case.algo == 'array' && 1000000 || 100000000 }}
+        # fuzzing it is much slower. dictionary recv also uses it.
+        runs=${{ (matrix.case.algo == 'array' || matrix.case.algo == 'dictionary') && 1000000 || 100000000 }}
 
         # Start more fuzzing processes in the background. We won't even monitor
         # their progress, because the server will panic if they find an error.
