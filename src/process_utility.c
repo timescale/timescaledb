@@ -4647,6 +4647,9 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 	/* Inhibit collecting new commands while in the trigger */
 	EventTriggerInhibitCommandCollection();
 
+	if (ts_cm_functions->ddl_command_end)
+		ts_cm_functions->ddl_command_end(trigdata);
+
 	switch (nodeTag(trigdata->parsetree))
 	{
 		case T_AlterTableStmt:

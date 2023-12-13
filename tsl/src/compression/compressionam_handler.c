@@ -10,6 +10,8 @@
 #include <access/skey.h>
 #include <access/tableam.h>
 #include <access/transam.h>
+#include <access/xact.h>
+#include <catalog/heap.h>
 #include <catalog/index.h>
 #include <catalog/pg_attribute.h>
 #include <catalog/storage.h>
@@ -42,6 +44,7 @@
 #include "compression/arrow_tts.h"
 #include "compressionam_handler.h"
 #include "create.h"
+#include "debug_assert.h"
 #include "guc.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
@@ -50,7 +53,7 @@
 #include "ts_catalog/compression_settings.h"
 
 static const TableAmRoutine compressionam_methods;
-static void compressionam_handler_end_conversion(Oid relid);
+static void convert_to_compressionam_finish(Oid relid);
 
 typedef struct ColumnCompressionSettings
 {
@@ -100,7 +103,6 @@ get_chunk_id_from_relid(Oid relid)
 	const char *schema = get_namespace_name(nspid);
 	const char *relname = get_rel_name(relid);
 	ts_chunk_get_id(schema, relname, &chunk_id, false);
-
 	return chunk_id;
 }
 
@@ -125,6 +127,7 @@ lazy_build_compressionam_info_cache(Relation rel, bool include_compressed_relinf
 		 * to free it with a single pfree(). */
 		caminfo =
 			MemoryContextAllocZero(CacheMemoryContext, COMPRESSION_AM_INFO_SIZE(tupdesc->natts));
+		caminfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
 		caminfo->compressed_relid = InvalidOid;
 		caminfo->num_columns = tupdesc->natts;
 		caminfo->hypertable_id = hyper_id;
@@ -162,12 +165,13 @@ lazy_build_compressionam_info_cache(Relation rel, bool include_compressed_relinf
 		Assert(caminfo->num_orderby == ts_array_length(settings->fd.orderby));
 	}
 
+	Ensure(caminfo->relation_id > 0, "invalid chunk ID");
+
 	/* Only optionally include information about the compressed chunk because
 	 * it might not exist when this cache is built. The information will be
 	 * added the next time the function is called instead. */
 	if (!OidIsValid(caminfo->compressed_relid) && include_compressed_relinfo)
 	{
-		caminfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
 		caminfo->compressed_relation_id = get_compressed_chunk_id(rel->rd_id);
 		caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
 	}
@@ -316,6 +320,7 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 {
 	CompressionScanDesc scan;
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
 
 	RelationIncrementReferenceCount(relation);
 
@@ -331,11 +336,7 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->rs_base.rs_key = palloc0(sizeof(ScanKeyData) * nkeys);
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
-
-	Chunk *chunk = ts_chunk_get_by_relid(RelationGetRelid(relation), true);
-	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-
-	scan->compressed_rel = table_open(c_chunk->table_id, AccessShareLock);
+	scan->compressed_rel = table_open(caminfo->compressed_relid, AccessShareLock);
 	scan->compressed_tuple_index = 1;
 	scan->returned_row_count = 0;
 	scan->compressed_row_count = 0;
@@ -1067,7 +1068,7 @@ static void
 compressionam_finish_bulk_insert(Relation rel, int options)
 {
 	if (conversionstate)
-		compressionam_handler_end_conversion(rel->rd_id);
+		convert_to_compressionam_finish(RelationGetRelid(rel));
 }
 
 /* ------------------------------------------------------------------------
@@ -1601,28 +1602,46 @@ convert_to_compressionam(Oid relid)
 }
 
 /*
- * Convert the table away from compression AM to another table access method.
- * When this happens it is necessary to cleanup metadata.
+ * List of relation IDs of compressed relations to truncate. Used to clean up
+ * the compressed relation when converting from compression TAM to another TAM
+ * (typically heap).
  */
+static List *truncate_relids = NIL;
+
 static void
-convert_from_compressionam(Oid relid)
+cleanup_compression_relations(void)
 {
-	int32 chunk_id = get_chunk_id_from_relid(relid);
-	int PG_USED_FOR_ASSERTS_ONLY count = ts_compression_chunk_size_delete(chunk_id);
-	Assert(count == 1);
+	if (truncate_relids != NIL)
+	{
+		heap_truncate(truncate_relids);
+		list_free(truncate_relids);
+		truncate_relids = NIL;
+	}
 }
 
 void
-compressionam_handler_start_conversion(Oid relid, bool to_other_am)
+compressionam_xact_event(XactEvent event, void *arg)
 {
-	if (to_other_am)
-		convert_from_compressionam(relid);
-	else
-		convert_to_compressionam(relid);
+	/*
+	 * Cleanup in case of aborted transcation. Need not explicitly check for
+	 * abort since the states should only exist if it is an abort.
+	 */
+	if (truncate_relids)
+	{
+		list_free(truncate_relids);
+		truncate_relids = NIL;
+	}
+
+	if (conversionstate)
+	{
+		tuplesort_end(conversionstate->tuplesortstate);
+		pfree(conversionstate);
+		conversionstate = NULL;
+	}
 }
 
-void
-compressionam_handler_end_conversion(Oid relid)
+static void
+convert_to_compressionam_finish(Oid relid)
 {
 	Chunk *chunk = ts_chunk_get_by_relid(conversionstate->relid, true);
 	Relation relation = table_open(conversionstate->relid, AccessShareLock);
@@ -1678,6 +1697,49 @@ compressionam_handler_end_conversion(Oid relid)
 	table_close(relation, NoLock);
 	table_close(compressed_rel, NoLock);
 	conversionstate = NULL;
+}
+
+/*
+ * Convert the table away from compression AM to another table access method.
+ * When this happens it is necessary to cleanup metadata.
+ */
+static void
+convert_from_compressionam(Oid relid)
+{
+	int32 chunk_id = get_chunk_id_from_relid(relid);
+	int32 compressed_chunk_id = get_compressed_chunk_id(relid);
+	Oid compressed_relid = ts_chunk_get_relid(compressed_chunk_id, false);
+	ts_compression_chunk_size_delete(chunk_id);
+
+	/* Need to truncate the compressed relation after converting from compression TAM */
+	MemoryContext oldmcxt = MemoryContextSwitchTo(CacheMemoryContext);
+	truncate_relids = lappend_oid(truncate_relids, compressed_relid);
+	MemoryContextSwitchTo(oldmcxt);
+}
+
+void
+compressionam_alter_access_method_begin(Oid relid, bool to_other_am)
+{
+	if (to_other_am)
+		convert_from_compressionam(relid);
+	else
+		convert_to_compressionam(relid);
+}
+
+/*
+ * Called at the end of converting to a table access method.
+ *
+ * Note that this function is called on every ALTER TABLE SET ACCESS METHOD,
+ * even when the compression TAM is neither old nor new TAM.
+ */
+void
+compressionam_alter_access_method_finish(Oid relid, bool to_other_am)
+{
+	if (to_other_am)
+		cleanup_compression_relations();
+
+	/* Finishing the conversion to compression TAM is handled in
+	 * the finish_bulk_insert callback */
 }
 
 /* ------------------------------------------------------------------------

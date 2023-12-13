@@ -59,6 +59,12 @@ PG_MODULE_MAGIC;
 extern void PGDLLEXPORT _PG_init(void);
 #endif
 
+static void
+tsl_xact_event(XactEvent event, void *arg)
+{
+	compressionam_xact_event(event, arg);
+}
+
 /*
  * Cross module function initialization.
  *
@@ -164,6 +170,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_target_segments = decompress_target_segments,
 	.compressionam_handler = compressionam_handler,
 	.ddl_command_start = tsl_ddl_command_start,
+	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,
 	.create_chunk = chunk_create,
@@ -181,6 +188,7 @@ static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
 	_continuous_aggs_cache_inval_fini();
+	UnregisterXactCallback(tsl_xact_event, NULL);
 }
 
 TS_FUNCTION_INFO_V1(ts_module_init);
@@ -201,6 +209,8 @@ ts_module_init(PG_FUNCTION_ARGS)
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
+
+	RegisterXactCallback(tsl_xact_event, NULL);
 	PG_RETURN_BOOL(true);
 }
 
