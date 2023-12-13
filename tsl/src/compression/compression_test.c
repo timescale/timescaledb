@@ -42,6 +42,9 @@ get_compression_algorithm(char *name)
 	return _INVALID_COMPRESSION_ALGORITHM;
 }
 
+/*
+ * Specializations of test functions for arithmetic types.
+ */
 #define ALGO GORILLA
 #define CTYPE float8
 #define PG_TYPE_PREFIX FLOAT8
@@ -62,6 +65,10 @@ get_compression_algorithm(char *name)
 #undef PG_TYPE_PREFIX
 #undef DATUM_TO_CTYPE
 
+/*
+ * The table of the supported testing configurations. We use it to generate
+ * dispatch tables and specializations of test functions.
+ */
 #define APPLY_FOR_TYPES(X)                                                                         \
 	X(GORILLA, FLOAT8, RowByRow)                                                                   \
 	X(GORILLA, FLOAT8, Bulk)                                                                       \
@@ -316,9 +323,12 @@ get_fuzzing_kind(const char *s)
 	}
 }
 
+/*
+ * Fuzzing target for all supported types.
+ */
 static int
-target(const uint8 *Data, size_t Size, CompressionAlgorithm requested_algo, Oid pg_type,
-	   DecompressionTestType test_type)
+target_generic(const uint8 *Data, size_t Size, CompressionAlgorithm requested_algo, Oid pg_type,
+			   DecompressionTestType test_type)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -354,8 +364,8 @@ target(const uint8 *Data, size_t Size, CompressionAlgorithm requested_algo, Oid 
 }
 
 /*
- * This is our test function that will be called by the libfuzzer driver. It
- * has to catch the postgres exceptions normally produced for corrupt data.
+ * This is a wrapper for fuzzing target. It will called by the libfuzzer driver.
+ * It has to catch the postgres exceptions normally produced for corrupt data.
  */
 static int
 target_wrapper(const uint8_t *Data, size_t Size, CompressionAlgorithm requested_algo, Oid pg_type,
@@ -367,7 +377,7 @@ target_wrapper(const uint8_t *Data, size_t Size, CompressionAlgorithm requested_
 	PG_TRY();
 	{
 		CHECK_FOR_INTERRUPTS();
-		res = target(Data, Size, requested_algo, pg_type, test_type);
+		res = target_generic(Data, Size, requested_algo, pg_type, test_type);
 	}
 	PG_CATCH();
 	{
@@ -384,6 +394,10 @@ target_wrapper(const uint8_t *Data, size_t Size, CompressionAlgorithm requested_
 	return res == -1 ? -1 : 0;
 }
 
+/*
+ * Specializations of fuzzing targets for supported types that will be directly
+ * called by the fuzzing driver.
+ */
 #define DECLARE_TARGET(ALGO, PGTYPE, KIND)                                                         \
 	static int target_##ALGO##_##PGTYPE##_##KIND(const uint8_t *D, size_t S)                       \
 	{                                                                                              \
@@ -454,6 +468,7 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 	}
 
 	APPLY_FOR_TYPES(DISPATCH)
+#undef DISPATCH
 
 	if (target == NULL)
 	{

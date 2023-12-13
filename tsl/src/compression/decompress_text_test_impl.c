@@ -91,9 +91,9 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	compressed_data = (Datum) compressor->finish(compressor);
 	if (compressed_data == 0)
 	{
-		/* The gorilla compressor returns NULL for all-null input sets. */
+		/* Some compressors return NULL when all rows are null. */
 		return n;
-	};
+	}
 
 	/*
 	 * 2) Decompress and check that it's the same.

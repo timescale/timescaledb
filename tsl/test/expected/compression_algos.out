@@ -1594,7 +1594,7 @@ group by 2 order by 1 desc
 ;
  count | rowbyrow_result 
 -------+-----------------
-     2 | true
+     3 | true
      1 | XX001
 (2 rows)
 
@@ -1608,6 +1608,6 @@ group by 2 order by 1 desc
  count | rowbyrow_result 
 -------+-----------------
      5 | XX001
-     1 | true
+     2 | true
 (2 rows)
 
