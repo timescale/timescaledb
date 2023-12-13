@@ -95,26 +95,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 
 	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
 
-	if (test_type == DTT_RowByRowFuzzing)
-	{
-		DecompressionIterator *iter =
-			definitions[data_algo].iterator_init_forward(compressed_data, PG_TYPE_OID);
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-			;
-		return 0;
-	}
-
 	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo);
-
-	if (test_type == DTT_BulkFuzzing)
-	{
-		/*
-		 * For routine fuzzing, we only run bulk decompression to make it faster
-		 * and the coverage space smaller.
-		 */
-		decompress_all(compressed_data, PG_TYPE_OID, CurrentMemoryContext);
-		return 0;
-	}
 
 	ArrowArray *arrow = NULL;
 	if (test_type == DTT_Bulk)

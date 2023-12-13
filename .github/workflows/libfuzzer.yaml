@@ -12,27 +12,12 @@ name: Libfuzzer
     paths: .github/workflows/libfuzzer.yaml
 
 jobs:
-  fuzz:
-    strategy:
-      fail-fast: false
-      matrix:
-        case: [
-            { algo: gorilla   , pgtype: float8, kind: rowbyrow, runs:  500000000 },
-            { algo: deltadelta, pgtype: int8  , kind: rowbyrow, runs:  500000000 },
-            { algo: gorilla   , pgtype: float8, kind: bulk    , runs: 1000000000 },
-            { algo: deltadelta, pgtype: int8  , kind: bulk    , runs: 1000000000 },
-            # array has a peculiar recv function that recompresses all input, so
-            # fuzzing it is much slower. The dictionary recv also uses it.
-            { algo: array     , pgtype: text  , kind: rowbyrow, runs:   10000000 },
-            { algo: dictionary, pgtype: text  , kind: rowbyrow, runs:   10000000 },
-            ]
-
-    name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.kind }}
+  build:
     runs-on: ubuntu-22.04
+    name: Build PostgreSQL and TimescaleDB
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
-
     steps:
     - name: Install Linux Dependencies
       run: |
@@ -108,6 +93,45 @@ jobs:
             -DPG_PATH=$HOME/$PG_INSTALL_DIR
 
         make -C build -j$(nproc) install
+
+    - name: Save the build
+      uses: actions/upload-artifact@v2
+      with:
+        name: fuzzing-install-dir
+        path: $HOME/$PG_INSTALL_DIR
+        retention-days: 1
+
+  fuzz:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [
+            { algo: gorilla   , pgtype: float8, kind: rowbyrow, runs:  500000000 },
+            { algo: deltadelta, pgtype: int8  , kind: rowbyrow, runs:  500000000 },
+            { algo: gorilla   , pgtype: float8, kind: bulk    , runs: 1000000000 },
+            { algo: deltadelta, pgtype: int8  , kind: bulk    , runs: 1000000000 },
+            # array has a peculiar recv function that recompresses all input, so
+            # fuzzing it is much slower. The dictionary recv also uses it.
+            { algo: array     , pgtype: text  , kind: rowbyrow, runs:   10000000 },
+            { algo: dictionary, pgtype: text  , kind: rowbyrow, runs:   10000000 },
+            ]
+
+    name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.kind }}
+    runs-on: ubuntu-22.04
+    env:
+      PG_SRC_DIR: pgbuild
+      PG_INSTALL_DIR: postgresql
+
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v3
+
+    - name: Download the installation directory
+      uses: actions/download-artifact@v2
+      with:
+        name: fuzzing-install-dir
+        path: $HOME/$PG_INSTALL_DIR
 
     - name: initdb
       run: |
@@ -194,14 +218,14 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: PostgreSQL log for ${{ toJSON(matrix.case) }}
+        name: PostgreSQL log for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.kind }}
         path: postgres.log
 
     - name: Save fuzzer-generated crash cases
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: Crash cases for ${{ toJSON(matrix.case) }}
+        name: Crash cases for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.kind }}
         path: db/crash-*
 
     # We use separate restore/save actions, because the default action won't
@@ -240,5 +264,5 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v3
       with:
-        name: Coredumps for ${{ toJSON(matrix.case) }}
+        name: Coredumps for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.kind }}
         path: coredumps

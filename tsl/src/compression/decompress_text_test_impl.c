@@ -14,7 +14,7 @@ static int
 decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType test_type,
 						int requested_algo)
 {
-	if (!(test_type == DTT_RowByRow || test_type == DTT_RowByRowFuzzing))
+	if (!(test_type == DTT_RowByRow))
 	{
 		elog(ERROR, "decompression test type %d not supported for text", test_type);
 	}
@@ -36,15 +36,6 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	}
 
 	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
-
-	if (test_type == DTT_RowByRowFuzzing)
-	{
-		DecompressionIterator *iter =
-			definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-			;
-		return 0;
-	}
 
 	/*
 	 * Test row-by-row decompression.
