@@ -144,7 +144,7 @@ jobs:
         name: fuzzing-install-dir
 
     - name: Unpack the installation directory
-      run: 7z x -o $HOME install.7z
+      run: 7z x -o$HOME install.7z
 
     - name: initdb
       run: |
