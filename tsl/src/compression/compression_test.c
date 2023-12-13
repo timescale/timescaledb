@@ -341,8 +341,7 @@ target(const uint8 *Data, size_t Size, CompressionAlgorithm requested_algo, Oid 
 
 	if (test_type == DTT_RowByRowFuzzing)
 	{
-		DecompressionIterator *iter =
-			def->iterator_init_forward(compressed_data, pg_type);
+		DecompressionIterator *iter = def->iterator_init_forward(compressed_data, pg_type);
 		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 			;
 		return 0;
