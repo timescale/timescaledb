@@ -273,8 +273,34 @@ copy_append_path(AppendPath *path, List *subpaths)
 {
 	AppendPath *newPath = makeNode(AppendPath);
 	memcpy(newPath, path, sizeof(AppendPath));
+
+	Assert(list_length(newPath->subpaths) == list_length(subpaths));
 	newPath->subpaths = subpaths;
-	cost_append(newPath);
+
+	/*
+	 * Note that we can't just call cost_append here, because when there is only
+	 * one child path, postgres inherits its pathkeys for append, but doesn't
+	 * reset append's parallel-aware flags, which leads to an assertion failure
+	 * in cost_append(). Below is a copy of how the create_append_path() handles
+	 * this case:
+	 *
+	 * If there's exactly one child path, the Append is a no-op and will be
+	 * discarded later (in setrefs.c); therefore, we can inherit the child's
+	 * size and cost, as well as its pathkeys if any (overriding whatever the
+	 * caller might've said).  Otherwise, we must do the normal costsize
+	 * calculation.
+	 */
+	if (list_length(newPath->subpaths) == 1)
+	{
+		Path	   *child = (Path *) linitial(newPath->subpaths);
+
+		newPath->path.rows = child->rows;
+		newPath->path.startup_cost = child->startup_cost;
+		newPath->path.total_cost = child->total_cost;
+		newPath->path.pathkeys = child->pathkeys;
+	}
+	else
+		cost_append(newPath);
 
 	return newPath;
 }
