@@ -151,7 +151,7 @@ def macos_config(overrides):
                 "remote_connection",
                 "compressed_collation",
             },
-            "os": "macos-11",
+            "os": "macos-13",
             "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include --without-icu",
             "pginstallcheck": True,
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
