@@ -6,6 +6,8 @@
 -- when injecting query_pathkeys on top of the append
 -- path that combines the uncompressed and compressed parts of a chunk.
 
+set enable_parallel_append to off; -- for less flaky plans
+
 set timescaledb.enable_decompression_sorted_merge = off;
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 
@@ -99,8 +101,12 @@ SELECT * FROM test1 ORDER BY time ASC NULLS LAST, x3 DESC NULLS FIRST, x4 DESC N
 :PREFIX
 SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
 
+set max_parallel_workers_per_gather = 0; -- parallel plan different on Windows
+set enable_hashagg to off; -- different on PG13
 :PREFIX
 SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10;
+reset max_parallel_workers_per_gather;
+reset enable_hashagg;
 
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, x4, time LIMIT 10;

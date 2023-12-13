@@ -889,16 +889,14 @@ FROM hyper_timepart
 WHERE device = 1
 GROUP BY 1
 LIMIT 10;
-                                                          QUERY PLAN                                                          
-------------------------------------------------------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
  Limit
    Output: _hyper_3_8_chunk.device, (avg(_hyper_3_8_chunk.temp))
-   ->  Finalize GroupAggregate
+   ->  GroupAggregate
          Output: _hyper_3_8_chunk.device, avg(_hyper_3_8_chunk.temp)
-         ->  Partial GroupAggregate
-               Output: _hyper_3_8_chunk.device, PARTIAL avg(_hyper_3_8_chunk.temp)
-               ->  Index Scan using _hyper_3_8_chunk_hyper_timepart_device_expr_idx on _timescaledb_internal._hyper_3_8_chunk
-                     Output: _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
-                     Index Cond: (_hyper_3_8_chunk.device = 1)
-(9 rows)
+         ->  Index Scan using _hyper_3_8_chunk_hyper_timepart_device_expr_idx on _timescaledb_internal._hyper_3_8_chunk
+               Output: _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
+               Index Cond: (_hyper_3_8_chunk.device = 1)
+(7 rows)
 
