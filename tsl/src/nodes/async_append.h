@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_ASYNC_APPEND_H
-#define TIMESCALEDB_TSL_ASYNC_APPEND_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
@@ -33,5 +32,3 @@ typedef struct AsyncScanState
 } AsyncScanState;
 
 extern void async_append_add_paths(PlannerInfo *root, RelOptInfo *final_rel);
-
-#endif

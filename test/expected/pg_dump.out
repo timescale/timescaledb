@@ -36,7 +36,7 @@ INSERT INTO "two_Partitions"("timeCustom", device_id, series_0, series_1) VALUES
 \set QUIET on
 \o
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE OR REPLACE FUNCTION bgw_wait(database TEXT, timeout INT)
+CREATE OR REPLACE FUNCTION bgw_wait(database TEXT, timeout INT, raise_error BOOLEAN DEFAULT TRUE)
 RETURNS VOID
 AS :MODULE_PATHNAME, 'ts_bgw_wait'
 LANGUAGE C VOLATILE;
@@ -609,12 +609,24 @@ SELECT timescaledb_pre_restore();
  t
 (1 row)
 
-SELECT bgw_wait(:'TEST_DBNAME', 60);
+SELECT bgw_wait(:'TEST_DBNAME', 60, FALSE);
  bgw_wait 
 ----------
  
 (1 row)
 
+-- Force other sessions connected to the TEST_DBNAME to be finished
+SET client_min_messages TO ERROR;
+SELECT COUNT(pg_catalog.pg_terminate_backend(pid))>=0
+FROM pg_stat_activity
+WHERE pid <> pg_backend_pid()
+AND datname = ':TEST_DBNAME';
+ ?column? 
+----------
+ t
+(1 row)
+
+RESET client_min_messages;
 CREATE DATABASE :TEST_DBNAME_EXTRA WITH TEMPLATE :TEST_DBNAME;
 -- Connect to the database and do some basic stuff to check that the
 -- extension works.

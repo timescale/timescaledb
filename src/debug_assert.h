@@ -3,10 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DEBUG_ASSERT_H
-#define TIMESCALEDB_DEBUG_ASSERT_H
+#pragma once
 
-#include <c.h>
 #include <postgres.h>
 
 /*
@@ -38,5 +36,3 @@
 					 errmsg(FMT, ##__VA_ARGS__)));                                                 \
 	} while (0)
 #endif
-
-#endif /* TIMESCALEDB_DEBUG_ASSERT_H */

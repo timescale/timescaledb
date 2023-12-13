@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_COMPAT_H
-#define TIMESCALEDB_COMPAT_H
+#pragma once
 
 #include <postgres.h>
 #include <commands/cluster.h>
@@ -1059,5 +1058,3 @@ error_severity(int elevel)
 	return prefix;
 }
 #endif
-
-#endif /* TIMESCALEDB_COMPAT_H */

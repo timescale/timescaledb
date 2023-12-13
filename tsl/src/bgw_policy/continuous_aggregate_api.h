@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_BGW_POLICY_CAGG_API_H
-#define TIMESCALEDB_TSL_BGW_POLICY_CAGG_API_H
+#pragma once
 
 #include <postgres.h>
 #include <utils/jsonb.h>
@@ -32,5 +30,3 @@ Datum policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type,
 									   bool if_not_exists, bool fixed_schedule,
 									   TimestampTz initial_start, const char *timezone);
 Datum policy_refresh_cagg_remove_internal(Oid cagg_oid, bool if_exists);
-
-#endif /* TIMESCALEDB_TSL_BGW_POLICY_CAGG_API_H */

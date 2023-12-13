@@ -1,3 +1,0 @@
-Fixes: #6254 Fix exception detail passing in compression_policy_execute
-
-Thanks: @fetchezar for reporting an issue with compression policy error messages

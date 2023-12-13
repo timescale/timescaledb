@@ -19,6 +19,10 @@ insert into foo values( 3 , 16 , 20, NULL);
 insert into foo values( 10 , 10 , 20, NULL);
 insert into foo values( 20 , 11 , 20, NULL);
 insert into foo values( 30 , 12 , 20, NULL);
+analyze foo;
+-- check that approximate_row_count works with a regular table
+SELECT approximate_row_count('foo');
+SELECT count(*) from foo;
 
 alter table foo set (timescaledb.compress, timescaledb.compress_segmentby = 'a,b', timescaledb.compress_orderby = 'c desc, d asc nulls last');
 
@@ -28,10 +32,9 @@ update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_transparent_decompression to OFF;
 
-select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from
-_timescaledb_catalog.hypertable order by id;
-select * from _timescaledb_catalog.hypertable_compression order by hypertable_id, attname;
-select * from timescaledb_information.compression_settings ORDER BY hypertable_name;
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable ORDER BY id;
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
+SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
 
 -- TEST2 compress-chunk for the chunks created earlier --
 select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
@@ -122,12 +125,8 @@ select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
 
-select hypertable_id, attname, compression_algorithm_id , al.name
-from _timescaledb_catalog.hypertable_compression hc,
-     _timescaledb_catalog.hypertable ht,
-      _timescaledb_catalog.compression_algorithm al
-where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id
-ORDER BY hypertable_id, attname;
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
 where cl.oid = at.attrelid and  at.attnum > 0
@@ -322,13 +321,8 @@ INSERT INTO datatype_test VALUES ('2000-01-01',2,4,8,4.0,8.0,'2000-01-01','2001-
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
 
-SELECT
-  attname, alg.name
-FROM _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable_compression htc ON ht.id=htc.hypertable_id
-  INNER JOIN _timescaledb_catalog.compression_algorithm alg ON alg.id=htc.compression_algorithm_id
-WHERE ht.table_name='datatype_test'
-ORDER BY attname;
+select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
 
 --TEST try to compress a hypertable that has a continuous aggregate
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);
@@ -538,9 +532,13 @@ SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE
 SELECT * FROM pg_stats WHERE tablename = :statchunk;
 
 ALTER TABLE stattest SET (timescaledb.compress);
+-- check that approximate_row_count works with all normal chunks
 SELECT approximate_row_count('stattest');
 SELECT compress_chunk(c) FROM show_chunks('stattest') c;
+-- check that approximate_row_count works with all compressed chunks
 SELECT approximate_row_count('stattest');
+-- actual count should match with the above
+SELECT count(*) from stattest;
 -- Uncompressed chunk table is empty since we just compressed the chunk and moved everything to compressed chunk table.
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
@@ -564,6 +562,8 @@ SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 
 -- verify that corresponding compressed chunk table stats is updated as well.
 SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
+-- verify that approximate_row_count works fine on a chunk with compressed data
+SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_COMP_CHUNK_NAME');
 
 -- Verify partial chunk stats are handled correctly when analyzing
 -- for both uncompressed and compressed chunk tables
@@ -577,7 +577,13 @@ SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 -- verify that corresponding compressed chunk table stats have not changed since
 -- we didn't compress anything new.
 SELECT relpages, reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
-
+-- verify that approximate_row_count works fine on a chunk with a mix of uncompressed
+-- and compressed data
+SELECT table_name  as "STAT_CHUNK_NAME" from temptable \gset
+SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_CHUNK_NAME');
+-- should match with the result via the hypertable post in-memory decompression
+SELECT count(*) from stattest;
+SELECT count(*) from show_chunks('stattest');
 
 -- Verify that decompressing the chunk restores autoanalyze to the hypertable's setting
 SELECT reloptions FROM pg_class WHERE relname = :statchunk;
@@ -597,7 +603,6 @@ SET client_min_messages TO NOTICE;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk and attname = 'c1';
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 
-DROP TABLE stattest;
 
 --- Test that analyze on compression internal table updates stats on original chunks
 CREATE TABLE stattest2(time TIMESTAMPTZ NOT NULL, c1 int, c2 int);
@@ -1008,17 +1013,20 @@ INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
 
 ALTER TABLE sensor_data_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='sensor_id', timescaledb.compress_orderby = 'time DESC');
 
+-- Increase work_mem slightly so that the batch sorted merge plan is not disabled.
+SET work_mem = '16MB';
+
 -- Compress three of the chunks
 SELECT compress_chunk(ch) FROM show_chunks('sensor_data_compressed') ch LIMIT 3;
 ANALYZE sensor_data_compressed;
 
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
--- Only the first chunks should be accessed (sorted merge append is enabled)
+-- Only the first chunks should be accessed (batch sorted merge is enabled)
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
--- Only the first chunks should be accessed (sorted merge append is disabled)
+-- Only the first chunks should be accessed (batch sorted merge is disabled)
 SET timescaledb.enable_decompression_sorted_merge = FALSE;
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
@@ -1029,11 +1037,11 @@ SELECT compress_chunk(ch, if_not_compressed => true) FROM show_chunks('sensor_da
 
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
--- Only the first chunks should be accessed (sorted merge append is enabled)
+-- Only the first chunks should be accessed (batch sorted merge is enabled)
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
--- Only the first chunks should be accessed (sorted merge append is disabled)
+-- Only the first chunks should be accessed (batch sorted merge is disabled)
 SET timescaledb.enable_decompression_sorted_merge = FALSE;
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
@@ -1043,12 +1051,26 @@ RESET timescaledb.enable_decompression_sorted_merge;
 INSERT INTO sensor_data_compressed (time, sensor_id, cpu, temperature)
    VALUES ('1980-01-02 01:00:00-00', 2, 4, 14.0);
 
--- Only the first chunks should be accessed (sorted merge append is enabled)
+-- Only the first chunks should be accessed (batch sorted merge is enabled)
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 
--- Only the first chunks should be accessed (sorted merge append is disabled)
+-- Only the first chunks should be accessed (batch sorted merge is disabled)
 SET timescaledb.enable_decompression_sorted_merge = FALSE;
 :PREFIX
 SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
 RESET timescaledb.enable_decompression_sorted_merge;
+
+-- create another chunk
+INSERT INTO stattest SELECT '2021/02/20 01:00'::TIMESTAMPTZ + ('1 hour'::interval * v), 250 * v FROM generate_series(125,140) v;
+ANALYZE stattest;
+SELECT count(*) from show_chunks('stattest');
+SELECT table_name INTO TEMPORARY temptable FROM _timescaledb_catalog.chunk WHERE hypertable_id = (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'stattest') ORDER BY creation_time desc limit 1;
+SELECT table_name  as "STAT_CHUNK2_NAME" FROM temptable \gset
+-- verify that approximate_row_count works ok on normal chunks
+SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_CHUNK2_NAME');
+-- verify that approximate_row_count works fine on a hypertable with a mix of uncompressed
+-- and compressed data
+SELECT approximate_row_count('stattest');
+
+DROP TABLE stattest;

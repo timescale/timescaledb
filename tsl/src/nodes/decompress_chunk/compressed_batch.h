@@ -3,11 +3,10 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #pragma once
 
 #include "compression/compression.h"
-#include "nodes/decompress_chunk/exec.h"
+#include "nodes/decompress_chunk/decompress_context.h"
 
 typedef struct ArrowArray ArrowArray;
 
@@ -50,6 +49,7 @@ typedef struct DecompressBatchState
 	TupleTableSlot *compressed_slot;
 	int total_batch_rows;
 	int next_batch_row;
+	Size block_size_bytes; /* Block size to use for memory context */
 	MemoryContext per_batch_context;
 
 	/*
@@ -62,19 +62,35 @@ typedef struct DecompressBatchState
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
-extern void compressed_batch_set_compressed_tuple(DecompressChunkState *chunk_state,
+extern void compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 												  DecompressBatchState *batch_state,
 												  TupleTableSlot *subslot);
 
-extern void compressed_batch_advance(DecompressChunkState *chunk_state,
+extern void compressed_batch_advance(DecompressContext *dcontext,
 									 DecompressBatchState *batch_state);
 
-extern void compressed_batch_save_first_tuple(DecompressChunkState *chunk_state,
+extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
 
-extern void init_bulk_decompression_mctx(DecompressChunkState *chunk_state,
-										 MemoryContext parent_ctx);
-
-extern void init_per_batch_mctx(DecompressChunkState *chunk_state,
-								DecompressBatchState *batch_state);
+#define create_bulk_decompression_mctx(parent_mctx)                                                \
+	AllocSetContextCreate(parent_mctx,                                                             \
+						  "Bulk decompression",                                                    \
+						  /* minContextSize = */ 0,                                                \
+						  /* initBlockSize = */ 64 * 1024,                                         \
+						  /* maxBlockSize = */ 64 * 1024);
+/*
+ * Initialize the batch memory context
+ *
+ * We use custom size for the batch memory context page, calculated to
+ * fit the typical result of bulk decompression (if we use it).
+ * This allows us to save on expensive malloc/free calls, because the
+ * Postgres memory contexts reallocate all pages except the first one
+ * after each reset.
+ */
+#define create_per_batch_mctx(block_size_bytes)                                                    \
+	AllocSetContextCreate(CurrentMemoryContext,                                                    \
+						  "Per-batch decompression",                                               \
+						  0,                                                                       \
+						  block_size_bytes,                                                        \
+						  block_size_bytes);

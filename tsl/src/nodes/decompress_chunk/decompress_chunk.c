@@ -25,26 +25,19 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "custom_type_cache.h"
 #include "debug_assert.h"
-#include "ts_catalog/hypertable_compression.h"
+#include "ts_catalog/array_utils.h"
 #include "import/planner.h"
 #include "import/allpaths.h"
 #include "compression/create.h"
-#include "nodes/decompress_chunk/batch_queue_heap.h"
+#include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
 #include "utils.h"
 
-#define DECOMPRESS_CHUNK_CPU_TUPLE_COST 0.01
-
 #define DECOMPRESS_CHUNK_BATCH_SIZE 1000
-
-/* We have to decompress the compressed batches in parallel. Therefore, we need a high
- * amount of memory. Set the tuple cost for this algorithm a very high value to prevent
- * that this algorithm is chosen when a lot of batches needs to be merged. For more details,
- * see the discussion in cost_decompress_sorted_merge_append(). */
-#define DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST 0.8
 
 static CustomPathMethods decompress_chunk_path_methods = {
 	.CustomName = "DecompressChunk",
@@ -82,13 +75,9 @@ static SortInfo build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionI
 							   List *pathkeys);
 
 static bool
-is_compressed_column(CompressionInfo *info, AttrNumber attno)
+is_compressed_column(CompressionInfo *info, Oid type)
 {
-	char *column_name = get_attname(info->compressed_rte->relid, attno, false);
-	FormData_hypertable_compression *column_info =
-		get_column_compressioninfo(info->hypertable_compression_info, column_name);
-
-	return column_info->algo_id != 0;
+	return type == info->compresseddata_oid;
 }
 
 static EquivalenceClass *
@@ -279,12 +268,15 @@ copy_decompress_chunk_path(DecompressChunkPath *src)
 static CompressionInfo *
 build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 {
-	ListCell *lc;
 	AppendRelInfo *appinfo;
 	CompressionInfo *info = palloc0(sizeof(CompressionInfo));
 
+	info->compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
+
+	info->settings = ts_compression_settings_get(ht->main_table_relid);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{
@@ -302,19 +294,20 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
 
 	info->hypertable_id = ht->fd.id;
 
-	info->hypertable_compression_info = ts_hypertable_compression_get(ht->fd.id);
+	info->num_orderby_columns = ts_array_length(info->settings->fd.orderby);
+	info->num_segmentby_columns = ts_array_length(info->settings->fd.segmentby);
 
-	foreach (lc, info->hypertable_compression_info)
+	if (info->num_segmentby_columns)
 	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (fd->orderby_column_index > 0)
-			info->num_orderby_columns++;
-		if (fd->segmentby_column_index > 0)
+		ArrayIterator it = array_create_iterator(info->settings->fd.segmentby, 0, NULL);
+		Datum datum;
+		bool isnull;
+		while (array_iterate(it, &datum, &isnull))
 		{
-			AttrNumber chunk_attno = get_attnum(info->chunk_rte->relid, NameStr(fd->attname));
+			Ensure(!isnull, "NULL element in catalog array");
+			AttrNumber chunk_attno = get_attnum(info->chunk_rte->relid, TextDatumGetCString(datum));
 			info->chunk_segmentby_attnos =
 				bms_add_member(info->chunk_segmentby_attnos, chunk_attno);
-			info->num_segmentby_columns++;
 		}
 	}
 
@@ -335,8 +328,17 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
 
 	/* total_cost is cost for fetching all tuples */
-	path->total_cost = compressed_path->total_cost + path->rows * DECOMPRESS_CHUNK_CPU_TUPLE_COST;
+	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
 	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+}
+
+/* Smoothstep function S1 (the h01 cubic Hermite spline). */
+static double
+smoothstep(double x, double start, double end)
+{
+	x = (x - start) / (end - start);
+	x = x < 0 ? 0 : x > 1 ? 1 : x;
+	return x * x * (3.0f - 2.0f * x);
 }
 
 /*
@@ -344,8 +346,8 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
  * a binary heap.
  */
 static void
-cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compression_info,
-									DecompressChunkPath *dcpath, Path *compressed_path)
+cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
+						DecompressChunkPath *dcpath, Path *compressed_path)
 {
 	Path sort_path; /* dummy for result of cost_sort */
 
@@ -370,74 +372,94 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
 	/*
 	 * In compressed batch sorted merge, for each distinct segmentby value we
 	 * have to keep the corresponding latest batch open. Estimate the number of
-	 * these batches to account for it in the cost model.
+	 * these batches with the usual Postgres estimator for grouping cardinality.
 	 */
-	double num_segmentby_groups = 1;
+	List *segmentby_groupexprs = NIL;
 	for (int segmentby_attno = bms_next_member(compression_info->chunk_segmentby_attnos, -1);
 		 segmentby_attno > 0;
 		 segmentby_attno =
 			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
-		Var var = { .xpr.type = T_Var,
-					.varno = compression_info->compressed_rel->relid,
-					.varattno = segmentby_attno };
-		VariableStatData vardata;
-		examine_variable(root, (Node *) &var, compression_info->compressed_rel->relid, &vardata);
-		bool isdefault = false;
-		const double ndistinct = get_variable_numdistinct(&vardata, &isdefault);
-		/*
-		 * Having correlated segmentby columns doesn't make much sense, so assume
-		 * they are totally uncorrelated for estimating the number of distinct
-		 * values.
-		 */
-		num_segmentby_groups *= ndistinct;
-
-		if (vardata.freefunc != NULL && vardata.statsTuple != NULL)
-		{
-			vardata.freefunc(vardata.statsTuple);
-		}
+		Var *var = palloc(sizeof(Var));
+		*var = (Var){ .xpr.type = T_Var,
+					  .varno = compression_info->compressed_rel->relid,
+					  .varattno = segmentby_attno };
+		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
+	const double open_batches_estimated = estimate_num_groups_compat(root,
+																	 segmentby_groupexprs,
+																	 dcpath->custom_path.path.rows,
+																	 NULL,
+																	 NULL);
+	Assert(open_batches_estimated > 0);
 
 	/*
-	 * We're not taking the restrictions on the compressed scan into account
-	 * when estimating the number of distinct segmentby values above, but at
-	 * least we should make sure that our estimate is lower than the total
-	 * number of rows returned by the compressed path.
+	 * We can't have more open batches than the total number of compressed rows,
+	 * so clamp it for sanity of the following calculations.
 	 */
-	const double simultaneously_open_baches = Min(sort_path.rows, num_segmentby_groups);
-
-	/* startup_cost is cost before fetching first tuple */
-	dcpath->custom_path.path.startup_cost = sort_path.total_cost;
+	const double open_batches_clamped = Min(open_batches_estimated, sort_path.rows);
 
 	/*
-	 * The cost model for the normal chunk decompression produces the following total
-	 * costs.
-	 *
-	 * Segments  Total costs
-	 * 10         711.84
-	 * 50        4060.91
-	 * 100       8588.32
-	 * 10000   119281.84
-	 *
-	 * The cost model of the regular decompression is roughly linear. Opening multiple batches in
-	 * parallel needs resources and merging a high amount of batches becomes inefficient at some
-	 * point. So, we use a quadratic cost model here to have higher costs than the normal
-	 * decompression when more than ~100 batches are used. We set
-	 * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST to 0.8 to become most costly as soon as we have to
-	 * simultaneously hold more than 120 batches.
-	 *
-	 * Besides the component quadratic in the number of batches that are open at
-	 * the same time, we also have a component that is linear in the number of
-	 * total processed batches.
-	 *
-	 * Note: To behave similarly to the cost model of the regular decompression path, this cost
-	 * model does not consider the number of decompressed tuples.
+	 * Keeping a lot of batches open might use a lot of memory. The batch sorted
+	 * merge can't offload anything to disk, so we just penalize it heavily if
+	 * we expect it to go over the work_mem. First, estimate the amount of
+	 * memory we'll need. We do this on the basis of uncompressed chunk width,
+	 * as if we had to materialize entire decompressed batches. This might
+	 * be less precise when bulk decompression is not used, because we
+	 * materialize only the compressed data which is smaller. But it accounts
+	 * for projections, which is probably more important than precision, because
+	 * we often read a small subset of columns in analytical queries. The
+	 * compressed chunk is never projected so we can't use it for that.
 	 */
-	dcpath->custom_path.path.total_cost =
-		sort_path.total_cost + sort_path.rows * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST +
-		pow(simultaneously_open_baches, 2) * DECOMPRESS_CHUNK_HEAP_MERGE_CPU_TUPLE_COST;
+	const double work_mem_bytes = work_mem * 1024;
+	const double needed_memory_bytes = open_batches_clamped * DECOMPRESS_CHUNK_BATCH_SIZE *
+									   dcpath->custom_path.path.pathtarget->width;
 
-	dcpath->custom_path.path.rows = sort_path.rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	fprintf(stderr,
+			"open batches %lf, needed_bytes %lf\n",
+			open_batches_clamped,
+			needed_memory_bytes);
+
+	/*
+	 * Next, calculate the cost penalty. It is a smooth step, starting at 75% of
+	 * work_mem, and ending at 125%. We want to effectively disable this plan
+	 * if it doesn't fit into the available memory, so the penalty should be
+	 * comparable to disable_cost but still less than it, so that the
+	 * manual disables still have priority.
+	 */
+	const double work_mem_penalty =
+		0.1 * disable_cost *
+		smoothstep(needed_memory_bytes, 0.75 * work_mem_bytes, 1.25 * work_mem_bytes);
+	Assert(work_mem_penalty >= 0);
+
+	/*
+	 * startup_cost is cost before fetching first tuple. Batch sorted merge has
+	 * to load at least the number of batches we expect to be open
+	 * simultaneously, before it can produce the first row.
+	 */
+	const double sort_path_cost_for_startup =
+		sort_path.startup_cost +
+		(sort_path.total_cost - sort_path.startup_cost) * (open_batches_clamped / sort_path.rows);
+	Assert(sort_path_cost_for_startup >= 0);
+	dcpath->custom_path.path.startup_cost = sort_path_cost_for_startup + work_mem_penalty;
+
+	/*
+	 * Finally, to run this path to completion, we have to complete the
+	 * underlying sort path, and return all uncompressed rows. Getting one
+	 * uncompressed row involves replacing the top row in the heap, which costs
+	 * O(log(heap size)). The constant multiplier is found empirically by
+	 * benchmarking the queries returning 1 - 1e9 tuples, with segmentby
+	 * cardinality 1 to 1e4, and adjusting the cost so that the fastest plan is
+	 * used. The "+ 1" under the logarithm is to avoid zero uncompressed row cost
+	 * when we expect to have only 1 batch open.
+	 */
+	const double sort_path_cost_rest = sort_path.total_cost - sort_path_cost_for_startup;
+	Assert(sort_path_cost_rest >= 0);
+	const double uncompressed_row_cost = 1.5 * log(open_batches_clamped + 1) * cpu_tuple_cost;
+	Assert(uncompressed_row_cost > 0);
+	dcpath->custom_path.path.total_cost = dcpath->custom_path.path.startup_cost +
+										  sort_path_cost_rest +
+										  dcpath->custom_path.path.rows * uncompressed_row_cost;
 }
 
 /*
@@ -499,14 +521,13 @@ cost_decompress_sorted_merge_append(PlannerInfo *root, CompressionInfo *compress
  * compatible and the optimization can be used.
  */
 static MergeBatchResult
-can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
+can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 {
 	PathKey *pk;
 	Var *var;
 	Expr *expr;
 	char *column_name;
 	List *pathkeys = root->query_pathkeys;
-	FormData_hypertable_compression *ci;
 	MergeBatchResult merge_result = SCAN_FORWARD;
 
 //	fprintf(stderr, "csma %s\n", get_rel_name(chunk->table_id));
@@ -541,30 +562,32 @@ can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 		}
 
 		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-		ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
+		int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
 
-		if (ci->orderby_column_index != pk_index + 1)
-		{
+		if (orderby_index != pk_index + 1)
 			return MERGE_NOT_POSSIBLE;
-		}
 
 		/* Check order, if the order of the first column do not match, switch to backward scan */
 		Assert(pk->pk_strategy == BTLessStrategyNumber ||
 			   pk->pk_strategy == BTGreaterStrategyNumber);
 
+		bool orderby_desc =
+			ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+		bool orderby_nullsfirst =
+			ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
+
 		if (pk->pk_strategy != BTLessStrategyNumber)
 		{
 			/* Test that ORDER BY and NULLS first/last do match in forward scan */
-			if (!ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first &&
+			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first &&
 				merge_result == SCAN_FORWARD)
 				continue;
 			/* Exact opposite in backward scan */
-			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first &&
 					 merge_result == SCAN_BACKWARD)
 				continue;
 			/* Switch scan direction on exact opposite order for first attribute */
-			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
-					 pk_index == 0)
+			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
 				merge_result = SCAN_BACKWARD;
 			else
 			{
@@ -574,16 +597,15 @@ can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 		else
 		{
 			/* Test that ORDER BY and NULLS first/last do match in forward scan */
-			if (ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first &&
+			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first &&
 				merge_result == SCAN_FORWARD)
 				continue;
 			/* Exact opposite in backward scan */
-			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
+			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first &&
 					 merge_result == SCAN_BACKWARD)
 				continue;
 			/* Switch scan direction on exact opposite order for first attribute */
-			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first &&
-					 pk_index == 0)
+			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
 				merge_result = SCAN_BACKWARD;
 			else
 			{
@@ -710,9 +732,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
 	pushdown_quals(root,
+				   compression_info->settings,
 				   chunk_rel,
 				   compressed_rel,
-				   compression_info->hypertable_compression_info,
 				   ts_chunk_is_partial(chunk));
 	set_baserel_size_estimates(root, compressed_rel);
 	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
@@ -798,7 +820,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						compression_info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->right_em->em_expr);
-					if (is_compressed_column(compression_info, var->varattno))
+					if (is_compressed_column(compression_info, var->vartype))
 					{
 						references_compressed = true;
 						break;
@@ -809,7 +831,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						compression_info->compressed_rel->relid)
 				{
 					Var *var = castNode(Var, ri->left_em->em_expr);
-					if (is_compressed_column(compression_info, var->varattno))
+					if (is_compressed_column(compression_info, var->vartype))
 					{
 						references_compressed = true;
 						break;
@@ -823,7 +845,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		path = (Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
 
 		/*
-		 * Create a path for the sorted merge append optimization. This optimization performs a
+		 * Create a path for the batch sorted merge optimization. This optimization performs a
 		 * merge append of the involved batches by using a binary heap and preserving the
 		 * compression order. This optimization is only taken into consideration if we can't push
 		 * down the sort to the compressed chunk. If we can push down the sort, the batches can be
@@ -833,7 +855,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 		if (ts_guc_enable_decompression_sorted_merge && !sort_info.can_pushdown_sort)
 		{
-			MergeBatchResult merge_result = can_sorted_merge_append(root, compression_info, chunk);
+			MergeBatchResult merge_result = can_batch_sorted_merge(root, compression_info, chunk);
 			if (merge_result != MERGE_NOT_POSSIBLE)
 			{
 				batch_merge_path = copy_decompress_chunk_path((DecompressChunkPath *) path);
@@ -846,10 +868,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * query here.
 				 */
 				batch_merge_path->custom_path.path.pathkeys = root->query_pathkeys;
-				cost_decompress_sorted_merge_append(root,
-													compression_info,
-													batch_merge_path,
-													compressed_path);
+				cost_batch_sorted_merge(root, compression_info, batch_merge_path, compressed_path);
 
 				/* If the chunk is partially compressed, prepare the path only and add it later
 				 * to a merge append path when we are able to generate the ordered result for the
@@ -1136,7 +1155,6 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 		List *chunk_vars = pull_var_clause(lfirst(lc), PVC_RECURSE_PLACEHOLDERS);
 		foreach (lc2, chunk_vars)
 		{
-			FormData_hypertable_compression *column_info;
 			char *column_name;
 			Var *chunk_var = castNode(Var, lfirst(lc2));
 
@@ -1157,28 +1175,22 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 			}
 
 			column_name = get_attname(info->chunk_rte->relid, chunk_var->varattno, false);
-			column_info =
-				get_column_compressioninfo(info->hypertable_compression_info, column_name);
-
-			Assert(column_info != NULL);
-
 			compressed_reltarget_add_var_for_column(compressed_rel,
 													compressed_relid,
 													column_name,
 													&attrs_used);
 
 			/* if the column is an orderby, add it's metadata columns too */
-			if (column_info->orderby_column_index > 0)
+			int16 index;
+			if ((index = ts_array_position(info->settings->fd.orderby, column_name)))
 			{
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														compression_column_segment_min_name(
-															column_info),
+														column_segment_min_name(index),
 														&attrs_used);
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
-														compression_column_segment_max_name(
-															column_info),
+														column_segment_max_name(index),
 														&attrs_used);
 			}
 		}
@@ -1266,16 +1278,11 @@ chunk_joininfo_mutator(Node *node, CompressionInfo *context)
 		Var *compress_var = copyObject(var);
 		char *column_name;
 		AttrNumber compressed_attno;
-		FormData_hypertable_compression *compressioninfo;
 		if ((Index) var->varno != context->chunk_rel->relid)
 			return (Node *) var;
 
 		column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
-		compressioninfo =
-			get_column_compressioninfo(context->hypertable_compression_info, column_name);
-
-		compressed_attno =
-			get_attnum(context->compressed_rte->relid, compressioninfo->attname.data);
+		compressed_attno = get_attnum(context->compressed_rte->relid, column_name);
 		compress_var->varno = context->compressed_rel->relid;
 		compress_var->varattno = compressed_attno;
 
@@ -1417,65 +1424,18 @@ compressed_rel_setup_joininfo(RelOptInfo *compressed_rel, CompressionInfo *info)
 
 typedef struct EMCreationContext
 {
-	List *compression_info;
 	Oid uncompressed_relid;
 	Oid compressed_relid;
 	Index uncompressed_relid_idx;
 	Index compressed_relid_idx;
-	FormData_hypertable_compression *current_col_info;
+	CompressionSettings *settings;
 } EMCreationContext;
 
-/* get the compression info for an EquivalenceMember (EM) expr,
- * or return NULL if it's not one we can create an EM for
- * This is applicable to segment by and compressed columns
- * of the compressed table.
- */
-static FormData_hypertable_compression *
-get_compression_info_for_em(Node *node, EMCreationContext *context)
-{
-	/* based on adjust_appendrel_attrs_mutator */
-	if (node == NULL)
-		return NULL;
-
-	Assert(!IsA(node, Query));
-
-	if (IsA(node, Var))
-	{
-		FormData_hypertable_compression *col_info;
-		char *column_name;
-		Var *var = castNode(Var, node);
-		if ((Index) var->varno != context->uncompressed_relid_idx)
-			return NULL;
-
-		/* we can't add an EM for system attributes or whole-row refs */
-		if (var->varattno <= 0)
-			return NULL;
-
-		column_name = get_attname(context->uncompressed_relid, var->varattno, true);
-		if (column_name == NULL)
-			return NULL;
-
-		col_info = get_column_compressioninfo(context->compression_info, column_name);
-
-		if (col_info == NULL)
-			return NULL;
-
-		return col_info;
-	}
-
-	/*
-	 * we currently ignore non-Var expressions; the EC we care about
-	 * (the one relating Hypertable columns to chunk columns)
-	 * should not have any
-	 */
-	return NULL;
-}
-
 static Node *
-create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *context)
+create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *context,
+											 const char *attname)
 {
 	/* based on adjust_appendrel_attrs_mutator */
-	Assert(context->current_col_info != NULL);
 	Assert((Index) var->varno == context->uncompressed_relid_idx);
 	Assert(var->varattno > 0);
 
@@ -1484,8 +1444,7 @@ create_var_for_compressed_equivalence_member(Var *var, const EMCreationContext *
 	if (var->varlevelsup == 0)
 	{
 		var->varno = context->compressed_relid_idx;
-		var->varattno =
-			get_attnum(context->compressed_relid, NameStr(context->current_col_info->attname));
+		var->varattno = get_attnum(context->compressed_relid, attname);
 		var->varnosyn = var->varno;
 		var->varattnosyn = var->varattno;
 
@@ -1530,22 +1489,12 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		 * be set on the em */
 		Assert(bms_overlap(cur_em->em_relids, uncompressed_chunk_relids));
 
-		context->current_col_info = get_compression_info_for_em((Node *) var, context);
-		if (context->current_col_info == NULL)
+		const char *attname = get_attname(info->chunk_rte->relid, var->varattno, false);
+
+		if (!ts_array_is_member(context->settings->fd.segmentby, attname))
 			continue;
 
-		if (!COMPRESSIONCOL_IS_SEGMENT_BY(context->current_col_info))
-		{
-			/*
-			 * This EM is not a segmentby column. Technically we can have a
-			 * query which equates a segmentby column to a compressed column,
-			 * and therefore has an EC with such members, so we still have to
-			 * check other EMs, maybe they are segmentby.
-			 */
-			continue;
-		}
-
-		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context);
+		child_expr = (Expr *) create_var_for_compressed_equivalence_member(var, context, attname);
 		if (child_expr == NULL)
 			continue;
 
@@ -1638,13 +1587,12 @@ static void
 compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *info)
 {
 	EMCreationContext context = {
-		.compression_info = info->hypertable_compression_info,
-
 		.uncompressed_relid = info->chunk_rte->relid,
 		.compressed_relid = info->compressed_rte->relid,
 
 		.uncompressed_relid_idx = info->chunk_rel->relid,
 		.compressed_relid_idx = info->compressed_rel->relid,
+		.settings = info->settings,
 	};
 
 	Assert(info->chunk_rte->relid != info->compressed_rel->relid);
@@ -1726,19 +1674,21 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	root->simple_rel_array[compressed_index] = compressed_rel;
 	info->compressed_rel = compressed_rel;
-	ListCell *lc;
-	foreach (lc, info->hypertable_compression_info)
+
+	Relation r = table_open(info->compressed_rte->relid, AccessShareLock);
+
+	for (int i = 0; i < r->rd_att->natts; i++)
 	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (fd->segmentby_column_index <= 0)
-		{
-			/* store attnos for the compressed chunk here */
-			AttrNumber compressed_chunk_attno =
-				get_attnum(info->compressed_rte->relid, NameStr(fd->attname));
-			info->compressed_attnos_in_compressed_chunk =
-				bms_add_member(info->compressed_attnos_in_compressed_chunk, compressed_chunk_attno);
-		}
+		Form_pg_attribute attr = TupleDescAttr(r->rd_att, i);
+
+		if (attr->attisdropped || attr->atttypid != info->compresseddata_oid)
+			continue;
+
+		info->compressed_attnos_in_compressed_chunk =
+			bms_add_member(info->compressed_attnos_in_compressed_chunk, attr->attnum);
 	}
+	table_close(r, NoLock);
+
 	compressed_rel_setup_reltarget(compressed_rel, info, needs_sequence_num);
 	compressed_rel_setup_equivalence_classes(root, info);
 	/* translate chunk_rel->joininfo for compressed_rel */
@@ -1937,22 +1887,6 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
 	return rte;
 }
 
-FormData_hypertable_compression *
-get_column_compressioninfo(List *hypertable_compression_info, char *column_name)
-{
-	ListCell *lc;
-
-	foreach (lc, hypertable_compression_info)
-	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		if (namestrcmp(&fd->attname, column_name) == 0)
-			return fd;
-	}
-	elog(ERROR, "No compression information for column \"%s\" found.", column_name);
-
-	pg_unreachable();
-}
-
 /*
  * Find segmentby columns that are equated to a constant by a toplevel
  * baserestrictinfo.
@@ -2031,7 +1965,6 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 	Var *var;
 	Expr *expr;
 	char *column_name;
-	FormData_hypertable_compression *ci;
 	ListCell *lc = list_head(pathkeys);
 	SortInfo sort_info = { .can_pushdown_sort = false, .needs_sequence_num = false };
 
@@ -2069,10 +2002,9 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 				break;
 
 			column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-			ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
-
-			if (ci->segmentby_column_index <= 0)
+			if (!ts_array_is_member(info->settings->fd.segmentby, column_name))
 				break;
+
 			segmentby_columns = bms_add_member(segmentby_columns, var->varattno);
 		}
 
@@ -2110,10 +2042,15 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 			return sort_info;
 
 		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
-		ci = get_column_compressioninfo(info->hypertable_compression_info, column_name);
+		int orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
 
-		if (ci->orderby_column_index != pk_index)
+		if (orderby_index != pk_index)
 			return sort_info;
+
+		bool orderby_desc =
+			ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+		bool orderby_nullsfirst =
+			ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
 
 		/*
 		 * pk_strategy is either BTLessStrategyNumber (for ASC) or
@@ -2121,18 +2058,18 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 		 */
 		if (pk->pk_strategy == BTLessStrategyNumber)
 		{
-			if (ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first)
+			if (!orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 				reverse = false;
-			else if (!ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first)
+			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
 				reverse = true;
 			else
 				return sort_info;
 		}
 		else if (pk->pk_strategy == BTGreaterStrategyNumber)
 		{
-			if (!ci->orderby_asc && ci->orderby_nullsfirst == pk->pk_nulls_first)
+			if (orderby_desc && orderby_nullsfirst == pk->pk_nulls_first)
 				reverse = false;
-			else if (ci->orderby_asc && ci->orderby_nullsfirst != pk->pk_nulls_first)
+			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first)
 				reverse = true;
 			else
 				return sort_info;

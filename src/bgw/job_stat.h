@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef BGW_JOB_STAT_H
-#define BGW_JOB_STAT_H
+#pragma once
 
 #include "ts_catalog/catalog.h"
 #include "job.h"
@@ -45,4 +44,3 @@ extern TSDLLEXPORT void ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id);
 
 extern TSDLLEXPORT TimestampTz ts_get_next_scheduled_execution_slot(BgwJob *job,
 																	TimestampTz finish_time);
-#endif /* BGW_JOB_STAT_H */

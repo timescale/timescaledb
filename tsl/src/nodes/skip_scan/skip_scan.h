@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_NODES_SKIP_SCAN_H
-#define TIMESCALEDB_TSL_NODES_SKIP_SCAN_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/plannodes.h>
@@ -13,5 +12,3 @@ extern void tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel,
 									RelOptInfo *output_rel);
 extern Node *tsl_skip_scan_state_create(CustomScan *cscan);
 extern void _skip_scan_init(void);
-
-#endif /* TIMESCALEDB_TSL_NODES_SKIP_SCAN_H */

@@ -39,6 +39,7 @@
 #include <parser/parse_coerce.h>
 
 #include "hypertable.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/hypertable_data_node.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/metadata.h"
@@ -46,7 +47,6 @@
 #include "dimension.h"
 #include "chunk.h"
 #include "chunk_adaptive.h"
-#include "ts_catalog/hypertable_compression.h"
 #include "subspace_store.h"
 #include "hypertable_cache.h"
 #include "trigger.h"
@@ -396,27 +396,10 @@ ts_hypertable_relid_to_id(Oid relid)
 	return result;
 }
 
-static bool
-hypertable_is_compressed_or_materialization(const Hypertable *ht)
-{
-	ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-	return (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht) ||
-			status == HypertableIsMaterialization);
-}
-
-static ScanFilterResult
-hypertable_filter_exclude_compressed_and_materialization(const TupleInfo *ti, void *data)
-{
-	Hypertable *ht = ts_hypertable_from_tupleinfo(ti);
-
-	return hypertable_is_compressed_or_materialization(ht) ? SCAN_EXCLUDE : SCAN_INCLUDE;
-}
-
 static int
 hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int indexid,
 							   tuple_found_func on_tuple_found, void *scandata, int limit,
-							   LOCKMODE lock, bool tuplock, MemoryContext mctx,
-							   tuple_filter_func filter)
+							   LOCKMODE lock, MemoryContext mctx, tuple_filter_func filter)
 {
 	Catalog *catalog = ts_catalog_get();
 	ScannerCtx scanctx = {
@@ -434,35 +417,6 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 	};
 
 	return ts_scanner_scan(&scanctx);
-}
-
-static ScanTupleResult
-hypertable_tuple_append(TupleInfo *ti, void *data)
-{
-	List **hypertables = data;
-
-	*hypertables = lappend(*hypertables, ts_hypertable_from_tupleinfo(ti));
-
-	return SCAN_CONTINUE;
-}
-
-List *
-ts_hypertable_get_all(void)
-{
-	List *result = NIL;
-
-	hypertable_scan_limit_internal(NULL,
-								   0,
-								   InvalidOid,
-								   hypertable_tuple_append,
-								   &result,
-								   -1,
-								   RowExclusiveLock,
-								   false,
-								   CurrentMemoryContext,
-								   hypertable_filter_exclude_compressed_and_materialization);
-
-	return result;
 }
 
 static ScanTupleResult
@@ -516,7 +470,6 @@ ts_hypertable_update(Hypertable *ht)
 										  ht,
 										  1,
 										  RowExclusiveLock,
-										  false,
 										  CurrentMemoryContext,
 										  NULL);
 }
@@ -524,7 +477,7 @@ ts_hypertable_update(Hypertable *ht)
 int
 ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 									   tuple_found_func tuple_found, void *data, LOCKMODE lockmode,
-									   bool tuplock, MemoryContext mctx)
+									   MemoryContext mctx)
 {
 	ScanKeyData scankey[2];
 	NameData schema_name = { .data = { 0 } };
@@ -555,7 +508,6 @@ ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 										  data,
 										  1,
 										  lockmode,
-										  tuplock,
 										  mctx,
 										  NULL);
 }
@@ -676,7 +628,7 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
 
 	/* remove any associated compression definitions */
-	ts_hypertable_compression_delete_by_hypertable_id(hypertable_id);
+	ts_compression_settings_delete(ts_hypertable_id_to_relid(hypertable_id, true));
 
 	if (!compressed_hypertable_id_isnull)
 	{
@@ -729,7 +681,6 @@ ts_hypertable_delete_by_name(const char *schema_name, const char *table_name)
 										  NULL,
 										  0,
 										  RowExclusiveLock,
-										  false,
 										  CurrentMemoryContext,
 										  NULL);
 }
@@ -752,7 +703,6 @@ ts_hypertable_delete_by_id(int32 hypertable_id)
 										  NULL,
 										  1,
 										  RowExclusiveLock,
-										  false,
 										  CurrentMemoryContext,
 										  NULL);
 }
@@ -773,7 +723,8 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 		performDeletion(&hypertable_addr, behavior, 0);
 	}
 	/* Clean up catalog */
-	ts_hypertable_delete_by_name(hypertable->fd.schema_name.data, hypertable->fd.table_name.data);
+	ts_hypertable_delete_by_name(NameStr(hypertable->fd.schema_name),
+								 NameStr(hypertable->fd.table_name));
 }
 
 static ScanTupleResult
@@ -815,90 +766,8 @@ ts_hypertable_reset_associated_schema_name(const char *associated_schema)
 										  NULL,
 										  0,
 										  RowExclusiveLock,
-										  false,
 										  CurrentMemoryContext,
 										  NULL);
-}
-
-static ScanTupleResult
-tuple_found_lock(TupleInfo *ti, void *data)
-{
-	TM_Result *result = data;
-
-	*result = ti->lockresult;
-	return SCAN_DONE;
-}
-
-TM_Result
-ts_hypertable_lock_tuple(Oid table_relid)
-{
-	TM_Result result;
-	int num_found;
-
-	num_found = hypertable_scan(get_namespace_name(get_rel_namespace(table_relid)),
-								get_rel_name(table_relid),
-								tuple_found_lock,
-								&result,
-								RowExclusiveLock,
-								true);
-
-	if (num_found != 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-				 errmsg("table \"%s\" is not a hypertable", get_rel_name(table_relid))));
-
-	return result;
-}
-
-bool
-ts_hypertable_lock_tuple_simple(Oid table_relid)
-{
-	TM_Result result = ts_hypertable_lock_tuple(table_relid);
-
-	switch (result)
-	{
-		case TM_SelfModified:
-
-			/*
-			 * Updated by the current transaction already. We equate this with
-			 * a successful lock since the tuple should be locked if updated
-			 * by us.
-			 */
-			return true;
-		case TM_Ok:
-			/* successfully locked */
-			return true;
-
-		case TM_Deleted:
-		case TM_Updated:
-			ereport(ERROR,
-					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
-					 errmsg("hypertable \"%s\" has already been updated by another transaction",
-							get_rel_name(table_relid)),
-					 errhint("Retry the operation again.")));
-			pg_unreachable();
-			return false;
-
-		case TM_BeingModified:
-			ereport(ERROR,
-					(errcode(ERRCODE_LOCK_NOT_AVAILABLE),
-					 errmsg("hypertable \"%s\" is being updated by another transaction",
-							get_rel_name(table_relid)),
-					 errhint("Retry the operation again.")));
-			pg_unreachable();
-			return false;
-		case TM_WouldBlock:
-			/* Locking would block. Let caller decide what to do */
-			return false;
-		case TM_Invisible:
-			elog(ERROR, "attempted to lock invisible tuple");
-			pg_unreachable();
-			return false;
-		default:
-			elog(ERROR, "unexpected tuple lock status");
-			pg_unreachable();
-			return false;
-	}
 }
 
 int
@@ -1033,7 +902,7 @@ ts_hypertable_get_by_name(const char *schema, const char *name)
 {
 	Hypertable *ht = NULL;
 
-	hypertable_scan(schema, name, hypertable_tuple_found, &ht, AccessShareLock, false);
+	hypertable_scan(schema, name, hypertable_tuple_found, &ht, AccessShareLock);
 
 	return ht;
 }
@@ -1107,7 +976,6 @@ ts_hypertable_get_by_id(int32 hypertable_id)
 								   &ht,
 								   1,
 								   AccessShareLock,
-								   false,
 								   CurrentMemoryContext,
 								   NULL);
 	return ht;
@@ -1973,9 +1841,9 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
 	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
 	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
-	bool replication_factor_is_null = PG_ARGISNULL(14);
-	int32 replication_factor_in = replication_factor_is_null ? 0 : PG_GETARG_INT32(14);
-	ArrayType *data_node_arr = PG_ARGISNULL(15) ? NULL : PG_GETARG_ARRAYTYPE_P(15);
+	bool replication_factor_is_null = true;
+	int32 replication_factor_in = 0;
+	ArrayType *data_node_arr = NULL;
 
 	bool distributed_is_null;
 	bool distributed;
@@ -1989,18 +1857,8 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("partition column cannot be NULL")));
 
-	/* create_distributed_hypertable() does not have explicit
-	 * distributed argument */
-	if (!is_dist_call)
-	{
-		distributed_is_null = PG_ARGISNULL(16);
-		distributed = distributed_is_null ? false : PG_GETARG_BOOL(16);
-	}
-	else
-	{
-		distributed_is_null = false;
-		distributed = true;
-	}
+	distributed_is_null = true;
+	distributed = false;
 
 	DimensionInfo *open_dim_info =
 		ts_dimension_info_create_open(table_relid,

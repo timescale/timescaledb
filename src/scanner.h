@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_SCANNER_H
-#define TIMESCALEDB_SCANNER_H
+#pragma once
 
 #include <postgres.h>
 #include <access/genam.h>
@@ -161,5 +160,3 @@ extern TSDLLEXPORT HeapTuple ts_scanner_fetch_heap_tuple(const TupleInfo *ti, bo
 														 bool *should_free);
 extern TSDLLEXPORT TupleDesc ts_scanner_get_tupledesc(const TupleInfo *ti);
 extern TSDLLEXPORT void *ts_scanner_alloc_result(const TupleInfo *ti, Size size);
-
-#endif /* TIMESCALEDB_SCANNER_H */

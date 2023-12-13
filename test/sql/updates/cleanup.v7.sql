@@ -3,4 +3,4 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \ir cleanup.v6.sql
-\ir cleanup.multinode.sql
+

@@ -251,6 +251,7 @@ ts_bgw_wait(PG_FUNCTION_ARGS)
 	/* The timeout is given in seconds, so we compute the number of iterations
 	 * necessary to get a coverage of that time */
 	uint32 iterations = PG_ARGISNULL(1) ? 5 : (PG_GETARG_UINT32(1) + 4) / 5;
+	bool raise_error = PG_ARGISNULL(2) ? true : PG_GETARG_BOOL(2);
 	Oid dboid = get_database_oid(text_to_cstring(datname), false);
 
 	/* This function contains a timeout of 5 seconds, so we iterate a few
@@ -269,14 +270,19 @@ ts_bgw_wait(PG_FUNCTION_ARGS)
 						   notherbackends,
 						   npreparedxacts)));
 	}
-	ereport(ERROR,
-			(errcode(ERRCODE_OBJECT_IN_USE),
-			 errmsg("source database \"%s\" is being accessed by other users",
-					text_to_cstring(datname)),
-			 errdetail("There are %d other session(s) and %d prepared transaction(s) using the "
-					   "database.",
-					   notherbackends,
-					   npreparedxacts)));
+
+	if (raise_error)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_IN_USE),
+				 errmsg("source database \"%s\" is being accessed by other users",
+						text_to_cstring(datname)),
+				 errdetail("There are %d other session(s) and %d prepared transaction(s) using the "
+						   "database.",
+						   notherbackends,
+						   npreparedxacts)));
+	}
+
 	pg_unreachable();
 }
 

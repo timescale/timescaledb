@@ -856,9 +856,18 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		 * Until then the choice was made in favor of the most generic schema
 		 * that can be optimized later.
 		 */
+		Oid bucket_func_schema_oid = get_func_namespace(bucket_info->bucket_func->funcid);
+		Ensure(OidIsValid(bucket_func_schema_oid),
+			   "namespace for funcid %d not found",
+			   bucket_info->bucket_func->funcid);
+		char *bucket_func_schema_name = get_namespace_name(bucket_func_schema_oid);
+		Ensure(bucket_func_schema_name != NULL,
+			   "unable to get namespace name for Oid %d",
+			   bucket_func_schema_oid);
+		bool is_experimental =
+			(strncmp(bucket_func_schema_name, EXPERIMENTAL_SCHEMA_NAME, NAMEDATALEN) == 0);
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
-											 get_func_namespace(bucket_info->bucket_func->funcid) !=
-												 PG_PUBLIC_NAMESPACE,
+											 is_experimental,
 											 get_func_name(bucket_info->bucket_func->funcid),
 											 bucket_width,
 											 origin,

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_GUC_H
-#define TIMESCALEDB_GUC_H
+#pragma once
 
 #include <postgres.h>
 #include "export.h"
@@ -100,14 +99,6 @@ extern TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
 typedef void (*set_ssl_options_hook_type)(const char *user_name);
 extern TSDLLEXPORT set_ssl_options_hook_type ts_set_ssl_options_hook;
 
-/*
- * Exit code to use when scheduler exits.
- *
- * Mostly used for debugging, but defined also for non-debug builds since that
- * simplifies the code (and also simplifies debugging non-debug builds).
- */
-extern TSDLLEXPORT int ts_bgw_scheduler_exit_code;
-
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;
@@ -141,5 +132,3 @@ typedef enum
 } FeatureFlagType;
 
 extern TSDLLEXPORT void ts_feature_flag_check(FeatureFlagType);
-
-#endif /* TIMESCALEDB_GUC_H */

@@ -2,6 +2,11 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+-- Increase the working memory limit slightly, otherwise the batch sorted merge
+-- will be penalized for segmentby cardinalities larger than 100, where it is
+-- still faster than sort.
+SET work_mem to '16MB';
+
 \set PREFIX 'EXPLAIN (analyze, verbose, costs off, timing off, summary off)'
 
 CREATE TABLE test1 (
@@ -210,6 +215,12 @@ SELECT * FROM test1 WHERE x4 > 100 ORDER BY time DESC, x4, x3;
 -- Should not be optimized
 :PREFIX
 SELECT * FROM test1 WHERE x4 > 100 ORDER BY time ASC, x3, x4;
+
+-- Test that the enable_sort GUC doesn't disable the batch sorted merge plan.
+SET enable_sort TO OFF;
+:PREFIX
+SELECT * FROM test1 ORDER BY time DESC;
+RESET enable_sort;
 
 ------
 -- Tests based on results

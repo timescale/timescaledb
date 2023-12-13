@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_H
-#define TIMESCALEDB_HYPERTABLE_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/primnodes.h>
@@ -84,7 +83,6 @@ enum Anum_generic_create_hypertable
 #define Natts_generic_create_hypertable (_Anum_generic_create_hypertable_max - 1)
 
 extern TSDLLEXPORT Oid ts_rel_get_owner(Oid relid);
-extern List *ts_hypertable_get_all(void);
 
 typedef enum HypertableCreateFlags
 {
@@ -124,10 +122,7 @@ extern Hypertable *ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid r
 															bool allow_matht);
 extern int ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 												  tuple_found_func tuple_found, void *data,
-												  LOCKMODE lockmode, bool tuplock,
-												  MemoryContext mctx);
-extern TM_Result ts_hypertable_lock_tuple(Oid table_relid);
-extern bool ts_hypertable_lock_tuple_simple(Oid table_relid);
+												  LOCKMODE lockmode, MemoryContext mctx);
 extern TSDLLEXPORT int ts_hypertable_update(Hypertable *ht);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
@@ -190,13 +185,12 @@ extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_n
 														int32 replication_factor,
 														int num_data_nodes);
 
-#define hypertable_scan(schema, table, tuple_found, data, lockmode, tuplock)                       \
+#define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
 										   table,                                                  \
 										   tuple_found,                                            \
 										   data,                                                   \
 										   lockmode,                                               \
-										   tuplock,                                                \
 										   CurrentMemoryContext)
 
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
@@ -207,5 +201,3 @@ extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_n
 	(hypertable_is_distributed(ht) ? RELKIND_FOREIGN_TABLE : RELKIND_RELATION)
 #define hypertable_is_distributed_member(ht)                                                       \
 	((ht)->fd.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)
-
-#endif /* TIMESCALEDB_HYPERTABLE_H */

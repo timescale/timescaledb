@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
+#pragma once
 
 /*
  * This file contains source code that was copied and/or modified from
@@ -14,8 +15,6 @@
  * they were declared static in the core planner, but we need them for
  * our manipulations.
  */
-#ifndef TIMESCALEDB_PLANNER_IMPORT_H
-#define TIMESCALEDB_PLANNER_IMPORT_H
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
@@ -49,12 +48,6 @@ extern TSDLLEXPORT PathKey *ts_make_pathkey_from_sortop(PlannerInfo *root, Expr 
 														bool nulls_first, Index sortref,
 														bool create_it);
 
-extern TSDLLEXPORT PathKey *
-ts_make_pathkey_from_sortinfo(PlannerInfo *root, Expr *expr, Relids nullable_relids, Oid opfamily,
-							  Oid opcintype, Oid collation, bool reverse_sort, bool nulls_first,
-							  Index sortref, Relids rel, bool create_it);
 extern TSDLLEXPORT List *ts_build_path_tlist(PlannerInfo *root, Path *path);
 
 extern void ts_ExecSetTupleBound(int64 tuples_needed, PlanState *child_node);
-
-#endif /* TIMESCALEDB_PLANNER_IMPORT_H */

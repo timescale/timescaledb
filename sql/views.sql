@@ -287,19 +287,30 @@ WHERE dim.hypertable_id = ht.id;
 
 ---compression parameters information ---
 CREATE OR REPLACE VIEW timescaledb_information.compression_settings AS
-SELECT ht.schema_name AS hypertable_schema,
-  ht.table_name AS hypertable_name,
-  segq.attname,
-  segq.segmentby_column_index,
-  segq.orderby_column_index,
-  segq.orderby_asc,
-  segq.orderby_nullsfirst
-FROM _timescaledb_catalog.hypertable_compression segq,
-  _timescaledb_catalog.hypertable ht
-WHERE segq.hypertable_id = ht.id
-  AND (segq.segmentby_column_index IS NOT NULL
-    OR segq.orderby_column_index IS NOT NULL)
-ORDER BY table_name,
+SELECT
+	schema_name AS hypertable_schema,
+  table_name AS hypertable_name,
+  (unnest(cs.segmentby))::name COLLATE "C" AS attname,
+  generate_series(1,array_length(cs.segmentby,1))::smallint AS segmentby_column_index,
+  NULL::smallint AS orderby_column_index,
+  NULL::bool AS orderby_asc,
+  NULL::bool AS orderby_nullsfirst
+FROM _timescaledb_catalog.hypertable ht
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.segmentby IS NOT NULL
+WHERE compressed_hypertable_id IS NOT NULL
+UNION ALL
+SELECT
+	schema_name AS hypertable_schema,
+  table_name AS hypertable_name,
+  (unnest(cs.orderby))::name COLLATE "C" AS attname,
+  NULL::smallint AS segmentby_column_index,
+  generate_series(1,array_length(cs.orderby,1))::smallint AS orderby_column_index,
+  unnest(array_replace(array_replace(array_replace(cs.orderby_desc,false,NULL),true,false),NULL,true)) AS orderby_asc,
+  unnest(cs.orderby_nullsfirst) AS orderby_nullsfirst
+FROM _timescaledb_catalog.hypertable ht
+INNER JOIN _timescaledb_catalog.compression_settings cs ON cs.relid = format('%I.%I',ht.schema_name,ht.table_name)::regclass AND cs.orderby IS NOT NULL
+WHERE compressed_hypertable_id IS NOT NULL
+ORDER BY hypertable_name,
   segmentby_column_index,
   orderby_column_index;
 

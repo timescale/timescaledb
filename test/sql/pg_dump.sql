@@ -9,7 +9,7 @@
 \o
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
-CREATE OR REPLACE FUNCTION bgw_wait(database TEXT, timeout INT)
+CREATE OR REPLACE FUNCTION bgw_wait(database TEXT, timeout INT, raise_error BOOLEAN DEFAULT TRUE)
 RETURNS VOID
 AS :MODULE_PATHNAME, 'ts_bgw_wait'
 LANGUAGE C VOLATILE;
@@ -197,7 +197,15 @@ drop function get_sqlstate(TEXT);
 -- cannot have any backends connected to the database when cloning it.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT timescaledb_pre_restore();
-SELECT bgw_wait(:'TEST_DBNAME', 60);
+SELECT bgw_wait(:'TEST_DBNAME', 60, FALSE);
+
+-- Force other sessions connected to the TEST_DBNAME to be finished
+SET client_min_messages TO ERROR;
+SELECT COUNT(pg_catalog.pg_terminate_backend(pid))>=0
+FROM pg_stat_activity
+WHERE pid <> pg_backend_pid()
+AND datname = ':TEST_DBNAME';
+RESET client_min_messages;
 
 CREATE DATABASE :TEST_DBNAME_EXTRA WITH TEMPLATE :TEST_DBNAME;
 

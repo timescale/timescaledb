@@ -3,6 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#pragma once
+
 /*
  * Deltadelta is used to encode integers or integer-like objects (e.g. timestamps). It's input is a
  * series of integers. first convert that series to a series of delta-of-deltas between
@@ -14,11 +16,8 @@
  * First we zigzag encodes the delta-of-deltas
  * Second, we simple8b_rle encode the zig-zag encoding
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_DELTA_DELTA_H
-#define TIMESCALEDB_TSL_COMPRESSION_DELTA_DELTA_H
 
 #include <postgres.h>
-#include <c.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 
@@ -65,5 +64,3 @@ extern Datum tsl_deltadelta_compressor_finish(PG_FUNCTION_ARGS);
 		.compressor_for_type = delta_delta_compressor_for_type,                                    \
 		.compressed_data_storage = TOAST_STORAGE_EXTERNAL,                                         \
 	}
-
-#endif

@@ -439,7 +439,7 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 	if (acl_result != ACLCHECK_OK)
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("permission denied for table %s", ht->fd.table_name.data)));
+				 errmsg("permission denied for table %s", NameStr(ht->fd.table_name))));
 
 	if (hypertable_is_distributed(ht))
 		ereport(ERROR,

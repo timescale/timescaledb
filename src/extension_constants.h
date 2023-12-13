@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_EXTENSION_CONSTANTS_H
-#define TIMESCALEDB_EXTENSION_CONSTANTS_H
+#pragma once
 
 /* No function definitions here, only potentially globally available defines as this is used by the
  * loader*/
@@ -46,5 +45,3 @@ typedef enum TsExtensionSchemas
 extern const char *const ts_extension_schema_names[];
 
 #define RENDEZVOUS_BGW_LOADER_API_VERSION "timescaledb.bgw_loader_api_version"
-
-#endif /* TIMESCALEDB_EXTENSION_CONSTANTS_H */

@@ -4,11 +4,8 @@
  * LICENSE-APACHE for a copy of the license.
  */
 
-#ifndef TIMESCALEDB_TIMEZONES_H
-#define TIMESCALEDB_TIMEZONES_H
+#pragma once
 
 #include "export.h"
 
 extern TSDLLEXPORT bool ts_is_valid_timezone_name(const char *tz_name);
-
-#endif /* TIMESCALEDB_TIMEZONES_H */

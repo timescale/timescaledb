@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_UTILS_H
-#define TIMESCALEDB_UTILS_H
+#pragma once
 
 #include <postgres.h>
 #include <access/htup_details.h>
@@ -249,5 +248,3 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 		return InvalidOid;
 	}
 }
-
-#endif /* TIMESCALEDB_UTILS_H */

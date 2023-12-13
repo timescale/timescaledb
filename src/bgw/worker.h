@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-
-#ifndef BGW_WORKER_H
-#define BGW_WORKER_H
+#pragma once
 
 #include <postgres.h>
 
@@ -49,5 +47,3 @@ typedef struct BgwParams
  */
 StaticAssertDecl(sizeof(BgwParams) <= sizeof(((BackgroundWorker *) 0)->bgw_extra),
 				 "sizeof(BgwParams) exceeds sizeof(bgw_extra) field of BackgroundWorker");
-
-#endif /* BGW_WORKER_H */

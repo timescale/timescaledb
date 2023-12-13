@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_FLOAT_UTILS_H
-#define TIMESCALEDB_TSL_COMPRESSION_FLOAT_UTILS_H
+#pragma once
 
 #include <postgres.h>
 
@@ -47,5 +46,3 @@ bits_get_double(uint64 bits)
 	memcpy(&out, &bits, sizeof(double));
 	return out;
 }
-
-#endif

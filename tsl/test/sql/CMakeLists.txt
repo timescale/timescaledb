@@ -34,10 +34,6 @@ set(TEST_FILES
     size_utils_tsl.sql
     vectorized_aggregation.sql)
 
-if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-  list(APPEND TEST_FILES dist_param.sql)
-endif()
-
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
 endif()
@@ -48,7 +44,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     bgw_db_scheduler.sql
     bgw_scheduler_control.sql
-    bgw_scheduler_restart.sql
     job_errors_permissions.sql
     troubleshooting_job_errors.sql
     bgw_db_scheduler_fixed.sql
@@ -65,7 +60,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_indexscan.sql
     compression_segment_meta.sql
     compress_sorted_merge_filter.sql
-    compress_table.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
@@ -90,38 +84,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     recompress_chunk_segmentwise.sql
     feature_flags.sql)
 
-  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-    list(
-      APPEND
-      TEST_FILES
-      cagg_bgw_dist_ht.sql
-      cagg_ddl_dist_ht.sql
-      cagg_migrate_dist_ht.sql
-      cagg_on_cagg_dist_ht.sql
-      cagg_on_cagg_joins_dist_ht.sql
-      data_fetcher.sql
-      data_node_bootstrap.sql
-      data_node.sql
-      debug_notice.sql
-      dist_api_calls.sql
-      dist_commands.sql
-      dist_copy_available_dns.sql
-      dist_copy_format_long.sql
-      dist_copy_long.sql
-      dist_ddl.sql
-      dist_cagg.sql
-      dist_policy.sql
-      dist_triggers.sql
-      dist_backup.sql
-      remote_connection_cache.sql
-      remote_connection.sql
-      remote_copy.sql
-      remote_stmt_params.sql
-      remote_txn_id.sql
-      remote_txn_resolve.sql
-      remote_txn.sql)
-  endif()
-
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
@@ -137,12 +99,9 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
 endif()
 
 set(SOLO_TESTS
-    # dist_hypertable needs a lot of memory when the Sanitizer is active
-    dist_hypertable-${PG_VERSION_MAJOR}
     # This interferes with other tests since it reloads the config to increase
     # log level.
     bgw_scheduler_control
-    bgw_scheduler_restart
     bgw_db_scheduler
     job_errors_permissions
     troubleshooting_job_errors
@@ -154,25 +113,9 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
-    dist_util-${PG_VERSION_MAJOR}
     move
-    remote_connection_cache
-    remote_copy
-    remote_txn
-    remote_txn_resolve
     reorder
     telemetry_stats-${PG_VERSION_MAJOR})
-# In PG versions 15.0 to 15.2, dist_move_chunk can cause a deadlock when run in
-# parallel with other tests as mentioned in #4972.
-if(ENABLE_MULTINODE_TESTS
-   AND ${PG_VERSION_MAJOR} EQUAL "15"
-   AND ${PG_VERSION_MINOR} LESS "3")
-  list(APPEND SOLO_TESTS dist_move_chunk)
-endif()
-
-if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-  list(APPEND SOLO_TESTS cagg_bgw_dist_ht data_fetcher)
-endif()
 
 set(TEST_TEMPLATES
     bgw_custom.sql.in
@@ -202,31 +145,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_usage.sql.in
     compression_errors.sql.in
     continuous_aggs.sql.in
-    continuous_aggs_deprecated.sql.in
-    deparse.sql.in)
+    continuous_aggs_deprecated.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
   endif()
-  if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-    list(
-      APPEND
-      TEST_TEMPLATES
-      cagg_invalidation_dist_ht.sql.in
-      dist_hypertable.sql.in
-      dist_grant.sql.in
-      dist_ref_table_join.sql.in
-      dist_remote_error.sql.in
-      dist_partial_agg.sql.in
-      dist_query.sql.in
-      dist_compression.sql.in
-      dist_move_chunk.sql.in
-      dist_util.sql.in)
-  endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
-
-if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-  list(APPEND TEST_TEMPLATES dist_views.sql.in)
-endif()
 
 # Check if PostgreSQL was compiled with JIT support
 set(PG_CONFIG_H "${PG_INCLUDEDIR}/pg_config.h")

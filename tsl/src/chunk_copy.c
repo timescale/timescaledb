@@ -209,13 +209,13 @@ chunk_copy_operation_update(ChunkCopy *cc)
 {
 	NameData application_name;
 
-	snprintf(application_name.data,
-			 sizeof(application_name.data),
+	snprintf(NameStr(application_name),
+			 sizeof(NameStr(application_name)),
 			 "%s:%s",
-			 cc->fd.operation_id.data,
+			 NameStr(cc->fd.operation_id),
 			 cc->stage->name);
 
-	pgstat_report_appname(application_name.data);
+	pgstat_report_appname(NameStr(application_name));
 
 	chunk_copy_operation_scan_update_by_id(NameStr(cc->fd.operation_id),
 										   chunk_copy_operation_tuple_update,
@@ -351,7 +351,7 @@ chunk_copy_setup(ChunkCopy *cc, Oid chunk_relid, const char *src_node, const cha
 	cc->fd.chunk_id = cc->chunk->fd.id;
 	namestrcpy(&cc->fd.source_node_name, src_node);
 	namestrcpy(&cc->fd.dest_node_name, dst_node);
-	memset(cc->fd.compressed_chunk_name.data, 0, NAMEDATALEN);
+	memset(NameStr(cc->fd.compressed_chunk_name), 0, NAMEDATALEN);
 	cc->fd.delete_on_src_node = delete_on_src_node;
 
 	ts_cache_release(hcache);
@@ -380,15 +380,15 @@ chunk_copy_stage_init(ChunkCopy *cc)
 	int32 id;
 
 	/* check if the user has specified the operation id, if not generate one */
-	if (cc->fd.operation_id.data[0] == '\0')
+	if (NameStr(cc->fd.operation_id)[0] == '\0')
 	{
 		/*
 		 * Get the operation id for this chunk move/copy activity. The naming
 		 * convention is "ts_copy_seq-id_chunk-id".
 		 */
 		id = ts_catalog_table_next_seq_id(ts_catalog_get(), CHUNK_COPY_OPERATION);
-		snprintf(cc->fd.operation_id.data,
-				 sizeof(cc->fd.operation_id.data),
+		snprintf(NameStr(cc->fd.operation_id),
+				 sizeof(NameStr(cc->fd.operation_id)),
 				 "ts_copy_%d_%d",
 				 id,
 				 cc->chunk->fd.id);
@@ -503,8 +503,8 @@ chunk_copy_get_source_compressed_chunk_name(ChunkCopy *cc)
 				 errmsg("failed to get corresponding compressed chunk name from the source data "
 						"node")));
 
-	snprintf(cc->fd.compressed_chunk_name.data,
-			 sizeof(cc->fd.compressed_chunk_name.data),
+	snprintf(NameStr(cc->fd.compressed_chunk_name),
+			 sizeof(NameStr(cc->fd.compressed_chunk_name)),
 			 "%s",
 			 PQgetvalue(res, 0, 0));
 
@@ -626,7 +626,7 @@ chunk_copy_stage_create_empty_compressed_chunk_cleanup(ChunkCopy *cc)
 				   INTERNAL_SCHEMA_NAME,
 				   NameStr(cc->fd.compressed_chunk_name));
 	ts_dist_cmd_run_on_data_nodes(cmd, list_make1(NameStr(cc->fd.dest_node_name)), true);
-	cc->fd.compressed_chunk_name.data[0] = 0;
+	NameStr(cc->fd.compressed_chunk_name)[0] = 0;
 }
 
 static void
@@ -946,8 +946,8 @@ chunk_copy_stage_attach_chunk(ChunkCopy *cc)
 	chunk_data_node->foreign_server_oid = cc->dst_server->serverid;
 
 	remote_chunk_name = psprintf("%s.%s",
-								 quote_identifier(chunk->fd.schema_name.data),
-								 quote_identifier(chunk->fd.table_name.data));
+								 quote_identifier(NameStr(chunk->fd.schema_name)),
+								 quote_identifier(NameStr(chunk->fd.table_name)));
 
 	chunk_api_create_on_data_nodes(chunk, ht, remote_chunk_name, list_make1(chunk_data_node));
 
@@ -977,8 +977,8 @@ chunk_copy_stage_attach_compressed_chunk(ChunkCopy *cc)
 	chunk_copy_alter_chunk_owner(cc, NameStr(cc->fd.dest_node_name), true, true);
 
 	chunk_name = psprintf("%s.%s",
-						  quote_identifier(cc->chunk->fd.schema_name.data),
-						  quote_identifier(cc->chunk->fd.table_name.data));
+						  quote_identifier(NameStr(cc->chunk->fd.schema_name)),
+						  quote_identifier(NameStr(cc->chunk->fd.table_name)));
 
 	compressed_chunk_name = psprintf("%s.%s",
 									 quote_identifier(INTERNAL_SCHEMA_NAME),
@@ -1173,11 +1173,11 @@ chunk_copy(Oid chunk_relid, const char *src_node, const char *dst_node, const ch
 					 errhint("operation_id names may only contain lower case letters, numbers, and "
 							 "the underscore character.")));
 
-		snprintf(cc.fd.operation_id.data, sizeof(cc.fd.operation_id.data), "%s", op_id);
+		snprintf(NameStr(cc.fd.operation_id), sizeof(NameStr(cc.fd.operation_id)), "%s", op_id);
 	}
 	else
 	{
-		cc.fd.operation_id.data[0] = '\0';
+		NameStr(cc.fd.operation_id)[0] = '\0';
 	}
 
 	chunk_copy_setup(&cc, chunk_relid, src_node, dst_node, delete_on_src_node);

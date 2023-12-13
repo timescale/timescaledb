@@ -3,22 +3,22 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
-#define TIMESCALEDB_TSL_COMPRESSION_COMPRESSION_H
+#pragma once
 
 #include <postgres.h>
-#include <c.h>
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <utils/relcache.h>
+#include <nodes/execnodes.h>
 
 typedef struct BulkInsertStateData *BulkInsertState;
 
-#include <nodes/execnodes.h>
-#include "segment_meta.h"
-
 #include "compat/compat.h"
+#include "hypertable.h"
+#include "segment_meta.h"
+#include "ts_catalog/compression_settings.h"
+
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
  * varlen header, and followed by a version specifying which compression
@@ -34,8 +34,6 @@ typedef struct BulkInsertStateData *BulkInsertState;
 #define MAX_ROWS_PER_COMPRESSION 1000
 /* gap in sequence id between rows, potential for adding rows in gap later */
 #define SEQUENCE_NUM_GAP 10
-#define COMPRESSIONCOL_IS_SEGMENT_BY(col) ((col)->segmentby_column_index > 0)
-#define COMPRESSIONCOL_IS_ORDER_BY(col) ((col)->orderby_column_index > 0)
 
 typedef struct CompressedDataHeader
 {
@@ -62,8 +60,7 @@ typedef struct DecompressResult
 	bool is_done;
 } DecompressResult;
 
-/* Forward declaration of ColumnCompressionInfo so we don't need to include catalog.h */
-typedef struct FormData_hypertable_compression ColumnCompressionInfo;
+typedef struct FormData_hypertable ChunkCompressionSettings;
 
 typedef struct Compressor Compressor;
 struct Compressor
@@ -180,7 +177,7 @@ typedef struct CompressionAlgorithmDefinition
 	CompressionStorage compressed_data_storage;
 } CompressionAlgorithmDefinition;
 
-typedef enum CompressionAlgorithms
+typedef enum CompressionAlgorithm
 {
 	/* Not a real algorithm, if this does get used, it's a bug in the code */
 	_INVALID_COMPRESSION_ALGORITHM = 0,
@@ -194,7 +191,7 @@ typedef enum CompressionAlgorithms
 	/* end of real values */
 	_END_COMPRESSION_ALGORITHMS,
 	_MAX_NUM_COMPRESSION_ALGORITHMS = 128,
-} CompressionAlgorithms;
+} CompressionAlgorithm;
 
 typedef struct CompressionStats
 {
@@ -232,8 +229,6 @@ typedef struct RowCompressor
 	Oid index_oid;
 	/* relation info necessary to update indexes on compressed table */
 	ResultRelInfo *resultRelInfo;
-	/* segment by index index in the RelInfo if any */
-	int8 segmentby_index_index;
 
 	/* in theory we could have more input columns than outputted ones, so we
 	   store the number of inputs/compressors separately */
@@ -268,8 +263,12 @@ typedef struct RowCompressor
 	int insert_options;
 } RowCompressor;
 
-/* SegmentFilter is used for filtering segments based on qualifiers */
-typedef struct SegmentFilter
+/*
+ * BatchFilter is used for filtering batches before decompressing.
+ * The columns will either be segmentby columns or the corresponding
+ * metadata columns of orderby columns.
+ */
+typedef struct BatchFilter
 {
 	/* Column which we use for filtering */
 	NameData column_name;
@@ -279,7 +278,7 @@ typedef struct SegmentFilter
 	Const *value;
 	/* IS NULL or IS NOT NULL */
 	bool is_null_check;
-} SegmentFilter;
+} BatchFilter;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_decompress_reverse(PG_FUNCTION_ARGS);
@@ -311,16 +310,17 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
-extern CompressionStorage compression_get_toast_storage(CompressionAlgorithms algo);
-extern CompressionStats compress_chunk(Oid in_table, Oid out_table,
-									   const ColumnCompressionInfo **column_compression_info,
-									   int num_compression_infos, int insert_options);
+extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
+extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
+
+extern CompressionStats compress_chunk(Hypertable *ht, Oid in_table, Oid out_table,
+									   int insert_options);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
-	CompressionAlgorithms algorithm, bool reverse))(Datum, Oid element_type);
+	CompressionAlgorithm algorithm, bool reverse))(Datum, Oid element_type);
 
-extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithms algorithm);
+extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithm algorithm);
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
@@ -343,18 +343,15 @@ extern void compress_row_destroy(CompressSingleRowState *cr);
 extern void row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
-extern int16 *compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns,
-										   int n_columns, int *n_keys_out,
-										   const ColumnCompressionInfo ***keys_out);
-extern void compress_chunk_populate_sort_info_for_column(Oid table,
-														 const ColumnCompressionInfo *column,
-														 AttrNumber *att_nums, Oid *sort_operator,
-														 Oid *collation, bool *nulls_first);
-extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
-								Relation compressed_table, int num_compression_infos,
-								const ColumnCompressionInfo **column_compression_info,
-								int16 *column_offsets, int16 num_columns_in_compressed_table,
-								bool need_bistate, bool reset_sequence, int insert_options);
+extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
+														 const char *attname, AttrNumber *att_nums,
+														 Oid *sort_operator, Oid *collation,
+														 bool *nulls_first);
+extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+								TupleDesc uncompressed_tuple_desc, Relation compressed_table,
+								int16 num_columns_in_compressed_table, bool need_bistate,
+								bool reset_sequence, int insert_options);
+extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_finish(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
@@ -362,6 +359,7 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
+extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
@@ -396,5 +394,3 @@ consumeCompressedData(StringInfo si, int bytes)
  * We use this limit for sanity checks in case the compressed data is corrupt.
  */
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
-
-#endif

@@ -15,7 +15,7 @@
 
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
-#include "ts_catalog/hypertable_compression.h"
+#include "ts_catalog/array_utils.h"
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "compression/segment_meta.h"
@@ -26,16 +26,16 @@ typedef struct QualPushdownContext
 	RelOptInfo *compressed_rel;
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
-	List *compression_info;
 	bool can_pushdown;
 	bool needs_recheck;
+	CompressionSettings *settings;
 } QualPushdownContext;
 
 static Node *modify_expression(Node *node, QualPushdownContext *context);
 
 void
-pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_rel,
-			   List *compression_info, bool chunk_partial)
+pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chunk_rel,
+			   RelOptInfo *compressed_rel, bool chunk_partial)
 {
 	ListCell *lc;
 	List *decompress_clauses = NIL;
@@ -44,7 +44,7 @@ pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_
 		.compressed_rel = compressed_rel,
 		.chunk_rte = planner_rt_fetch(chunk_rel->relid, root),
 		.compressed_rte = planner_rt_fetch(compressed_rel->relid, root),
-		.compression_info = compression_info,
+		.settings = settings,
 	};
 
 	foreach (lc, chunk_rel->baserestrictinfo)
@@ -91,22 +91,6 @@ pushdown_quals(PlannerInfo *root, RelOptInfo *chunk_rel, RelOptInfo *compressed_
 	chunk_rel->baserestrictinfo = decompress_clauses;
 }
 
-static inline FormData_hypertable_compression *
-get_compression_info_from_var(QualPushdownContext *context, Var *var)
-{
-	char *column_name;
-	/* Not on the chunk we expect */
-	if ((Index) var->varno != context->chunk_rel->relid)
-		return NULL;
-
-	/* ignore system attibutes or whole row references */
-	if (var->varattno <= 0)
-		return NULL;
-
-	column_name = get_attname(context->chunk_rte->relid, var->varattno, false);
-	return get_column_compressioninfo(context->compression_info, column_name);
-}
-
 static OpExpr *
 make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta_column_attno,
 						 Var *uncompressed_var, Expr *compare_to_expr, StrategyNumber strategy)
@@ -128,10 +112,9 @@ make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta
 }
 
 static AttrNumber
-get_segment_meta_min_attr_number(FormData_hypertable_compression *compression_info,
-								 Oid compressed_relid)
+get_segment_meta_min_attr_number(int16 orderby_column_index, Oid compressed_relid)
 {
-	char *meta_col_name = compression_column_segment_min_name(compression_info);
+	char *meta_col_name = column_segment_min_name(orderby_column_index);
 
 	if (meta_col_name == NULL)
 		elog(ERROR, "could not find meta column");
@@ -140,10 +123,9 @@ get_segment_meta_min_attr_number(FormData_hypertable_compression *compression_in
 }
 
 static AttrNumber
-get_segment_meta_max_attr_number(FormData_hypertable_compression *compression_info,
-								 Oid compressed_relid)
+get_segment_meta_max_attr_number(int16 orderby_column_index, Oid compressed_relid)
 {
-	char *meta_col_name = compression_column_segment_max_name(compression_info);
+	char *meta_col_name = column_segment_max_name(orderby_column_index);
 
 	if (meta_col_name == NULL)
 		elog(ERROR, "could not find meta column");
@@ -166,23 +148,31 @@ get_pushdownsafe_expr(const QualPushdownContext *input_context, Expr *input)
 	return NULL;
 }
 
-static inline FormData_hypertable_compression *
-get_compression_info_for_column_with_segment_meta(QualPushdownContext *context, Expr *expr)
+static bool
+expr_has_metadata(QualPushdownContext *context, Expr *expr, int16 *index)
 {
-	Var *v;
-	FormData_hypertable_compression *compression_info;
-
 	if (!IsA(expr, Var))
-		return NULL;
+		return false;
 
-	v = (Var *) expr;
+	Var *var = castNode(Var, expr);
 
-	compression_info = get_compression_info_from_var(context, v);
-	/* Only order by vars have segment meta */
-	if (compression_info == NULL || compression_info->orderby_column_index <= 0)
-		return NULL;
+	/* Not on the chunk we expect */
+	if ((Index) var->varno != context->chunk_rel->relid)
+		return false;
 
-	return compression_info;
+	/* ignore system attibutes or whole row references */
+	if (var->varattno <= 0)
+		return false;
+
+	char *attname = get_attname(context->chunk_rte->relid, var->varattno, false);
+	int16 pos = ts_array_position(context->settings->fd.orderby, attname);
+
+	if (pos > 0)
+	{
+		*index = pos;
+	}
+
+	return pos > 0;
 }
 
 static Expr *
@@ -193,8 +183,8 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	Var *var_with_segment_meta;
 	TypeCacheEntry *tce;
 	int strategy;
-	FormData_hypertable_compression *compression_info;
 	Oid expr_type_id;
+	int16 index = 0;
 
 	if (list_length(expr_args) != 2)
 		return NULL;
@@ -208,21 +198,21 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 		rightop = ((RelabelType *) rightop)->arg;
 
 	/* Find the side that has var with segment meta set expr to the other side */
-	if ((compression_info = get_compression_info_for_column_with_segment_meta(context, leftop)) !=
-		NULL)
+	if (expr_has_metadata(context, leftop, &index))
 	{
 		var_with_segment_meta = (Var *) leftop;
 		expr = rightop;
 	}
-	else if ((compression_info =
-				  get_compression_info_for_column_with_segment_meta(context, rightop)) != NULL)
+	else if (expr_has_metadata(context, rightop, &index))
 	{
 		var_with_segment_meta = (Var *) rightop;
 		expr = leftop;
 		op_oid = get_commutator(op_oid);
 	}
 	else
+	{
 		return NULL;
+	}
 
 	/* May be able to allow non-strict operations as well.
 	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
@@ -267,7 +257,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 			return make_andclause(list_make2(
 				make_segment_meta_opexpr(context,
 										 opno_le,
-										 get_segment_meta_min_attr_number(compression_info,
+										 get_segment_meta_min_attr_number(index,
 																		  context->compressed_rte
 																			  ->relid),
 										 var_with_segment_meta,
@@ -275,7 +265,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 										 BTLessEqualStrategyNumber),
 				make_segment_meta_opexpr(context,
 										 opno_ge,
-										 get_segment_meta_max_attr_number(compression_info,
+										 get_segment_meta_max_attr_number(index,
 																		  context->compressed_rte
 																			  ->relid),
 										 var_with_segment_meta,
@@ -295,7 +285,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 				return (Expr *)
 					make_segment_meta_opexpr(context,
 											 opno,
-											 get_segment_meta_min_attr_number(compression_info,
+											 get_segment_meta_min_attr_number(index,
 																			  context
 																				  ->compressed_rte
 																				  ->relid),
@@ -317,7 +307,7 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 				return (Expr *)
 					make_segment_meta_opexpr(context,
 											 opno,
-											 get_segment_meta_max_attr_number(compression_info,
+											 get_segment_meta_max_attr_number(index,
 																			  context
 																				  ->compressed_rte
 																				  ->relid),
@@ -368,28 +358,18 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_Var:
 		{
 			Var *var = castNode(Var, node);
-			FormData_hypertable_compression *compressioninfo =
-				get_compression_info_from_var(context, var);
-			AttrNumber compressed_attno;
-
-			if (compressioninfo == NULL)
-			{
-				context->can_pushdown = false;
-				return NULL;
-			}
-
+			Assert((Index) var->varno == context->chunk_rel->relid);
+			char *attname = get_attname(context->chunk_rte->relid, var->varattno, false);
 			/* we can only push down quals for segmentby columns */
-			if (compressioninfo->segmentby_column_index <= 0)
+			if (!ts_array_is_member(context->settings->fd.segmentby, attname))
 			{
 				context->can_pushdown = false;
 				return NULL;
 			}
 
 			var = copyObject(var);
-			compressed_attno =
-				get_attnum(context->compressed_rte->relid, compressioninfo->attname.data);
 			var->varno = context->compressed_rel->relid;
-			var->varattno = compressed_attno;
+			var->varattno = get_attnum(context->compressed_rte->relid, attname);
 
 			return (Node *) var;
 		}

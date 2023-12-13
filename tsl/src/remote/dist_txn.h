@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_DIST_TXN_H
-#define TIMESCALEDB_TSL_REMOTE_DIST_TXN_H
+#pragma once
 
 #include <postgres.h>
 #include <foreign/foreign.h>
@@ -49,5 +48,3 @@ extern const char *remote_dist_txn_event_name(const DistTransactionEvent event);
 
 void _remote_dist_txn_init(void);
 void _remote_dist_txn_fini(void);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_DIST_TXN_H */

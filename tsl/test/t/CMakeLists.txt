@@ -1,21 +1,6 @@
-set(PROVE_TEST_FILES 009_logrepl_decomp_marker.pl)
+set(PROVE_TEST_FILES 001_job_crash_log.pl 002_logrepl_decomp_marker.pl)
 
-set(PROVE_DEBUG_TEST_FILES 008_mvcc_cagg.pl)
-
-if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-  list(APPEND PROVE_TEST_FILES 001_simple_multinode.pl 003_connections_privs.pl)
-endif()
-
-if(ENABLE_MULTINODE_TESTS AND ${PG_VERSION_MAJOR} LESS "16")
-  list(
-    APPEND
-    PROVE_DEBUG_TEST_FILES
-    002_chunk_copy_move.pl
-    004_multinode_rdwr_1pc.pl
-    005_add_data_node.pl
-    006_job_crash_log.pl
-    007_healthcheck.pl)
-endif()
+set(PROVE_DEBUG_TEST_FILES 003_mvcc_cagg.pl)
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND PROVE_TEST_FILES ${PROVE_DEBUG_TEST_FILES})

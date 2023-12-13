@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_BGW_MESSAGE_QUEUE_H
-#define TIMESCALEDB_BGW_MESSAGE_QUEUE_H
+#pragma once
 
 #include <postgres.h>
 #include <storage/dsm.h>
@@ -39,5 +38,3 @@ extern void ts_bgw_message_queue_alloc(void);
 /*called in every backend during shmem startup hook*/
 extern void ts_bgw_message_queue_shmem_startup(void);
 extern void ts_bgw_message_queue_shmem_cleanup(void);
-
-#endif /* TIMESCALEDB_BGW_MESSAGE_QUEUE_H */

@@ -116,13 +116,21 @@ SELECT sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
 
+
+--Vectorized aggregation not possible for expression
+SELECT sum(abs(int_value)) FROM testtable;
+
+:EXPLAIN
+SELECT sum(abs(int_value)) FROM testtable;
+
+
 -- Vectorized aggregation NOT possible
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
 
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 
 -- Vectorized aggregation NOT possible without bulk decompression
 SET timescaledb.enable_bulk_decompression = OFF;
@@ -206,15 +214,15 @@ SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
 
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
 
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 5;
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 10;
 
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(int_value) FROM testtable WHERE segment_by_value > 10;
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 
 ---
 -- Tests with parallel plans
@@ -314,9 +322,9 @@ SELECT sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
 
-SET timescaledb.vectorized_aggregation = OFF;
+SET timescaledb.enable_vectorized_aggregation = OFF;
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
-RESET timescaledb.vectorized_aggregation;
+RESET timescaledb.enable_vectorized_aggregation;
 
 SELECT sum(segment_by_value) FILTER (WHERE segment_by_value > 99999) FROM testtable;
 

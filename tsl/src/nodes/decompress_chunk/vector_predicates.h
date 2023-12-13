@@ -7,8 +7,11 @@
 /*
  * Functions for working with vectorized predicates.
  */
-
 #pragma once
 
-void (*get_vector_const_predicate(Oid pg_predicate))(const ArrowArray *, const Datum,
-													 uint64 *restrict);
+typedef void(VectorPredicate)(const ArrowArray *, Datum, uint64 *restrict);
+
+VectorPredicate *get_vector_const_predicate(Oid pg_predicate);
+
+void vector_array_predicate(VectorPredicate *scalar_predicate, bool is_or, const ArrowArray *vector,
+							Datum array, uint64 *restrict result);

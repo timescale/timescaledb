@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_UTILS_H
-#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_UTILS_H
+#pragma once
 
 #include <postgres.h>
 #include <funcapi.h>
@@ -18,5 +16,3 @@
 #include "compat/compat.h"
 
 extern Datum continuous_agg_validate_query(PG_FUNCTION_ARGS);
-
-#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_UTILS_H */

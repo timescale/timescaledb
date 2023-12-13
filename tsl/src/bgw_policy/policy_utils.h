@@ -3,9 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
-#ifndef TIMESCALEDB_TSL_BGW_POLICY_UTILS_H
-#define TIMESCALEDB_TSL_BGW_POLICY_UTILS_H
+#pragma once
 
 #include <postgres.h>
 #include "job.h"
@@ -16,4 +14,3 @@ int64 subtract_integer_from_now_internal(int64 interval, Oid time_dim_type, Oid 
 Datum subtract_interval_from_now(Interval *lag, Oid time_dim_type);
 const Dimension *get_open_dimension_for_hypertable(const Hypertable *ht, bool fail_if_not_found);
 bool policy_get_verbose_log(const Jsonb *config);
-#endif /* TIMESCALEDB_TSL_BGW_POLICY_UTILS_H */

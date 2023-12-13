@@ -253,9 +253,6 @@ WARNING:  function _timescaledb_internal.partialize_agg(anyelement) is deprecate
  
 (1 row)
 
-SELECT _timescaledb_internal.ping_data_node(NULL,NULL);
-WARNING:  function _timescaledb_internal.ping_data_node(name,interval) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  data node name cannot be NULL
 SELECT _timescaledb_internal.policy_compression_check(NULL);
 WARNING:  function _timescaledb_internal.policy_compression_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  config must not be NULL
@@ -289,35 +286,15 @@ WARNING:  function _timescaledb_internal.relation_size(regclass) is deprecated a
  (,,,)
 (1 row)
 
-SELECT _timescaledb_internal.remote_txn_heal_data_node(0);
-WARNING:  function _timescaledb_internal.remote_txn_heal_data_node(oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  cache lookup failed for foreign server 0
 SELECT _timescaledb_internal.restart_background_workers();
 WARNING:  function _timescaledb_internal.restart_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  must be superuser to restart background workers
 SELECT _timescaledb_internal.set_chunk_default_data_node(0,NULL);
 WARNING:  function _timescaledb_internal.set_chunk_default_data_node(regclass,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid chunk: cannot be NULL
-SELECT _timescaledb_internal.set_dist_id(NULL);
-WARNING:  function _timescaledb_internal.set_dist_id(uuid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- set_dist_id 
- 
-(1 row)
-
-SELECT _timescaledb_internal.set_peer_dist_id(NULL);
-WARNING:  function _timescaledb_internal.set_peer_dist_id(uuid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- set_peer_dist_id 
- 
-(1 row)
-
 SELECT _timescaledb_internal.show_chunk(0);
 WARNING:  function _timescaledb_internal.show_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
-SELECT pg_typeof(_timescaledb_internal.show_connection_cache());
-WARNING:  function _timescaledb_internal.show_connection_cache() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- pg_typeof 
-(0 rows)
-
 SELECT _timescaledb_internal.start_background_workers();
 WARNING:  function _timescaledb_internal.start_background_workers() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  must be superuser to start background workers
@@ -372,13 +349,6 @@ WARNING:  function _timescaledb_internal.tsl_loaded() is deprecated and has been
 SELECT _timescaledb_internal.unfreeze_chunk(0);
 WARNING:  function _timescaledb_internal.unfreeze_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
-SELECT _timescaledb_internal.validate_as_data_node();
-WARNING:  function _timescaledb_internal.validate_as_data_node() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-WARNING:  max_prepared_transactions is set low
- validate_as_data_node 
- 
-(1 row)
-
 CALL _timescaledb_internal.cagg_migrate_create_plan(NULL,NULL,true,true);
 WARNING:  procedure _timescaledb_internal.cagg_migrate_create_plan(_timescaledb_catalog.continuous_agg,text,boolean,boolean) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  permission denied for table continuous_agg_migrate_plan

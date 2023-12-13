@@ -151,7 +151,7 @@ column_is_serial(Relation rel, Name column)
 											   NameStr(rel->rd_rel->relname));
 	InitFunctionCallInfoData(*fcinfo, NULL, 2, InvalidOid, NULL, NULL);
 	FC_ARG(fcinfo, 0) = CStringGetTextDatum(relation_name);
-	FC_ARG(fcinfo, 1) = CStringGetTextDatum(column->data);
+	FC_ARG(fcinfo, 1) = CStringGetTextDatum(NameStr(*column));
 	FC_NULL(fcinfo, 0) = false;
 	FC_NULL(fcinfo, 1) = false;
 	pg_get_serial_sequence(fcinfo);
@@ -649,7 +649,7 @@ deparse_get_distributed_hypertable_create_command(Hypertable *ht)
 					 ", time_column_name => %s",
 					 quote_literal_cstr(NameStr(time_dim->fd.column_name)));
 
-	if (time_dim->fd.partitioning_func.data[0] != '\0')
+	if (NameStr(time_dim->fd.partitioning_func)[0] != '\0')
 		appendStringInfo(hypertable_cmd,
 						 ", time_partitioning_func => %s",
 						 quote_literal_cstr(

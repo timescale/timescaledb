@@ -82,3 +82,37 @@ explain (costs off) select * from t where high_card = 1 order by ts;
 (5 rows)
 
 reset enable_sort;
+-- Test that inequality conditions in WHERE also influence the estimates.
+explain (costs off) select * from t where high_card < 10 order by ts;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+   ->  Sort
+         Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
+         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+               Index Cond: (high_card < 10)
+(5 rows)
+
+explain (costs off) select * from t where high_card < 500 order by ts;
+                       QUERY PLAN                        
+---------------------------------------------------------
+ Sort
+   Sort Key: _hyper_1_1_chunk.ts
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Seq Scan on compress_hyper_2_2_chunk
+               Filter: (high_card < 500)
+(5 rows)
+
+-- Test that batch sorted merge respects the working memory limit.
+set work_mem to 64;
+explain (costs off) select * from t where high_card < 10 order by ts;
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Sort
+   Sort Key: _hyper_1_1_chunk.ts
+   ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+               Index Cond: (high_card < 10)
+(5 rows)
+
+reset work_mem;

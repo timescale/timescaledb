@@ -3,10 +3,10 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_BGW_POLICY_JOB_H
-#define TIMESCALEDB_TSL_BGW_POLICY_JOB_H
+#pragma once
 
-#include <c.h>
+#include <postgres.h>
+#include <utils/jsonb.h>
 
 #include <bgw/job.h>
 #include <hypertable.h>
@@ -64,5 +64,3 @@ extern void policy_compression_read_and_validate_config(Jsonb *config,
 extern void policy_recompression_read_and_validate_config(Jsonb *config,
 														  PolicyCompressionData *policy_data);
 extern bool job_execute(BgwJob *job);
-
-#endif /* TIMESCALEDB_TSL_BGW_POLICY_JOB_H */

@@ -33,3 +33,13 @@ explain (costs off) select * from t where low_card = 1 and high_card = 1 order b
 set enable_sort to off;
 explain (costs off) select * from t where high_card = 1 order by ts;
 reset enable_sort;
+
+-- Test that inequality conditions in WHERE also influence the estimates.
+explain (costs off) select * from t where high_card < 10 order by ts;
+explain (costs off) select * from t where high_card < 500 order by ts;
+
+
+-- Test that batch sorted merge respects the working memory limit.
+set work_mem to 64;
+explain (costs off) select * from t where high_card < 10 order by ts;
+reset work_mem;

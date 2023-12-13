@@ -373,7 +373,11 @@ create_sorted_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 											   target,
 											   parse->groupClause ? AGG_SORTED : AGG_PLAIN,
 											   AGGSPLIT_INITIAL_SERIAL,
+#if PG16_LT
 											   parse->groupClause,
+#else
+											   root->processed_groupClause,
+#endif
 											   NIL,
 											   agg_partial_costs,
 											   d_num_groups);
@@ -388,8 +392,6 @@ static AggPath *
 create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target,
 							   double d_num_groups, GroupPathExtraData *extra_data)
 {
-	Query *parse = root->parse;
-
 	/* Determine costs for aggregations */
 	AggClauseCosts *agg_partial_costs = &extra_data->agg_partial_costs;
 
@@ -399,7 +401,11 @@ create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
 										 target,
 										 AGG_HASHED,
 										 AGGSPLIT_INITIAL_SERIAL,
-										 parse->groupClause,
+#if PG16_LT
+										 root->parse->groupClause,
+#else
+										 root->processed_groupClause,
+#endif
 										 NIL,
 										 agg_partial_costs,
 										 d_num_groups);
@@ -947,7 +953,11 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 											  grouping_target,
 											  parse->groupClause ? AGG_SORTED : AGG_PLAIN,
 											  AGGSPLIT_FINAL_DESERIAL,
+#if PG16_LT
 											  parse->groupClause,
+#else
+											  root->processed_groupClause,
+#endif
 											  (List *) parse->havingQual,
 											  agg_final_costs,
 											  d_num_groups));
@@ -961,7 +971,11 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 											  grouping_target,
 											  AGG_HASHED,
 											  AGGSPLIT_FINAL_DESERIAL,
+#if PG16_LT
 											  parse->groupClause,
+#else
+											  root->processed_groupClause,
+#endif
 											  (List *) parse->havingQual,
 											  agg_final_costs,
 											  d_num_groups));

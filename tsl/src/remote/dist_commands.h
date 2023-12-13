@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_DIST_COMMANDS_H
-#define TIMESCALEDB_TSL_REMOTE_DIST_COMMANDS_H
+#pragma once
 
 #include "ts_catalog/catalog.h"
 
@@ -62,5 +61,3 @@ extern DistCmdResult *ts_dist_cmd_invoke_prepared_command(PreparedDistCmd *comma
 extern void ts_dist_cmd_close_prepared_command(PreparedDistCmd *command);
 
 extern Datum ts_dist_cmd_exec(PG_FUNCTION_ARGS);
-
-#endif

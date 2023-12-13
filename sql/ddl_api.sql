@@ -20,9 +20,6 @@
 -- chunk_target_size - (Optional) The target size for chunks (e.g., '1000MB', 'estimate', or 'off')
 -- chunk_sizing_func - (Optional) A function to calculate the chunk time interval for new chunks
 -- time_partitioning_func - (Optional) The partitioning function to use for "time" partitioning
--- replication_factor - (Optional) Set replication_factor to use with the new hypertable
--- data_nodes - (Optional) The specific data nodes to distribute this hypertable across
--- distributed - (Optional) Create distributed hypertable
 CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     relation                REGCLASS,
     time_column_name        NAME,
@@ -37,30 +34,8 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     migrate_data            BOOLEAN = FALSE,
     chunk_target_size       TEXT = NULL,
     chunk_sizing_func       REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
-    time_partitioning_func  REGPROC = NULL,
-    replication_factor      INTEGER = NULL,
-    data_nodes              NAME[] = NULL,
-    distributed             BOOLEAN = NULL
+    time_partitioning_func  REGPROC = NULL
 ) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create' LANGUAGE C VOLATILE;
-
-CREATE OR REPLACE FUNCTION @extschema@.create_distributed_hypertable(
-    relation                REGCLASS,
-    time_column_name        NAME,
-    partitioning_column     NAME = NULL,
-    number_partitions       INTEGER = NULL,
-    associated_schema_name  NAME = NULL,
-    associated_table_prefix NAME = NULL,
-    chunk_time_interval     ANYELEMENT = NULL::bigint,
-    create_default_indexes  BOOLEAN = TRUE,
-    if_not_exists           BOOLEAN = FALSE,
-    partitioning_func       REGPROC = NULL,
-    migrate_data            BOOLEAN = FALSE,
-    chunk_target_size       TEXT = NULL,
-    chunk_sizing_func       REGPROC = '_timescaledb_functions.calculate_chunk_interval'::regproc,
-    time_partitioning_func  REGPROC = NULL,
-    replication_factor      INTEGER = NULL,
-    data_nodes              NAME[] = NULL
-) RETURNS TABLE(hypertable_id INT, schema_name NAME, table_name NAME, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_create' LANGUAGE C VOLATILE;
 
 -- A generalized hypertable creation API that can be used to convert a PostgreSQL table
 -- with TIME/SERIAL/BIGSERIAL columns to a hypertable.
@@ -205,69 +180,6 @@ AS '@MODULE_PATHNAME@', 'ts_tablespace_detach_all_from_hypertable' LANGUAGE C VO
 CREATE OR REPLACE FUNCTION @extschema@.show_tablespaces(hypertable REGCLASS) RETURNS SETOF NAME
 AS '@MODULE_PATHNAME@', 'ts_tablespace_show' LANGUAGE C VOLATILE STRICT;
 
--- Add a data node to a TimescaleDB distributed database.
-CREATE OR REPLACE FUNCTION @extschema@.add_data_node(
-    node_name              NAME,
-    host                   TEXT,
-    database               NAME = NULL,
-    port                   INTEGER = NULL,
-    if_not_exists          BOOLEAN = FALSE,
-    bootstrap              BOOLEAN = TRUE,
-    password               TEXT = NULL
-) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME,
-                node_created BOOL, database_created BOOL, extension_created BOOL)
-AS '@MODULE_PATHNAME@', 'ts_data_node_add' LANGUAGE C VOLATILE;
-
--- Delete a data node from a distributed database
-CREATE OR REPLACE FUNCTION @extschema@.delete_data_node(
-    node_name              NAME,
-    if_exists              BOOLEAN = FALSE,
-    force                  BOOLEAN = FALSE,
-    repartition            BOOLEAN = TRUE,
-    drop_database          BOOLEAN = FALSE
-) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
-
--- Attach a data node to a distributed hypertable
-CREATE OR REPLACE FUNCTION @extschema@.attach_data_node(
-    node_name              NAME,
-    hypertable             REGCLASS,
-    if_not_attached        BOOLEAN = FALSE,
-    repartition            BOOLEAN = TRUE
-) RETURNS TABLE(hypertable_id INTEGER, node_hypertable_id INTEGER, node_name NAME)
-AS '@MODULE_PATHNAME@', 'ts_data_node_attach' LANGUAGE C VOLATILE;
-
--- Detach a data node from a distributed hypertable. NULL hypertable means it will detach from all distributed hypertables
-CREATE OR REPLACE FUNCTION @extschema@.detach_data_node(
-    node_name              NAME,
-    hypertable             REGCLASS = NULL,
-    if_attached            BOOLEAN = FALSE,
-    force                  BOOLEAN = FALSE,
-    repartition            BOOLEAN = TRUE,
-    drop_remote_data       BOOLEAN = FALSE
-) RETURNS INTEGER
-AS '@MODULE_PATHNAME@', 'ts_data_node_detach' LANGUAGE C VOLATILE;
-
--- Execute query on a specified list of data nodes. By default node_list is NULL, which means
--- to execute the query on every data node
-CREATE OR REPLACE PROCEDURE @extschema@.distributed_exec(
-       query TEXT,
-       node_list name[] = NULL,
-       transactional BOOLEAN = TRUE)
-AS '@MODULE_PATHNAME@', 'ts_distributed_exec' LANGUAGE C;
-
--- Execute pg_create_restore_point() on each data node
-CREATE OR REPLACE FUNCTION @extschema@.create_distributed_restore_point(
-    name                   TEXT
-) RETURNS TABLE(node_name NAME, node_type TEXT, restore_point pg_lsn)
-AS '@MODULE_PATHNAME@', 'ts_create_distributed_restore_point' LANGUAGE C VOLATILE STRICT;
-
--- Sets new replication factor for distributed hypertable
-CREATE OR REPLACE FUNCTION @extschema@.set_replication_factor(
-    hypertable              REGCLASS,
-    replication_factor      INTEGER
-) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_hypertable_distributed_set_replication_factor' LANGUAGE C VOLATILE;
-
 -- Refresh a continuous aggregate across the given window.
 CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     continuous_aggregate     REGCLASS,
@@ -275,11 +187,3 @@ CREATE OR REPLACE PROCEDURE @extschema@.refresh_continuous_aggregate(
     window_end               "any"
 ) LANGUAGE C AS '@MODULE_PATHNAME@', 'ts_continuous_agg_refresh';
 
-CREATE OR REPLACE FUNCTION @extschema@.alter_data_node(
-    node_name              NAME,
-    host                   TEXT = NULL,
-    database               NAME = NULL,
-    port                   INTEGER = NULL,
-    available              BOOLEAN = NULL
-) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, available BOOLEAN)
-AS '@MODULE_PATHNAME@', 'ts_data_node_alter' LANGUAGE C VOLATILE;

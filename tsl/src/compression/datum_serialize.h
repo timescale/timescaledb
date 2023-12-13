@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_DATUM_SERIALIZE_H
-#define TIMESCALEDB_TSL_COMPRESSION_DATUM_SERIALIZE_H
+#pragma once
 
 #include <postgres.h>
 #include <lib/stringinfo.h>
@@ -46,5 +45,3 @@ Datum bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **p
 Datum binary_string_to_datum(DatumDeserializer *deserializer, BinaryStringEncoding encoding,
 							 StringInfo buffer);
 Oid binary_string_get_type(StringInfo buffer);
-
-#endif

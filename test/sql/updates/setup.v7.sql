@@ -3,4 +3,4 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \ir setup.v6.sql
-\ir setup.multinode.sql
+

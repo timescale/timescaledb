@@ -1,11 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set IS_DISTRIBUTED FALSE
-\ir include/cagg_bgw_common.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
 --
 -- Setup
 --
@@ -78,26 +73,17 @@ SELECT * FROM _timescaledb_catalog.continuous_agg;
 
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
 GRANT CREATE ON SCHEMA public TO :ROLE_DEFAULT_PERM_USER;
-psql:include/cagg_bgw_common.sql:76: WARNING:  no privileges were granted for "public"
+WARNING:  no privileges were granted for "public"
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 CREATE TABLE test_continuous_agg_table(time int, data int);
-\if :IS_DISTRIBUTED
-SELECT create_distributed_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10, replication_factor => 2);
-\else
 SELECT create_hypertable('test_continuous_agg_table', 'time', chunk_time_interval => 10);
-psql:include/cagg_bgw_common.sql:82: NOTICE:  adding not-null constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
            create_hypertable            
 ----------------------------------------
  (1,public,test_continuous_agg_table,t)
 (1 row)
 
-\endif
 CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
-\if :IS_DISTRIBUTED
-CALL distributed_exec($DIST$
-CREATE OR REPLACE FUNCTION integer_now_test() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table $$;
-$DIST$);
-\endif
 SELECT set_integer_now_func('test_continuous_agg_table', 'integer_now_test');
  set_integer_now_func 
 ----------------------
@@ -372,7 +358,7 @@ SELECT ts_bgw_params_reset_time();
 (1 row)
 
 DROP MATERIALIZED VIEW test_continuous_agg_view;
-psql:include/cagg_bgw_common.sql:234: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_3_chunk
 CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
         timescaledb.materialized_only=true)
@@ -505,7 +491,7 @@ last_run_duration |
 
 \x off
 DROP MATERIALIZED VIEW test_continuous_agg_view;
-psql:include/cagg_bgw_common.sql:294: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_4_chunk
 --create a view with a function that it has no permission to execute
 CREATE MATERIALIZED VIEW test_continuous_agg_view
     WITH (timescaledb.continuous,
@@ -567,23 +553,14 @@ SELECT ts_bgw_params_reset_time();
 -- Test creating continuous aggregate with a user that is the non-owner of the raw table
 --
 CREATE TABLE test_continuous_agg_table_w_grant(time int, data int);
-\if :IS_DISTRIBUTED
-SELECT create_distributed_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10, replication_factor => 2);
-\else
 SELECT create_hypertable('test_continuous_agg_table_w_grant', 'time', chunk_time_interval => 10);
-psql:include/cagg_bgw_common.sql:332: NOTICE:  adding not-null constraint to column "time"
+NOTICE:  adding not-null constraint to column "time"
                create_hypertable                
 ------------------------------------------------
  (5,public,test_continuous_agg_table_w_grant,t)
 (1 row)
 
-\endif
 CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
-\if :IS_DISTRIBUTED
-CALL distributed_exec($DIST$
-CREATE OR REPLACE FUNCTION integer_now_test1() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(time), 0) FROM test_continuous_agg_table_w_grant $$;
-$DIST$);
-\endif
 SELECT set_integer_now_func('test_continuous_agg_table_w_grant', 'integer_now_test1');
  set_integer_now_func 
 ----------------------

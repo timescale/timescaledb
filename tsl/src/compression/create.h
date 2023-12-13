@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSION_CREATE_H
-#define TIMESCALEDB_TSL_COMPRESSION_CREATE_H
+#pragma once
+
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 
@@ -25,10 +25,5 @@ void tsl_process_compress_table_drop_column(Hypertable *ht, char *name);
 void tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt);
 Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id);
 
-char *compression_column_segment_min_name(const FormData_hypertable_compression *fd);
-char *compression_column_segment_max_name(const FormData_hypertable_compression *fd);
-
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
-
-#endif /* TIMESCALEDB_TSL_COMPRESSION_CREATE_H */

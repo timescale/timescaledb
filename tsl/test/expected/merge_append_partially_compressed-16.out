@@ -702,7 +702,7 @@ SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10
 ---------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Finalize GroupAggregate (actual rows=5 loops=1)
-         Group Key: test1.x1, test1.x2, test1."time"
+         Group Key: test1."time", test1.x1, test1.x2
          ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
                Order: test1."time", test1.x1, test1.x2
                ->  Merge Append (actual rows=5 loops=1)
@@ -711,7 +711,7 @@ SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10
                            Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
                            Sort Method: quicksort 
                            ->  Partial HashAggregate (actual rows=4 loops=1)
-                                 Group Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk."time"
+                                 Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
                                  Batches: 1 
                                  ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
                                        ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
@@ -719,7 +719,7 @@ SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10
                            Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
                            Sort Method: quicksort 
                            ->  Partial HashAggregate (actual rows=1 loops=1)
-                                 Group Key: _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2, _hyper_3_7_chunk."time"
+                                 Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
                                  Batches: 1 
                                  ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
 (22 rows)

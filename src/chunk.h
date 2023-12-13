@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CHUNK_H
-#define TIMESCALEDB_CHUNK_H
+#pragma once
 
 #include <postgres.h>
 #include <access/htup.h>
@@ -330,5 +329,3 @@ extern TSDLLEXPORT void ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk 
 extern TSDLLEXPORT bool ts_chunk_clear_status(Chunk *chunk, int32 status);
 extern bool ts_osm_chunk_range_is_invalid(int64 range_start, int64 range_end);
 extern int32 ts_chunk_get_osm_slice_id(int32 chunk_id, int32 time_dim_id);
-
-#endif /* TIMESCALEDB_CHUNK_H */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_CHUNK_CONSTRAINT_H
-#define TIMESCALEDB_CHUNK_CONSTRAINT_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pg_list.h>
@@ -89,5 +88,3 @@ extern ChunkConstraint *ts_chunk_constraints_add_from_tuple(ChunkConstraints *cc
 extern ScanIterator ts_chunk_constraint_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_constraint_scan_iterator_set_slice_id(ScanIterator *it, int32 slice_id);
 extern void ts_chunk_constraint_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
-
-#endif /* TIMESCALEDB_CHUNK_CONSTRAINT_H */

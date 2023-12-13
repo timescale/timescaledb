@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_PLANNER_H
-#define TIMESCALEDB_PLANNER_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/pg_list.h>
@@ -112,5 +111,3 @@ extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *nod
 extern TSDLLEXPORT void ts_add_baserel_cache_entry_for_chunk(Oid chunk_reloid,
 															 Hypertable *hypertable);
 TsRelType ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable **ht);
-
-#endif /* TIMESCALEDB_PLANNER_H */

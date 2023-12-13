@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_REMOTE_CONNECTION_CACHE_H
-#define TIMESCALEDB_TSL_REMOTE_CONNECTION_CACHE_H
+#pragma once
 
 #include <postgres.h>
 
@@ -29,5 +28,3 @@ extern void remote_connection_cache_dropped_role_callback(const char *rolename);
 extern Datum remote_connection_cache_show(PG_FUNCTION_ARGS);
 extern void _remote_connection_cache_init(void);
 extern void _remote_connection_cache_fini(void);
-
-#endif /* TIMESCALEDB_TSL_REMOTE_CONNECTION_CACHE_H */

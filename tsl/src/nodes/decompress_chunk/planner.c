@@ -31,6 +31,7 @@
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "vector_predicates.h"
+#include "ts_catalog/array_utils.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "DecompressChunk",
@@ -109,28 +110,7 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 						   TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber);
 	}
 
-	/*
-	 * Fill the helper array of compressed attno -> compression info.
-	 */
-	FormData_hypertable_compression **compressed_attno_to_compression_info =
-		palloc0(sizeof(void *) * (path->info->compressed_rel->max_attr + 1));
 	ListCell *lc;
-	foreach (lc, path->info->hypertable_compression_info)
-	{
-		FormData_hypertable_compression *fd = lfirst(lc);
-		AttrNumber compressed_attno =
-			get_attnum(path->info->compressed_rte->relid, NameStr(fd->attname));
-
-		if (compressed_attno == InvalidAttrNumber)
-		{
-			elog(ERROR,
-				 "column '%s' not found in the compressed chunk '%s'",
-				 NameStr(fd->attname),
-				 get_rel_name(path->info->compressed_rte->relid));
-		}
-
-		compressed_attno_to_compression_info[compressed_attno] = fd;
-	}
 
 	path->uncompressed_chunk_attno_to_compression_info =
 		palloc0(sizeof(*path->uncompressed_chunk_attno_to_compression_info) *
@@ -168,38 +148,15 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 		const char *column_name = get_attname(path->info->compressed_rte->relid,
 											  compressed_attno,
 											  /* missing_ok = */ false);
+		AttrNumber chunk_attno = get_attnum(path->info->chunk_rte->relid, column_name);
 
 		AttrNumber destination_attno_in_uncompressed_chunk = 0;
-		FormData_hypertable_compression *compression_info =
-			compressed_attno_to_compression_info[compressed_attno];
-		if (compression_info)
+		if (chunk_attno != InvalidAttrNumber)
 		{
 			/*
 			 * Normal column, not a metadata column.
 			 */
-			AttrNumber hypertable_attno = get_attnum(path->info->ht_rte->relid, column_name);
-			AttrNumber chunk_attno = get_attnum(path->info->chunk_rte->relid, column_name);
-			Assert(hypertable_attno != InvalidAttrNumber);
 			Assert(chunk_attno != InvalidAttrNumber);
-
-			/*
-			 * The versions older than this commit didn't set up the proper
-			 * collation and typmod for segmentby columns in compressed chunks,
-			 * so we have to determine them from the main hypertable.
-			 * Additionally, we have to set the proper type for the compressed
-			 * columns. It would be cool to get rid of this code someday and
-			 * just use the types from the compressed chunk, but the problem is
-			 * that we have to support the chunks created by the older versions
-			 * of TimescaleDB.
-			 */
-			if (compression_info->algo_id == _INVALID_COMPRESSION_ALGORITHM)
-			{
-				get_atttypetypmodcoll(path->info->ht_rte->relid,
-									  hypertable_attno,
-									  &var->vartype,
-									  &var->vartypmod,
-									  &var->varcollid);
-			}
 
 			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, chunk_attrs_needed))
 			{
@@ -248,15 +205,16 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 			}
 		}
 
+		bool is_segment = ts_array_is_member(path->info->settings->fd.segmentby, column_name);
+
 		path->decompression_map =
 			lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
-		path->is_segmentby_column =
-			lappend_int(path->is_segmentby_column,
-						compression_info && compression_info->segmentby_column_index != 0);
+		path->is_segmentby_column = lappend_int(path->is_segmentby_column, is_segment);
 
+		Oid typoid = get_atttype(path->info->chunk_rte->relid, chunk_attno);
 		const bool bulk_decompression_possible =
-			destination_attno_in_uncompressed_chunk > 0 && compression_info &&
-			tsl_get_decompress_all_function(compression_info->algo_id) != NULL;
+			!is_segment && destination_attno_in_uncompressed_chunk > 0 &&
+			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid)) != NULL;
 		path->have_bulk_decompression_columns |= bulk_decompression_possible;
 		path->bulk_decompression_column =
 			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
@@ -264,9 +222,9 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 		if (destination_attno_in_uncompressed_chunk > 0)
 		{
 			path->uncompressed_chunk_attno_to_compression_info
-				[destination_attno_in_uncompressed_chunk] = (DecompressChunkColumnCompression){
-				.fd = *compression_info, .bulk_decompression_possible = bulk_decompression_possible
-			};
+				[destination_attno_in_uncompressed_chunk] =
+				(DecompressChunkColumnCompression){ .bulk_decompression_possible =
+														bulk_decompression_possible };
 		}
 
 		if (path->perform_vectorized_aggregation)
@@ -452,34 +410,57 @@ is_not_runtime_constant(Node *node)
 static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
-	/* Only simple "Var op Const" binary predicates for now. */
-	if (!IsA(qual, OpExpr))
+	/*
+	 * Currently we vectorize some "Var op Const" binary predicates,
+	 * and scalar array operations with these predicates.
+	 */
+	if (!IsA(qual, OpExpr) && !IsA(qual, ScalarArrayOpExpr))
 	{
 		return NULL;
 	}
 
-	OpExpr *o = castNode(OpExpr, qual);
+	List *args = NIL;
+	OpExpr *opexpr = NULL;
+	Oid opno = InvalidOid;
+	ScalarArrayOpExpr *saop = NULL;
+	if (IsA(qual, OpExpr))
+	{
+		opexpr = castNode(OpExpr, qual);
+		args = opexpr->args;
+		opno = opexpr->opno;
+	}
+	else
+	{
+		saop = castNode(ScalarArrayOpExpr, qual);
+		args = saop->args;
+		opno = saop->opno;
+	}
 
-	if (list_length(o->args) != 2)
+	if (list_length(args) != 2)
 	{
 		return NULL;
 	}
 
-	if (IsA(lsecond(o->args), Var))
+	if (opexpr && IsA(lsecond(args), Var))
 	{
-		/* Try to commute the operator if the constant is on the right. */
-		Oid commutator_opno = get_commutator(o->opno);
-		if (OidIsValid(commutator_opno))
+		/*
+		 * Try to commute the operator if we have Var on the right.
+		 */
+		opno = get_commutator(opno);
+		if (!OidIsValid(opno))
 		{
-			o = (OpExpr *) copyObject(o);
-			o->opno = commutator_opno;
-			/*
-			 * opfuncid is a cache, we can set it to InvalidOid like the
-			 * CommuteOpExpr() does.
-			 */
-			o->opfuncid = InvalidOid;
-			o->args = list_make2(lsecond(o->args), linitial(o->args));
+			return NULL;
 		}
+
+		opexpr = (OpExpr *) copyObject(opexpr);
+		opexpr->opno = opno;
+		/*
+		 * opfuncid is a cache, we can set it to InvalidOid like the
+		 * CommuteOpExpr() does.
+		 */
+		opexpr->opfuncid = InvalidOid;
+		args = list_make2(lsecond(args), linitial(args));
+		opexpr->args = args;
 	}
 
 	/*
@@ -487,12 +468,12 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	 * side is a constant or can be evaluated to a constant at run time (e.g.
 	 * contains stable functions).
 	 */
-	if (!IsA(linitial(o->args), Var) || is_not_runtime_constant(lsecond(o->args)))
+	if (!IsA(linitial(args), Var) || is_not_runtime_constant(lsecond(args)))
 	{
 		return NULL;
 	}
 
-	Var *var = castNode(Var, linitial(o->args));
+	Var *var = castNode(Var, linitial(args));
 	Assert((Index) var->varno == path->info->chunk_rel->relid);
 
 	/*
@@ -506,13 +487,26 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return NULL;
 	}
 
-	Oid opcode = get_opcode(o->opno);
-	if (get_vector_const_predicate(opcode))
+	Oid opcode = get_opcode(opno);
+	if (!get_vector_const_predicate(opcode))
 	{
-		return (Node *) o;
+		return NULL;
 	}
 
-	return NULL;
+#if PG14_GE
+	if (saop)
+	{
+		if (saop->hashfuncid)
+		{
+			/*
+			 * Don't vectorize if the planner decided to build a hash table.
+			 */
+			return NULL;
+		}
+	}
+#endif
+
+	return opexpr ? (Node *) opexpr : (Node *) saop;
 }
 
 /*
@@ -882,10 +876,16 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	{
 		elog(ERROR, "debug: encountered vector quals when they are disabled");
 	}
-	else if (ts_guc_debug_require_vector_qual == RVQ_Only &&
-			 list_length(decompress_plan->scan.plan.qual) > 0)
+	else if (ts_guc_debug_require_vector_qual == RVQ_Only)
 	{
-		elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+		if (list_length(decompress_plan->scan.plan.qual) > 0)
+		{
+			elog(ERROR, "debug: encountered non-vector quals when they are disabled");
+		}
+		if (list_length(vectorized_quals) == 0)
+		{
+			elog(ERROR, "debug: did not encounter vector quals when they are required");
+		}
 	}
 #endif
 

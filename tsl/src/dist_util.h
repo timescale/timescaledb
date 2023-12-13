@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_DIST_UTIL_H
-#define TIMESCALEDB_TSL_DIST_UTIL_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -38,5 +37,3 @@ Datum dist_util_remote_hypertable_index_info(PG_FUNCTION_ARGS);
 void validate_data_node_settings(void);
 bool dist_util_is_compatible_version(const char *data_node_version,
 									 const char *access_node_version);
-
-#endif /* TIMESCALEDB_TSL_DIST_UTIL_H */

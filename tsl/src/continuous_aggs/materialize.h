@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_MATERIALIZE_H
-#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_MATERIALIZE_H
+#pragma once
 
 #include <postgres.h>
 #include <fmgr.h>
@@ -41,4 +40,3 @@ void continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName par
 										   const NameData *time_column_name,
 										   InternalTimeRange new_materialization_range,
 										   InternalTimeRange invalidation_range, int32 chunk_id);
-#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_MATERIALIZE_H */

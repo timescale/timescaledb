@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_HYPERTABLE_MODIFY_H
-#define TIMESCALEDB_HYPERTABLE_MODIFY_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
@@ -43,5 +42,3 @@ extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 extern TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 								  TupleTableSlot *slot, bool canSetTag);
 #endif
-
-#endif /* TIMESCALEDB_HYPERTABLE_MODIFY_H */

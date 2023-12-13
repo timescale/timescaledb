@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TELEMETRY_REPLICATION_H
-#define TIMESCALEDB_TELEMETRY_REPLICATION_H
+#pragma once
 
 #include <postgres.h>
 
@@ -20,5 +19,3 @@ typedef struct ReplicationInfo
 } ReplicationInfo;
 
 extern ReplicationInfo ts_telemetry_replication_info_gather(void);
-
-#endif /* TIMESCALEDB_TELEMETRY_REPLICATION_H */

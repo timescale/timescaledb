@@ -23,6 +23,7 @@
 #include "errors.h"
 #include "deparse.h"
 #include "debug_point.h"
+#include "ts_catalog/array_utils.h"
 
 typedef struct DistPreparedStmt
 {

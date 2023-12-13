@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_CONTINUOUS_AGGS_INVALIDATION_H
-#define TIMESCALEDB_TSL_CONTINUOUS_AGGS_INVALIDATION_H
+#pragma once
 
 #include <postgres.h>
 
@@ -73,5 +72,3 @@ extern Datum tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS);
 extern void remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id);
 
 extern void invalidation_store_free(InvalidationStore *store);
-
-#endif /* TIMESCALEDB_TSL_CONTINUOUS_AGGS_INVALIDATION_H */

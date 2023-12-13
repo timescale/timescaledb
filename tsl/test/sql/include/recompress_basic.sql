@@ -88,9 +88,10 @@ FROM test2
 GROUP BY time_bucket(INTERVAL '2 hour', timec), b
 ORDER BY 1, 2;
 
---chunk status should be unordered for the previously compressed chunk
+--chunk status should be partially compressed for the previously compressed chunk
 SELECT chunk_status,
-       chunk_name as "CHUNK_NAME"
+       chunk_name as "CHUNK_NAME",
+       compressed_chunk_name as "COMPRESSED_CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 
@@ -100,8 +101,12 @@ CALL run_job(:job_id);
 CALL run_job(:job_id);
 
 -- status should be compressed ---
+-- compressed chunk name should not change for
+-- the partially compressed chunk indicating
+-- it was done segmentwise
 SELECT chunk_status,
-       chunk_name as "CHUNK_NAME"
+       chunk_name as "CHUNK_NAME",
+       compressed_chunk_name as "COMPRESSED_CHUNK_NAME"
 FROM compressed_chunk_info_view
 WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 

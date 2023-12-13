@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TRIGGER_H
-#define TIMESCALEDB_TRIGGER_H
+#pragma once
 
 #include <postgres.h>
 #include <catalog/pg_trigger.h>
@@ -19,5 +18,3 @@ extern void ts_trigger_create_on_chunk(Oid trigger_oid, const char *chunk_schema
 									   const char *chunk_table_name);
 extern TSDLLEXPORT void ts_trigger_create_all_on_chunk(const Chunk *chunk);
 extern bool ts_relation_has_transition_table_trigger(Oid relid);
-
-#endif /* TIMESCALEDB_TRIGGER_H */

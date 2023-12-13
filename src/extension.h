@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#ifndef TIMESCALEDB_EXTENSION_H
-#define TIMESCALEDB_EXTENSION_H
+#pragma once
+
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 
@@ -22,5 +22,3 @@ extern const char *ts_extension_get_so_name(void);
 extern TSDLLEXPORT const char *ts_extension_get_version(void);
 extern bool ts_extension_is_proxy_table_relid(Oid relid);
 extern TSDLLEXPORT Oid ts_extension_get_oid(void);
-
-#endif /* TIMESCALEDB_EXTENSION_H */

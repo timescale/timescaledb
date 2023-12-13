@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_DECOMPRESS_CHUNK_H
-#define TIMESCALEDB_DECOMPRESS_CHUNK_H
+#pragma once
 
 #include <postgres.h>
 #include <nodes/bitmapset.h>
@@ -12,6 +11,7 @@
 
 #include "chunk.h"
 #include "hypertable.h"
+#include "ts_catalog/compression_settings.h"
 
 typedef struct CompressionInfo
 {
@@ -21,6 +21,10 @@ typedef struct CompressionInfo
 	RangeTblEntry *chunk_rte;
 	RangeTblEntry *compressed_rte;
 	RangeTblEntry *ht_rte;
+
+	Oid compresseddata_oid;
+
+	CompressionSettings *settings;
 
 	int hypertable_id;
 	List *hypertable_compression_info;
@@ -44,7 +48,6 @@ typedef struct CompressionInfo
 
 typedef struct ColumnCompressionInfo
 {
-	FormData_hypertable_compression fd;
 	bool bulk_decompression_possible;
 } DecompressChunkColumnCompression;
 
@@ -114,9 +117,4 @@ typedef struct DecompressChunkPath
 void ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										Chunk *chunk);
 
-FormData_hypertable_compression *get_column_compressioninfo(List *hypertable_compression_info,
-															char *column_name);
-
 extern bool ts_is_decompress_chunk_path(Path *path);
-
-#endif /* TIMESCALEDB_DECOMPRESS_CHUNK_H */

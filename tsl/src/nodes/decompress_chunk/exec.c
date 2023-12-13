@@ -25,12 +25,11 @@
 #include "guc.h"
 #include "import/ts_explain.h"
 #include "nodes/decompress_chunk/batch_array.h"
-#include "nodes/decompress_chunk/batch_queue_fifo.h"
-#include "nodes/decompress_chunk/batch_queue_heap.h"
+#include "nodes/decompress_chunk/batch_queue.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
-#include "ts_catalog/hypertable_compression.h"
 
 static void decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags);
 static void decompress_chunk_end(CustomScanState *node);
@@ -45,91 +44,11 @@ static CustomExecMethods decompress_chunk_state_methods = {
 	.ExplainCustomScan = decompress_chunk_explain,
 };
 
-struct BatchQueueFunctions
-{
-	void (*create)(DecompressChunkState *);
-	void (*free)(DecompressChunkState *);
-	bool (*needs_next_batch)(DecompressChunkState *);
-	void (*pop)(DecompressChunkState *);
-	void (*push_batch)(DecompressChunkState *, TupleTableSlot *);
-	void (*reset)(DecompressChunkState *);
-	TupleTableSlot *(*top_tuple)(DecompressChunkState *);
-};
-
-static const struct BatchQueueFunctions BatchQueueFunctionsFifo = {
-	.create = batch_queue_fifo_create,
-	.free = batch_queue_fifo_free,
-	.needs_next_batch = batch_queue_fifo_needs_next_batch,
-	.pop = batch_queue_fifo_pop,
-	.push_batch = batch_queue_fifo_push_batch,
-	.reset = batch_queue_fifo_reset,
-	.top_tuple = batch_queue_fifo_top_tuple,
-};
-
-static const struct BatchQueueFunctions BatchQueueFunctionsHeap = {
-	.create = batch_queue_heap_create,
-	.free = batch_queue_heap_free,
-	.needs_next_batch = batch_queue_heap_needs_next_batch,
-	.pop = batch_queue_heap_pop,
-	.push_batch = batch_queue_heap_push_batch,
-	.reset = batch_queue_heap_reset,
-	.top_tuple = batch_queue_heap_top_tuple,
-};
-
 /*
  * Build the sortkeys data structure from the list structure in the
  * custom_private field of the custom scan. This sort info is used to sort
- * binary heap used for sorted merge append.
+ * binary heap used for batch sorted merge.
  */
-static void
-build_batch_sorted_merge_info(DecompressChunkState *chunk_state)
-{
-	List *sortinfo = chunk_state->sortinfo;
-	if (sortinfo == NIL)
-	{
-		chunk_state->n_sortkeys = 0;
-		chunk_state->sortkeys = NULL;
-		return;
-	}
-
-	List *sort_col_idx = linitial(sortinfo);
-	List *sort_ops = lsecond(sortinfo);
-	List *sort_collations = lthird(sortinfo);
-	List *sort_nulls = lfourth(sortinfo);
-
-	chunk_state->n_sortkeys = list_length(linitial((sortinfo)));
-
-	Assert(list_length(sort_col_idx) == list_length(sort_ops));
-	Assert(list_length(sort_ops) == list_length(sort_collations));
-	Assert(list_length(sort_collations) == list_length(sort_nulls));
-	Assert(chunk_state->n_sortkeys > 0);
-
-	SortSupportData *sortkeys = palloc0(sizeof(SortSupportData) * chunk_state->n_sortkeys);
-
-	/* Inspired by nodeMergeAppend.c */
-	for (int i = 0; i < chunk_state->n_sortkeys; i++)
-	{
-		SortSupportData *sortKey = &sortkeys[i];
-
-		sortKey->ssup_cxt = CurrentMemoryContext;
-		sortKey->ssup_collation = list_nth_oid(sort_collations, i);
-		sortKey->ssup_nulls_first = list_nth_oid(sort_nulls, i);
-		sortKey->ssup_attno = list_nth_oid(sort_col_idx, i);
-
-		/*
-		 * It isn't feasible to perform abbreviated key conversion, since
-		 * tuples are pulled into mergestate's binary heap as needed.  It
-		 * would likely be counter-productive to convert tuples into an
-		 * abbreviated representation as they're pulled up, so opt out of that
-		 * additional optimization entirely.
-		 */
-		sortKey->abbreviate = false;
-
-		PrepareSortSupportFromOrderingOp(list_nth_oid(sort_ops, i), sortKey);
-	}
-
-	chunk_state->sortkeys = sortkeys;
-}
 
 Node *
 decompress_chunk_state_create(CustomScan *cscan)
@@ -155,9 +74,9 @@ decompress_chunk_state_create(CustomScan *cscan)
 	Assert(list_length(settings) == 6);
 	chunk_state->hypertable_id = linitial_int(settings);
 	chunk_state->chunk_relid = lsecond_int(settings);
-	chunk_state->reverse = lthird_int(settings);
-	chunk_state->batch_sorted_merge = lfourth_int(settings);
-	chunk_state->enable_bulk_decompression = lfifth_int(settings);
+	chunk_state->decompress_context.reverse = lthird_int(settings);
+	chunk_state->decompress_context.batch_sorted_merge = lfourth_int(settings);
+	chunk_state->decompress_context.enable_bulk_decompression = lfifth_int(settings);
 	chunk_state->perform_vectorized_aggregation = lsixth_int(settings);
 
 	Assert(IsA(cscan->custom_exprs, List));
@@ -236,14 +155,13 @@ constify_tableoid(List *node, Index chunk_index, Oid chunk_relid)
 }
 
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
-						   const struct BatchQueueFunctions *queue);
+decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFunctions *funcs);
 
 static TupleTableSlot *
 decompress_chunk_exec_fifo(CustomScanState *node)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
-	Assert(!chunk_state->batch_sorted_merge);
+	Assert(!chunk_state->decompress_context.batch_sorted_merge);
 	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsFifo);
 }
 
@@ -251,7 +169,7 @@ static TupleTableSlot *
 decompress_chunk_exec_heap(CustomScanState *node)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
-	Assert(chunk_state->batch_sorted_merge);
+	Assert(chunk_state->decompress_context.batch_sorted_merge);
 	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
 
@@ -265,6 +183,7 @@ static void
 decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	DecompressContext *dcontext = &chunk_state->decompress_context;
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
@@ -295,12 +214,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 		}
 	}
-
-	/* Extract sort info */
-	build_batch_sorted_merge_info(chunk_state);
 	/* Sort keys should only be present when sorted_merge_append is used */
-	Assert(chunk_state->batch_sorted_merge == true || chunk_state->n_sortkeys == 0);
-	Assert(chunk_state->n_sortkeys == 0 || chunk_state->sortkeys != NULL);
+	Assert(dcontext->batch_sorted_merge == true || list_length(chunk_state->sortinfo) == 0);
 
 	/*
 	 * Init the underlying compressed scan.
@@ -344,11 +259,13 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	Assert(num_compressed <= num_total);
-	chunk_state->num_compressed_columns = num_compressed;
-	chunk_state->num_total_columns = num_total;
-	chunk_state->template_columns = palloc0(sizeof(DecompressChunkColumnDescription) * num_total);
+	dcontext->num_compressed_columns = num_compressed;
+	dcontext->num_total_columns = num_total;
+	dcontext->template_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
+	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
+	dcontext->ps = &node->ss.ps;
 
-	TupleDesc desc = chunk_state->csstate.ss.ss_ScanTupleSlot->tts_tupleDescriptor;
+	TupleDesc desc = dcontext->decompressed_slot->tts_tupleDescriptor;
 
 	/*
 	 * Compressed columns go in front, and the rest go to the back, so we have
@@ -359,7 +276,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	for (int compressed_index = 0; compressed_index < list_length(chunk_state->decompression_map);
 		 compressed_index++)
 	{
-		DecompressChunkColumnDescription column = {
+		CompressionColumnDescription column = {
 			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
 			.output_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
 			.bulk_decompression_supported =
@@ -416,21 +333,17 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		if (column.type == COMPRESSED_COLUMN)
 		{
 			Assert(current_compressed < num_total);
-			chunk_state->template_columns[current_compressed++] = column;
+			dcontext->template_columns[current_compressed++] = column;
 		}
 		else
 		{
 			Assert(current_not_compressed < num_total);
-			chunk_state->template_columns[current_not_compressed++] = column;
+			dcontext->template_columns[current_not_compressed++] = column;
 		}
 	}
 
 	Assert(current_compressed == num_compressed);
 	Assert(current_not_compressed == num_total);
-
-	chunk_state->n_batch_state_bytes =
-		sizeof(DecompressBatchState) +
-		sizeof(CompressedColumnValues) * chunk_state->num_compressed_columns;
 
 	/*
 	 * Calculate the desired size of the batch memory context. Especially if we
@@ -440,59 +353,64 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	 *
 	 * Start with the default size.
 	 */
-	chunk_state->batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
-	if (chunk_state->enable_bulk_decompression)
+	Size batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
+
+	if (dcontext->enable_bulk_decompression)
 	{
 		for (int i = 0; i < num_total; i++)
 		{
-			DecompressChunkColumnDescription *column = &chunk_state->template_columns[i];
+			CompressionColumnDescription *column = &dcontext->template_columns[i];
 			if (column->bulk_decompression_supported)
 			{
 				/* Values array, with 64 element padding (actually we have less). */
-				chunk_state->batch_memory_context_bytes +=
+				batch_memory_context_bytes +=
 					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) * column->value_bytes;
 				/* Also nulls bitmap. */
-				chunk_state->batch_memory_context_bytes +=
+				batch_memory_context_bytes +=
 					GLOBAL_MAX_ROWS_PER_COMPRESSION / (64 * sizeof(uint64));
 				/* Arrow data structure. */
-				chunk_state->batch_memory_context_bytes +=
-					sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
+				batch_memory_context_bytes += sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
 				/* Memory context header overhead for the above parts. */
-				chunk_state->batch_memory_context_bytes += sizeof(void *) * 3;
+				batch_memory_context_bytes += sizeof(void *) * 3;
 			}
 		}
 	}
 
 	/* Round up to even number of 4k pages. */
-	chunk_state->batch_memory_context_bytes =
-		((chunk_state->batch_memory_context_bytes + 4095) / 4096) * 4096;
+	batch_memory_context_bytes = ((batch_memory_context_bytes + 4095) / 4096) * 4096;
 
 	/* As a precaution, limit it to 1MB. */
-	chunk_state->batch_memory_context_bytes =
-		Min(chunk_state->batch_memory_context_bytes, 1 * 1024 * 1024);
+	batch_memory_context_bytes = Min(batch_memory_context_bytes, 1 * 1024 * 1024);
 
 	elog(DEBUG3,
-		 "Batch memory context has initial capacity of  %d bytes",
-		 chunk_state->batch_memory_context_bytes);
+		 "Batch memory context has initial capacity of %zu bytes",
+		 batch_memory_context_bytes);
+
+	dcontext->batch_memory_context_bytes = batch_memory_context_bytes;
 
 	/*
 	 * Choose which batch queue we are going to use: heap for batch sorted
 	 * merge, and one-element FIFO for normal decompression.
 	 */
-	if (chunk_state->batch_sorted_merge)
+	if (dcontext->batch_sorted_merge)
 	{
-		chunk_state->batch_queue = &BatchQueueFunctionsHeap;
+		chunk_state->batch_queue =
+			batch_queue_heap_create(num_compressed,
+									batch_memory_context_bytes,
+									chunk_state->sortinfo,
+									dcontext->decompressed_slot->tts_tupleDescriptor,
+									&BatchQueueFunctionsHeap);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_heap;
 	}
 	else
 	{
-		chunk_state->batch_queue = &BatchQueueFunctionsFifo;
+		chunk_state->batch_queue = batch_queue_fifo_create(num_compressed,
+														   batch_memory_context_bytes,
+														   &BatchQueueFunctionsFifo);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 
-	chunk_state->batch_queue->create(chunk_state);
-
-	if (ts_guc_debug_require_batch_sorted_merge && !chunk_state->batch_sorted_merge)
+	if (ts_guc_debug_require_batch_sorted_merge && !dcontext->batch_sorted_merge)
 	{
 		elog(ERROR, "debug: batch sorted merge is required but not used");
 	}
@@ -535,11 +453,19 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			}
 		}
 
-		OpExpr *opexpr = castNode(OpExpr, constified);
-		Ensure(IsA(lsecond(opexpr->args), Const),
+		List *args;
+		if (IsA(constified, OpExpr))
+		{
+			args = castNode(OpExpr, constified)->args;
+		}
+		else
+		{
+			args = castNode(ScalarArrayOpExpr, constified)->args;
+		}
+		Ensure(IsA(lsecond(args), Const),
 			   "failed to evaluate runtime constant in vectorized filter");
-		chunk_state->vectorized_quals_constified =
-			lappend(chunk_state->vectorized_quals_constified, constified);
+		dcontext->vectorized_quals_constified =
+			lappend(dcontext->vectorized_quals_constified, constified);
 	}
 }
 
@@ -549,6 +475,9 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 static TupleTableSlot *
 perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+	BatchQueue *batch_queue = chunk_state->batch_queue;
+
 	Assert(chunk_state != NULL);
 	Assert(aggref != NULL);
 
@@ -556,25 +485,30 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	Assert(aggref->aggtranstype == INT8OID);
 
 	/* Two columns are decompressed, the column that needs to be aggregated and the count column */
-	Assert(chunk_state->num_total_columns == 2);
+	Assert(dcontext->num_total_columns == 2);
 
-	DecompressChunkColumnDescription *column_description = &chunk_state->template_columns[0];
-	Assert(chunk_state->template_columns[1].type == COUNT_COLUMN);
+	CompressionColumnDescription *column_description = &dcontext->template_columns[0];
+	Assert(dcontext->template_columns[1].type == COUNT_COLUMN);
 
 	/* Get a free batch slot */
-	const int new_batch_index = batch_array_get_free_slot(chunk_state);
+	const int new_batch_index = batch_array_get_unused_slot(&batch_queue->batch_array);
 
 	/* Nobody else should use batch states */
 	Assert(new_batch_index == 0);
-	DecompressBatchState *batch_state = batch_array_get_at(chunk_state, new_batch_index);
+	DecompressBatchState *batch_state =
+		batch_array_get_at(&batch_queue->batch_array, new_batch_index);
 
 	/* Init per batch memory context */
 	Assert(batch_state != NULL);
-	init_per_batch_mctx(chunk_state, batch_state);
+	Assert(batch_state->per_batch_context == NULL);
+	batch_state->per_batch_context =
+		create_per_batch_mctx(batch_queue->batch_array.batch_memory_context_bytes);
 	Assert(batch_state->per_batch_context != NULL);
 
 	/* Init bulk decompression memory context */
-	init_bulk_decompression_mctx(chunk_state, CurrentMemoryContext);
+	Assert(dcontext->bulk_decompression_context == NULL);
+	dcontext->bulk_decompression_context = create_bulk_decompression_mctx(CurrentMemoryContext);
+	Assert(dcontext->bulk_decompression_context != NULL);
 
 	/* Get a reference the the output TupleTableSlot */
 	TupleTableSlot *decompressed_scan_slot = chunk_state->csstate.ss.ss_ScanTupleSlot;
@@ -594,8 +528,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 		 * To calculate the sum for a segment by value, we need to multiply the value of the segment
 		 * by column with the number of compressed tuples in this batch.
 		 */
-		DecompressChunkColumnDescription *column_description_count =
-			&chunk_state->template_columns[1];
+		CompressionColumnDescription *column_description_count = &dcontext->template_columns[1];
 
 		while (true)
 		{
@@ -648,7 +581,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	}
 	else if (column_description->type == COMPRESSED_COLUMN)
 	{
-		Assert(chunk_state->enable_bulk_decompression);
+		Assert(dcontext->enable_bulk_decompression);
 		Assert(column_description->bulk_decompression_supported);
 		Assert(list_length(aggref->args) == 1);
 
@@ -680,7 +613,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			Assert(decompress_all != NULL);
 
 			MemoryContext context_before_decompression =
-				MemoryContextSwitchTo(chunk_state->bulk_decompression_context);
+				MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 			arrow = decompress_all(PointerGetDatum(header),
 								   column_description->typid,
@@ -688,7 +621,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			Assert(arrow != NULL);
 
-			MemoryContextReset(chunk_state->bulk_decompression_context);
+			MemoryContextReset(dcontext->bulk_decompression_context);
 			MemoryContextSwitchTo(context_before_decompression);
 
 			/* A compressed batch consists of 1000 tuples (see MAX_ROWS_PER_COMPRESSION). The
@@ -740,6 +673,8 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 static TupleTableSlot *
 perform_vectorized_aggregation(DecompressChunkState *chunk_state)
 {
+	BatchQueue *bq = chunk_state->batch_queue;
+
 	Assert(list_length(chunk_state->custom_scan_tlist) == 1);
 
 	/* Checked by planner */
@@ -749,7 +684,7 @@ perform_vectorized_aggregation(DecompressChunkState *chunk_state)
 	/* When using vectorized aggregates, only one result tuple is produced. So, if we have
 	 * already initialized a batch state, the aggregation was already performed.
 	 */
-	if (bms_num_members(chunk_state->unused_batch_states) != chunk_state->n_batch_states)
+	if (batch_array_has_active_batches(&bq->batch_array))
 	{
 		ExecClearTuple(chunk_state->csstate.ss.ss_ScanTupleSlot);
 		return chunk_state->csstate.ss.ss_ScanTupleSlot;
@@ -783,9 +718,13 @@ perform_vectorized_aggregation(DecompressChunkState *chunk_state)
  * relatively hot loop.
  */
 pg_attribute_always_inline static TupleTableSlot *
-decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
-						   const struct BatchQueueFunctions *queue)
+decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFunctions *bqfuncs)
 {
+	DecompressContext *dcontext = &chunk_state->decompress_context;
+	BatchQueue *bq = chunk_state->batch_queue;
+
+	Assert(bq->funcs == bqfuncs);
+
 	if (chunk_state->perform_vectorized_aggregation)
 	{
 		return perform_vectorized_aggregation(chunk_state);
@@ -796,8 +735,9 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
 		return NULL;
 	}
 
-	queue->pop(chunk_state);
-	while (queue->needs_next_batch(chunk_state))
+	bqfuncs->pop(bq, dcontext);
+
+	while (bqfuncs->needs_next_batch(bq))
 	{
 		TupleTableSlot *subslot = ExecProcNode(linitial(chunk_state->csstate.custom_ps));
 		if (TupIsNull(subslot))
@@ -806,9 +746,9 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state,
 			break;
 		}
 
-		queue->push_batch(chunk_state, subslot);
+		bqfuncs->push_batch(bq, dcontext, subslot);
 	}
-	TupleTableSlot *result_slot = queue->top_tuple(chunk_state);
+	TupleTableSlot *result_slot = bqfuncs->top_tuple(bq);
 
 	if (TupIsNull(result_slot))
 	{
@@ -829,15 +769,9 @@ static void
 decompress_chunk_rescan(CustomScanState *node)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	BatchQueue *bq = chunk_state->batch_queue;
 
-	chunk_state->batch_queue->reset(chunk_state);
-
-	for (int i = 0; i < chunk_state->n_batch_states; i++)
-	{
-		batch_array_free_at(chunk_state, i);
-	}
-
-	Assert(bms_num_members(chunk_state->unused_batch_states) == chunk_state->n_batch_states);
+	bq->funcs->reset(bq);
 
 	if (node->ss.ps.chgParam != NULL)
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
@@ -850,9 +784,9 @@ static void
 decompress_chunk_end(CustomScanState *node)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	BatchQueue *bq = chunk_state->batch_queue;
 
-	chunk_state->batch_queue->free(chunk_state);
-
+	bq->funcs->free(bq);
 	ExecEndNode(linitial(node->custom_ps));
 }
 
@@ -863,6 +797,7 @@ static void
 decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	DecompressContext *dcontext = &chunk_state->decompress_context;
 
 	ts_show_scan_qual(chunk_state->vectorized_quals_original,
 					  "Vectorized Filter",
@@ -891,14 +826,16 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 
 	if (es->verbose || es->format != EXPLAIN_FORMAT_TEXT)
 	{
-		if (chunk_state->batch_sorted_merge)
+		if (dcontext->batch_sorted_merge)
 		{
-			ExplainPropertyBool("Sorted merge append", chunk_state->batch_sorted_merge, es);
+			ExplainPropertyBool("Batch Sorted Merge", dcontext->batch_sorted_merge, es);
 		}
 
 		if (es->analyze && (es->verbose || es->format != EXPLAIN_FORMAT_TEXT))
 		{
-			ExplainPropertyBool("Bulk Decompression", chunk_state->enable_bulk_decompression, es);
+			ExplainPropertyBool("Bulk Decompression",
+								chunk_state->decompress_context.enable_bulk_decompression,
+								es);
 		}
 
 		if (chunk_state->perform_vectorized_aggregation)

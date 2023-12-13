@@ -44,6 +44,7 @@
 #include "remote/stmt_params.h"
 #include "remote/dist_commands.h"
 #include "remote/tuplefactory.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/chunk_data_node.h"
 
@@ -659,12 +660,12 @@ convert_type_oid_to_strings(Oid type_id, Datum *result_strings)
 	type_tuple = SearchSysCache1(TYPEOID, type_id);
 	Assert(HeapTupleIsValid(type_tuple));
 	type = (Form_pg_type) GETSTRUCT(type_tuple);
-	result_strings[ENCODED_TYPE_NAME] = PointerGetDatum(pstrdup(type->typname.data));
+	result_strings[ENCODED_TYPE_NAME] = PointerGetDatum(pstrdup(NameStr(type->typname)));
 
 	namespace_tuple = SearchSysCache1(NAMESPACEOID, type->typnamespace);
 	Assert(HeapTupleIsValid(namespace_tuple));
 	namespace = (Form_pg_namespace) GETSTRUCT(namespace_tuple);
-	result_strings[ENCODED_TYPE_NAMESPACE] = PointerGetDatum(pstrdup(namespace->nspname.data));
+	result_strings[ENCODED_TYPE_NAMESPACE] = PointerGetDatum(pstrdup(NameStr(namespace->nspname)));
 	ReleaseSysCache(namespace_tuple);
 	ReleaseSysCache(type_tuple);
 }
@@ -680,12 +681,12 @@ convert_op_oid_to_strings(Oid op_id, Datum *result_strings)
 	operator_tuple = SearchSysCache1(OPEROID, op_id);
 	Assert(HeapTupleIsValid(operator_tuple));
 	operator=(Form_pg_operator) GETSTRUCT(operator_tuple);
-	result_strings[ENCODED_OP_NAME] = PointerGetDatum(pstrdup(operator->oprname.data));
+	result_strings[ENCODED_OP_NAME] = PointerGetDatum(pstrdup(NameStr(operator->oprname)));
 
 	namespace_tuple = SearchSysCache1(NAMESPACEOID, operator->oprnamespace);
 	Assert(HeapTupleIsValid(namespace_tuple));
 	namespace = (Form_pg_namespace) GETSTRUCT(namespace_tuple);
-	result_strings[ENCODED_OP_NAMESPACE] = PointerGetDatum(pstrdup(namespace->nspname.data));
+	result_strings[ENCODED_OP_NAMESPACE] = PointerGetDatum(pstrdup(NameStr(namespace->nspname)));
 	ReleaseSysCache(namespace_tuple);
 
 	convert_type_oid_to_strings(operator->oprleft, LargSubarrayForOpArray(result_strings));
@@ -1017,7 +1018,7 @@ chunk_update_colstats(Chunk *chunk, int16 attnum, float nullfract, int32 width, 
 		Assert(HeapTupleIsValid(type_tuple));
 		type = (Form_pg_type) GETSTRUCT(type_tuple);
 		Assert(slot_values[k] != NULL);
-		nelems = ARR_DIMS(slot_values[k])[0];
+		nelems = ts_array_length(slot_values[k]);
 
 		decoded_data = palloc0(nelems * sizeof(Datum));
 
@@ -1810,8 +1811,8 @@ chunk_api_call_chunk_drop_replica(const Chunk *chunk, const char *node_name, Oid
 	 */
 
 	drop_cmd = psprintf("DROP TABLE %s.%s",
-						quote_identifier(chunk->fd.schema_name.data),
-						quote_identifier(chunk->fd.table_name.data));
+						quote_identifier(NameStr(chunk->fd.schema_name)),
+						quote_identifier(NameStr(chunk->fd.table_name)));
 	data_nodes = list_make1((char *) node_name);
 	ts_dist_cmd_run_on_data_nodes(drop_cmd, data_nodes, true);
 

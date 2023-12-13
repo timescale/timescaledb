@@ -410,11 +410,11 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				return NULL;
 			break;
 		case T_Agg:
-			if (plan->lefttree != NULL && IsA(plan->lefttree, CustomScan))
+			if (plan->lefttree != NULL)
 			{
 				Assert(plan->righttree == NULL);
-				Assert(castNode(CustomScan, plan->lefttree)->scan.scanrelid > 0);
-				return (Scan *) plan->lefttree;
+				/* Let ts_chunk_append_get_scan_plan handle the subplan */
+				return ts_chunk_append_get_scan_plan(plan->lefttree);
 			}
 			return NULL;
 			break;
