@@ -99,7 +99,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: fuzzing-install-dir
-        path: ~/$PG_INSTALL_DIR/
+        path: ~/${{ env.PG_INSTALL_DIR }}/
         if-no-files-found: error
         retention-days: 1
 
@@ -133,7 +133,7 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: fuzzing-install-dir
-        path: ~/$PG_INSTALL_DIR
+        path: ~/${{ env.PG_INSTALL_DIR }}/
 
     - name: initdb
       run: |
