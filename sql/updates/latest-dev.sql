@@ -78,3 +78,9 @@ DROP FOREIGN DATA WRAPPER IF EXISTS timescaledb_fdw;
 DROP FUNCTION IF EXISTS @extschema@.timescaledb_fdw_handler();
 DROP FUNCTION IF EXISTS @extschema@.timescaledb_fdw_validator(text[], oid);
 
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.create_chunk_replica_table;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_drop_replica;
+DROP PROCEDURE IF EXISTS _timescaledb_functions.wait_subscription_sync;
+DROP FUNCTION IF EXISTS _timescaledb_functions.health;
+DROP FUNCTION IF EXISTS _timescaledb_functions.drop_stale_chunks;

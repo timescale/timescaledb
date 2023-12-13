@@ -197,3 +197,53 @@ CREATE FUNCTION @extschema@.timescaledb_fdw_validator(text[], oid) RETURNS void 
 
 CREATE FOREIGN DATA WRAPPER timescaledb_fdw HANDLER @extschema@.timescaledb_fdw_handler VALIDATOR @extschema@.timescaledb_fdw_validator;
 
+CREATE FUNCTION _timescaledb_functions.create_chunk_replica_table(
+    chunk REGCLASS,
+    data_node_name NAME
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_chunk_create_replica_table' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION  _timescaledb_functions.chunk_drop_replica(
+    chunk                   REGCLASS,
+    node_name               NAME
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunk_drop_replica' LANGUAGE C VOLATILE;
+
+CREATE PROCEDURE _timescaledb_functions.wait_subscription_sync(
+    schema_name    NAME,
+    table_name     NAME,
+    retry_count    INT DEFAULT 18000,
+    retry_delay_ms NUMERIC DEFAULT 0.200
+)
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    in_sync BOOLEAN;
+BEGIN
+    FOR i in 1 .. retry_count
+    LOOP
+        SELECT pgs.srsubstate = 'r'
+        INTO in_sync
+        FROM pg_subscription_rel pgs
+        JOIN pg_class pgc ON relname = table_name
+        JOIN pg_namespace n ON (n.OID = pgc.relnamespace)
+        WHERE pgs.srrelid = pgc.oid AND schema_name = n.nspname;
+
+        if (in_sync IS NULL OR NOT in_sync) THEN
+          PERFORM pg_sleep(retry_delay_ms);
+        ELSE
+          RETURN;
+        END IF;
+    END LOOP;
+    RAISE 'subscription sync wait timedout';
+END
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.health() RETURNS
+TABLE (node_name NAME, healthy BOOL, in_recovery BOOL, error TEXT)
+AS '@MODULE_PATHNAME@', 'ts_health_check' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION _timescaledb_functions.drop_stale_chunks(
+    node_name NAME,
+    chunks integer[] = NULL
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunks_drop_stale' LANGUAGE C VOLATILE;
