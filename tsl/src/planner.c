@@ -11,7 +11,6 @@
 #include <foreign/fdwapi.h>
 #include <nodes/nodeFuncs.h>
 
-#include "nodes/async_append.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "chunk.h"
 #include "compat/compat.h"
@@ -29,23 +28,6 @@
 #include <math.h>
 
 #define OSM_EXTENSION_NAME "timescaledb_osm"
-
-static bool
-is_dist_hypertable_involved(PlannerInfo *root)
-{
-	int rti;
-
-	for (rti = 1; rti < root->simple_rel_array_size; rti++)
-	{
-		RangeTblEntry *rte = root->simple_rte_array[rti];
-		bool distributed = false;
-
-		if (ts_rte_is_hypertable(rte, &distributed) && distributed)
-			return true;
-	}
-
-	return false;
-}
 
 #if PG14_GE
 static int osm_present = -1;
@@ -79,11 +61,6 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			break;
 		case UPPERREL_DISTINCT:
 			tsl_skip_scan_paths_add(root, input_rel, output_rel);
-			break;
-		case UPPERREL_FINAL:
-			if (ts_guc_enable_async_append && root->parse->resultRelation == 0 &&
-				is_dist_hypertable_involved(root))
-				async_append_add_paths(root, output_rel);
 			break;
 		default:
 			break;

@@ -70,7 +70,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
     cagg_policy_run.sql
-    ddl_hook.sql
     decompress_memory.sql
     decompress_vector_qual.sql
     hypertable_generalization.sql
