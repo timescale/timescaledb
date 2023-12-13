@@ -333,12 +333,13 @@ target(const uint8 *Data, size_t Size, CompressionAlgorithm requested_algo, Oid 
 		return -1;
 	}
 
-	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
+	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
+	Datum compressed_data = def->compressed_data_recv(&si);
 
 	if (test_type == DTT_RowByRowFuzzing)
 	{
 		DecompressionIterator *iter =
-			definitions[data_algo].iterator_init_forward(compressed_data, pg_type);
+			def->iterator_init_forward(compressed_data, pg_type);
 		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 			;
 		return 0;
