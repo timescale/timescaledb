@@ -106,7 +106,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 
 	if (relation->rd_tableam == compressionam_routine())
 	{
-		compressionam_set_rel_pathlist(root, rel, ht);
+		// compressionam_set_rel_pathlist(root, rel, ht);
 
 		if (!ts_guc_enable_transparent_decompression && ts_guc_enable_columnarscan)
 			columnar_scan_set_rel_pathlist(root, rel, ht);
