@@ -19,14 +19,6 @@ hba_file='@TEST_PG_HBA_FILE@'
 # This section adds additional options required by TSL.
 timescaledb.license='timescale'
 max_connections=200
-max_prepared_transactions=100 #set same as max_connections
-ssl=on
-ssl_ca_file='@TEST_OUTPUT_DIR@/ts_root.crt'
-ssl_cert_file='@TEST_OUTPUT_DIR@/ts_data_node.crt'
-ssl_key_file='@TEST_OUTPUT_DIR@/ts_data_node.key'
-timescaledb.ssl_dir='@TEST_OUTPUT_DIR@/timescaledb/certs'
-wal_level='logical'
-timescaledb_experimental.enable_distributed_ddl=on
 log_error_verbosity='VERBOSE'
 log_min_messages='INFO'
 # This breaks isolation tests, not sure why the statements end in
