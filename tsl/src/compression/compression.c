@@ -28,7 +28,6 @@
 #include <parser/parse_coerce.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
-#include <utils/builtins.h>
 #include <utils/datum.h>
 #include <utils/fmgroids.h>
 #include <utils/lsyscache.h>

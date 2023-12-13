@@ -9,6 +9,7 @@
 
 #include <libpq/pqformat.h>
 #include <funcapi.h>
+#include <utils/builtins.h>
 
 #include "compression_test.h"
 
