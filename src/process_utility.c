@@ -4439,9 +4439,6 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 	 * standard process utility hook to maintain proper invocation
 	 * order of sql_drop and ddl_command_end triggers.
 	 */
-	if (ts_cm_functions->ddl_command_start)
-		ts_cm_functions->ddl_command_start(&args);
-
 	if (result == DDL_CONTINUE)
 		prev_ProcessUtility(&args);
 }
@@ -4453,9 +4450,6 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 
 	/* Inhibit collecting new commands while in the trigger */
 	EventTriggerInhibitCommandCollection();
-
-	if (ts_cm_functions->ddl_command_end)
-		ts_cm_functions->ddl_command_end(trigdata);
 
 	switch (nodeTag(trigdata->parsetree))
 	{
@@ -4478,9 +4472,6 @@ process_ddl_event_sql_drop(EventTriggerData *trigdata)
 {
 	ListCell *lc;
 	List *dropped_objects = ts_event_trigger_dropped_objects();
-
-	if (ts_cm_functions->sql_drop)
-		ts_cm_functions->sql_drop(dropped_objects);
 
 	foreach (lc, dropped_objects)
 		process_ddl_sql_drop(lfirst(lc));

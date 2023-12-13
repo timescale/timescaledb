@@ -8,7 +8,6 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/data_format.c
     ${CMAKE_CURRENT_SOURCE_DIR}/dist_txn.c
     ${CMAKE_CURRENT_SOURCE_DIR}/dist_commands.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/dist_ddl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/prepared_statement_fetcher.c
     ${CMAKE_CURRENT_SOURCE_DIR}/copy_fetcher.c
     ${CMAKE_CURRENT_SOURCE_DIR}/stmt_params.c
