@@ -84,3 +84,13 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_drop_replica;
 DROP PROCEDURE IF EXISTS _timescaledb_functions.wait_subscription_sync;
 DROP FUNCTION IF EXISTS _timescaledb_functions.health;
 DROP FUNCTION IF EXISTS _timescaledb_functions.drop_stale_chunks;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.rxid_in;
+DROP FUNCTION IF EXISTS _timescaledb_functions.rxid_out;
+
+DROP TYPE IF EXISTS @extschema@.rxid;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_hypertable_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_chunk_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_compressed_chunk_stats;
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_index_size;

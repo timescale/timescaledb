@@ -247,3 +247,64 @@ CREATE FUNCTION _timescaledb_functions.drop_stale_chunks(
     chunks integer[] = NULL
 ) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_chunks_drop_stale' LANGUAGE C VOLATILE;
+
+
+CREATE FUNCTION _timescaledb_functions.rxid_in(cstring) RETURNS @extschema@.rxid
+    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_in' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE FUNCTION _timescaledb_functions.rxid_out(@extschema@.rxid) RETURNS cstring
+    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_out' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE TYPE @extschema@.rxid (
+  internallength = 16,
+  input = _timescaledb_functions.rxid_in,
+  output = _timescaledb_functions.rxid_out
+);
+
+CREATE FUNCTION _timescaledb_functions.data_node_hypertable_info(
+    node_name              NAME,
+    schema_name_in name,
+    table_name_in name
+)
+RETURNS TABLE (
+    table_bytes     bigint,
+    index_bytes     bigint,
+    toast_bytes     bigint,
+    total_bytes     bigint)
+AS '@MODULE_PATHNAME@', 'ts_dist_remote_hypertable_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION _timescaledb_functions.data_node_chunk_info(
+    node_name              NAME,
+    schema_name_in name,
+    table_name_in name
+)
+RETURNS TABLE (
+    chunk_id        integer,
+    chunk_schema    name,
+    chunk_name      name,
+    table_bytes     bigint,
+    index_bytes     bigint,
+    toast_bytes     bigint,
+    total_bytes     bigint)
+AS '@MODULE_PATHNAME@', 'ts_dist_remote_chunk_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION _timescaledb_functions.data_node_compressed_chunk_stats(node_name name, schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint
+    )
+AS '@MODULE_PATHNAME@' , 'ts_dist_remote_compressed_chunk_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION _timescaledb_functions.data_node_index_size(node_name name, schema_name_in name, index_name_in name)
+RETURNS TABLE ( hypertable_id INTEGER, total_bytes BIGINT)
+AS '@MODULE_PATHNAME@' , 'ts_dist_remote_hypertable_index_info' LANGUAGE C VOLATILE STRICT;
+

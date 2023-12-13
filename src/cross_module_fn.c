@@ -112,19 +112,6 @@ CROSSMODULE_WRAPPER(chunk_get_colstats);
 CROSSMODULE_WRAPPER(chunk_create_empty_table);
 CROSSMODULE_WRAPPER(chunk_create_replica_table);
 
-CROSSMODULE_WRAPPER(timescaledb_fdw_handler);
-CROSSMODULE_WRAPPER(timescaledb_fdw_validator);
-CROSSMODULE_WRAPPER(remote_txn_id_in);
-CROSSMODULE_WRAPPER(remote_txn_id_out);
-CROSSMODULE_WRAPPER(remote_txn_heal_data_node);
-CROSSMODULE_WRAPPER(remote_connection_cache_show);
-CROSSMODULE_WRAPPER(dist_remote_hypertable_info);
-CROSSMODULE_WRAPPER(dist_remote_chunk_info);
-CROSSMODULE_WRAPPER(dist_remote_compressed_chunk_info);
-CROSSMODULE_WRAPPER(dist_remote_hypertable_index_info);
-CROSSMODULE_WRAPPER(distributed_exec);
-CROSSMODULE_WRAPPER(create_distributed_restore_point);
-CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 
