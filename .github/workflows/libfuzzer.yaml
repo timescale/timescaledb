@@ -194,14 +194,14 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: PostgreSQL log for ${{ matrix.case }}
+        name: PostgreSQL log for ${{ toJSON(matrix.case) }}
         path: postgres.log
 
     - name: Save fuzzer-generated crash cases
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: Crash cases for ${{ matrix.case }}
+        name: Crash cases for ${{ toJSON(matrix.case) }}
         path: db/crash-*
 
     # We use separate restore/save actions, because the default action won't
@@ -240,5 +240,5 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v3
       with:
-        name: Coredumps for ${{ matrix.case }}
+        name: Coredumps for ${{ toJSON(matrix.case) }}
         path: coredumps
