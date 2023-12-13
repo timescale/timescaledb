@@ -3,6 +3,13 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include <postgres.h>
+
+#include <libpq/pqformat.h>
+
+#include "compression.h"
+
+#include "compression_test.h"
 
 /*
  * Try to decompress the given compressed data. Used for fuzzing and for checking
@@ -35,13 +42,13 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 		return -1;
 	}
 
-	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
+	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
+	Datum compressed_data = def->compressed_data_recv(&si);
 
 	/*
 	 * Test row-by-row decompression.
 	 */
-	DecompressionIterator *iter =
-		definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
+	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, TEXTOID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
@@ -67,7 +74,7 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	/*
 	 * 1) Compress.
 	 */
-	Compressor *compressor = definitions[data_algo].compressor_for_type(TEXTOID);
+	Compressor *compressor = def->compressor_for_type(TEXTOID);
 
 	for (int i = 0; i < n; i++)
 	{
@@ -91,7 +98,7 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	/*
 	 * 2) Decompress and check that it's the same.
 	 */
-	iter = definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
+	iter = def->iterator_init_forward(compressed_data, TEXTOID);
 	int nn = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
@@ -133,13 +140,13 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	return n;
 }
 
-static int
+int
 decompress_ARRAY_TEXT(const uint8 *Data, size_t Size, DecompressionTestType test_type)
 {
 	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_ARRAY);
 }
 
-static int
+int
 decompress_DICTIONARY_TEXT(const uint8 *Data, size_t Size, DecompressionTestType test_type)
 {
 	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_DICTIONARY);

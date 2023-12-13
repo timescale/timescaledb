@@ -93,7 +93,8 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 		return -1;
 	}
 
-	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
+	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
+	Datum compressed_data = def->compressed_data_recv(&si);
 
 	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo);
 
@@ -110,8 +111,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	/*
 	 * Test row-by-row decompression.
 	 */
-	DecompressionIterator *iter =
-		definitions[data_algo].iterator_init_forward(compressed_data, PG_TYPE_OID);
+	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, PG_TYPE_OID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
@@ -137,7 +137,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	 *
 	 * 1) Compress.
 	 */
-	Compressor *compressor = definitions[data_algo].compressor_for_type(PG_TYPE_OID);
+	Compressor *compressor = def->compressor_for_type(PG_TYPE_OID);
 
 	for (int i = 0; i < n; i++)
 	{
@@ -161,7 +161,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	/*
 	 * 2) Decompress and check that it's the same.
 	 */
-	iter = definitions[data_algo].iterator_init_forward(compressed_data, PG_TYPE_OID);
+	iter = def->iterator_init_forward(compressed_data, PG_TYPE_OID);
 	int nn = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
