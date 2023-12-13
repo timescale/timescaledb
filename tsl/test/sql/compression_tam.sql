@@ -201,7 +201,17 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY device ASC LIMIT 5;
 SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
 INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
 WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
+
+SELECT device, count(*) INTO num_rows_before FROM :chunk GROUP BY device;
 ALTER TABLE :chunk SET ACCESS METHOD heap;
+SET timescaledb.enable_transparent_decompression TO true;
+SELECT device, count(*) INTO num_rows_after FROM :chunk GROUP BY device;
+SELECT device, num_rows_after.count AS after,
+	   num_rows_before.count AS before,
+	   (num_rows_after.count - num_rows_before.count) AS diff
+FROM num_rows_after JOIN num_rows_before USING (device)
+WHERE num_rows_after.count != num_rows_before.count;
+
 SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
 INNER JOIN _timescaledb_catalog.chunk c ON (c.id = ccs.chunk_id)
 WHERE format('%I.%I', c.schema_name, c.table_name)::regclass = :'chunk'::regclass;
