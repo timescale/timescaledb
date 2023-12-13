@@ -18,7 +18,6 @@
 #include <common/base64.h>
 #include <executor/nodeIndexscan.h>
 #include <executor/tuptable.h>
-#include <funcapi.h>
 #include <libpq/pqformat.h>
 #include <miscadmin.h>
 #include <nodes/nodeFuncs.h>
@@ -42,7 +41,6 @@
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
 #include <replication/message.h>
-#include <math.h>
 
 #include "compat/compat.h"
 
@@ -52,7 +50,6 @@
 #include "compression_test.h"
 #include "create.h"
 #include "custom_type_cache.h"
-#include "arrow_c_data_interface.h"
 #include "debug_assert.h"
 #include "debug_point.h"
 #include "deltadelta.h"

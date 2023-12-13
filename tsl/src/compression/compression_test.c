@@ -3,6 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include <math.h>
+
 #include <postgres.h>
 
 #include <libpq/pqformat.h>
