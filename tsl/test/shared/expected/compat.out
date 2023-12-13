@@ -79,26 +79,6 @@ ERROR:  hypertable cannot be NULL
 SELECT _timescaledb_internal.create_compressed_chunk(0,0,0,0,0,0,0,0,0,0);
 WARNING:  function _timescaledb_internal.create_compressed_chunk(regclass,regclass,bigint,bigint,bigint,bigint,bigint,bigint,bigint,bigint) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
-SELECT _timescaledb_internal.data_node_chunk_info(NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.data_node_chunk_info(name,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- data_node_chunk_info 
-(0 rows)
-
-SELECT _timescaledb_internal.data_node_compressed_chunk_stats(NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.data_node_compressed_chunk_stats(name,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- data_node_compressed_chunk_stats 
-(0 rows)
-
-SELECT _timescaledb_internal.data_node_hypertable_info(NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.data_node_hypertable_info(name,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- data_node_hypertable_info 
-(0 rows)
-
-SELECT _timescaledb_internal.data_node_index_size(NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.data_node_index_size(name,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- data_node_index_size 
-(0 rows)
-
 SELECT _timescaledb_internal.drop_chunk(0);
 WARNING:  function _timescaledb_internal.drop_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  chunk not found

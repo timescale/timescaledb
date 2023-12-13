@@ -124,10 +124,6 @@ CrossModuleFunctions tsl_cm_functions = {
 
 	.reorder_chunk = tsl_reorder_chunk,
 	.move_chunk = tsl_move_chunk,
-	.move_chunk_proc = tsl_move_chunk_proc,
-	.copy_chunk_proc = tsl_copy_chunk_proc,
-	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
-	.subscription_exec = tsl_subscription_exec,
 
 	.policies_add = policies_add,
 	.policies_remove = policies_remove,

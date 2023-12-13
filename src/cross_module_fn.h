@@ -88,10 +88,6 @@ typedef struct CrossModuleFunctions
 
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
-	PGFunction move_chunk_proc;
-	PGFunction copy_chunk_proc;
-	PGFunction subscription_exec;
-	PGFunction copy_chunk_cleanup_proc;
 
 	/* Vectorized queries */
 	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);

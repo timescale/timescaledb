@@ -47,10 +47,6 @@ CROSSMODULE_WRAPPER(job_alter_set_hypertable_id);
 
 CROSSMODULE_WRAPPER(reorder_chunk);
 CROSSMODULE_WRAPPER(move_chunk);
-CROSSMODULE_WRAPPER(move_chunk_proc);
-CROSSMODULE_WRAPPER(copy_chunk_proc);
-CROSSMODULE_WRAPPER(copy_chunk_cleanup_proc);
-CROSSMODULE_WRAPPER(subscription_exec);
 
 CROSSMODULE_WRAPPER(policies_add);
 CROSSMODULE_WRAPPER(policies_remove);
@@ -421,12 +417,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.job_run = error_no_default_fn_pg_community,
 	.job_execute = job_execute_default_fn,
 
-	.move_chunk = error_no_default_fn_pg_community,
-	.move_chunk_proc = error_no_default_fn_pg_community,
-	.copy_chunk_proc = error_no_default_fn_pg_community,
-	.copy_chunk_cleanup_proc = error_no_default_fn_pg_community,
-	.subscription_exec = error_no_default_fn_pg_community,
 	.reorder_chunk = error_no_default_fn_pg_community,
+	.move_chunk = error_no_default_fn_pg_community,
 
 	.policies_add = error_no_default_fn_pg_community,
 	.policies_remove = error_no_default_fn_pg_community,
