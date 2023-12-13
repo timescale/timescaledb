@@ -144,7 +144,7 @@ jobs:
         name: fuzzing-install-dir
 
     - name: Unpack the installation directory
-      run: 7z x install.7z
+      run: 7z x install.7z $HOME/$PG_INSTALL_DIR
 
     - name: initdb
       run: |
