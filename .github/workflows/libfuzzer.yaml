@@ -25,7 +25,7 @@ jobs:
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
         sudo apt-get update
-        sudo apt-get install clang lld llvm flex bison lcov systemd-coredump gdb libipc-run-perl \
+        sudo apt-get install 7zip clang lld llvm flex bison lcov systemd-coredump gdb libipc-run-perl \
           libtest-most-perl tree
 
     - name: Checkout TimescaleDB
@@ -95,11 +95,17 @@ jobs:
 
         make -C build -j$(nproc) install
 
+    # Incredibly, the upload-artifact action can't preserve executable permissions:
+    # https://github.com/actions/upload-artifact/issues/38
+    # It's also extremely slow.
+    - name: Compress the installation directory
+      run: 7z a install.7z $HOME/$PG_INSTALL_DIR
+
     - name: Save the installation directory
       uses: actions/upload-artifact@v3
       with:
         name: fuzzing-install-dir
-        path: ~/${{ env.PG_INSTALL_DIR }}/
+        path: install.7z
         if-no-files-found: error
         retention-days: 1
 
@@ -126,6 +132,9 @@ jobs:
       PG_INSTALL_DIR: postgresql
 
     steps:
+    - name: Install Linux dependencies
+      run: sudo apt install 7zip
+
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
 
@@ -133,7 +142,9 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: fuzzing-install-dir
-        path: ~/${{ env.PG_INSTALL_DIR }}/
+
+    - name: Unpack the installation directory
+      run: 7z x install.7z
 
     - name: initdb
       run: |
