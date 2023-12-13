@@ -248,7 +248,6 @@ CREATE FUNCTION _timescaledb_functions.drop_stale_chunks(
 ) RETURNS VOID
 AS '@MODULE_PATHNAME@', 'ts_chunks_drop_stale' LANGUAGE C VOLATILE;
 
-
 CREATE FUNCTION _timescaledb_functions.rxid_in(cstring) RETURNS @extschema@.rxid
     AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_in' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 
@@ -260,6 +259,8 @@ CREATE TYPE @extschema@.rxid (
   input = _timescaledb_functions.rxid_in,
   output = _timescaledb_functions.rxid_out
 );
+
+ALTER TABLE _timescaledb_catalog.remote_txn ADD CONSTRAINT remote_txn_remote_transaction_id_check CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL);
 
 CREATE FUNCTION _timescaledb_functions.data_node_hypertable_info(
     node_name              NAME,
@@ -307,4 +308,32 @@ AS '@MODULE_PATHNAME@' , 'ts_dist_remote_compressed_chunk_info' LANGUAGE C VOLAT
 CREATE FUNCTION _timescaledb_functions.data_node_index_size(node_name name, schema_name_in name, index_name_in name)
 RETURNS TABLE ( hypertable_id INTEGER, total_bytes BIGINT)
 AS '@MODULE_PATHNAME@' , 'ts_dist_remote_hypertable_index_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION timescaledb_experimental.block_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_block_new_chunks' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION timescaledb_experimental.allow_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;
+
+CREATE PROCEDURE timescaledb_experimental.move_chunk(
+    chunk REGCLASS,
+    source_node NAME = NULL,
+    destination_node NAME = NULL,
+    operation_id NAME = NULL)
+AS '@MODULE_PATHNAME@', 'ts_move_chunk_proc' LANGUAGE C;
+
+CREATE PROCEDURE timescaledb_experimental.copy_chunk(
+    chunk REGCLASS,
+    source_node NAME = NULL,
+    destination_node NAME = NULL,
+    operation_id NAME = NULL)
+AS '@MODULE_PATHNAME@', 'ts_copy_chunk_proc' LANGUAGE C;
+
+CREATE FUNCTION timescaledb_experimental.subscription_exec(
+    subscription_command TEXT
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_subscription_exec' LANGUAGE C VOLATILE;
+
+CREATE PROCEDURE timescaledb_experimental.cleanup_copy_chunk_operation(
+    operation_id NAME)
+AS '@MODULE_PATHNAME@', 'ts_copy_chunk_cleanup_proc' LANGUAGE C;
 

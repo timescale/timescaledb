@@ -90,9 +90,10 @@ ALTER TABLE _timescaledb_catalog.continuous_agg
 DROP PROCEDURE IF EXISTS timescaledb_experimental.move_chunk(REGCLASS, NAME, NAME);
 DROP PROCEDURE IF EXISTS timescaledb_experimental.copy_chunk(REGCLASS, NAME, NAME);
 
+-- we only create stub here to prevent dependency on a specific so
 CREATE OR REPLACE FUNCTION timescaledb_experimental.subscription_exec(
     subscription_command TEXT
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_subscription_exec' LANGUAGE C VOLATILE;
+) RETURNS VOID AS '' LANGUAGE SQL VOLATILE;
 
 -- Recreate chunk_copy_operation table with newly added `compress_chunk_name` column
 --
