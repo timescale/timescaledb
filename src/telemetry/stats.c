@@ -43,9 +43,8 @@ classify_hypertable(const Hypertable *ht)
 	{
 		/*
 		 * This is an internal compression table, but could be for a
-		 * regular hypertable, a distributed member hypertable, or for
-		 * an internal materialized hypertable (cagg). The latter case
-		 * is currently not handled
+		 * regular hypertable, or for an internal materialized
+		 * hypertable (cagg). The latter case is currently not handled
 		 */
 		return RELTYPE_COMPRESSION_HYPERTABLE;
 	}
@@ -53,26 +52,9 @@ classify_hypertable(const Hypertable *ht)
 	{
 		/*
 		 * Not dealing with an internal compression hypertable, but
-		 * could be a materialized hypertable (cagg) unless it is
-		 * distributed.
+		 * could be a materialized hypertable (cagg).
 		 */
-		switch (ht->fd.replication_factor)
-		{
-			case HYPERTABLE_DISTRIBUTED_MEMBER:
-				return RELTYPE_DISTRIBUTED_HYPERTABLE_MEMBER;
-			case HYPERTABLE_REGULAR:
-			{
-				const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
-
-				if (cagg)
-					return RELTYPE_MATERIALIZED_HYPERTABLE;
-
-				return RELTYPE_HYPERTABLE;
-			}
-			default:
-				Assert(ht->fd.replication_factor >= 1);
-				return RELTYPE_DISTRIBUTED_HYPERTABLE;
-		}
+		return RELTYPE_HYPERTABLE;
 	}
 }
 
@@ -92,10 +74,6 @@ classify_chunk(Cache *htcache, const Hypertable **ht, const Chunk *chunk)
 	{
 		case RELTYPE_HYPERTABLE:
 			return RELTYPE_CHUNK;
-		case RELTYPE_DISTRIBUTED_HYPERTABLE:
-			return RELTYPE_DISTRIBUTED_CHUNK;
-		case RELTYPE_DISTRIBUTED_HYPERTABLE_MEMBER:
-			return RELTYPE_DISTRIBUTED_CHUNK_MEMBER;
 		case RELTYPE_MATERIALIZED_HYPERTABLE:
 			return RELTYPE_MATERIALIZED_CHUNK;
 		case RELTYPE_COMPRESSION_HYPERTABLE:
@@ -241,22 +219,9 @@ process_hypertable(HyperStats *hyp, Form_pg_class class, const Hypertable *ht)
 }
 
 static void
-process_distributed_hypertable(HyperStats *hyp, Form_pg_class class, const Hypertable *ht)
-{
-	hyp->storage.base.relcount++;
-
-	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-		hyp->compressed_hypertable_count++;
-
-	if (ht->fd.replication_factor > 1)
-		hyp->replicated_hypertable_count++;
-}
-
-static void
 process_continuous_agg(CaggStats *cs, Form_pg_class class, const ContinuousAgg *cagg)
 {
 	const Hypertable *mat_ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-	const Hypertable *raw_ht = ts_hypertable_get_by_id(cagg->data.raw_hypertable_id);
 
 	Assert(cagg);
 
@@ -264,9 +229,6 @@ process_continuous_agg(CaggStats *cs, Form_pg_class class, const ContinuousAgg *
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(mat_ht))
 		cs->hyp.compressed_hypertable_count++;
-
-	if (hypertable_is_distributed(raw_ht))
-		cs->on_distributed_hypertable_count++;
 
 	if (!cagg->data.materialized_only)
 		cs->uses_real_time_aggregation_count++;
@@ -433,12 +395,6 @@ process_chunk(StatsContext *statsctx, StatsRelType chunk_reltype, Form_pg_class 
 		case RELTYPE_CHUNK:
 			add_chunk_stats(&stats->hypertables, class, chunk, compr_stats);
 			break;
-		case RELTYPE_DISTRIBUTED_CHUNK:
-			add_chunk_stats(&stats->distributed_hypertables, class, chunk, compr_stats);
-			break;
-		case RELTYPE_DISTRIBUTED_CHUNK_MEMBER:
-			add_chunk_stats(&stats->distributed_hypertable_members, class, chunk, compr_stats);
-			break;
 		case RELTYPE_MATERIALIZED_CHUNK:
 			add_chunk_stats(&stats->continuous_aggs.hyp, class, chunk, compr_stats);
 			break;
@@ -555,18 +511,6 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 				Assert(NULL != ht);
 				process_hypertable(&stats->hypertables, class, ht);
 				break;
-			case RELTYPE_DISTRIBUTED_HYPERTABLE:
-				Assert(NULL != ht);
-				process_distributed_hypertable(&stats->distributed_hypertables, class, ht);
-				break;
-			case RELTYPE_DISTRIBUTED_HYPERTABLE_MEMBER:
-				/*
-				 * Since this is just a hypertable on a data node, process as
-				 * a regular hypertable.
-				 */
-				Assert(NULL != ht);
-				process_hypertable(&stats->distributed_hypertable_members, class, ht);
-				break;
 			case RELTYPE_TABLE:
 				process_relation(&stats->tables.base, class);
 				break;
@@ -574,8 +518,6 @@ ts_telemetry_stats_gather(TelemetryStats *stats)
 				process_relation(&stats->partitioned_tables.storage.base, class);
 				break;
 			case RELTYPE_CHUNK:
-			case RELTYPE_DISTRIBUTED_CHUNK:
-			case RELTYPE_DISTRIBUTED_CHUNK_MEMBER:
 			case RELTYPE_COMPRESSION_CHUNK:
 			case RELTYPE_MATERIALIZED_CHUNK:
 				Assert(NULL != chunk);

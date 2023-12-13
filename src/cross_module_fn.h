@@ -38,8 +38,6 @@ typedef struct HypertableModifyState HypertableModifyState;
 
 typedef struct CrossModuleFunctions
 {
-	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
-
 	PGFunction policy_compression_add;
 	PGFunction policy_compression_remove;
 	PGFunction policy_recompression_proc;
