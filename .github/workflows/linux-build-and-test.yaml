@@ -69,10 +69,7 @@ jobs:
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
       run: |
-        # This is needed because GitHub image macos-10.15 version
-        # 20210927.1 did not install OpenSSL so we install openssl
-        # explicitly.
-        brew install openssl gawk
+        brew install gawk
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 
