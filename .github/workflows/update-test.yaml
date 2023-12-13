@@ -92,3 +92,23 @@ jobs:
       with:
         name: Extension downgrade diff ${{ matrix.pg }}
         path: downgrade_test.*.diff.*
+
+  repair_test:
+    name: Repair test PG${{ matrix.pg }}
+    runs-on: 'ubuntu-latest'
+    needs: config
+    strategy:
+      matrix:
+        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
+      fail-fast: false
+    env:
+      PG_VERSION: ${{ matrix.pg }}
+      POSTGRES_HOST_AUTH_METHOD: trust
+    steps:
+    - name: Checkout TimescaleDB
+      uses: actions/checkout@v3
+
+    - name: Repair tests ${{ matrix.pg }}
+      run: |
+        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
+        ./scripts/test_repairs_pg${PG_MAJOR}.sh
