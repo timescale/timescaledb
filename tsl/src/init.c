@@ -210,9 +210,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.remote_txn_heal_data_node = remote_txn_heal_data_node,
 	.remote_connection_cache_show = remote_connection_cache_show,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
-	.ddl_command_start = tsl_ddl_command_start,
-	.ddl_command_end = tsl_ddl_command_end,
-	.sql_drop = tsl_sql_drop,
 	.set_distributed_id = dist_util_set_id,
 	.set_distributed_peer_id = dist_util_set_peer_id,
 	.is_access_node_session = dist_util_is_access_node_session_on_data_node,
@@ -240,7 +237,6 @@ CrossModuleFunctions tsl_cm_functions = {
 static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
-	_tsl_process_utility_fini();
 	_remote_dist_txn_fini();
 	_remote_connection_cache_fini();
 	_continuous_aggs_cache_inval_fini();
@@ -261,7 +257,6 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_skip_scan_init();
 	_remote_connection_cache_init();
 	_remote_dist_txn_init();
-	_tsl_process_utility_init();
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);

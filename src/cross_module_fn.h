@@ -92,9 +92,6 @@ typedef struct CrossModuleFunctions
 	PGFunction copy_chunk_proc;
 	PGFunction subscription_exec;
 	PGFunction copy_chunk_cleanup_proc;
-	void (*ddl_command_start)(ProcessUtilityArgs *args);
-	void (*ddl_command_end)(EventTriggerData *command);
-	void (*sql_drop)(List *dropped_objects);
 
 	/* Vectorized queries */
 	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
