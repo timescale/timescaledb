@@ -50,7 +50,6 @@
 #include "remote/connection.h"
 #include "remote/dist_commands.h"
 #include "remote/dist_txn.h"
-#include "remote/healthcheck.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "reorder.h"
@@ -233,7 +232,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_create_replica_table = chunk_create_replica_table,
 	.hypertable_distributed_set_replication_factor = hypertable_set_replication_factor,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
-	.health_check = ts_dist_health_check,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
