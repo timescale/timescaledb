@@ -95,10 +95,6 @@ typedef enum DistCopyTransferFormat
 
 extern TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
 
-/* Hook for plugins to allow additional SSL options */
-typedef void (*set_ssl_options_hook_type)(const char *user_name);
-extern TSDLLEXPORT set_ssl_options_hook_type ts_set_ssl_options_hook;
-
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
 extern char *ts_current_timestamp_mock;

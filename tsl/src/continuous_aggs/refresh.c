@@ -694,36 +694,16 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * windows.
 	 */
 	LockRelationOid(hyper_relid, ExclusiveLock);
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
 	const CaggsInfo all_caggs_info =
 		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
 	max_materializations = materialization_per_refresh_window();
-	if (is_raw_ht_distributed)
-	{
-		invalidations = NULL;
-		/* Force to always merge the refresh ranges in the distributed raw HyperTable case.
-		 * Session variable MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME was checked for
-		 * validity in materialization_per_refresh_window().
-		 */
-		max_materializations = 0;
-		remote_invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
-											 cagg->data.raw_hypertable_id,
-											 refresh_window,
-											 &all_caggs_info,
-											 &do_merged_refresh,
-											 &merged_refresh_window);
-	}
-	else
-	{
-		invalidations = invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
-													  cagg->data.raw_hypertable_id,
-													  refresh_window,
-													  &all_caggs_info,
-													  max_materializations,
-													  &do_merged_refresh,
-													  &merged_refresh_window);
-	}
+	invalidations = invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
+												  cagg->data.raw_hypertable_id,
+												  refresh_window,
+												  &all_caggs_info,
+												  max_materializations,
+												  &do_merged_refresh,
+												  &merged_refresh_window);
 
 	if (invalidations != NULL || do_merged_refresh)
 	{
@@ -745,7 +725,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   invalidations,
 										   bucket_width,
 										   chunk_id,
-										   is_raw_ht_distributed,
+										   false,
 										   do_merged_refresh,
 										   merged_refresh_window);
 		if (invalidations)
@@ -765,7 +745,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
-	bool is_raw_ht_distributed;
 	int rc;
 
 	/* Connect to SPI manager due to the underlying SPI calls */
@@ -793,9 +772,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * still take a long time and it is probably best for consistency to always
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
-
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	is_raw_ht_distributed = hypertable_is_distributed(ht);
 
 	/* No bucketing when open ended */
 	if (!(start_isnull && end_isnull))
@@ -872,20 +848,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Process invalidations in the hypertable invalidation log */
 	const CaggsInfo all_caggs_info =
 		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	if (is_raw_ht_distributed)
-	{
-		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-												   cagg->data.raw_hypertable_id,
-												   refresh_window.type,
-												   &all_caggs_info);
-	}
-	else
-	{
-		invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-											cagg->data.raw_hypertable_id,
-											refresh_window.type,
-											&all_caggs_info);
-	}
+	invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
+										cagg->data.raw_hypertable_id,
+										refresh_window.type,
+										&all_caggs_info);
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();

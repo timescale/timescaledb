@@ -47,7 +47,6 @@ typedef struct ChunkInsertState
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
 	EState *estate;
-	List *chunk_data_nodes; /* List of data nodes for the chunk (ChunkDataNode objects) */
 	int32 chunk_id;
 	Oid user_id;
 

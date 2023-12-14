@@ -760,7 +760,7 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	Query *parse = root->parse;
 
 	/* We are only interested in hypertables */
-	if (ht == NULL || hypertable_is_distributed(ht))
+	if (!ht)
 		return;
 
 	/* Perform partial aggregation planning only if there is an aggregation is requested */

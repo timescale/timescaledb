@@ -629,7 +629,7 @@ static void
 add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht, Index ht_relid,
 					   Path *decompress_chunk_path, Path *compressed_path)
 {
-	if (root->query_pathkeys == NIL || hypertable_is_distributed(ht))
+	if (root->query_pathkeys == NIL)
 		return;
 
 	/* We are only interested in regular (i.e., non index) paths */

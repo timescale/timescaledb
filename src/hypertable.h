@@ -57,7 +57,6 @@ typedef struct Hypertable
 	 * Allows restricting the data nodes to use for the hypertable. Default is to
 	 * use all available data nodes.
 	 */
-	List *data_nodes;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */
@@ -135,8 +134,6 @@ extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(const Hypertable *
 extern TSDLLEXPORT void ts_hypertable_drop_trigger(Oid relid, const char *trigger_name);
 extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior);
 
-extern TSDLLEXPORT void ts_hypertable_check_partitioning(const Hypertable *ht,
-														 int32 id_of_updated_dimension);
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
@@ -161,16 +158,6 @@ extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
 extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(const Hypertable *ht,
 																	  List *constraint_list);
-extern TSDLLEXPORT List *ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht,
-															   const Hypercube *cube);
-extern TSDLLEXPORT List *ts_hypertable_get_data_node_name_list(const Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_data_node_serverids_list(const Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_available_data_nodes(const Hypertable *ht,
-																bool error_if_missing);
-extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_names(const Hypertable *ht,
-																	 bool error_if_missing);
-extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(const Hypertable *ht);
-extern TSDLLEXPORT HypertableType ts_hypertable_get_type(const Hypertable *ht);
 extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
@@ -179,9 +166,6 @@ extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, con
 extern TSDLLEXPORT void ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema,
 												   const char *name);
 extern TSDLLEXPORT bool ts_hypertable_update_dimension_partitions(const Hypertable *ht);
-extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_name,
-														int32 replication_factor,
-														int num_data_nodes);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

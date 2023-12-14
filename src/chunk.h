@@ -76,11 +76,6 @@ typedef struct Chunk
 	Hypercube *cube;
 	ChunkConstraints *constraints;
 
-	/*
-	 * The data nodes that hold a copy of the chunk. NIL for non-distributed
-	 * hypertables.
-	 */
-	List *data_nodes;
 } Chunk;
 
 /* This structure is used during the join of the chunk constraints to find
@@ -216,8 +211,8 @@ extern TSDLLEXPORT void ts_chunk_drop(const Chunk *chunk, DropBehavior behavior,
 extern TSDLLEXPORT void ts_chunk_drop_preserve_catalog_row(const Chunk *chunk,
 														   DropBehavior behavior, int32 log_level);
 extern TSDLLEXPORT List *ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than,
-												 int32 log_level, List **affected_data_nodes,
-												 Oid time_type, Oid arg_type, bool older_newer);
+												 int32 log_level, Oid time_type, Oid arg_type,
+												 bool older_newer);
 extern TSDLLEXPORT Chunk *
 ts_chunk_find_or_create_without_cuts(const Hypertable *ht, Hypercube *hc, const char *schema_name,
 									 const char *table_name, Oid chunk_table_relid, bool *created);
@@ -235,10 +230,7 @@ extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
 extern TSDLLEXPORT List *ts_chunk_get_all_chunk_ids(LOCKMODE lockmode);
-extern TSDLLEXPORT List *ts_chunk_get_data_node_name_list(const Chunk *chunk);
 
-extern bool TSDLLEXPORT ts_chunk_has_data_node(const Chunk *chunk, const char *node_name);
-extern List *ts_chunk_data_nodes_copy(const Chunk *chunk);
 extern TSDLLEXPORT Chunk *ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube,
 													 const char *schema_name,
 													 const char *table_name);

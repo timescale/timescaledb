@@ -18,7 +18,6 @@
 #include "chunk_scan.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
-#include "ts_catalog/chunk_data_node.h"
 #include "utils.h"
 
 /*
@@ -207,56 +206,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	ts_scan_iterator_close(&slice_iterator);
 
 	Assert(CurrentMemoryContext == work_mcxt);
-
-	/*
-	 * Fill in data nodes for remote chunks.
-	 *
-	 * Avoid the loop if there are no remote chunks. (Typically, either all
-	 * chunks are remote chunks or none are.)
-	 */
-	if (remote_chunk_count > 0)
-	{
-		ScanIterator data_node_it = ts_chunk_data_nodes_scan_iterator_create(orig_mcxt);
-
-		for (int i = 0; i < locked_chunk_count; i++)
-		{
-			Chunk *chunk = locked_chunks[i];
-
-			if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-			{
-				/* Must start or restart the scan on the longer-lived context */
-				ts_chunk_data_nodes_scan_iterator_set_chunk_id(&data_node_it, chunk->fd.id);
-				ts_scan_iterator_start_or_restart_scan(&data_node_it);
-
-				while (ts_scan_iterator_next(&data_node_it) != NULL)
-				{
-					bool should_free;
-					TupleInfo *ti = ts_scan_iterator_tuple_info(&data_node_it);
-					ChunkDataNode *chunk_data_node;
-					Form_chunk_data_node form;
-					MemoryContext old_mcxt;
-					HeapTuple tuple;
-
-					tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-					form = (Form_chunk_data_node) GETSTRUCT(tuple);
-					old_mcxt = MemoryContextSwitchTo(ti->mctx);
-					chunk_data_node = palloc(sizeof(ChunkDataNode));
-					memcpy(&chunk_data_node->fd, form, sizeof(FormData_chunk_data_node));
-					chunk_data_node->foreign_server_oid =
-						get_foreign_server_oid(NameStr(form->node_name),
-											   /* missing_ok = */ false);
-					chunk->data_nodes = lappend(chunk->data_nodes, chunk_data_node);
-					MemoryContextSwitchTo(old_mcxt);
-
-					if (should_free)
-						heap_freetuple(tuple);
-				}
-			}
-		}
-
-		ts_scan_iterator_close(&data_node_it);
-	}
-
 	MemoryContextSwitchTo(orig_mcxt);
 	MemoryContextDelete(work_mcxt);
 

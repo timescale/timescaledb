@@ -78,19 +78,6 @@ gapfill_function_walker(Node *node, gapfill_walker_context *context)
 }
 
 /*
- * Check if the given expression contains call to time_bucket_gapfill
- */
-bool
-gapfill_in_expression(Expr *node)
-{
-	gapfill_walker_context context = { .call.node = NULL, .count = 0 };
-
-	gapfill_function_walker((Node *) node, &context);
-
-	return context.count > 0;
-}
-
-/*
  * Find locf/interpolate function call
  */
 static bool
