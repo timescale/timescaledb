@@ -173,7 +173,6 @@ jobs:
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
-        restore-keys: "${{ steps.config.outputs.cache_prefix }}-bulk"
 
     # We save the row-by-row corpus separately from the bulk corpus, so that
     # they don't overwrite each other. Now we are going to combine them.
@@ -183,7 +182,6 @@ jobs:
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
-        restore-keys: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
 
     - name: Initialize the fuzzing corpus
       run: |
@@ -267,11 +265,17 @@ jobs:
     # The caches for rowbyrow and bulk fuzzing are saved separately, otherwise
     # the slower job would always overwrite the cache from the faster one. We
     # want to combine corpuses from bulk and rowbyrow fuzzing for better
-    # coverage.
+    # coverage. Note that the cache action cannot be restored on a path
+    # different from the one it was saved from. To make our lives more
+    # interesting, it is not directly documented anywhere, but we can deduce it
+    # from path influencing the version.
+    - name: Copy the fuzzer corpus to please the actions/cache
+      run: |
+        find "db/corpus" -type f -exec cp -t db/corpus-{{ matrix.case.bulk && 'bulk' || 'rowbyrow' }} {} +
     - name: Save fuzzer corpus
       uses: actions/cache/save@v3
       with:
-        path: db/corpus
+        path: db/corpus-{{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
         key: "${{ format('{0}-{1}-{2}-{3}',
             steps.config.outputs.cache_prefix,
 			matrix.case.bulk && 'bulk' || 'rowbyrow',
