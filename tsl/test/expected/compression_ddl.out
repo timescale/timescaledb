@@ -479,12 +479,6 @@ SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
      0
 (1 row)
 
-SELECT count(*) FROM _timescaledb_catalog.hypertable_compression;
- count 
--------
-     0
-(1 row)
-
 --verify that the policy is gone
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
  count 
@@ -595,13 +589,6 @@ SELECT compressed_hypertable_id IS NULL FROM _timescaledb_catalog.hypertable hyp
  t
 (1 row)
 
---no hypertable compression entries left
-SELECT count(*) = 0 FROM _timescaledb_catalog.hypertable_compression;
- ?column? 
-----------
- t
-(1 row)
-
 --make sure there are no orphaned  _timescaledb_catalog.compression_chunk_size entries (should be 0)
 SELECT count(*) as orphaned_compression_chunk_size
 FROM _timescaledb_catalog.compression_chunk_size size
@@ -689,6 +676,12 @@ INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'
 CREATE MATERIALIZED VIEW test_agg WITH (timescaledb.continuous) AS SELECT time_bucket('1 hour', created_at) AS bucket, AVG(c1) AS avg_c1 FROM i2844 GROUP BY bucket;
 NOTICE:  refreshing continuous aggregate "test_agg"
 ALTER TABLE i2844 SET (timescaledb.compress);
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='i2844'::regclass;
+ relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
+-------+-----------+--------------+--------------+--------------------
+ i2844 |           | {created_at} | {t}          | {t}
+(1 row)
+
 SELECT compress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('i2844');
              compressed_chunk             
 ------------------------------------------
@@ -775,18 +768,6 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
 -- TEST: ALTER TABLE add column tests --
 ALTER TABLE test1 ADD COLUMN new_coli integer;
 ALTER TABLE test1 ADD COLUMN new_colv varchar(30);
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-ORDER BY attname;
- hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
-            13 | Time     |                        4 |                        |                    1 | f           | t
-            13 | bntcol   |                        0 |                      1 |                      |             | 
-            13 | intcol   |                        4 |                        |                      |             | 
-            13 | new_coli |                        4 |                        |                      |             | 
-            13 | new_colv |                        2 |                        |                      |             | 
-            13 | txtcol   |                        2 |                        |                      |             | 
-(6 rows)
-
 SELECT count(*) from test1 where new_coli is not null;
  count 
 -------
@@ -854,21 +835,29 @@ SELECT count(*) from test1 where new_colv  = '101t';
 
 CREATE INDEX new_index ON test1(new_colv);
 -- TEST 2:  ALTER TABLE rename column
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-WHERE attname = 'new_coli' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
-                       WHERE table_name = 'test1' );
- hypertable_id | attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+----------+--------------------------+------------------------+----------------------+-------------+--------------------
-            13 | new_coli |                        4 |                        |                      |             | 
+SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------+--------
+ 13 | public      | test1      | _timescaledb_internal  | _hyper_13               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       14 |                    |      0
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
+ relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+-----------+---------+--------------+--------------------
+ test1 | {bntcol}  | {Time}  | {t}          | {t}
 (1 row)
 
 ALTER TABLE test1 RENAME new_coli TO coli;
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-WHERE attname = 'coli' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
-                       WHERE table_name = 'test1' );
- hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-            13 | coli    |                        4 |                        |                      |             | 
+SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------+--------
+ 13 | public      | test1      | _timescaledb_internal  | _hyper_13               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       14 |                    |      0
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
+ relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+-----------+---------+--------------+--------------------
+ test1 | {bntcol}  | {Time}  | {t}          | {t}
 (1 row)
 
 SELECT count(*) from test1 where coli  = 100;
@@ -879,12 +868,10 @@ SELECT count(*) from test1 where coli  = 100;
 
 --rename segment by column name
 ALTER TABLE test1 RENAME bntcol TO  bigintcol  ;
-SELECT * FROM _timescaledb_catalog.hypertable_compression
-WHERE attname = 'bigintcol' and hypertable_id = (SELECT id from _timescaledb_catalog.hypertable
-                       WHERE table_name = 'test1' );
- hypertable_id |  attname  | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+-----------+--------------------------+------------------------+----------------------+-------------+--------------------
-            13 | bigintcol |                        0 |                      1 |                      |             | 
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
+ relid |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+-------+-------------+---------+--------------+--------------------
+ test1 | {bigintcol} | {Time}  | {t}          | {t}
 (1 row)
 
 --query by segment by column name
@@ -902,12 +889,12 @@ SELECT * from test1 WHERE bigintcol = 200;
 -- add a new chunk and compress
 INSERT INTO test1 SELECT '2019-03-04 2:00', 99, 800, 'newchunk' ;
 SELECT count(compress_chunk(ch, true)) FROM show_chunks('test1') ch;
-psql:include/compression_alter.sql:74: NOTICE:  chunk "_hyper_13_74_chunk" is already compressed
-psql:include/compression_alter.sql:74: NOTICE:  chunk "_hyper_13_75_chunk" is already compressed
-psql:include/compression_alter.sql:74: NOTICE:  chunk "_hyper_13_76_chunk" is already compressed
-psql:include/compression_alter.sql:74: NOTICE:  chunk "_hyper_13_77_chunk" is already compressed
-psql:include/compression_alter.sql:74: NOTICE:  chunk "_hyper_13_82_chunk" is already compressed
-psql:include/compression_alter.sql:74: NOTICE:  chunk "_hyper_13_83_chunk" is already compressed
+psql:include/compression_alter.sql:68: NOTICE:  chunk "_hyper_13_74_chunk" is already compressed
+psql:include/compression_alter.sql:68: NOTICE:  chunk "_hyper_13_75_chunk" is already compressed
+psql:include/compression_alter.sql:68: NOTICE:  chunk "_hyper_13_76_chunk" is already compressed
+psql:include/compression_alter.sql:68: NOTICE:  chunk "_hyper_13_77_chunk" is already compressed
+psql:include/compression_alter.sql:68: NOTICE:  chunk "_hyper_13_82_chunk" is already compressed
+psql:include/compression_alter.sql:68: NOTICE:  chunk "_hyper_13_83_chunk" is already compressed
  count 
 -------
      7
@@ -952,7 +939,13 @@ FROM ( SELECT attrelid::regclass, attname FROM pg_attribute
 -- check if the name change is reflected for settings
 ALTER TABLE test1 RENAME  bigintcol TO
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc;
-psql:include/compression_alter.sql:103: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
+psql:include/compression_alter.sql:97: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
+SELECT * from _timescaledb_catalog.compression_settings WHERE relid = 'test1'::regclass;
+ relid |                             segmentby                             | orderby | orderby_desc | orderby_nullsfirst 
+-------+-------------------------------------------------------------------+---------+--------------+--------------------
+ test1 | {cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca} | {Time}  | {t}          | {t}
+(1 row)
+
 SELECT * from timescaledb_information.compression_settings
 WHERE hypertable_name = 'test1' and attname like 'ccc%';
  hypertable_schema | hypertable_name |                             attname                             | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
@@ -973,7 +966,7 @@ FROM ( SELECT attrelid::regclass, attname FROM pg_attribute
 ALTER TABLE test1 RENAME
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc
 TO bigintcol;
-psql:include/compression_alter.sql:116: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
+psql:include/compression_alter.sql:111: NOTICE:  identifier "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc" will be truncated to "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccca"
 SELECT * from timescaledb_information.compression_settings
 WHERE hypertable_name = 'test1' and attname = 'bigintcol' ;
  hypertable_schema | hypertable_name |  attname  | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
@@ -1046,7 +1039,7 @@ SELECT *,assert_equal(c3,43) FROM test_defaults ORDER BY 1,2;
 (3 rows)
 
 select decompress_chunk(show_chunks('test_defaults'),true);
-psql:include/compression_alter.sql:147: NOTICE:  chunk "_hyper_15_93_chunk" is not compressed
+psql:include/compression_alter.sql:142: NOTICE:  chunk "_hyper_15_93_chunk" is not compressed
              decompress_chunk             
 ------------------------------------------
  _timescaledb_internal._hyper_15_92_chunk
@@ -1079,7 +1072,7 @@ SELECT *,assert_equal(c3,43) FROM test_defaults ORDER BY 1,2;
 -- test dropping columns from compressed
 CREATE TABLE test_drop(f1 text, f2 text, f3 text, time timestamptz, device int, o1 text, o2 text);
 SELECT create_hypertable('test_drop','time');
-psql:include/compression_alter.sql:154: NOTICE:  adding not-null constraint to column "time"
+psql:include/compression_alter.sql:149: NOTICE:  adding not-null constraint to column "time"
     create_hypertable    
 -------------------------
  (17,public,test_drop,t)
@@ -1089,13 +1082,13 @@ ALTER TABLE test_drop SET (timescaledb.compress,timescaledb.compress_segmentby='
 -- dropping segmentby or orderby columns will fail
 \set ON_ERROR_STOP 0
 ALTER TABLE test_drop DROP COLUMN time;
-psql:include/compression_alter.sql:159: ERROR:  cannot drop column named in partition key
+psql:include/compression_alter.sql:154: ERROR:  cannot drop column named in partition key
 ALTER TABLE test_drop DROP COLUMN o1;
-psql:include/compression_alter.sql:160: ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
+psql:include/compression_alter.sql:155: ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
 ALTER TABLE test_drop DROP COLUMN o2;
-psql:include/compression_alter.sql:161: ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
+psql:include/compression_alter.sql:156: ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
 ALTER TABLE test_drop DROP COLUMN device;
-psql:include/compression_alter.sql:162: ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
+psql:include/compression_alter.sql:157: ERROR:  cannot drop orderby or segmentby column from a hypertable with compression enabled
 \set ON_ERROR_STOP 1
 -- switch to WARNING only to suppress compress_chunk NOTICEs
 SET client_min_messages TO WARNING;
@@ -1112,7 +1105,7 @@ ALTER TABLE test_drop DROP COLUMN f2;
 -- test non-existant column
 \set ON_ERROR_STOP 0
 ALTER TABLE test_drop DROP COLUMN f10;
-psql:include/compression_alter.sql:176: ERROR:  column "f10" of relation "test_drop" does not exist
+psql:include/compression_alter.sql:171: ERROR:  column "f10" of relation "test_drop" does not exist
 \set ON_ERROR_STOP 1
 ALTER TABLE test_drop DROP COLUMN IF EXISTS f10;
 INSERT INTO test_drop SELECT NULL,'2001-01-01',2,'o1','o2';
@@ -1159,16 +1152,18 @@ SELECT * FROM test_drop ORDER BY 1;
 (5 rows)
 
 -- check dropped columns got removed from catalog
--- only c2 should be left in metadata
-SELECT attname
-FROM _timescaledb_catalog.hypertable_compression htc
-INNER JOIN _timescaledb_catalog.hypertable ht
-  ON ht.id=htc.hypertable_id AND ht.table_name='test_drop'
-WHERE attname NOT IN ('time','device','o1','o2')
-ORDER BY 1;
- attname 
----------
- c2
+-- only segmentby and orderby are in catalog which we dont support removing
+-- atm, so nothing to see here
+SELECT * FROM _timescaledb_catalog.hypertable WHERE table_name = 'test_drop';
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------+--------
+ 17 | public      | test_drop  | _timescaledb_internal  | _hyper_17               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       18 |                    |      0
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_drop'::regclass;
+   relid   | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
+-----------+-----------+--------------+--------------+--------------------
+ test_drop | {device}  | {o1,o2,time} | {f,f,t}      | {f,f,t}
 (1 row)
 
 --TEST tablespaces for compressed chunks with attach_tablespace interface --

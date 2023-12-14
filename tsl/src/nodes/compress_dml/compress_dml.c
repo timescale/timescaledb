@@ -12,7 +12,6 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "hypertable.h"
-#include "ts_catalog/hypertable_compression.h"
 #include "compress_dml.h"
 #include "utils.h"
 

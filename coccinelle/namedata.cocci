@@ -22,3 +22,26 @@ symbol NAMEDATALEN;
 - strlcpy(E1, E2, NAMEDATALEN);
 + /* You are using strlcpy with NAMEDATALEN, please consider using NameData and namestrcpy instead. */
 + namestrcpy(E1, E2);
+
+@@
+typedef NameData;
+NameData E;
+@@
+- E.data
++ /* Use NameStr rather than accessing data member directly */
++ NameStr(E)
+
+@@
+NameData *E;
+@@
+- E->data
++ /* Use NameStr rather than accessing data member directly */
++ NameStr(*E)
+
+@@
+typedef Name;
+Name E;
+@@
+- E->data
++ /* Use NameStr rather than accessing data member directly */
++ NameStr(*E)

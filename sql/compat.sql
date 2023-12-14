@@ -605,16 +605,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.ping_data_node(node_name name,timeout interval=NULL) RETURNS boolean LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.ping_data_node(name,interval) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.ping_data_node($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_compression_check(config jsonb) RETURNS void LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
@@ -715,16 +705,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.remote_txn_heal_data_node(foreign_server_oid oid) RETURNS integer LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.remote_txn_heal_data_node(oid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.remote_txn_heal_data_node($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.restart_background_workers() RETURNS boolean LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
@@ -745,42 +725,12 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.set_dist_id(dist_id uuid) RETURNS boolean LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.set_dist_id(uuid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.set_dist_id($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.set_peer_dist_id(dist_id uuid) RETURNS boolean LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.set_peer_dist_id(uuid) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.set_peer_dist_id($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.show_chunk(chunk regclass) RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB) LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
     RAISE WARNING 'function _timescaledb_internal.show_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
   RETURN QUERY SELECT * FROM _timescaledb_functions.show_chunk($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.show_connection_cache() RETURNS TABLE (node_name name, user_name name, host text, port int, database name, backend_pid int, connection_status text, transaction_status text, transaction_depth int, processing boolean, invalidated boolean) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.show_connection_cache() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN QUERY SELECT * FROM _timescaledb_functions.show_connection_cache();
 END$$
 SET search_path TO pg_catalog,pg_temp;
 
@@ -891,16 +841,6 @@ BEGIN
     RAISE WARNING 'function _timescaledb_internal.unfreeze_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
   RETURN _timescaledb_functions.unfreeze_chunk($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.validate_as_data_node() RETURNS void LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.validate_as_data_node() is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  PERFORM _timescaledb_functions.validate_as_data_node();
 END$$
 SET search_path TO pg_catalog,pg_temp;
 

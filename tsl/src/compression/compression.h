@@ -10,13 +10,14 @@
 #include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <utils/relcache.h>
+#include <nodes/execnodes.h>
 
 typedef struct BulkInsertStateData *BulkInsertState;
 
-#include <nodes/execnodes.h>
-
 #include "compat/compat.h"
+#include "hypertable.h"
 #include "segment_meta.h"
+#include "ts_catalog/compression_settings.h"
 
 /*
  * Compressed data starts with a specialized varlen type starting with the usual
@@ -33,8 +34,6 @@ typedef struct BulkInsertStateData *BulkInsertState;
 #define MAX_ROWS_PER_COMPRESSION 1000
 /* gap in sequence id between rows, potential for adding rows in gap later */
 #define SEQUENCE_NUM_GAP 10
-#define COMPRESSIONCOL_IS_SEGMENT_BY(col) ((col)->segmentby_column_index > 0)
-#define COMPRESSIONCOL_IS_ORDER_BY(col) ((col)->orderby_column_index > 0)
 
 typedef struct CompressedDataHeader
 {
@@ -61,8 +60,7 @@ typedef struct DecompressResult
 	bool is_done;
 } DecompressResult;
 
-/* Forward declaration of ColumnCompressionInfo so we don't need to include catalog.h */
-typedef struct FormData_hypertable_compression ColumnCompressionInfo;
+typedef struct FormData_hypertable ChunkCompressionSettings;
 
 typedef struct Compressor Compressor;
 struct Compressor
@@ -315,9 +313,8 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
 
-extern CompressionStats compress_chunk(Oid in_table, Oid out_table,
-									   const ColumnCompressionInfo **column_compression_info,
-									   int num_compression_infos, int insert_options);
+extern CompressionStats compress_chunk(Hypertable *ht, Oid in_table, Oid out_table,
+									   int insert_options);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
@@ -347,18 +344,14 @@ extern void compress_row_destroy(CompressSingleRowState *cr);
 extern void row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
-extern int16 *compress_chunk_populate_keys(Oid in_table, const ColumnCompressionInfo **columns,
-										   int n_columns, int *n_keys_out,
-										   const ColumnCompressionInfo ***keys_out);
-extern void compress_chunk_populate_sort_info_for_column(Oid table,
-														 const ColumnCompressionInfo *column,
-														 AttrNumber *att_nums, Oid *sort_operator,
-														 Oid *collation, bool *nulls_first);
-extern void row_compressor_init(RowCompressor *row_compressor, TupleDesc uncompressed_tuple_desc,
-								Relation compressed_table, int num_compression_infos,
-								const ColumnCompressionInfo **column_compression_info,
-								int16 *column_offsets, int16 num_columns_in_compressed_table,
-								bool need_bistate, bool reset_sequence, int insert_options);
+extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
+														 const char *attname, AttrNumber *att_nums,
+														 Oid *sort_operator, Oid *collation,
+														 bool *nulls_first);
+extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+								TupleDesc uncompressed_tuple_desc, Relation compressed_table,
+								int16 num_columns_in_compressed_table, bool need_bistate,
+								bool reset_sequence, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_finish(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
@@ -367,6 +360,7 @@ extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_nu
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
+extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not

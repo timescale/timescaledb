@@ -30,7 +30,6 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
-#include "ts_catalog/hypertable_compression.h"
 
 static void decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags);
 static void decompress_chunk_end(CustomScanState *node);
