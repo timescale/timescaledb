@@ -876,7 +876,6 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
 
-	int col = 0;
 	for (int i = 0; i < uncompressed_tuple_desc->natts; i++)
 	{
 		Form_pg_attribute attr = TupleDescAttr(uncompressed_tuple_desc, i);
@@ -944,7 +943,6 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 				.max_metadata_attr_offset = -1,
 			};
 		}
-		col++;
 	}
 
 	row_compressor->index_oid =
