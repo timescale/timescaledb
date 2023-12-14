@@ -271,7 +271,7 @@ jobs:
     # from path influencing the version.
     - name: Copy the fuzzer corpus to please the actions/cache
       run: |
-        find "db/corpus" -type f -exec cp -t db/corpus-{{ matrix.case.bulk && 'bulk' || 'rowbyrow' }} {} +
+        find "db/corpus" -type f -exec cp -t db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }} {} +
     - name: Save fuzzer corpus
       uses: actions/cache/save@v3
       with:
