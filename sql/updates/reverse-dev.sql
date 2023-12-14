@@ -191,3 +191,149 @@ GRANT SELECT ON _timescaledb_catalog.hypertable_compression TO PUBLIC;
 DROP VIEW timescaledb_information.compression_settings;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.compression_settings;
 DROP TABLE _timescaledb_catalog.compression_settings;
+
+CREATE FUNCTION @extschema@.timescaledb_fdw_handler() RETURNS fdw_handler AS '@MODULE_PATHNAME@', 'ts_timescaledb_fdw_handler' LANGUAGE C STRICT;
+CREATE FUNCTION @extschema@.timescaledb_fdw_validator(text[], oid) RETURNS void AS '@MODULE_PATHNAME@', 'ts_timescaledb_fdw_validator' LANGUAGE C STRICT;
+
+CREATE FOREIGN DATA WRAPPER timescaledb_fdw HANDLER @extschema@.timescaledb_fdw_handler VALIDATOR @extschema@.timescaledb_fdw_validator;
+
+CREATE FUNCTION _timescaledb_functions.create_chunk_replica_table(
+    chunk REGCLASS,
+    data_node_name NAME
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_chunk_create_replica_table' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION  _timescaledb_functions.chunk_drop_replica(
+    chunk                   REGCLASS,
+    node_name               NAME
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunk_drop_replica' LANGUAGE C VOLATILE;
+
+CREATE PROCEDURE _timescaledb_functions.wait_subscription_sync(
+    schema_name    NAME,
+    table_name     NAME,
+    retry_count    INT DEFAULT 18000,
+    retry_delay_ms NUMERIC DEFAULT 0.200
+)
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    in_sync BOOLEAN;
+BEGIN
+    FOR i in 1 .. retry_count
+    LOOP
+        SELECT pgs.srsubstate = 'r'
+        INTO in_sync
+        FROM pg_subscription_rel pgs
+        JOIN pg_class pgc ON relname = table_name
+        JOIN pg_namespace n ON (n.OID = pgc.relnamespace)
+        WHERE pgs.srrelid = pgc.oid AND schema_name = n.nspname;
+
+        if (in_sync IS NULL OR NOT in_sync) THEN
+          PERFORM pg_sleep(retry_delay_ms);
+        ELSE
+          RETURN;
+        END IF;
+    END LOOP;
+    RAISE 'subscription sync wait timedout';
+END
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.health() RETURNS
+TABLE (node_name NAME, healthy BOOL, in_recovery BOOL, error TEXT)
+AS '@MODULE_PATHNAME@', 'ts_health_check' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION _timescaledb_functions.drop_stale_chunks(
+    node_name NAME,
+    chunks integer[] = NULL
+) RETURNS VOID
+AS '@MODULE_PATHNAME@', 'ts_chunks_drop_stale' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION _timescaledb_functions.rxid_in(cstring) RETURNS @extschema@.rxid
+    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_in' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE FUNCTION _timescaledb_functions.rxid_out(@extschema@.rxid) RETURNS cstring
+    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_out' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE TYPE @extschema@.rxid (
+  internallength = 16,
+  input = _timescaledb_functions.rxid_in,
+  output = _timescaledb_functions.rxid_out
+);
+
+ALTER TABLE _timescaledb_catalog.remote_txn ADD CONSTRAINT remote_txn_remote_transaction_id_check CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL);
+
+CREATE FUNCTION _timescaledb_functions.data_node_hypertable_info(
+    node_name              NAME,
+    schema_name_in name,
+    table_name_in name
+)
+RETURNS TABLE (
+    table_bytes     bigint,
+    index_bytes     bigint,
+    toast_bytes     bigint,
+    total_bytes     bigint)
+AS '@MODULE_PATHNAME@', 'ts_dist_remote_hypertable_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION _timescaledb_functions.data_node_chunk_info(
+    node_name              NAME,
+    schema_name_in name,
+    table_name_in name
+)
+RETURNS TABLE (
+    chunk_id        integer,
+    chunk_schema    name,
+    chunk_name      name,
+    table_bytes     bigint,
+    index_bytes     bigint,
+    toast_bytes     bigint,
+    total_bytes     bigint)
+AS '@MODULE_PATHNAME@', 'ts_dist_remote_chunk_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION _timescaledb_functions.data_node_compressed_chunk_stats(node_name name, schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint
+    )
+AS '@MODULE_PATHNAME@' , 'ts_dist_remote_compressed_chunk_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION _timescaledb_functions.data_node_index_size(node_name name, schema_name_in name, index_name_in name)
+RETURNS TABLE ( hypertable_id INTEGER, total_bytes BIGINT)
+AS '@MODULE_PATHNAME@' , 'ts_dist_remote_hypertable_index_info' LANGUAGE C VOLATILE STRICT;
+
+CREATE FUNCTION timescaledb_experimental.block_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL, force BOOLEAN = FALSE) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_block_new_chunks' LANGUAGE C VOLATILE;
+
+CREATE FUNCTION timescaledb_experimental.allow_new_chunks(data_node_name NAME, hypertable REGCLASS = NULL) RETURNS INTEGER
+AS '@MODULE_PATHNAME@', 'ts_data_node_allow_new_chunks' LANGUAGE C VOLATILE;
+
+CREATE PROCEDURE timescaledb_experimental.move_chunk(
+    chunk REGCLASS,
+    source_node NAME = NULL,
+    destination_node NAME = NULL,
+    operation_id NAME = NULL)
+AS '@MODULE_PATHNAME@', 'ts_move_chunk_proc' LANGUAGE C;
+
+CREATE PROCEDURE timescaledb_experimental.copy_chunk(
+    chunk REGCLASS,
+    source_node NAME = NULL,
+    destination_node NAME = NULL,
+    operation_id NAME = NULL)
+AS '@MODULE_PATHNAME@', 'ts_copy_chunk_proc' LANGUAGE C;
+
+CREATE FUNCTION timescaledb_experimental.subscription_exec(
+    subscription_command TEXT
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_subscription_exec' LANGUAGE C VOLATILE;
+
+CREATE PROCEDURE timescaledb_experimental.cleanup_copy_chunk_operation(
+    operation_id NAME)
+AS '@MODULE_PATHNAME@', 'ts_copy_chunk_cleanup_proc' LANGUAGE C;
+

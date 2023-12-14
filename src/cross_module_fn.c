@@ -13,9 +13,6 @@
 #include "guc.h"
 #include "license_guc.h"
 #include "bgw/job.h"
-#ifdef USE_TELEMETRY
-#include "telemetry/telemetry.h"
-#endif
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \
@@ -50,10 +47,6 @@ CROSSMODULE_WRAPPER(job_alter_set_hypertable_id);
 
 CROSSMODULE_WRAPPER(reorder_chunk);
 CROSSMODULE_WRAPPER(move_chunk);
-CROSSMODULE_WRAPPER(move_chunk_proc);
-CROSSMODULE_WRAPPER(copy_chunk_proc);
-CROSSMODULE_WRAPPER(copy_chunk_cleanup_proc);
-CROSSMODULE_WRAPPER(subscription_exec);
 
 CROSSMODULE_WRAPPER(policies_add);
 CROSSMODULE_WRAPPER(policies_remove);
@@ -115,20 +108,6 @@ CROSSMODULE_WRAPPER(chunk_get_colstats);
 CROSSMODULE_WRAPPER(chunk_create_empty_table);
 CROSSMODULE_WRAPPER(chunk_create_replica_table);
 
-CROSSMODULE_WRAPPER(timescaledb_fdw_handler);
-CROSSMODULE_WRAPPER(timescaledb_fdw_validator);
-CROSSMODULE_WRAPPER(remote_txn_id_in);
-CROSSMODULE_WRAPPER(remote_txn_id_out);
-CROSSMODULE_WRAPPER(remote_txn_heal_data_node);
-CROSSMODULE_WRAPPER(remote_connection_cache_show);
-CROSSMODULE_WRAPPER(dist_remote_hypertable_info);
-CROSSMODULE_WRAPPER(dist_remote_chunk_info);
-CROSSMODULE_WRAPPER(dist_remote_compressed_chunk_info);
-CROSSMODULE_WRAPPER(dist_remote_hypertable_index_info);
-CROSSMODULE_WRAPPER(distributed_exec);
-CROSSMODULE_WRAPPER(create_distributed_restore_point);
-CROSSMODULE_WRAPPER(hypertable_distributed_set_replication_factor);
-CROSSMODULE_WRAPPER(health_check);
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 
@@ -178,14 +157,6 @@ error_no_default_fn_bool_void_community(void)
 	error_no_default_fn_community();
 	pg_unreachable();
 }
-
-#ifdef USE_TELEMETRY
-static void
-add_tsl_telemetry_info_default(JsonbParseState **parse_state)
-{
-	error_no_default_fn_community();
-}
-#endif
 
 static bool
 job_execute_default_fn(BgwJob *job)
@@ -404,16 +375,10 @@ mn_get_foreign_join_path_default_fn_pg_community(PlannerInfo *root, RelOptInfo *
  * exception.
  */
 TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
-#ifdef USE_TELEMETRY
-	.add_tsl_telemetry_info = add_tsl_telemetry_info_default,
-#endif
 	.create_upper_paths_hook = NULL,
 	.set_rel_pathlist_dml = NULL,
 	.set_rel_pathlist_query = NULL,
 	.set_rel_pathlist = NULL,
-	.ddl_command_start = NULL,
-	.ddl_command_end = NULL,
-	.sql_drop = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
 
@@ -452,12 +417,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.job_run = error_no_default_fn_pg_community,
 	.job_execute = job_execute_default_fn,
 
-	.move_chunk = error_no_default_fn_pg_community,
-	.move_chunk_proc = error_no_default_fn_pg_community,
-	.copy_chunk_proc = error_no_default_fn_pg_community,
-	.copy_chunk_cleanup_proc = error_no_default_fn_pg_community,
-	.subscription_exec = error_no_default_fn_pg_community,
 	.reorder_chunk = error_no_default_fn_pg_community,
+	.move_chunk = error_no_default_fn_pg_community,
 
 	.policies_add = error_no_default_fn_pg_community,
 	.policies_remove = error_no_default_fn_pg_community,
@@ -550,7 +511,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.chunk_create_replica_table = error_no_default_fn_pg_community,
 	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
-	.health_check = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
 	.mn_get_foreign_join_paths = mn_get_foreign_join_path_default_fn_pg_community,

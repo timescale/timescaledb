@@ -41,7 +41,6 @@
 #include "extension.h"
 #include "cache.h"
 #include "chunk.h"
-#include "fdw/fdw.h"
 #include "remote/async.h"
 #include "remote/connection.h"
 #include "remote/connection_cache.h"

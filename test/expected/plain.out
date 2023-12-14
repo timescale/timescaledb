@@ -38,8 +38,7 @@ ALTER TYPE rainbow RENAME TO colors;
         |        |               |      | green   +|                   |                   | 
         |        |               |      | blue    +|                   |                   | 
         |        |               |      | purple   |                   |                   | 
- public | rxid   | rxid          | 16   |          | super_user        |                   | 
-(2 rows)
+(1 row)
 
 REINDEX TABLE regular_table;
 \c :TEST_DBNAME :ROLE_SUPERUSER

@@ -12,7 +12,6 @@ SELECT _timescaledb_internal.cagg_watermark(0);
 SELECT _timescaledb_internal.cagg_watermark_materialized(0);
 SELECT _timescaledb_internal.calculate_chunk_interval(0,0,0);
 SELECT _timescaledb_internal.chunk_constraint_add_table_constraint(NULL);
-SELECT _timescaledb_internal.chunk_drop_replica(0,NULL);
 SELECT _timescaledb_internal.chunk_id_from_relid(0);
 SELECT _timescaledb_internal.chunk_index_clone(0);
 SELECT _timescaledb_internal.chunk_index_replace(0,0);
@@ -23,16 +22,10 @@ SELECT _timescaledb_internal.chunks_remote_size(NULL,NULL);
 SELECT _timescaledb_internal.compressed_chunk_local_stats(NULL,NULL);
 SELECT _timescaledb_internal.compressed_chunk_remote_stats(NULL,NULL);
 SELECT _timescaledb_internal.create_chunk(0,NULL,NULL,NULL,0);
-SELECT _timescaledb_internal.create_chunk_replica_table(0,NULL);
 SELECT _timescaledb_internal.create_chunk_table(0,NULL,NULL,NULL);
 SELECT _timescaledb_internal.create_compressed_chunk(0,0,0,0,0,0,0,0,0,0);
-SELECT _timescaledb_internal.data_node_chunk_info(NULL,NULL,NULL);
-SELECT _timescaledb_internal.data_node_compressed_chunk_stats(NULL,NULL,NULL);
-SELECT _timescaledb_internal.data_node_hypertable_info(NULL,NULL,NULL);
-SELECT _timescaledb_internal.data_node_index_size(NULL,NULL,NULL);
 SELECT _timescaledb_internal.drop_chunk(0);
 SELECT _timescaledb_internal.drop_dist_ht_invalidation_trigger(0);
-SELECT _timescaledb_internal.drop_stale_chunks(NULL,NULL);
 SELECT _timescaledb_internal.freeze_chunk(0);
 SELECT FROM _timescaledb_internal.generate_uuid();
 SELECT _timescaledb_internal.get_approx_row_count(0);
@@ -44,7 +37,6 @@ SELECT pg_typeof(_timescaledb_internal.get_git_commit());
 SELECT pg_typeof(_timescaledb_internal.get_os_info());
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
-SELECT pg_typeof(_timescaledb_internal.health());
 SELECT _timescaledb_internal.hypertable_constraint_add_table_fk_constraint(NULL,NULL,NULL,0);
 SELECT _timescaledb_internal.hypertable_invalidation_log_delete(0);
 SELECT _timescaledb_internal.hypertable_local_size(NULL,NULL);
@@ -99,8 +91,6 @@ CALL _timescaledb_internal.policy_recompression(0,NULL);
 CALL _timescaledb_internal.policy_refresh_continuous_aggregate(0,NULL);
 CALL _timescaledb_internal.policy_reorder(0,NULL);
 CALL _timescaledb_internal.policy_retention(0,NULL);
-
-CALL _timescaledb_internal.wait_subscription_sync(NULL,NULL,0,0);
 \set ON_ERROR_STOP 1
 
 -- tests for the cagg invalidation trigger on the deprecated schema

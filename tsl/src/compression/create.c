@@ -976,7 +976,6 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 	/* compression is enabled. can we turn it off? */
 	check_modify_compression_options(ht, settings, with_clause_options, NIL);
 
-	/* distributed hypertables do not have compression table on the access node */
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 		drop_existing_compression_table(ht);
 	else
@@ -1149,20 +1148,9 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 
 	compresscolinfo_add_metadata_columns(&compress_cols);
 
-	if (hypertable_is_distributed(ht))
-	{
-		/* On a distributed hypertable, there's no data locally, so don't
-		 * create local compression tables and data but let the DDL pass on to
-		 * data nodes. */
-		ts_hypertable_set_compressed(ht, 0);
-		return true;
-	}
-	else
-	{
-		Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
-		compress_htid = create_compression_table(ownerid, &compress_cols, tablespace_oid);
-		ts_hypertable_set_compressed(ht, compress_htid);
-	}
+	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
+	compress_htid = create_compression_table(ownerid, &compress_cols, tablespace_oid);
+	ts_hypertable_set_compressed(ht, compress_htid);
 
 	if (!with_clause_options[CompressChunkTimeInterval].is_default)
 	{

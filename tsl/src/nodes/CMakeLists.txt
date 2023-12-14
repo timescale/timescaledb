@@ -1,4 +1,4 @@
-set(SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/async_append.c)
+set(SOURCES)
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
 add_subdirectory(compress_dml)
 add_subdirectory(decompress_chunk)

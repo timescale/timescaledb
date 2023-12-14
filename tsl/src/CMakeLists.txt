@@ -1,7 +1,6 @@
 set(SOURCES
     chunk_api.c
     chunk.c
-    chunk_copy.c
     data_node.c
     deparse.c
     dist_util.c
@@ -13,9 +12,6 @@ set(SOURCES
     planner.c
     process_utility.c
     reorder.c)
-if(USE_TELEMETRY)
-  list(APPEND SOURCES telemetry.c)
-endif()
 
 # Add test source code in Debug builds
 if(CMAKE_BUILD_TYPE MATCHES Debug)
@@ -61,6 +57,5 @@ install(TARGETS ${TSL_LIBRARY_NAME} DESTINATION ${PG_PKGLIBDIR})
 add_subdirectory(bgw_policy)
 add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
-add_subdirectory(fdw)
 add_subdirectory(nodes)
 add_subdirectory(remote)

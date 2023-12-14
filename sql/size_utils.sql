@@ -44,33 +44,6 @@ FROM
 
 GRANT SELECT ON  _timescaledb_internal.hypertable_chunk_local_size TO PUBLIC;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_hypertable_info(
-    node_name              NAME,
-    schema_name_in name,
-    table_name_in name
-)
-RETURNS TABLE (
-    table_bytes     bigint,
-    index_bytes     bigint,
-    toast_bytes     bigint,
-    total_bytes     bigint)
-AS '@MODULE_PATHNAME@', 'ts_dist_remote_hypertable_info' LANGUAGE C VOLATILE STRICT;
-
-CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_chunk_info(
-    node_name              NAME,
-    schema_name_in name,
-    table_name_in name
-)
-RETURNS TABLE (
-    chunk_id        integer,
-    chunk_schema    name,
-    chunk_name      name,
-    table_bytes     bigint,
-    index_bytes     bigint,
-    toast_bytes     bigint,
-    total_bytes     bigint)
-AS '@MODULE_PATHNAME@', 'ts_dist_remote_chunk_info' LANGUAGE C VOLATILE STRICT;
-
 CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_local_size(
 	schema_name_in name,
 	table_name_in name)
@@ -189,18 +162,17 @@ $BODY$
 DECLARE
         table_name       NAME = NULL;
         schema_name      NAME = NULL;
-        is_distributed   BOOL = FALSE;
 BEGIN
-        SELECT relname, nspname, replication_factor > 0
-        INTO table_name, schema_name, is_distributed
+        SELECT relname, nspname
+        INTO table_name, schema_name
         FROM pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
         WHERE c.OID = hypertable;
 
         IF table_name IS NULL THEN
-                SELECT h.schema_name, h.table_name, replication_factor > 0
-                INTO schema_name, table_name, is_distributed
+                SELECT h.schema_name, h.table_name
+                INTO schema_name, table_name
                 FROM pg_class c
                 INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
                 INNER JOIN _timescaledb_catalog.continuous_agg a ON (a.user_view_schema = n.nspname AND a.user_view_name = c.relname)
@@ -212,18 +184,9 @@ BEGIN
                 END IF;
         END IF;
 
-        CASE WHEN is_distributed THEN
-			RETURN QUERY
-			SELECT *, NULL::name
-			FROM _timescaledb_functions.hypertable_local_size(schema_name, table_name)
-			UNION
-			SELECT *
-			FROM _timescaledb_functions.hypertable_remote_size(schema_name, table_name);
-        ELSE
 			RETURN QUERY
 			SELECT *, NULL::name
 			FROM _timescaledb_functions.hypertable_local_size(schema_name, table_name);
-        END CASE;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
@@ -336,18 +299,17 @@ $BODY$
 DECLARE
         table_name       NAME;
         schema_name      NAME;
-        is_distributed   BOOL;
 BEGIN
-        SELECT relname, nspname, replication_factor > 0
-        INTO table_name, schema_name, is_distributed
+        SELECT relname, nspname
+        INTO table_name, schema_name
         FROM pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
         INNER JOIN _timescaledb_catalog.hypertable ht ON (ht.schema_name = n.nspname AND ht.table_name = c.relname)
         WHERE c.OID = hypertable;
 
         IF table_name IS NULL THEN
-            SELECT h.schema_name, h.table_name, replication_factor > 0
-            INTO schema_name, table_name, is_distributed
+            SELECT h.schema_name, h.table_name
+            INTO schema_name, table_name
             FROM pg_class c
             INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
             INNER JOIN _timescaledb_catalog.continuous_agg a ON (a.user_view_schema = n.nspname AND a.user_view_name = c.relname)
@@ -359,15 +321,9 @@ BEGIN
             END IF;
 		END IF;
 
-        CASE WHEN is_distributed THEN
-            RETURN QUERY SELECT ch.chunk_schema, ch.chunk_name, ch.table_bytes, ch.index_bytes,
-                        ch.toast_bytes, ch.total_bytes, ch.node_name
-            FROM _timescaledb_functions.chunks_remote_size(schema_name, table_name) ch;
-        ELSE
-            RETURN QUERY SELECT chl.chunk_schema, chl.chunk_name, chl.table_bytes, chl.index_bytes,
+    RETURN QUERY SELECT chl.chunk_schema, chl.chunk_name, chl.table_bytes, chl.index_bytes,
                         chl.toast_bytes, chl.total_bytes, NULL::NAME
             FROM _timescaledb_functions.chunks_local_size(schema_name, table_name) chl;
-        END CASE;
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 ---------- end of detailed size functions ------
@@ -415,7 +371,6 @@ DECLARE
     mat_ht           REGCLASS = NULL;
     local_table_name       NAME = NULL;
     local_schema_name      NAME = NULL;
-    is_distributed   BOOL = FALSE;
     is_compressed    BOOL = FALSE;
     uncompressed_row_count BIGINT = 0;
     compressed_row_count BIGINT = 0;
@@ -552,22 +507,6 @@ FROM
 
 GRANT SELECT ON _timescaledb_internal.compressed_chunk_stats TO PUBLIC;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_compressed_chunk_stats(node_name name, schema_name_in name, table_name_in name)
-    RETURNS TABLE (
-        chunk_schema name,
-        chunk_name name,
-        compression_status text,
-        before_compression_table_bytes bigint,
-        before_compression_index_bytes bigint,
-        before_compression_toast_bytes bigint,
-        before_compression_total_bytes bigint,
-        after_compression_table_bytes bigint,
-        after_compression_index_bytes bigint,
-        after_compression_toast_bytes bigint,
-        after_compression_total_bytes bigint
-    )
-AS '@MODULE_PATHNAME@' , 'ts_dist_remote_compressed_chunk_info' LANGUAGE C VOLATILE STRICT;
-
 CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_chunk_local_stats(schema_name_in name, table_name_in name)
     RETURNS TABLE (
         chunk_schema name,
@@ -662,16 +601,11 @@ CREATE OR REPLACE FUNCTION @extschema@.chunk_compression_stats (hypertable REGCL
 DECLARE
     table_name name;
     schema_name name;
-    is_distributed bool;
 BEGIN
     SELECT
-        relname,
-        nspname,
-        replication_factor > 0
+      relname, nspname
     INTO
-	    table_name,
-        schema_name,
-        is_distributed
+	    table_name, schema_name
     FROM
         pg_class c
         INNER JOIN pg_namespace n ON (n.OID = c.relnamespace)
@@ -684,20 +618,12 @@ BEGIN
 	    RETURN;
 	END IF;
 
-    CASE WHEN is_distributed THEN
-        RETURN QUERY
-        SELECT
-            *
-        FROM
-            _timescaledb_functions.compressed_chunk_remote_stats(schema_name, table_name);
-    ELSE
-        RETURN QUERY
-        SELECT
-            *,
-            NULL::name
-        FROM
-            _timescaledb_functions.compressed_chunk_local_stats(schema_name, table_name);
-    END CASE;
+  RETURN QUERY
+  SELECT
+      *,
+      NULL::name
+  FROM
+      _timescaledb_functions.compressed_chunk_local_stats(schema_name, table_name);
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
@@ -780,10 +706,6 @@ $BODY$
 		 AND h.table_name = c.relname;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.data_node_index_size(node_name name, schema_name_in name, index_name_in name)
-RETURNS TABLE ( hypertable_id INTEGER, total_bytes BIGINT)
-AS '@MODULE_PATHNAME@' , 'ts_dist_remote_hypertable_index_info' LANGUAGE C VOLATILE STRICT;
-
 CREATE OR REPLACE FUNCTION _timescaledb_functions.indexes_remote_size(
     schema_name_in             NAME,
     table_name_in              NAME,
@@ -826,12 +748,11 @@ DECLARE
         ht_index_name       NAME;
         ht_schema_name      NAME;
         ht_name      NAME;
-        is_distributed   BOOL;
         ht_id INTEGER;
         index_bytes BIGINT;
 BEGIN
-   SELECT c.relname, cl.relname, nsp.nspname, ht.replication_factor > 0
-   INTO ht_index_name, ht_name, ht_schema_name, is_distributed
+   SELECT c.relname, cl.relname, nsp.nspname
+   INTO ht_index_name, ht_name, ht_schema_name
    FROM pg_class c, pg_index cind, pg_class cl,
         pg_namespace nsp, _timescaledb_catalog.hypertable ht
    WHERE c.oid = cind.indexrelid AND cind.indrelid = cl.oid
@@ -849,11 +770,6 @@ BEGIN
 
    IF index_bytes IS NULL THEN
        index_bytes = 0;
-   END IF;
-
-   -- Add size from data nodes
-   IF is_distributed THEN
-       index_bytes = index_bytes + _timescaledb_functions.indexes_remote_size(ht_schema_name, ht_name, ht_index_name);
    END IF;
 
    RETURN index_bytes;

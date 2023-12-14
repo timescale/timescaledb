@@ -25,7 +25,7 @@ CREATE OR REPLACE PROCEDURE custom_proc1(jobid int, config jsonb) LANGUAGE PLPGS
 $$
 BEGIN
   UPDATE my_table SET b = 1 WHERE a = 0;
-  PERFORM pg_sleep(10);
+  PERFORM pg_sleep(5);
   COMMIT;
 END
 $$;
@@ -35,7 +35,7 @@ CREATE OR REPLACE PROCEDURE custom_proc2(jobid int, config jsonb) LANGUAGE PLPGS
 $$
 BEGIN
   UPDATE my_table SET b = 2 WHERE a = 0;
-  PERFORM pg_sleep(10);
+  PERFORM pg_sleep(5);
   COMMIT;
 END
 $$;
@@ -48,7 +48,7 @@ SELECT _timescaledb_functions.start_background_workers();
  t
 (1 row)
 
-SELECT pg_sleep(20);
+SELECT pg_sleep(6);
  pg_sleep 
 ----------
  

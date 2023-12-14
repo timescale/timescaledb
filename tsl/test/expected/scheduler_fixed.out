@@ -36,12 +36,12 @@ DELETE FROM _timescaledb_config.bgw_job;
 TRUNCATE _timescaledb_internal.bgw_job_stat;
 create or replace procedure job_20(jobid int, config jsonb) language plpgsql as $$
 begin
-perform pg_sleep(20);
+perform pg_sleep(5);
 end
 $$;
 create or replace procedure job_5(jobid int, config jsonb) language plpgsql as $$
 begin
-perform pg_sleep(5);
+perform pg_sleep(1);
 end
 $$;
 select * from _timescaledb_internal.bgw_job_stat;
@@ -95,7 +95,7 @@ select next_start as next_start_long from timescaledb_information.job_stats wher
 select :'next_start_long'::timestamptz - :'initial_start_long'::timestamptz as schedule_diff;
  schedule_diff 
 ---------------
- @ 30 secs
+ @ 15 secs
 (1 row)
 
 -- test some possible schedule_interval, finish_time, initial_start combinations
