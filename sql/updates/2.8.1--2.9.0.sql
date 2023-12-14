@@ -380,7 +380,7 @@ GRANT SELECT ON _timescaledb_catalog.dimension TO PUBLIC;
 
 -- end recreate _timescaledb_catalog.dimension table --
 
--- changes related to alter_data_node():
+-- only creating stub here to not introduce shared library dependencies
 CREATE INDEX chunk_data_node_node_name_idx ON _timescaledb_catalog.chunk_data_node (node_name);
 CREATE FUNCTION @extschema@.alter_data_node(
     node_name              NAME,
@@ -389,7 +389,7 @@ CREATE FUNCTION @extschema@.alter_data_node(
     port                   INTEGER = NULL,
 	available              BOOLEAN = NULL
 ) RETURNS TABLE(node_name NAME, host TEXT, port INTEGER, database NAME, available BOOLEAN)
-AS '@MODULE_PATHNAME@', 'ts_data_node_alter' LANGUAGE C VOLATILE;
+AS $$ SELECT NULL::name,NULL::text,NULL::int,NULL::name,NULL::bool; $$ LANGUAGE SQL VOLATILE;
 
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_agg`
@@ -488,9 +488,9 @@ ALTER TABLE _timescaledb_catalog.continuous_agg_migrate_plan
 
 ANALYZE _timescaledb_catalog.continuous_agg;
 
--- changes related to drop_stale_chunks()
+-- only create stub here to not introduce shared library dependency
 CREATE FUNCTION _timescaledb_internal.drop_stale_chunks(
     node_name NAME,
     chunks integer[] = NULL
 ) RETURNS VOID
-AS '@MODULE_PATHNAME@', 'ts_chunks_drop_stale' LANGUAGE C VOLATILE;
+AS '' LANGUAGE SQL VOLATILE;

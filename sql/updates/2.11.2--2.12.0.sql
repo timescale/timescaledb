@@ -99,7 +99,6 @@ ALTER FUNCTION _timescaledb_internal.calculate_chunk_interval(int, bigint, bigin
 ALTER FUNCTION _timescaledb_internal.chunks_in(record, integer[]) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.chunk_id_from_relid(oid) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.show_chunk(regclass) SET SCHEMA _timescaledb_functions;
-ALTER FUNCTION _timescaledb_internal.set_chunk_default_data_node(regclass, name) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.get_chunk_relstats(regclass) SET SCHEMA _timescaledb_functions;
 ALTER FUNCTION _timescaledb_internal.get_chunk_colstats(regclass) SET SCHEMA _timescaledb_functions;
 
@@ -128,6 +127,8 @@ DECLARE
     invalidation_process_cagg_log, invalidation_process_hypertable_log, materialization_invalidation_log_delete,
 
     alter_job_set_hypertable_id,
+
+    set_chunk_default_data_node,
 
     create_compressed_chunk, get_compressed_chunk_index_for_recompression, recompress_chunk_segmentwise,
     chunk_drop_replica, chunk_index_clone, chunk_index_replace, create_chunk_replica_table, drop_stale_chunks,

@@ -806,46 +806,6 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		if (uid != saved_uid)
 			SetUserIdAndSecContext(saved_uid, sec_ctx);
 	}
-	else if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-	{
-		ChunkDataNode *cdn;
-
-		if (list_length(chunk->data_nodes) == 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
-					 (errmsg("no data nodes associated with chunk \"%s\"",
-							 get_rel_name(chunk->table_id)))));
-
-		/*
-		 * Use the first chunk data node as the "primary" to put in the foreign
-		 * table
-		 */
-		cdn = linitial(chunk->data_nodes);
-		stmt.base.type = T_CreateForeignServerStmt;
-		stmt.servername = NameStr(cdn->fd.node_name);
-
-		/* Create the foreign table catalog information */
-		CreateForeignTable(&stmt, objaddr.objectId);
-
-		/*
-		 * Some options require being table owner to set for example statistics
-		 * so we have to set them before restoring security context
-		 */
-		set_attoptions(rel, objaddr.objectId);
-
-		/*
-		 * Need to restore security context to execute remote commands as the
-		 * original user
-		 */
-		if (uid != saved_uid)
-			SetUserIdAndSecContext(saved_uid, sec_ctx);
-
-		/* Create the corresponding chunk replicas on the remote data nodes */
-		ts_cm_functions->create_chunk_on_data_nodes(chunk, ht, NULL, NIL);
-
-		/* Record the remote data node chunk ID mappings */
-		ts_chunk_data_node_insert_multi(chunk->data_nodes);
-	}
 	else
 		elog(ERROR, "invalid relkind \"%c\" when creating chunk", chunk->relkind);
 
@@ -4454,9 +4414,6 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	dc_names = list_concat(dc_names, dc_temp);
 
 	MemoryContextSwitchTo(oldcontext);
-
-	if (data_node_oids != NIL)
-		ts_cm_functions->func_call_on_data_nodes(fcinfo, data_node_oids);
 
 	/* store data for multi function call */
 	funcctx->max_calls = list_length(dc_names);

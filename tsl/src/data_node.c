@@ -1204,7 +1204,6 @@ data_node_modify_hypertable_data_nodes(const char *node_name, List *hypertable_d
 				const Chunk *chunk = ts_chunk_get_by_id(cdn->fd.chunk_id, true);
 				LockRelationOid(chunk->table_id, ShareUpdateExclusiveLock);
 
-				chunk_update_foreign_server_if_needed(chunk, cdn->foreign_server_oid, false);
 				ts_chunk_data_node_delete_by_chunk_id_and_node_name(cdn->fd.chunk_id,
 																	NameStr(cdn->fd.node_name));
 			}
@@ -1555,43 +1554,6 @@ create_alter_data_node_tuple(TupleDesc tupdesc, const char *node_name, List *opt
 }
 
 /*
- * Switch data node to use for queries on chunks.
- *
- * When available=false it will switch from the given data node to another
- * one, but only if the data node is currently used for queries on the chunk.
- *
- * When available=true it will switch to the given data node, if it is
- * "primary" for the chunk (according to the current partitioning
- * configuration).
- */
-static void
-switch_data_node_on_chunks(const ForeignServer *datanode, bool available)
-{
-	unsigned int failed_update_count = 0;
-	ScanIterator it = ts_chunk_data_nodes_scan_iterator_create(CurrentMemoryContext);
-	ts_chunk_data_nodes_scan_iterator_set_node_name(&it, datanode->servername);
-
-	/* Scan for chunks that reference the given data node */
-	ts_scanner_foreach(&it)
-	{
-		TupleTableSlot *slot = ts_scan_iterator_slot(&it);
-		bool PG_USED_FOR_ASSERTS_ONLY isnull = false;
-		Datum chunk_id = slot_getattr(slot, Anum_chunk_data_node_chunk_id, &isnull);
-
-		Assert(!isnull);
-
-		const Chunk *chunk = ts_chunk_get_by_id(DatumGetInt32(chunk_id), true);
-		if (!chunk_update_foreign_server_if_needed(chunk, datanode->serverid, available))
-			failed_update_count++;
-	}
-
-	if (!available && failed_update_count > 0)
-		elog(WARNING, "could not switch data node on %u chunks", failed_update_count);
-
-	ts_scan_iterator_close(&it);
-}
-
-/*
  * Append new data node options.
  *
  * When setting options via AlterForeignServer(), the defelem list must
@@ -1723,18 +1685,9 @@ data_node_alter(PG_FUNCTION_ARGS)
 	alter_server_stmt.options = options;
 	AlterForeignServer(&alter_server_stmt);
 
-	/* Drop stale chunks on the unavailable data node, if we are going to
-	 * make it available again */
-	if (!available_is_null && available && !ts_data_node_is_available_by_server(server))
-		ts_chunk_drop_stale_chunks(node_name, NULL);
-
 	/* Make changes to the data node (foreign server object) visible so that
 	 * the changes are present when we switch "primary" data node on chunks */
 	CommandCounterIncrement();
-
-	/* Update the currently used query data node on all affected chunks to
-	 * reflect the new status of the data node */
-	switch_data_node_on_chunks(server, available);
 
 	/* Add updated options last as they will take precedence over old options
 	 * when creating the result tuple. */
