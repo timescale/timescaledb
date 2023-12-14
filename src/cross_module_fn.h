@@ -38,8 +38,6 @@ typedef struct HypertableModifyState HypertableModifyState;
 
 typedef struct CrossModuleFunctions
 {
-	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
-
 	PGFunction policy_compression_add;
 	PGFunction policy_compression_remove;
 	PGFunction policy_recompression_proc;
@@ -90,13 +88,6 @@ typedef struct CrossModuleFunctions
 
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
-	PGFunction move_chunk_proc;
-	PGFunction copy_chunk_proc;
-	PGFunction subscription_exec;
-	PGFunction copy_chunk_cleanup_proc;
-	void (*ddl_command_start)(ProcessUtilityArgs *args);
-	void (*ddl_command_end)(EventTriggerData *command);
-	void (*sql_drop)(List *dropped_objects);
 
 	/* Vectorized queries */
 	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
@@ -184,9 +175,6 @@ typedef struct CrossModuleFunctions
 	PGFunction remote_connection_cache_show;
 	void (*create_chunk_on_data_nodes)(const Chunk *chunk, const Hypertable *ht,
 									   const char *remote_chunk_name, List *data_nodes);
-	Path *(*distributed_insert_path_create)(PlannerInfo *root, ModifyTablePath *mtpath,
-											Index hypertable_rti, int subpath_index);
-	uint64 (*distributed_copy)(const CopyStmt *stmt, CopyChunkState *ccstate, List *attnums);
 	bool (*set_distributed_id)(Datum id);
 	void (*set_distributed_peer_id)(Datum id);
 	bool (*is_access_node_session)(void);
@@ -209,7 +197,6 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction chunks_drop_stale;
-	PGFunction health_check;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
 	void (*mn_get_foreign_join_paths)(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,

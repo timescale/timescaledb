@@ -59,24 +59,20 @@ SET timescaledb.enable_transparent_decompression to ON;
 update foo set c = 40
 where  a = (SELECT max(a) FROM foo);
 SET timescaledb.enable_transparent_decompression to OFF;
-select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from
-_timescaledb_catalog.hypertable order by id;
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable ORDER BY id;
  id |      schema_name      |        table_name        | compressed | compressed_hypertable_id 
 ----+-----------------------+--------------------------+------------+--------------------------
   1 | public                | foo                      |          1 |                        2
   2 | _timescaledb_internal | _compressed_hypertable_2 |          2 |                         
 (2 rows)
 
-select * from _timescaledb_catalog.hypertable_compression order by hypertable_id, attname;
- hypertable_id | attname | compression_algorithm_id | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
----------------+---------+--------------------------+------------------------+----------------------+-------------+--------------------
-             1 | a       |                        0 |                      1 |                      |             | 
-             1 | b       |                        0 |                      2 |                      |             | 
-             1 | c       |                        4 |                        |                    1 | f           | t
-             1 | d       |                        4 |                        |                    2 | t           | f
-(4 rows)
+SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY relid::regclass;
+ relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+-----------+---------+--------------+--------------------
+ foo   | {a,b}     | {c,d}   | {t,f}        | {t,f}
+(1 row)
 
-select * from timescaledb_information.compression_settings ORDER BY hypertable_name;
+SELECT * FROM timescaledb_information.compression_settings ORDER BY hypertable_name;
  hypertable_schema | hypertable_name | attname | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
 -------------------+-----------------+---------+------------------------+----------------------+-------------+--------------------
  public            | foo             | a       |                      1 |                      |             | 
@@ -286,20 +282,17 @@ insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'POR', 'klick', 55, 75;
 insert into conditions
 select generate_series('2018-12-01 00:00'::timestamp, '2018-12-31 00:00'::timestamp, '1 day'), 'NYC', 'klick', 55, 75;
-select hypertable_id, attname, compression_algorithm_id , al.name
-from _timescaledb_catalog.hypertable_compression hc,
-     _timescaledb_catalog.hypertable ht,
-      _timescaledb_catalog.compression_algorithm al
-where ht.id = hc.hypertable_id and ht.table_name like 'conditions' and al.id = hc.compression_algorithm_id
-ORDER BY hypertable_id, attname;
- hypertable_id |   attname   | compression_algorithm_id |               name               
----------------+-------------+--------------------------+----------------------------------
-             5 | humidity    |                        3 | COMPRESSION_ALGORITHM_GORILLA
-             5 | location    |                        0 | COMPRESSION_ALGORITHM_NONE
-             5 | location2   |                        2 | COMPRESSION_ALGORITHM_DICTIONARY
-             5 | temperature |                        3 | COMPRESSION_ALGORITHM_GORILLA
-             5 | time        |                        4 | COMPRESSION_ALGORITHM_DELTADELTA
-(5 rows)
+SELECT id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'conditions';
+ id | schema_name | table_name | compressed | compressed_hypertable_id 
+----+-------------+------------+------------+--------------------------
+  5 | public      | conditions |          1 |                        6
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'conditions'::regclass;
+   relid    | segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+------------+------------+---------+--------------+--------------------
+ conditions | {location} | {time}  | {f}          | {f}
+(1 row)
 
 select attname, attstorage, typname from pg_attribute at, pg_class cl , pg_type ty
 where cl.oid = at.attrelid and  at.attnum > 0
@@ -918,30 +911,17 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('datatype_test') ch;
      1
 (1 row)
 
-SELECT
-  attname, alg.name
-FROM _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable_compression htc ON ht.id=htc.hypertable_id
-  INNER JOIN _timescaledb_catalog.compression_algorithm alg ON alg.id=htc.compression_algorithm_id
-WHERE ht.table_name='datatype_test'
-ORDER BY attname;
-      attname       |               name               
---------------------+----------------------------------
- char_column        | COMPRESSION_ALGORITHM_DICTIONARY
- date_column        | COMPRESSION_ALGORITHM_DELTADELTA
- decimal_column     | COMPRESSION_ALGORITHM_ARRAY
- float4_column      | COMPRESSION_ALGORITHM_GORILLA
- float8_column      | COMPRESSION_ALGORITHM_GORILLA
- int2_column        | COMPRESSION_ALGORITHM_DELTADELTA
- int4_column        | COMPRESSION_ALGORITHM_DELTADELTA
- int8_column        | COMPRESSION_ALGORITHM_DELTADELTA
- interval_column    | COMPRESSION_ALGORITHM_DICTIONARY
- numeric_column     | COMPRESSION_ALGORITHM_ARRAY
- text_column        | COMPRESSION_ALGORITHM_DICTIONARY
- time               | COMPRESSION_ALGORITHM_DELTADELTA
- timestamp_column   | COMPRESSION_ALGORITHM_DELTADELTA
- timestamptz_column | COMPRESSION_ALGORITHM_DELTADELTA
-(14 rows)
+select id, schema_name, table_name, compression_state as compressed, compressed_hypertable_id from _timescaledb_catalog.hypertable where table_name = 'datatype_test';
+ id | schema_name |  table_name   | compressed | compressed_hypertable_id 
+----+-------------+---------------+------------+--------------------------
+ 11 | public      | datatype_test |          1 |                       12
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='datatype_test'::regclass;
+     relid     | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------------+-----------+---------+--------------+--------------------
+ datatype_test |           | {time}  | {t}          | {t}
+(1 row)
 
 --TEST try to compress a hypertable that has a continuous aggregate
 CREATE TABLE metrics(time timestamptz, device_id int, v1 float, v2 float);

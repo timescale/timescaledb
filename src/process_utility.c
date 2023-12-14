@@ -5,7 +5,6 @@
  */
 #include <catalog/pg_class_d.h>
 #include <postgres.h>
-#include <foreign/foreign.h>
 #include <nodes/parsenodes.h>
 #include <nodes/nodes.h>
 #include <nodes/makefuncs.h>
@@ -60,7 +59,9 @@
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/hypertable_data_node.h"
+#include "ts_catalog/array_utils.h"
 #include "dimension_vector.h"
 #include "indexing.h"
 #include "scan_iterator.h"
@@ -405,55 +406,6 @@ add_chunk_oid(Hypertable *ht, Oid chunk_relid, void *vargs)
 	}
 }
 
-static bool
-block_on_foreign_server(const char *const server_name)
-{
-	const ForeignServer *server;
-
-	Assert(server_name != NULL);
-	server = GetForeignServerByName(server_name, true);
-	if (NULL != server)
-	{
-		Oid ts_fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
-		if (server->fdwid == ts_fdwid)
-			return true;
-	}
-	return false;
-}
-
-static DDLResult
-process_create_foreign_server_start(ProcessUtilityArgs *args)
-{
-	CreateForeignServerStmt *stmt = (CreateForeignServerStmt *) args->parsetree;
-
-	if (strcmp(EXTENSION_FDW_NAME, stmt->fdwname) == 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported for a TimescaleDB data node"),
-				 errhint("Use add_data_node() to add data nodes to a "
-						 "distributed database.")));
-
-	return DDL_CONTINUE;
-}
-
-static void
-process_drop_foreign_server_start(DropStmt *stmt)
-{
-	ListCell *lc;
-
-	foreach (lc, stmt->objects)
-	{
-		const char *servername = strVal(lfirst(lc));
-
-		if (block_on_foreign_server(servername))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on a TimescaleDB data node"),
-					 errhint("Use delete_data_node() to remove data nodes from a "
-							 "distributed database.")));
-	}
-}
-
 static void
 process_drop_trigger_start(ProcessUtilityArgs *args, DropStmt *stmt)
 {
@@ -488,55 +440,6 @@ process_drop_trigger_start(ProcessUtilityArgs *args, DropStmt *stmt)
 	}
 
 	ts_cache_release(hcache);
-}
-
-static DDLResult
-process_create_foreign_table_start(ProcessUtilityArgs *args)
-{
-	CreateForeignTableStmt *stmt = (CreateForeignTableStmt *) args->parsetree;
-
-	if (block_on_foreign_server(stmt->servername))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported"),
-				 errdetail(
-					 "It is not possible to create stand-alone TimescaleDB foreign tables.")));
-
-	return DDL_CONTINUE;
-}
-
-static DDLResult
-process_alter_foreign_server(ProcessUtilityArgs *args)
-{
-	AlterForeignServerStmt *stmt = (AlterForeignServerStmt *) args->parsetree;
-	ForeignServer *server = GetForeignServerByName(stmt->servername, true);
-	Oid fdwid = get_foreign_data_wrapper_oid(EXTENSION_FDW_NAME, false);
-	ListCell *lc;
-
-	if (server != NULL && server->fdwid == fdwid)
-	{
-		if (stmt->has_version)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("version not supported"),
-					 errdetail(
-						 "It is not possible to set a version on the data node configuration.")));
-
-		/* Options are validated by the FDW, but we need to block available option
-		 * since that must be handled via alter_data_node(). */
-		foreach (lc, stmt->options)
-		{
-			DefElem *elem = lfirst(lc);
-
-			if (strcmp(elem->defname, "available") == 0)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("cannot set \"available\" using ALTER SERVER"),
-						 errhint("Use alter_data_node() to set \"available\".")));
-		}
-	}
-
-	return DDL_CONTINUE;
 }
 
 static void
@@ -1793,9 +1696,6 @@ process_drop_start(ProcessUtilityArgs *args)
 		case OBJECT_VIEW:
 			process_drop_view_start(args, stmt);
 			break;
-		case OBJECT_FOREIGN_SERVER:
-			process_drop_foreign_server_start(stmt);
-			break;
 		case OBJECT_TRIGGER:
 			process_drop_trigger_start(args, stmt);
 			break;
@@ -1952,11 +1852,11 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	Hypertable *ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	Dimension *dim;
 
-	if (NULL == ht)
+	if (!ht)
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
-		if (NULL != chunk)
+		if (chunk)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("cannot rename column \"%s\" of hypertable chunk \"%s\"",
@@ -2019,6 +1919,7 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	 * we don't do anything. */
 	if (ht)
 	{
+		ts_compression_settings_rename_column(ht->main_table_relid, stmt->subname, stmt->newname);
 		add_hypertable_to_process_args(args, ht);
 		dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space,
 														  DIMENSION_TYPE_ANY,
@@ -4214,15 +4115,6 @@ process_ddl_command_start(ProcessUtilityArgs *args)
 
 	switch (nodeTag(args->parsetree))
 	{
-		case T_CreateForeignTableStmt:
-			handler = process_create_foreign_table_start;
-			break;
-		case T_AlterForeignServerStmt:
-			handler = process_alter_foreign_server;
-			break;
-		case T_CreateForeignServerStmt:
-			handler = process_create_foreign_server_start;
-			break;
 		case T_AlterObjectSchemaStmt:
 			handler = process_alterobjectschema;
 			break;
@@ -4547,9 +4439,6 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
 	 * standard process utility hook to maintain proper invocation
 	 * order of sql_drop and ddl_command_end triggers.
 	 */
-	if (ts_cm_functions->ddl_command_start)
-		ts_cm_functions->ddl_command_start(&args);
-
 	if (result == DDL_CONTINUE)
 		prev_ProcessUtility(&args);
 }
@@ -4561,9 +4450,6 @@ process_ddl_event_command_end(EventTriggerData *trigdata)
 
 	/* Inhibit collecting new commands while in the trigger */
 	EventTriggerInhibitCommandCollection();
-
-	if (ts_cm_functions->ddl_command_end)
-		ts_cm_functions->ddl_command_end(trigdata);
 
 	switch (nodeTag(trigdata->parsetree))
 	{
@@ -4586,9 +4472,6 @@ process_ddl_event_sql_drop(EventTriggerData *trigdata)
 {
 	ListCell *lc;
 	List *dropped_objects = ts_event_trigger_dropped_objects();
-
-	if (ts_cm_functions->sql_drop)
-		ts_cm_functions->sql_drop(dropped_objects);
 
 	foreach (lc, dropped_objects)
 		process_ddl_sql_drop(lfirst(lc));

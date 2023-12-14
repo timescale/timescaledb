@@ -312,7 +312,6 @@ DROP TABLE :UNCOMPRESSED_HYPER_NAME;
 
 --verify that there are no more hypertable remaining
 SELECT count(*) FROM _timescaledb_catalog.hypertable hypertable;
-SELECT count(*) FROM _timescaledb_catalog.hypertable_compression;
 
 --verify that the policy is gone
 SELECT count(*) FROM _timescaledb_config.bgw_job WHERE id >= 1000;
@@ -378,8 +377,7 @@ ALTER table test1 set (timescaledb.compress='f');
 --only one hypertable left
 SELECT count(*) = 1 FROM _timescaledb_catalog.hypertable hypertable;
 SELECT compressed_hypertable_id IS NULL FROM _timescaledb_catalog.hypertable hypertable WHERE hypertable.table_name like 'test1' ;
---no hypertable compression entries left
-SELECT count(*) = 0 FROM _timescaledb_catalog.hypertable_compression;
+
 --make sure there are no orphaned  _timescaledb_catalog.compression_chunk_size entries (should be 0)
 SELECT count(*) as orphaned_compression_chunk_size
 FROM _timescaledb_catalog.compression_chunk_size size
@@ -442,6 +440,8 @@ INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'
 CREATE MATERIALIZED VIEW test_agg WITH (timescaledb.continuous) AS SELECT time_bucket('1 hour', created_at) AS bucket, AVG(c1) AS avg_c1 FROM i2844 GROUP BY bucket;
 
 ALTER TABLE i2844 SET (timescaledb.compress);
+
+SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='i2844'::regclass;
 
 SELECT compress_chunk(show_chunks) AS compressed_chunk FROM show_chunks('i2844');
 SELECT drop_chunks('i2844', older_than => '2000-01-01 18:00'::timestamptz);

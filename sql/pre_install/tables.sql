@@ -466,23 +466,19 @@ CREATE TABLE _timescaledb_catalog.compression_algorithm (
   CONSTRAINT compression_algorithm_pkey PRIMARY KEY (id)
 );
 
-CREATE TABLE _timescaledb_catalog.hypertable_compression (
-  hypertable_id integer NOT NULL,
-  attname name NOT NULL,
-  compression_algorithm_id smallint,
-  segmentby_column_index smallint,
-  orderby_column_index smallint,
-  orderby_asc boolean,
-  orderby_nullsfirst boolean,
-  -- table constraints
-  CONSTRAINT hypertable_compression_pkey PRIMARY KEY (hypertable_id, attname),
-  CONSTRAINT hypertable_compression_hypertable_id_orderby_column_index_key UNIQUE (hypertable_id, orderby_column_index),
-  CONSTRAINT hypertable_compression_hypertable_id_segmentby_column_index_key UNIQUE (hypertable_id, segmentby_column_index),
-  CONSTRAINT hypertable_compression_compression_algorithm_id_fkey FOREIGN KEY (compression_algorithm_id) REFERENCES _timescaledb_catalog.compression_algorithm (id),
-  CONSTRAINT hypertable_compression_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+CREATE TABLE _timescaledb_catalog.compression_settings (
+	relid regclass NOT NULL,
+  segmentby text[],
+  orderby text[],
+  orderby_desc bool[],
+  orderby_nullsfirst bool[],
+  CONSTRAINT compression_settings_pkey PRIMARY KEY (relid),
+  CONSTRAINT compression_settings_check_segmentby CHECK (array_ndims(segmentby) = 1),
+  CONSTRAINT compression_settings_check_orderby_null CHECK ((orderby IS NULL AND orderby_desc IS NULL AND orderby_nullsfirst IS NULL) OR (orderby IS NOT NULL AND orderby_desc IS NOT NULL AND orderby_nullsfirst IS NOT NULL)),
+  CONSTRAINT compression_settings_check_orderby_cardinality CHECK (array_ndims(orderby) = 1 AND array_ndims(orderby_desc) = 1 AND array_ndims(orderby_nullsfirst) = 1 AND cardinality(orderby) = cardinality(orderby_desc) AND cardinality(orderby) = cardinality(orderby_nullsfirst))
 );
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_compression', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
 
 CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   chunk_id integer NOT NULL,
@@ -513,8 +509,7 @@ CREATE TABLE _timescaledb_catalog.remote_txn (
   data_node_name name, --this is really only to allow us to cleanup stuff on a per-node basis.
   remote_transaction_id text NOT NULL,
   -- table constraints
-  CONSTRAINT remote_txn_pkey PRIMARY KEY (remote_transaction_id),
-  CONSTRAINT remote_txn_remote_transaction_id_check CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL)
+  CONSTRAINT remote_txn_pkey PRIMARY KEY (remote_transaction_id)
 );
 
 CREATE INDEX remote_txn_data_node_name_idx ON _timescaledb_catalog.remote_txn (data_node_name);

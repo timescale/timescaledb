@@ -380,39 +380,7 @@ AND conditions.city = devices.location AND
       conditions.temperature > 28
 GROUP BY name, bucket;
 
---With old format cagg definition
-CREATE MATERIALIZED VIEW cagg_cagg_old
-WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
-SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
-   AVG(temperature),
-   MAX(temperature),
-   MIN(temperature),
-   devices.device_id device_id,
-   name
-FROM conditions, devices
-WHERE conditions.device_id = devices.device_id
-GROUP BY name, bucket, devices.device_id;
-
-CREATE MATERIALIZED VIEW cagg_cagg_old
-WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE, timescaledb.finalized = FALSE) AS
-SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
-   AVG(temperature),
-   MAX(temperature),
-   MIN(temperature),
-   devices.device_id device_id,
-   name
-FROM conditions JOIN devices
-ON conditions.device_id = devices.device_id
-GROUP BY name, bucket, devices.device_id;
-
 CREATE  TABLE mat_t1( a integer, b integer,c TEXT);
-
---With LATERAL multiple tables old format
-CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE, timescaledb.finalized = false)
-as
-select temperature, count(*) from conditions,
-LATERAL (Select * from mat_t1 where a = conditions.temperature) q
-group by temperature WITH NO DATA;
 
 --With LATERAL multiple tables in new format
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE)

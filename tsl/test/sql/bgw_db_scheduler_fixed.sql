@@ -763,7 +763,7 @@ ORDER BY job_id;
 -- test ability to switch from one type of schedule to another
 CREATE OR REPLACE PROCEDURE job_test(jobid int, config jsonb) language plpgsql as $$
 BEGIN
-PERFORM pg_sleep(10);
+PERFORM pg_sleep(0.5);
 END
 $$;
 

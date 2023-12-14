@@ -34,13 +34,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_data_recv(internal)
    AS '@MODULE_PATHNAME@', 'ts_compressed_data_recv'
    LANGUAGE C IMMUTABLE STRICT;
 
--- Remote transation ID implementation
-CREATE OR REPLACE FUNCTION _timescaledb_functions.rxid_in(cstring) RETURNS @extschema@.rxid
-    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_in' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-
-CREATE OR REPLACE FUNCTION _timescaledb_functions.rxid_out(@extschema@.rxid) RETURNS cstring
-    AS '@MODULE_PATHNAME@', 'ts_remote_txn_id_out' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
-
 CREATE OR REPLACE FUNCTION _timescaledb_functions.dimension_info_in(cstring)
     RETURNS _timescaledb_internal.dimension_info
     LANGUAGE C STRICT IMMUTABLE

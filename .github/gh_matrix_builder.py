@@ -79,9 +79,6 @@ def build_debug_config(overrides):
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
         }
     )
-    # We use .get() here to be able to handle also configurations without PG versions
-    if not pull_request or overrides.get("pg") == PG15_LATEST:
-        base_config["tsdb_build_args"] += " -DENABLE_MULTINODE_TESTS=ON"
     base_config.update(overrides)
     return base_config
 
@@ -100,8 +97,6 @@ def build_release_config(overrides):
             "coverage": False,
         }
     )
-    if not pull_request:
-        release_config["tsdb_build_args"] += " -DENABLE_MULTINODE_TESTS=ON"
     base_config.update(release_config)
     base_config.update(overrides)
     return base_config
@@ -151,14 +146,12 @@ def macos_config(overrides):
                 "remote_connection",
                 "compressed_collation",
             },
-            "os": "macos-11",
+            "os": "macos-13",
             "pg_extra_args": "--with-libraries=/usr/local/opt/openssl/lib --with-includes=/usr/local/opt/openssl/include --without-icu",
             "pginstallcheck": True,
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl",
         }
     )
-    if not pull_request:
-        base_config["tsdb_build_args"] += " -DENABLE_MULTINODE_TESTS=ON"
     base_config.update(overrides)
     return base_config
 
@@ -167,7 +160,6 @@ def macos_config(overrides):
 ignored_tests = {}
 
 # common ignored tests for all non-scheduled pg15 tests (e.g. PRs)
-# dist_move_chunk, dist_param, dist_insert, and remote_txn ignored due to flakiness
 if pull_request:
     ignored_tests = {
         "telemetry",
@@ -225,10 +217,9 @@ if not pull_request:
         "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
         "skipped_tests": {"001_extension"},
         "ignored_tests": {
-            "dist_gapfill_pushdown-13",
             "transparent_decompress_chunk-13",
         },
-        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF -DENABLE_MULTINODE_TESTS=ON",
+        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
     }
     m["include"].append(build_debug_config(pg13_debug_earliest))
 
@@ -239,7 +230,7 @@ if not pull_request:
                 "pg": PG14_EARLIEST,
                 # The early releases don't build with llvm 14.
                 "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-                "ignored_tests": {"dist_gapfill_pushdown-14 memoize"},
+                "ignored_tests": {"memoize"},
             }
         )
     )
@@ -287,7 +278,7 @@ if not pull_request:
     m["include"].append(
         build_debug_config(
             {
-                "ignored_tests": {"dist_gapfill_pushdown-14 memoize"},
+                "ignored_tests": {"memoize"},
                 "pg": 14,
                 "snapshot": "snapshot",
             }

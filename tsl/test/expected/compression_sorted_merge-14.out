@@ -472,11 +472,11 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS FIRST;
    Batch Sorted Merge: true
    Bulk Decompression: false
    ->  Sort (actual rows=2 loops=1)
-         Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1
+         Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2
          Sort Key: compress_hyper_6_6_chunk._ts_meta_min_1 NULLS FIRST
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2 loops=1)
-               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1
+               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2
 (10 rows)
 
 -- Should be optimized (backward scan)
@@ -489,11 +489,11 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS LAST;
    Batch Sorted Merge: true
    Bulk Decompression: false
    ->  Sort (actual rows=2 loops=1)
-         Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1
+         Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2
          Sort Key: compress_hyper_6_6_chunk._ts_meta_max_1 DESC NULLS LAST
          Sort Method: quicksort 
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2 loops=1)
-               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1
+               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2
 (10 rows)
 
 -- Should not be optimized
@@ -509,7 +509,7 @@ SELECT * FROM test_with_defined_null ORDER BY x2 ASC NULLS LAST;
          Output: _hyper_5_5_chunk."time", _hyper_5_5_chunk.x1, _hyper_5_5_chunk.x2, _hyper_5_5_chunk.x3
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2 loops=1)
-               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1
+               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2
 (9 rows)
 
 -- Should not be optimized
@@ -525,7 +525,7 @@ SELECT * FROM test_with_defined_null ORDER BY x2 DESC NULLS FIRST;
          Output: _hyper_5_5_chunk."time", _hyper_5_5_chunk.x1, _hyper_5_5_chunk.x2, _hyper_5_5_chunk.x3
          Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_6_6_chunk (actual rows=2 loops=1)
-               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1
+               Output: compress_hyper_6_6_chunk."time", compress_hyper_6_6_chunk.x1, compress_hyper_6_6_chunk.x2, compress_hyper_6_6_chunk.x3, compress_hyper_6_6_chunk._ts_meta_count, compress_hyper_6_6_chunk._ts_meta_sequence_num, compress_hyper_6_6_chunk._ts_meta_min_1, compress_hyper_6_6_chunk._ts_meta_max_1, compress_hyper_6_6_chunk._ts_meta_min_2, compress_hyper_6_6_chunk._ts_meta_max_2
 (9 rows)
 
 ------

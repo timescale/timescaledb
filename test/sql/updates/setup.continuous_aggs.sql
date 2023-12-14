@@ -7,9 +7,13 @@
 -- we keep them separate anyway so that we can do additional checking
 -- if necessary.
 SELECT
-	extversion < '2.0.0' AS has_refresh_mat_view
-  FROM pg_extension
- WHERE extname = 'timescaledb' \gset
+     split_part(extversion, '.', 1)::int * 100000 +
+     split_part(extversion, '.', 2)::int *    100 AS extversion_num
+FROM
+     pg_extension WHERE extname = 'timescaledb' \gset
+
+SELECT
+     :extversion_num <  200000 AS has_refresh_mat_view \gset
 
 CREATE TYPE custom_type AS (high int, low int);
 
