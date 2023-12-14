@@ -1329,7 +1329,8 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 \gset
 -- delete 10k rows
 DELETE FROM sample_table WHERE c4 = 5;
-INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Index "compress_hyper_20_38_chunk__compressed_hypertable_20_c4__ts_met" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 = 5;
  count 
@@ -1381,7 +1382,8 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 < 5 \gset
 -- delete 50k rows
 DELETE FROM sample_table WHERE c4 < 5;
-INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Index "compress_hyper_20_38_chunk__compressed_hypertable_20_c4__ts_met" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 < 5;
  count 
@@ -1433,7 +1435,8 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 >= 5 \gset
 -- delete 50k rows
 DELETE FROM sample_table WHERE c4 >= 5;
-INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Index "compress_hyper_20_38_chunk__compressed_hypertable_20_c4__ts_met" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 >= 5;
  count 
@@ -1486,6 +1489,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c2 = 3 \gset
 -- delete 10k rows
 DELETE FROM sample_table WHERE c2 = 3;
+INFO:  Number of compressed rows fetched from table scan: 100. Number of compressed rows filtered: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c2 = 3;
  count 
@@ -1538,6 +1542,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 < 2 \gset
 -- delete 20k rows
 DELETE FROM sample_table WHERE c1 < 2;
+INFO:  Number of compressed rows fetched from table scan: 20. Number of compressed rows filtered: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c1 < 2;
  count 
@@ -1590,6 +1595,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c1 >= 7 \gset
 -- delete 30k rows
 DELETE FROM sample_table WHERE c1 >= 7;
+INFO:  Number of compressed rows fetched from table scan: 30. Number of compressed rows filtered: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c1 >= 7;
  count 
@@ -1643,7 +1649,8 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 and c1 = 5 \gset
 -- delete 1k rows
 DELETE FROM sample_table WHERE c4 = 5 and c1 = 5;
-INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 9.
+INFO:  Index "compress_hyper_20_38_chunk__compressed_hypertable_20_c4__ts_met" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by heap filters: 9.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
  count 
@@ -1697,7 +1704,8 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 > 5 and c2 = 5 \gset
 -- delete 4k rows
 DELETE FROM sample_table WHERE c4 > 5 and c2 = 5;
-INFO:  Number of compressed rows fetched from index: 40. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Index "compress_hyper_20_38_chunk__compressed_hypertable_20_c4__ts_met" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 40. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
  count 
@@ -1759,7 +1767,8 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7;
 SELECT COUNT(*) AS "total_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7 \gset
 UPDATE sample_table SET c3 = c3 + 0 WHERE c4 = 4 AND c1 >= 7;
-INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by orderby columns: 7.
+INFO:  Index "compress_hyper_20_38_chunk__compressed_hypertable_20_c4__ts_met" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by heap filters: 7.
 -- report 7 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
  count 
@@ -2391,7 +2400,8 @@ SELECT COUNT(*) FROM tab1 WHERE filler_3 = 5 AND filler_2 = 4;
 (1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_3 = 5 AND filler_2 = 4;
-INFO:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Index "compress_hyper_2_2_chunk_filler_2_filler_3" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by heap filters: 0.
 ROLLBACK;
 BEGIN;
 SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5 AND filler_2 = 4;
@@ -2401,7 +2411,8 @@ SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5 AND filler_2 = 4;
 (1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5 AND filler_2 = 4;
-INFO:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Index "compress_hyper_2_2_chunk_filler_1_filler_2" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 4. Number of compressed rows filtered by heap filters: 0.
 ROLLBACK;
 -- idealy filler_1 index should be selected,
 -- instead first matching index is selected
@@ -2413,7 +2424,8 @@ SELECT COUNT(*) FROM tab1 WHERE filler_1 < 5;
 (1 row)
 
 UPDATE tab1 SET v0 = v1 + v2 WHERE filler_1 < 5;
-INFO:  Number of compressed rows fetched from index: 16. Number of compressed rows filtered by orderby columns: 0.
+INFO:  Index "compress_hyper_2_2_chunk__compressed_hypertable_2__ts_meta_mi_2" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 16. Number of compressed rows filtered by heap filters: 0.
 ROLLBACK;
 RESET timescaledb.debug_compression_path_info;
 DROP TABLE tab1;
@@ -2440,3 +2452,206 @@ SELECT compress_chunk(show_chunks('t'));
 UPDATE t SET b = 2 WHERE tableoid = 0;
 UPDATE t SET b = 2 WHERE tableoid is null;
 DROP TABLE t;
+-- github issue: 6367
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE DATABASE test6367;
+\c test6367 :ROLE_SUPERUSER
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+CREATE TABLE t6367 (
+  time timestamptz NOT NULL,
+  source_id varchar(64) NOT NULL,
+  label varchar,
+  data jsonb
+);
+SELECT table_name FROM create_hypertable('t6367', 'time');
+ table_name 
+------------
+ t6367
+(1 row)
+
+ALTER TABLE t6367 SET(timescaledb.compress, timescaledb.compress_segmentby = 'source_id, label', timescaledb.compress_orderby = 'time');
+INSERT INTO t6367
+SELECT time, source_id, label, '{}' AS data
+FROM
+generate_series('1990-01-01'::timestamptz, '1990-01-10'::timestamptz, INTERVAL '1 day') AS g1(time),
+generate_series(1, 3, 1 ) AS g2(source_id),
+generate_series(1, 3, 1 ) AS g3(label);
+SELECT compress_chunk(c) FROM show_chunks('t6367') c;
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+(2 rows)
+
+DROP INDEX _timescaledb_internal._compressed_hypertable_2_source_id_label__ts_meta_sequence__idx;
+-- testcase with no index, should use seq scan
+set timescaledb.debug_compression_path_info to on;
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+    10
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+-- test case with an index which has only one
+-- of the segmentby filters
+CREATE INDEX source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id);
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+    10
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+INFO:  Index "compress_hyper_2_3_chunk_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 2.
+INFO:  Index "compress_hyper_2_4_chunk_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 2.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+-- test that we are filtering NULL checks
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NULL;
+ count 
+-------
+     0
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label IS NULL;
+INFO:  Index "compress_hyper_2_3_chunk_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 3.
+INFO:  Index "compress_hyper_2_4_chunk_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 3.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NULL;
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
+ count 
+-------
+    30
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label IS NOT NULL;
+INFO:  Index "compress_hyper_2_3_chunk_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 0.
+INFO:  Index "compress_hyper_2_4_chunk_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 0.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+DROP INDEX _timescaledb_internal.source_id_idx;
+-- test case with an index which has multiple same column
+CREATE INDEX source_id_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id, source_id);
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+    10
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+INFO:  Index "compress_hyper_2_3_chunk_source_id_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 2.
+INFO:  Index "compress_hyper_2_4_chunk_source_id_source_id_idx" is used for scan. 
+INFO:  Number of compressed rows fetched from index: 3. Number of compressed rows filtered by heap filters: 2.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+DROP INDEX _timescaledb_internal.source_id_source_id_idx;
+-- test using a non-btree index
+-- fallback to heap scan
+CREATE INDEX brin_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 USING brin (source_id);
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+    10
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+DROP INDEX _timescaledb_internal.brin_source_id_idx;
+-- test using an expression index
+-- should fallback to heap scans
+CREATE INDEX expr_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (upper(source_id));
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+    10
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+DROP INDEX _timescaledb_internal.expr_source_id_idx;
+-- test using a partial index
+-- should fallback to heap scans
+CREATE INDEX partial_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id)
+WHERE _ts_meta_min_1 > '1990-01-01'::timestamptz;
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+    10
+(1 row)
+
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+INFO:  Number of compressed rows fetched from table scan: 1. Number of compressed rows filtered: 0.
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ count 
+-------
+     0
+(1 row)
+
+ROLLBACK;
+RESET timescaledb.debug_compression_path_info;
+DROP TABLE t6367;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE test6367;
