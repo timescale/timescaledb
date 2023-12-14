@@ -125,7 +125,7 @@ jobs:
             { algo: dictionary, pgtype: text  , bulk: false, runs:   10000000 },
             ]
 
-    name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk }}
+    name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
     runs-on: ubuntu-22.04
     env:
       PG_SRC_DIR: pgbuild
@@ -163,7 +163,7 @@ jobs:
       run: |
         set -x
         echo "cache_prefix=${{ format('libfuzzer-2-{0}-{1}', matrix.case.algo, matrix.case.pgtype) }}" >> $GITHUB_OUTPUT
-        echo "name='${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}'" >> $GITHUB_OUTPUT
+        echo "name=${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}" >> $GITHUB_OUTPUT
 
     - name: Restore the cached fuzzing corpus (bulk)
       id: restore-corpus-cache-bulk
