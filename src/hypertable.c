@@ -1569,109 +1569,6 @@ ts_validate_replication_factor(const char *hypertable_name, int32 replication_fa
 	return (int16) (replication_factor & 0xFFFF);
 }
 
-static int16
-hypertable_validate_create_call(const char *hypertable_name, bool distributed,
-								bool distributed_is_null, int32 replication_factor,
-								bool replication_factor_is_null, ArrayType *data_node_arr,
-								List **data_nodes)
-{
-	bool distributed_local_error = false;
-
-	if (!distributed_is_null && !replication_factor_is_null)
-	{
-		/* create_hypertable(distributed, replication_factor) */
-		if (!distributed)
-			distributed_local_error = true;
-	}
-	else if (!distributed_is_null)
-	{
-		/* create_hypertable(distributed) */
-		switch (ts_guc_hypertable_distributed_default)
-		{
-			case HYPERTABLE_DIST_AUTO:
-			case HYPERTABLE_DIST_DISTRIBUTED:
-				if (distributed)
-					replication_factor = ts_guc_hypertable_replication_factor_default;
-				else
-				{
-					/* creating regular hypertable according to the policy */
-				}
-				break;
-			case HYPERTABLE_DIST_LOCAL:
-				if (distributed)
-					replication_factor = ts_guc_hypertable_replication_factor_default;
-				else
-					distributed_local_error = true;
-				break;
-		}
-	}
-	else if (!replication_factor_is_null)
-	{
-		/* create_hypertable(replication_factor) */
-		switch (ts_guc_hypertable_distributed_default)
-		{
-			case HYPERTABLE_DIST_AUTO:
-			case HYPERTABLE_DIST_DISTRIBUTED:
-				/* distributed and distributed member */
-				distributed = true;
-				break;
-			case HYPERTABLE_DIST_LOCAL:
-				distributed_local_error = true;
-				break;
-		}
-	}
-	else
-	{
-		/* create_hypertable() */
-		switch (ts_guc_hypertable_distributed_default)
-		{
-			case HYPERTABLE_DIST_AUTO:
-				distributed = false;
-				break;
-			case HYPERTABLE_DIST_LOCAL:
-				distributed_local_error = true;
-				break;
-			case HYPERTABLE_DIST_DISTRIBUTED:
-				replication_factor = ts_guc_hypertable_replication_factor_default;
-				distributed = true;
-				break;
-		}
-	}
-
-	if (distributed_local_error)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("local hypertables cannot set replication_factor"),
-				 errhint("Set distributed=>true or use create_distributed_hypertable() to create a "
-						 "distributed hypertable.")));
-
-	if (!distributed)
-		return 0;
-
-	/*
-	 * Special replication_factor case for hypertables created on remote
-	 * data nodes. Used to distinguish them from regular hypertables.
-	 *
-	 * Such argument is only allowed to be use by access node session.
-	 */
-	if (replication_factor == -1)
-	{
-		bool an_session_on_dn =
-			ts_cm_functions->is_access_node_session && ts_cm_functions->is_access_node_session();
-		if (an_session_on_dn)
-			return -1;
-	}
-
-	/* Validate data nodes and check permissions on them */
-	if (replication_factor > 0)
-		*data_nodes = ts_cm_functions->get_and_validate_data_node_list(data_node_arr);
-
-	/* Check replication_factor value and the number of nodes */
-	return ts_validate_replication_factor(hypertable_name,
-										  replication_factor,
-										  list_length(*data_nodes));
-}
-
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_create_general);
@@ -1746,13 +1643,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 		 * Validate data nodes and check permissions on them if this is a
 		 * distributed hypertable.
 		 */
-		replication_factor = hypertable_validate_create_call(get_rel_name(table_relid),
-															 distributed,
-															 distributed_is_null,
-															 replication_factor_in,
-															 replication_factor_is_null,
-															 data_node_arr,
-															 &data_nodes);
+		replication_factor = 0;
 
 		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
@@ -2280,15 +2171,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	if ((flags & HYPERTABLE_CREATE_DISABLE_DEFAULT_INDEXES) == 0)
 		ts_indexing_create_default_indexes(ht);
 
-	if (replication_factor > 0)
-		ts_cm_functions->hypertable_make_distributed(ht, data_node_names);
-	else if (list_length(data_node_names) > 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication factor"),
-				 errhint("The replication factor should be 1 or greater with a non-empty data node "
-						 "list.")));
-
 	ts_cache_release(hcache);
 
 	return true;
@@ -2479,7 +2361,6 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 						NULL,
 						NULL,
 						&now_func_oid);
-	ts_hypertable_func_call_on_data_nodes(hypertable, fcinfo);
 	ts_cache_release(hcache);
 	PG_RETURN_NULL();
 }
@@ -2847,13 +2728,6 @@ ts_hypertable_get_type(const Hypertable *ht)
 	if (ht->fd.replication_factor < 1)
 		return (HypertableType) ht->fd.replication_factor;
 	return HYPERTABLE_DISTRIBUTED;
-}
-
-void
-ts_hypertable_func_call_on_data_nodes(const Hypertable *ht, FunctionCallInfo fcinfo)
-{
-	if (hypertable_is_distributed(ht))
-		ts_cm_functions->func_call_on_data_nodes(fcinfo, ts_hypertable_get_data_node_name_list(ht));
 }
 
 /*

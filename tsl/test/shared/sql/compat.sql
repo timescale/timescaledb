@@ -62,7 +62,6 @@ SELECT _timescaledb_internal.range_value_to_pretty(0,0);
 SELECT _timescaledb_internal.recompress_chunk_segmentwise(0,true);
 SELECT _timescaledb_internal.relation_size(0);
 SELECT _timescaledb_internal.restart_background_workers();
-SELECT _timescaledb_internal.set_chunk_default_data_node(0,NULL);
 SELECT _timescaledb_internal.show_chunk(0);
 SELECT _timescaledb_internal.start_background_workers();
 SELECT _timescaledb_internal.stop_background_workers();
