@@ -165,7 +165,7 @@ jobs:
         path: db/corpus-bulk
         # If the initial corpus changes, probably it was updated by hand with
         # some important examples, and it makes sense to start anew from it.
-        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.pgtype }}-true\
+        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.pgtype }}-true-\
           ${{ hashFiles(format('tsl/test/fuzzing/compression/{0}-{1}', matrix.case.algo, matrix.case.pgtype)) }}"
 
     # We save the row-by-row corpus separately from the bulk corpus, so that
@@ -175,7 +175,7 @@ jobs:
       uses: actions/cache/restore@v3
       with:
         path: db/corpus-rowbyrow
-        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.pgtype }}-false\
+        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.pgtype }}-false-\
           ${{ hashFiles(format('tsl/test/fuzzing/compression/{0}-{1}', matrix.case.algo, matrix.case.pgtype)) }}"
 
     - name: Initialize the fuzzing corpus from repository
