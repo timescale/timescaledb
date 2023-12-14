@@ -275,7 +275,7 @@ jobs:
     - name: Save fuzzer corpus
       uses: actions/cache/save@v3
       with:
-        path: db/corpus-{{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
+        path: db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
         key: "${{ format('{0}-{1}-{2}-{3}',
             steps.config.outputs.cache_prefix,
 			matrix.case.bulk && 'bulk' || 'rowbyrow',
