@@ -268,7 +268,10 @@ jobs:
       uses: actions/cache/save@v3
       with:
         path: db/corpus
-        key: "${{ steps.config.outputs.cache_prefix }}-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}"
+        key: "${{ format('{0}-{1}-{2}-{3}',
+            steps.config.outputs.cache_prefix,
+			matrix.case.bulk && 'bulk' || 'rowbyrow',
+            github.run_id, github.run_attempt) }}"
 
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
