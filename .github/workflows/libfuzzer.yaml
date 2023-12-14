@@ -188,7 +188,7 @@ jobs:
         find "tsl/test/fuzzing/compression/${{ matrix.case.algo }}-${{ matrix.case.pgtype }}" -type f -exec cp -t db/corpus {} +
 
     - name: Initialize the fuzzing corpus from cache
-      if: !(steps.restore-corpus-cache-bulk.outputs.cache-matched-key == '' && steps.restore-corpus-cache-rowbyrow.outputs.cache-matched-key == '')
+      if: ${{ !(steps.restore-corpus-cache-bulk.outputs.cache-matched-key == '' && steps.restore-corpus-cache-rowbyrow.outputs.cache-matched-key == '') }}
       run: |
         # Combine the corpus from rowbyrow and bulk fuzzing.
         mkdir -p db/corpus{,-rowbyrow,-bulk}
