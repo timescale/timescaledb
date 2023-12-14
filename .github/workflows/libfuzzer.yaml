@@ -182,7 +182,6 @@ jobs:
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
 
     - name: Initialize the fuzzing corpus
-      if: ${{ !(steps.restore-corpus-cache-bulk.outputs.cache-matched-key == '' && steps.restore-corpus-cache-rowbyrow.outputs.cache-matched-key == '') }}
       run: |
         # Combine the cached corpus from rowbyrow and bulk fuzzing, and from repository.
         mkdir -p db/corpus{,-rowbyrow,-bulk}
