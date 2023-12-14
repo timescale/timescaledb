@@ -1241,7 +1241,6 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 	}
 
 	dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
-	ts_hypertable_check_partitioning(ht, dim->fd.id);
 }
 
 TS_FUNCTION_INFO_V1(ts_dimension_set_num_slices);
@@ -1640,10 +1639,9 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 
 			if (space_dim != NULL)
 			{
-				List *data_nodes = ts_hypertable_get_available_data_nodes(info->ht, false);
 				ts_dimension_partition_info_recreate(dimension_id,
 													 info->num_slices,
-													 data_nodes,
+													 NIL,
 													 info->ht->fd.replication_factor);
 			}
 		}
@@ -1657,9 +1655,6 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 		 */
 		info->ht = ts_hypertable_get_by_id(info->ht->fd.id);
 		ts_indexing_verify_indexes(info->ht);
-
-		/* Check that partitioning is sane */
-		ts_hypertable_check_partitioning(info->ht, dimension_id);
 
 		/*
 		 * If the hypertable has chunks, to make it compatible

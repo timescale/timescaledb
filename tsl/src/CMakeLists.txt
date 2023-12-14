@@ -1,11 +1,6 @@
 set(SOURCES
     chunk_api.c
     chunk.c
-    data_node.c
-    deparse.c
-    dist_util.c
-    dist_backup.c
-    hypertable.c
     init.c
     partialize_agg.c
     partialize_finalize.c
@@ -58,4 +53,3 @@ add_subdirectory(bgw_policy)
 add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
 add_subdirectory(nodes)
-add_subdirectory(remote)

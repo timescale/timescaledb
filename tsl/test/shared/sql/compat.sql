@@ -25,7 +25,6 @@ SELECT _timescaledb_internal.create_chunk(0,NULL,NULL,NULL,0);
 SELECT _timescaledb_internal.create_chunk_table(0,NULL,NULL,NULL);
 SELECT _timescaledb_internal.create_compressed_chunk(0,0,0,0,0,0,0,0,0,0);
 SELECT _timescaledb_internal.drop_chunk(0);
-SELECT _timescaledb_internal.drop_dist_ht_invalidation_trigger(0);
 SELECT _timescaledb_internal.freeze_chunk(0);
 SELECT FROM _timescaledb_internal.generate_uuid();
 SELECT _timescaledb_internal.get_approx_row_count(0);

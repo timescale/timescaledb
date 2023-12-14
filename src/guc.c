@@ -208,16 +208,6 @@ ts_feature_flag_check(FeatureFlagType type)
  */
 static bool gucs_are_initialized = false;
 
-/* Hook for plugins to allow additional SSL options */
-set_ssl_options_hook_type ts_set_ssl_options_hook = NULL;
-
-/* Assign the hook to the passed in function argument */
-void
-ts_assign_ssl_options_hook(void *fn)
-{
-	ts_set_ssl_options_hook = (set_ssl_options_hook_type) fn;
-}
-
 /*
  * Warn about the mismatched cache sizes that can lead to cache thrashing.
  */

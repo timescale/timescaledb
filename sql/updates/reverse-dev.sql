@@ -340,4 +340,7 @@ AS '@MODULE_PATHNAME@', 'ts_copy_chunk_cleanup_proc' LANGUAGE C;
 CREATE FUNCTION _timescaledb_functions.set_chunk_default_data_node(chunk REGCLASS, node_name NAME) RETURNS BOOLEAN
 AS '@MODULE_PATHNAME@', 'ts_chunk_set_default_data_node' LANGUAGE C VOLATILE;
 
+CREATE FUNCTION _timescaledb_functions.drop_dist_ht_invalidation_trigger(
+    raw_hypertable_id INTEGER
+) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_drop_dist_ht_invalidation_trigger' LANGUAGE C STRICT VOLATILE;
 

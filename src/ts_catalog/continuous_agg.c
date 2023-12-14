@@ -1176,8 +1176,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	if (OidIsValid(raw_hypertable_trig.objectId))
 	{
 		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
-		if (ts_cm_functions->remote_drop_dist_ht_invalidation_trigger)
-			ts_cm_functions->remote_drop_dist_ht_invalidation_trigger(cadata->raw_hypertable_id);
 	}
 
 	if (OidIsValid(mat_hypertable.objectId))

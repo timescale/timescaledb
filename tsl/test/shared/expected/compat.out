@@ -82,9 +82,6 @@ ERROR:  invalid Oid
 SELECT _timescaledb_internal.drop_chunk(0);
 WARNING:  function _timescaledb_internal.drop_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  chunk not found
-SELECT _timescaledb_internal.drop_dist_ht_invalidation_trigger(0);
-WARNING:  function _timescaledb_internal.drop_dist_ht_invalidation_trigger(integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  function was not provided with a valid distributed hypertable id
 SELECT _timescaledb_internal.freeze_chunk(0);
 WARNING:  function _timescaledb_internal.freeze_chunk(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid

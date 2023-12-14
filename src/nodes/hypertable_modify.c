@@ -28,7 +28,6 @@
 #include "hypertable_cache.h"
 #include "hypertable_modify.h"
 #include "nodes/chunk_append/chunk_append.h"
-#include "ts_catalog/hypertable_data_node.h"
 
 #if PG14_GE
 static void fireASTriggers(ModifyTableState *node);
@@ -199,12 +198,7 @@ static void
 hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
 	HypertableModifyState *state = (HypertableModifyState *) node;
-	List *fdw_private = linitial_node(List, state->mt->fdwPrivLists);
 	ModifyTableState *mtstate = linitial_node(ModifyTableState, node->custom_ps);
-	Index rti = state->mt->nominalRelation;
-	RangeTblEntry *rte = rt_fetch(rti, es->rtable);
-	const char *relname = get_rel_name(rte->relid);
-	const char *namespace = get_namespace_name(get_rel_namespace(rte->relid));
 
 #if PG14_GE
 	/*
@@ -267,42 +261,6 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
 	if (state->tuples_decompressed > 0)
 		ExplainPropertyInteger("Tuples decompressed", NULL, state->tuples_decompressed, es);
-
-	if (NULL != state->fdwroutine)
-	{
-		appendStringInfo(es->str, "Insert on distributed hypertable");
-
-		if (es->verbose)
-		{
-			List *node_names = NIL;
-			ListCell *lc;
-
-			appendStringInfo(es->str,
-							 " %s.%s\n",
-							 quote_identifier(namespace),
-							 quote_identifier(relname));
-
-			foreach (lc, state->serveroids)
-			{
-				ForeignServer *server = GetForeignServer(lfirst_oid(lc));
-
-				node_names = lappend(node_names, server->servername);
-			}
-
-			ExplainPropertyList("Data nodes", node_names, es);
-		}
-		else
-			appendStringInfo(es->str, " %s\n", quote_identifier(relname));
-
-		/* Let the foreign data wrapper add its part of the explain, but only
-		 * if this was using the non-direct API. */
-		if (NIL != fdw_private && state->fdwroutine->ExplainForeignModify)
-			state->fdwroutine->ExplainForeignModify(mtstate,
-													mtstate->resultRelInfo,
-													fdw_private,
-													0,
-													es);
-	}
 }
 
 static CustomExecMethods hypertable_modify_state_methods = {
@@ -319,30 +277,11 @@ hypertable_modify_state_create(CustomScan *cscan)
 {
 	HypertableModifyState *state;
 	ModifyTable *mt = castNode(ModifyTable, linitial(cscan->custom_plans));
-	Oid serverid;
 
 	state = (HypertableModifyState *) newNode(sizeof(HypertableModifyState), T_CustomScanState);
 	state->cscan_state.methods = &hypertable_modify_state_methods;
 	state->mt = mt;
 	state->mt->arbiterIndexes = linitial(cscan->custom_private);
-
-	/*
-	 * Get the list of data nodes to insert on.
-	 */
-	state->serveroids = lsecond(cscan->custom_private);
-
-	/*
-	 * Get the FDW routine for the first data node. It should be the same for
-	 * all of them
-	 */
-	if (NIL != state->serveroids)
-	{
-		serverid = linitial_oid(state->serveroids);
-		state->fdwroutine = GetFdwRoutineByServerId(serverid);
-		Assert(state->fdwroutine != NULL);
-	}
-	else
-		state->fdwroutine = NULL;
 
 	return (Node *) state;
 }
@@ -681,7 +620,7 @@ ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath *mtpath, Hyp
 	hmpath->cpath.custom_paths = list_make1(mtpath);
 	hmpath->cpath.methods = &hypertable_modify_path_methods;
 	hmpath->distributed_insert_plans = distributed_insert_plans;
-	hmpath->serveroids = ts_hypertable_get_available_data_node_server_oids(ht);
+	hmpath->serveroids = NIL;
 	path = &hmpath->cpath.path;
 #if PG14_LT
 	mtpath->subpaths = list_make1(subpath);

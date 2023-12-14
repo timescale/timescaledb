@@ -29,12 +29,9 @@
 #include <hypertable_cache.h>
 
 #include "compat/compat.h"
-#include "remote/dist_commands.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
-#include "data_node.h"
-#include "deparse.h"
 #include "invalidation.h"
 #include "refresh.h"
 
@@ -272,54 +269,6 @@ tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS)
 #define INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME "invalidation_hyper_log_add_entry"
 
 void
-remote_invalidation_log_add_entry(const Hypertable *raw_ht,
-								  ContinuousAggHypertableStatus caggstatus, int32 entry_id,
-								  int64 start, int64 end)
-{
-	Oid func_oid;
-	LOCAL_FCINFO(fcinfo, INVALIDATION_CAGG_ADD_ENTRY_NARGS);
-	FmgrInfo flinfo;
-
-	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
-
-	static const Oid type_id[INVALIDATION_CAGG_ADD_ENTRY_NARGS] = { INT4OID, INT8OID, INT8OID };
-	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
-								 makeString((caggstatus == HypertableIsMaterialization) ?
-												INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME :
-												INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME));
-
-	if (!hypertable_is_distributed(raw_ht))
-		elog(ERROR, "function was not provided with a valid distributed hypertable");
-
-	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
-	Assert(OidIsValid(func_oid));
-
-	fmgr_info(func_oid, &flinfo);
-	InitFunctionCallInfoData(*fcinfo,
-							 &flinfo,
-							 INVALIDATION_CAGG_ADD_ENTRY_NARGS,
-							 InvalidOid,
-							 NULL,
-							 NULL);
-
-	FC_NULL(fcinfo, 0) = false;
-	FC_ARG(fcinfo, 0) = Int32GetDatum(entry_id);
-	FC_NULL(fcinfo, 1) = false;
-	FC_ARG(fcinfo, 1) = Int64GetDatum(start);
-	FC_NULL(fcinfo, 2) = false;
-	FC_ARG(fcinfo, 2) = Int64GetDatum(end);
-	/* Check for null result, since caller is clearly not expecting one */
-	if (fcinfo->isnull)
-		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-	DistCmdResult *result;
-	List *data_node_list = ts_hypertable_get_data_node_name_list(raw_ht);
-	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_node_list);
-	if (result)
-		ts_dist_cmd_close_response(result);
-}
-
-void
 invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
 {
 	Relation rel = open_invalidation_log(LOG_HYPER, RowExclusiveLock);
@@ -366,14 +315,7 @@ continuous_agg_invalidate_raw_ht(const Hypertable *raw_ht, int64 start, int64 en
 {
 	Assert(raw_ht != NULL);
 
-	if (hypertable_is_distributed(raw_ht))
-	{
-		remote_invalidation_log_add_entry(raw_ht, HypertableIsRawTable, raw_ht->fd.id, start, end);
-	}
-	else
-	{
-		invalidation_hyper_log_add_entry(raw_ht->fd.id, start, end);
-	}
+	invalidation_hyper_log_add_entry(raw_ht->fd.id, start, end);
 }
 
 void
@@ -382,18 +324,7 @@ continuous_agg_invalidate_mat_ht(const Hypertable *raw_ht, const Hypertable *mat
 {
 	Assert((raw_ht != NULL) && (mat_ht != NULL));
 
-	if (hypertable_is_distributed(raw_ht))
-	{
-		remote_invalidation_log_add_entry(raw_ht,
-										  HypertableIsMaterialization,
-										  mat_ht->fd.id,
-										  start,
-										  end);
-	}
-	else
-	{
-		invalidation_cagg_log_add_entry(mat_ht->fd.id, start, end);
-	}
+	invalidation_cagg_log_add_entry(mat_ht->fd.id, start, end);
 }
 
 typedef enum InvalidationResult
@@ -1201,70 +1132,6 @@ tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
 #define INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS 7
 #define INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME "invalidation_process_hypertable_log"
 
-void
-remote_invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-										   Oid dimtype, const CaggsInfo *all_caggs)
-{
-	Oid func_oid;
-	ArrayType *mat_hypertable_ids;
-	ArrayType *bucket_widths;
-	ArrayType *bucket_functions;
-	LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS);
-	FmgrInfo flinfo;
-	unsigned int i;
-
-	ts_create_arrays_from_caggs_info(all_caggs,
-									 &mat_hypertable_ids,
-									 &bucket_widths,
-									 &bucket_functions);
-
-	static const Oid type_id[INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS] = {
-		INT4OID, INT4OID, REGTYPEOID, INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID
-	};
-	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
-								 makeString(INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME));
-
-	/*
-	 * Note that we have to explicitly specify the amount of arguments in this
-	 * case, because there are several overloaded versions of invalidation_process_hypertable_log().
-	 */
-	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
-	Assert(OidIsValid(func_oid));
-
-	fmgr_info(func_oid, &flinfo);
-	InitFunctionCallInfoData(*fcinfo,
-							 &flinfo,
-							 INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS,
-							 InvalidOid,
-							 NULL,
-							 NULL);
-
-	for (i = 0; i < INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS; ++i)
-	{
-		FC_NULL(fcinfo, i) = false;
-	}
-	FC_ARG(fcinfo, 0) = Int32GetDatum(mat_hypertable_id);
-	FC_ARG(fcinfo, 1) = Int32GetDatum(raw_hypertable_id);
-	FC_ARG(fcinfo, 2) = ObjectIdGetDatum(dimtype);
-	FC_ARG(fcinfo, 3) = PointerGetDatum(mat_hypertable_ids);
-	FC_ARG(fcinfo, 4) = PointerGetDatum(bucket_widths);
-	FC_ARG(fcinfo, 5) = PointerGetDatum(construct_empty_array(INT8OID));
-	FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_functions);
-	/* Check for null result, since caller is clearly not expecting one */
-	if (fcinfo->isnull)
-		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-	Hypertable *ht = ts_hypertable_get_by_id(raw_hypertable_id);
-	if (!ht || !hypertable_is_distributed(ht))
-		elog(ERROR, "function was not provided with a valid distributed hypertable id");
-
-	DistCmdResult *result;
-	List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
-	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_node_list);
-	if (result)
-		ts_dist_cmd_close_response(result);
-}
-
 InvalidationStore *
 invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 							  const InternalTimeRange *refresh_window,
@@ -1402,265 +1269,6 @@ tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
 	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
-}
-
-#define INVALIDATION_PROCESS_CAGG_LOG_NARGS 9
-#define INVALIDATION_PROCESS_CAGG_LOG_FUNCNAME "invalidation_process_cagg_log"
-
-void
-remote_invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
-									 const InternalTimeRange *refresh_window,
-									 const CaggsInfo *all_caggs, bool *do_merged_refresh,
-									 InternalTimeRange *ret_merged_refresh_window)
-{
-	Oid func_oid;
-	ArrayType *mat_hypertable_ids;
-	ArrayType *bucket_widths;
-	ArrayType *bucket_functions;
-	LOCAL_FCINFO(fcinfo, INVALIDATION_PROCESS_CAGG_LOG_NARGS);
-	FmgrInfo flinfo;
-	unsigned int i;
-
-	*do_merged_refresh = false;
-
-	ts_create_arrays_from_caggs_info(all_caggs,
-									 &mat_hypertable_ids,
-									 &bucket_widths,
-									 &bucket_functions);
-
-	static const Oid type_id[INVALIDATION_PROCESS_CAGG_LOG_NARGS] = {
-		INT4OID,	  INT4OID,		REGTYPEOID,	  INT8OID,		INT8OID,
-		INT4ARRAYOID, INT8ARRAYOID, INT8ARRAYOID, TEXTARRAYOID,
-	};
-	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
-								 makeString(INVALIDATION_PROCESS_CAGG_LOG_FUNCNAME));
-
-	/*
-	 * Note that we have to explicitly specify the amount of arguments in this
-	 * case, because there are several overloaded versions of invalidation_process_cagg_log().
-	 */
-	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
-	Assert(OidIsValid(func_oid));
-
-	fmgr_info(func_oid, &flinfo);
-	InitFunctionCallInfoData(*fcinfo,
-							 &flinfo,
-							 INVALIDATION_PROCESS_CAGG_LOG_NARGS,
-							 InvalidOid,
-							 NULL,
-							 NULL);
-
-	for (i = 0; i < INVALIDATION_PROCESS_CAGG_LOG_NARGS; ++i)
-	{
-		FC_NULL(fcinfo, i) = false;
-	}
-	FC_ARG(fcinfo, 0) = Int32GetDatum(mat_hypertable_id);
-	FC_ARG(fcinfo, 1) = Int32GetDatum(raw_hypertable_id);
-	FC_ARG(fcinfo, 2) = ObjectIdGetDatum(refresh_window->type);
-	FC_ARG(fcinfo, 3) = Int64GetDatum(refresh_window->start);
-	FC_ARG(fcinfo, 4) = Int64GetDatum(refresh_window->end);
-	FC_ARG(fcinfo, 5) = PointerGetDatum(mat_hypertable_ids);
-	FC_ARG(fcinfo, 6) = PointerGetDatum(bucket_widths);
-	FC_ARG(fcinfo, 7) = PointerGetDatum(construct_empty_array(INT8OID));
-	FC_ARG(fcinfo, 8) = PointerGetDatum(bucket_functions);
-	/* Check for null result, since caller is clearly not expecting one */
-	if (fcinfo->isnull)
-		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-	Hypertable *ht = ts_hypertable_get_by_id(raw_hypertable_id);
-	if (!ht || !hypertable_is_distributed(ht))
-		elog(ERROR, "function was not provided with a valid distributed hypertable id");
-
-	DistCmdResult *dist_res;
-	List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
-	dist_res = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_node_list);
-	if (dist_res)
-	{
-		unsigned num_dist_res = ts_dist_cmd_response_count(dist_res);
-		int64 start_time, end_time;
-		InternalTimeRange merged_window = {
-			.type = refresh_window->type,
-			.start = TS_TIME_NOEND, /* initial state invalid */
-			.end = TS_TIME_NOBEGIN	/* initial state invalid */
-		};
-
-		for (i = 0; i < num_dist_res; ++i)
-		{
-			const char *node_name;
-			PGresult *result = ts_dist_cmd_get_result_by_index(dist_res, i, &node_name);
-			if (PQresultStatus(result) != PGRES_TUPLES_OK)
-				ereport(ERROR,
-						(errcode(ERRCODE_CONNECTION_EXCEPTION),
-						 errmsg("%s", PQresultErrorMessage(result))));
-			Assert(PQntuples(result) == 1);
-			Assert(PQnfields(result) == 2);
-			if (PQgetisnull(result, 0, 0))
-			{ /* No invalidations in this data node */
-				Assert(PQgetisnull(result, 0, 1));
-				continue;
-			}
-			start_time = pg_strtoint64(PQgetvalue(result, 0, 0));
-			end_time = pg_strtoint64(PQgetvalue(result, 0, 1));
-			elog(DEBUG1,
-				 "merged invalidations for refresh on [" INT64_FORMAT ", " INT64_FORMAT "] from %s",
-				 start_time,
-				 end_time,
-				 node_name);
-
-			/* merge refresh windows from the data nodes */
-			if (start_time < merged_window.start)
-				merged_window.start = start_time;
-			if (end_time > merged_window.end)
-				merged_window.end = end_time;
-		}
-		ts_dist_cmd_close_response(dist_res);
-
-		if (merged_window.start <= merged_window.end)
-		{
-			*ret_merged_refresh_window = merged_window;
-			*do_merged_refresh = true;
-		}
-	}
-}
-
-#define INVALIDATION_LOG_DELETE_NARGS 1
-#define HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME "hypertable_invalidation_log_delete"
-#define MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME "materialization_invalidation_log_delete"
-
-void
-remote_invalidation_log_delete(int32 raw_hypertable_id, ContinuousAggHypertableStatus caggstatus)
-{
-	/* Execute on all data nodes if there are any */
-	List *data_nodes = data_node_get_node_name_list();
-	if (NIL == data_nodes)
-		return;
-
-	Oid func_oid;
-	LOCAL_FCINFO(fcinfo, INVALIDATION_LOG_DELETE_NARGS);
-	FmgrInfo flinfo;
-
-	Assert(HypertableIsMaterialization == caggstatus || HypertableIsRawTable == caggstatus);
-
-	static const Oid type_id[INVALIDATION_LOG_DELETE_NARGS] = { INT4OID };
-	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
-								 makeString((caggstatus == HypertableIsMaterialization) ?
-												MATERIALIZATION_INVALIDATION_LOG_DELETE_FUNCNAME :
-												HYPERTABLE_INVALIDATION_LOG_DELETE_FUNCNAME));
-
-	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
-	Assert(OidIsValid(func_oid));
-
-	fmgr_info(func_oid, &flinfo);
-	InitFunctionCallInfoData(*fcinfo,
-							 &flinfo,
-							 INVALIDATION_LOG_DELETE_NARGS,
-							 InvalidOid,
-							 NULL,
-							 NULL);
-
-	FC_NULL(fcinfo, 0) = false;
-	FC_ARG(fcinfo, 0) = Int32GetDatum(raw_hypertable_id);
-	/* Check for null result, since caller is clearly not expecting one */
-	if (fcinfo->isnull)
-		elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-	DistCmdResult *result;
-	result = ts_dist_cmd_invoke_func_call_on_data_nodes(fcinfo, data_nodes);
-	if (result)
-		ts_dist_cmd_close_response(result);
-}
-
-/**
- * Delete invalidation trigger for distributed hypertable member with hypertable ID
- * 'raw_hypertable_id' in the Data Node.
- *
- * @param raw_hypertable_id - The hypertable ID of the distributed hypertable member in the
- *                            Data Node.
- */
-Datum
-tsl_drop_dist_ht_invalidation_trigger(PG_FUNCTION_ARGS)
-{
-	Cache *hcache;
-	Hypertable *ht;
-	int32 raw_hypertable_id = PG_GETARG_INT32(0);
-
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry_by_id(hcache, raw_hypertable_id);
-	if (!ht || !hypertable_is_distributed_member(ht))
-		elog(ERROR, "function was not provided with a valid distributed hypertable id");
-
-	ts_materialization_invalidation_log_delete_inner(raw_hypertable_id);
-	ts_hypertable_drop_trigger(ht->main_table_relid, CAGGINVAL_TRIGGER_NAME);
-
-	ts_cache_release(hcache);
-
-	PG_RETURN_VOID();
-}
-
-#define DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS 1
-#define DROP_DIST_HT_INVALIDATION_TRIGGER_FUNCNAME "drop_dist_ht_invalidation_trigger"
-
-void
-remote_drop_dist_ht_invalidation_trigger(int32 raw_hypertable_id)
-{
-	Cache *hcache;
-	Hypertable *ht;
-
-	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry_by_id(hcache, raw_hypertable_id);
-	Assert(ht);
-	if (!hypertable_is_distributed(ht))
-	{
-		ts_cache_release(hcache);
-		return;
-	}
-	List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
-	DistCmdResult *result;
-	ListCell *cell;
-	Oid func_oid;
-
-	static const Oid type_id[DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS] = { INT4OID };
-	List *const fqn = list_make2(makeString(FUNCTIONS_SCHEMA_NAME),
-								 makeString(DROP_DIST_HT_INVALIDATION_TRIGGER_FUNCNAME));
-
-	func_oid = LookupFuncName(fqn, -1 /* lengthof(type_id) */, type_id, false);
-	Assert(OidIsValid(func_oid));
-
-	FunctionCallInfo fcinfo =
-		palloc(SizeForFunctionCallInfo(DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS));
-	FmgrInfo flinfo;
-	List *cmd_descriptors = NIL; /* same order as ht->data_nodes */
-	DistCmdDescr *cmd_descr_data = palloc(list_length(data_node_list) * sizeof(*cmd_descr_data));
-	unsigned i = 0;
-
-	foreach (cell, ht->data_nodes)
-	{
-		HypertableDataNode *node = lfirst(cell);
-
-		fmgr_info(func_oid, &flinfo);
-		InitFunctionCallInfoData(*fcinfo,
-								 &flinfo,
-								 DROP_DIST_HT_INVALIDATION_TRIGGER_NARGS,
-								 InvalidOid,
-								 NULL,
-								 NULL);
-
-		FC_NULL(fcinfo, 0) = false;
-		/* distributed member hypertable ID */
-		FC_ARG(fcinfo, 0) = Int32GetDatum(node->fd.node_hypertable_id);
-		/* Check for null result, since caller is clearly not expecting one */
-		if (fcinfo->isnull)
-			elog(ERROR, "function %u returned NULL", flinfo.fn_oid);
-
-		cmd_descr_data[i].sql = deparse_func_call(fcinfo);
-		cmd_descr_data[i].params = NULL;
-		cmd_descriptors = lappend(cmd_descriptors, &cmd_descr_data[i++]);
-	}
-
-	result = ts_dist_multi_cmds_params_invoke_on_data_nodes(cmd_descriptors, data_node_list, true);
-	if (result)
-		ts_dist_cmd_close_response(result);
-	ts_cache_release(hcache);
 }
 
 void

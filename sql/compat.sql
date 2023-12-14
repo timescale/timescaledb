@@ -224,16 +224,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.drop_dist_ht_invalidation_trigger(raw_hypertable_id integer) RETURNS void LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.drop_dist_ht_invalidation_trigger(integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  PERFORM _timescaledb_functions.drop_dist_ht_invalidation_trigger($1);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 -- We cannot create a wrapper function in plpgsql for the aggregate transition
 -- functions because plpgsql cannot deal with datatype internal but since these
 -- are used in an aggregation context and cannot be called directly and will

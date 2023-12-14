@@ -28,7 +28,6 @@
 #include "errors.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
-#include "ts_catalog/chunk_data_node.h"
 #include "ts_catalog/continuous_agg.h"
 #include "chunk_index.h"
 #include "indexing.h"
@@ -509,12 +508,7 @@ set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch)
 					 errmsg("could not find arbiter index for hypertable index \"%s\" on chunk "
 							"\"%s\"",
 							get_rel_name(hypertable_index),
-							get_rel_name(RelationGetRelid(state->rel))),
-					 hypertable_is_distributed(dispatch->hypertable) ?
-						 errhint(
-							 "Omit the index inference specification for the distributed hypertable"
-							 " in the ON CONFLICT clause.") :
-						 0));
+							get_rel_name(RelationGetRelid(state->rel)))));
 		}
 
 		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
@@ -661,7 +655,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 #else
 		state->user_id = ExecGetResultRelCheckAsUser(relinfo, state->estate);
 #endif
-		state->chunk_data_nodes = ts_chunk_data_nodes_copy(chunk);
 	}
 
 	if (dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify)

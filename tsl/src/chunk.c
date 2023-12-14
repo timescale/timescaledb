@@ -42,11 +42,7 @@
 
 #include "chunk.h"
 #include "chunk_api.h"
-#include "data_node.h"
-#include "deparse.h"
 #include "debug_point.h"
-#include "dist_util.h"
-#include "ts_catalog/chunk_data_node.h"
 #include "utils.h"
 
 /* Data in a frozen chunk cannot be modified. So any operation

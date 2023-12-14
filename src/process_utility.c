@@ -50,7 +50,6 @@
 #include "ts_catalog/catalog.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "ts_catalog/chunk_data_node.h"
 #include "compat/compat.h"
 #include "copy.h"
 #include "errors.h"
@@ -60,7 +59,6 @@
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "ts_catalog/compression_settings.h"
-#include "ts_catalog/hypertable_data_node.h"
 #include "ts_catalog/array_utils.h"
 #include "dimension_vector.h"
 #include "indexing.h"
@@ -695,8 +693,7 @@ add_chunk_to_vacuum(Hypertable *ht, Oid chunk_relid, void *arg)
 /*
  * Construct a list of VacuumRelations for all vacuumable rels in
  * the current database.  This is similar to the PostgresQL get_all_vacuum_rels
- * from vacuum.c, only it filters out distributed hypertables and chunks
- * that have been compressed.
+ * from vacuum.c.
  */
 static List *
 ts_get_all_vacuum_rels(bool is_vacuumcmd)
@@ -714,7 +711,6 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 	while ((tuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		Form_pg_class classform = (Form_pg_class) GETSTRUCT(tuple);
-		Hypertable *ht;
 		Oid relid;
 
 		relid = classform->oid;
@@ -733,11 +729,6 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		if (classform->relkind != RELKIND_RELATION && classform->relkind != RELKIND_MATVIEW &&
 			classform->relkind != RELKIND_PARTITIONED_TABLE)
 			continue;
-
-		ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
-		if (ht)
-			if (hypertable_is_distributed(ht))
-				continue;
 
 		/*
 		 * Build VacuumRelation(s) specifying the table OIDs to be processed.
@@ -811,15 +802,6 @@ process_vacuum(ProcessUtilityArgs *args)
 				{
 					add_hypertable_to_process_args(args, ht);
 
-					/* Exclude distributed hypertables from the list of relations
-					 * to vacuum and analyze since they contain no local tuples.
-					 *
-					 * Support for VACUUM/ANALYZE operations on a distributed hypertable
-					 * is implemented as a part of distributed ddl and remote
-					 * statistics import functions.
-					 */
-					if (hypertable_is_distributed(ht))
-						continue;
 					ctx.ht_vacuum_rel = vacuum_rel;
 					foreach_chunk(ht, add_chunk_to_vacuum, &ctx);
 				}
@@ -1009,12 +991,7 @@ process_truncate(ProcessUtilityArgs *args)
 
 						hypertables = lappend(hypertables, ht);
 
-						if (!hypertable_is_distributed(ht))
-							list_append = true;
-						else
-							/* mark list as changed because we'll not add the distributed hypertable
-							 */
-							list_changed = true;
+						list_append = true;
 					}
 					else if ((chunk = ts_chunk_get_by_relid(relid, false)) != NULL)
 					{ /* this is a chunk */
@@ -1777,15 +1754,8 @@ process_reindex(ProcessUtilityArgs *args)
 							(errmsg("concurrent index creation on hypertables is not supported")));
 
 				/* Do not process remote chunks in case of distributed hypertable */
-				if (hypertable_is_distributed(ht))
-				{
+				if (foreach_chunk(ht, reindex_chunk, args) >= 0)
 					result = DDL_DONE;
-				}
-				else
-				{
-					if (foreach_chunk(ht, reindex_chunk, args) >= 0)
-						result = DDL_DONE;
-				}
 
 				add_hypertable_to_process_args(args, ht);
 			}
@@ -2062,7 +2032,7 @@ process_rename_constraint_or_trigger(ProcessUtilityArgs *args, Cache *hcache, Oi
 
 		if (stmt->renameType == OBJECT_TABCONSTRAINT)
 			foreach_chunk(ht, rename_hypertable_constraint, stmt);
-		else if (stmt->renameType == OBJECT_TRIGGER && !hypertable_is_distributed(ht))
+		else if (stmt->renameType == OBJECT_TRIGGER)
 			foreach_chunk(ht, rename_hypertable_trigger, stmt);
 	}
 	else if (stmt->renameType == OBJECT_TABCONSTRAINT)
@@ -2392,8 +2362,6 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 	IndexInfo *indexinfo;
 	Chunk *chunk;
 
-	Assert(!hypertable_is_distributed(ht));
-
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	if (IS_OSM_CHUNK(chunk)) /*cannot create index on foreign OSM chunk */
 	{
@@ -2672,12 +2640,6 @@ process_index_start(ProcessUtilityArgs *args)
 				 errmsg(
 					 "cannot use timescaledb.transaction_per_chunk with UNIQUE or PRIMARY KEY")));
 
-	if (info.extended_options.multitransaction && hypertable_is_distributed(ht))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg(
-					 "cannot use timescaledb.transaction_per_chunk with distributed hypertable")));
-
 	ts_indexing_verify_index(ht->space, stmt);
 
 	if (info.extended_options.multitransaction)
@@ -2699,8 +2661,7 @@ process_index_start(ProcessUtilityArgs *args)
 	/* CREATE INDEX on the root table of the hypertable */
 	root_table_index = ts_indexing_root_table_create_index(stmt,
 														   args->query_string,
-														   info.extended_options.multitransaction,
-														   hypertable_is_distributed(ht));
+														   info.extended_options.multitransaction);
 
 	if (cagg)
 		RESTORE_USER(uid, saved_uid, sec_ctx);
@@ -2717,13 +2678,6 @@ process_index_start(ProcessUtilityArgs *args)
 
 	/* support ONLY ON clause, index on root table already created */
 	if (!stmt->relation->inh)
-	{
-		ts_cache_release(hcache);
-		return DDL_DONE;
-	}
-
-	/* CREATE INDEX on the chunks, unless this is a distributed hypertable */
-	if (hypertable_is_distributed(ht))
 	{
 		ts_cache_release(hcache);
 		return DDL_DONE;
@@ -3730,8 +3684,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			/* Avoid running this command for distributed hypertable chunks
 			 * since PostgreSQL currently does not allow to alter
 			 * storage options for a foreign table. */
-			if (!hypertable_is_distributed(ht))
-				foreach_chunk(ht, process_altertable_chunk, cmd);
+			foreach_chunk(ht, process_altertable_chunk, cmd);
 			break;
 		case AT_SetTableSpace:
 			process_altertable_set_tablespace_end(ht, cmd);
@@ -4338,16 +4291,6 @@ process_drop_view(EventTriggerDropView *dropped_view)
 }
 
 static void
-process_drop_foreign_server(EventTriggerDropObject *obj)
-{
-	EventTriggerDropForeignServer *server = (EventTriggerDropForeignServer *) obj;
-
-	Assert(obj->type == EVENT_TRIGGER_DROP_FOREIGN_SERVER);
-	ts_hypertable_data_node_delete_by_node_name(server->servername);
-	ts_chunk_data_node_delete_by_node_name(server->servername);
-}
-
-static void
 process_ddl_sql_drop(EventTriggerDropObject *obj)
 {
 	switch (obj->type)
@@ -4359,7 +4302,6 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 			process_drop_index(obj);
 			break;
 		case EVENT_TRIGGER_DROP_TABLE:
-		case EVENT_TRIGGER_DROP_FOREIGN_TABLE:
 			process_drop_table(obj);
 			break;
 		case EVENT_TRIGGER_DROP_SCHEMA:
@@ -4371,8 +4313,8 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
 		case EVENT_TRIGGER_DROP_VIEW:
 			process_drop_view((EventTriggerDropView *) obj);
 			break;
+		case EVENT_TRIGGER_DROP_FOREIGN_TABLE:
 		case EVENT_TRIGGER_DROP_FOREIGN_SERVER:
-			process_drop_foreign_server(obj);
 			break;
 	}
 }
