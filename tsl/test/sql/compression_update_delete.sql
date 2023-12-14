@@ -1314,3 +1314,96 @@ SELECT compress_chunk(show_chunks('t'));
 UPDATE t SET b = 2 WHERE tableoid = 0;
 UPDATE t SET b = 2 WHERE tableoid is null;
 DROP TABLE t;
+
+-- github issue: 6367
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE DATABASE test6367;
+\c test6367 :ROLE_SUPERUSER
+SET client_min_messages = ERROR;
+CREATE EXTENSION timescaledb CASCADE;
+
+CREATE TABLE t6367 (
+  time timestamptz NOT NULL,
+  source_id varchar(64) NOT NULL,
+  label varchar,
+  data jsonb
+);
+SELECT table_name FROM create_hypertable('t6367', 'time');
+
+ALTER TABLE t6367 SET(timescaledb.compress, timescaledb.compress_segmentby = 'source_id, label', timescaledb.compress_orderby = 'time');
+
+INSERT INTO t6367
+SELECT time, source_id, label, '{}' AS data
+FROM
+generate_series('1990-01-01'::timestamptz, '1990-01-10'::timestamptz, INTERVAL '1 day') AS g1(time),
+generate_series(1, 3, 1 ) AS g2(source_id),
+generate_series(1, 3, 1 ) AS g3(label);
+
+SELECT compress_chunk(c) FROM show_chunks('t6367') c;
+DROP INDEX _timescaledb_internal._compressed_hypertable_2_source_id_label__ts_meta_sequence__idx;
+-- testcase with no index, should use seq scan
+set timescaledb.debug_compression_path_info to on;
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ROLLBACK;
+-- test case with an index which has only one
+-- of the segmentby filters
+CREATE INDEX source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id);
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ROLLBACK;
+-- test that we are filtering NULL checks
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NULL;
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label IS NULL;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NULL;
+ROLLBACK;
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label IS NOT NULL;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
+ROLLBACK;
+DROP INDEX _timescaledb_internal.source_id_idx;
+-- test case with an index which has multiple same column
+CREATE INDEX source_id_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id, source_id);
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ROLLBACK;
+DROP INDEX _timescaledb_internal.source_id_source_id_idx;
+-- test using a non-btree index
+-- fallback to heap scan
+CREATE INDEX brin_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 USING brin (source_id);
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ROLLBACK;
+DROP INDEX _timescaledb_internal.brin_source_id_idx;
+-- test using an expression index
+-- should fallback to heap scans
+CREATE INDEX expr_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (upper(source_id));
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ROLLBACK;
+DROP INDEX _timescaledb_internal.expr_source_id_idx;
+-- test using a partial index
+-- should fallback to heap scans
+CREATE INDEX partial_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id)
+WHERE _ts_meta_min_1 > '1990-01-01'::timestamptz;
+BEGIN;
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
+SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
+ROLLBACK;
+RESET timescaledb.debug_compression_path_info;
+DROP TABLE t6367;
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP DATABASE test6367;
