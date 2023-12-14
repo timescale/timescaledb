@@ -48,8 +48,6 @@
 #include <nodes/extensible.h>
 
 #include <compat/compat.h>
-#include "fdw/relinfo.h"
-#include "fdw/fdw_utils.h"
 #include "debug.h"
 #include "utils.h"
 
@@ -80,12 +78,6 @@ static const char *upperrel_stage_name[] = {
 	[UPPERREL_FINAL] = "FINAL",
 };
 /* clang-format on */
-
-static const char *fdw_rel_type_names[] = {
-	[TS_FDW_RELINFO_HYPERTABLE_DATA_NODE] = "DATA_NODE",
-	[TS_FDW_RELINFO_HYPERTABLE] = "HYPERTABLE",
-	[TS_FDW_RELINFO_FOREIGN_TABLE] = "FOREIGN_TABLE",
-};
 
 static void
 append_var_expr(StringInfo buf, const Node *expr, const List *rtable)
@@ -288,33 +280,12 @@ ts_append_pathkeys(StringInfo buf, const List *pathkeys, const List *rtable)
 static const char *
 get_relation_name(PlannerInfo *root, RelOptInfo *rel)
 {
-	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
-
-	if (NULL != fdw_info)
-		return fdw_info->relation_name->data;
-
 	if (rel->reloptkind == RELOPT_BASEREL)
 	{
 		RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
 		return get_rel_name(rte->relid);
 	}
-
-	return "-";
-}
-
-/*
- * Return a string name for the FDW type of a relation.
- *
- * For relations that are not an FDW relation we simply return "-".
- */
-static const char *
-get_fdw_relation_typename(RelOptInfo *rel)
-{
-	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
-
-	if (NULL != fdw_info)
-		return fdw_rel_type_names[fdw_info->type];
 
 	return "-";
 }
@@ -414,10 +385,7 @@ tsl_debug_append_path(StringInfo buf, PlannerInfo *root, Path *path, int indent)
 
 	if (path->parent)
 	{
-		appendStringInfo(buf,
-						 " [rel type: %s, kind: %s",
-						 get_fdw_relation_typename(path->parent),
-						 reloptkind_name[path->parent->reloptkind]);
+		appendStringInfo(buf, " [rel kind: %s", reloptkind_name[path->parent->reloptkind]);
 		appendStringInfoString(buf, ", parent's base rels: ");
 		append_relids(buf, root, path->parent->relids);
 		appendStringInfoChar(buf, ']');
@@ -480,67 +448,9 @@ tsl_debug_append_pathlist(StringInfo buf, PlannerInfo *root, List *pathlist, int
 	ListCell *cell;
 	foreach (cell, pathlist)
 	{
-		Path *path = isconsidered ? ((ConsideredPath *) lfirst(cell))->path : lfirst(cell);
+		Path *path = lfirst(cell);
 		tsl_debug_append_path(buf, root, path, indent);
 	}
-}
-
-/*
- * Check whether a path is the origin of a considered path.
- *
- * It is not possible to do a simple memcmp() of paths here because a path
- * could be a (semi-)shallow copy. Therefore we use the origin of the
- * ConsideredPath object.
- */
-static bool
-path_is_origin(const Path *p1, const ConsideredPath *p2)
-{
-	return p2->origin == (uintptr_t) p1;
-}
-
-/*
- * Print paths that were pruned during planning.
- *
- * The pruned paths are those that have been considered but are not in the
- * rel's pathlist.
- */
-static void
-tsl_debug_append_pruned_pathlist(StringInfo buf, PlannerInfo *root, RelOptInfo *rel, int indent)
-{
-	TsFdwRelInfo *fdw_info = fdw_relinfo_get(rel);
-	ListCell *lc1;
-
-	if (NULL == fdw_info || fdw_info->considered_paths == NIL)
-		return;
-
-	foreach (lc1, rel->pathlist)
-	{
-		Path *p1 = (Path *) lfirst(lc1);
-		ListCell *lc2;
-
-		foreach (lc2, fdw_info->considered_paths)
-		{
-			ConsideredPath *p2 = (ConsideredPath *) lfirst(lc2);
-
-			if (path_is_origin(p1, p2))
-			{
-				fdw_info->considered_paths = list_delete_cell(fdw_info->considered_paths, lc2);
-				fdw_utils_free_path(p2);
-				break;
-			}
-		}
-	}
-
-	if (fdw_info->considered_paths == NIL)
-		return;
-
-	appendStringInfoString(buf, "Pruned paths:\n");
-	tsl_debug_append_pathlist(buf, root, fdw_info->considered_paths, indent, true);
-
-	foreach (lc1, fdw_info->considered_paths)
-		fdw_utils_free_path(lfirst(lc1));
-
-	fdw_info->considered_paths = NIL;
 }
 
 void
@@ -552,9 +462,8 @@ tsl_debug_log_rel_with_paths(PlannerInfo *root, RelOptInfo *rel, UpperRelationKi
 		appendStringInfo(buf, "Upper rel stage %s:\n", upperrel_stage_name[*upper_stage]);
 
 	appendStringInfo(buf,
-					 "RELOPTINFO [rel name: %s, type: %s, kind: %s, base rel names: ",
+					 "RELOPTINFO [rel name: %s, kind: %s, base rel names: ",
 					 get_relation_name(root, rel),
-					 get_fdw_relation_typename(rel),
 					 reloptkind_name[rel->reloptkind]);
 	append_relids(buf, root, rel->relids);
 	appendStringInfoChar(buf, ']');
@@ -562,7 +471,6 @@ tsl_debug_log_rel_with_paths(PlannerInfo *root, RelOptInfo *rel, UpperRelationKi
 
 	appendStringInfoString(buf, "Path list:\n");
 	tsl_debug_append_pathlist(buf, root, rel->pathlist, 1, false);
-	tsl_debug_append_pruned_pathlist(buf, root, rel, 1);
 
 	if (rel->cheapest_parameterized_paths)
 	{

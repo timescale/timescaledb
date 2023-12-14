@@ -42,13 +42,13 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 
 create or replace procedure job_20(jobid int, config jsonb) language plpgsql as $$
 begin
-perform pg_sleep(20);
+perform pg_sleep(5);
 end
 $$;
 
 create or replace procedure job_5(jobid int, config jsonb) language plpgsql as $$
 begin
-perform pg_sleep(5);
+perform pg_sleep(1);
 end
 $$;
 

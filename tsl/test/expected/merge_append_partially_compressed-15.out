@@ -4,6 +4,7 @@
 -- this test checks the validity of the produced plans for partially compressed chunks
 -- when injecting query_pathkeys on top of the append
 -- path that combines the uncompressed and compressed parts of a chunk.
+set enable_parallel_append to off; -- for less flaky plans
 set timescaledb.enable_decompression_sorted_merge = off;
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float);
@@ -696,32 +697,32 @@ SELECT * FROM test1 ORDER BY time ASC NULLS FIRST, x3 DESC NULLS LAST, x4 ASC;
                ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
 (13 rows)
 
+set max_parallel_workers_per_gather = 0; -- parallel plan different on Windows
+set enable_hashagg to off; -- different on PG13
 :PREFIX
 SELECT x1, x2, max(time) FROM test1 GROUP BY x1, x2, time ORDER BY time limit 10;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
-   ->  Sort (actual rows=5 loops=1)
-         Sort Key: _hyper_3_7_chunk."time"
-         Sort Method: quicksort 
-         ->  Finalize HashAggregate (actual rows=5 loops=1)
-               Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-               Batches: 1 
-               ->  Gather (actual rows=5 loops=1)
-                     Workers Planned: 1
-                     Workers Launched: 1
-                     ->  Parallel Append (actual rows=2 loops=2)
-                           ->  Partial HashAggregate (actual rows=4 loops=1)
-                                 Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-                                 Batches: 1 
-                                 ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
-                                       ->  Parallel Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
-                           ->  Partial HashAggregate (actual rows=1 loops=1)
-                                 Group Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
-                                 Batches: 1 
-                                 ->  Parallel Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
-(20 rows)
+   ->  GroupAggregate (actual rows=5 loops=1)
+         Group Key: test1."time", test1.x1, test1.x2
+         ->  Custom Scan (ChunkAppend) on test1 (actual rows=5 loops=1)
+               Order: test1."time", test1.x1, test1.x2
+               ->  Merge Append (actual rows=5 loops=1)
+                     Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                     ->  Sort (actual rows=4 loops=1)
+                           Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                           Sort Method: quicksort 
+                           ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk (actual rows=4 loops=1)
+                                 ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
+                     ->  Sort (actual rows=1 loops=1)
+                           Sort Key: _hyper_3_7_chunk."time", _hyper_3_7_chunk.x1, _hyper_3_7_chunk.x2
+                           Sort Method: quicksort 
+                           ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
+(16 rows)
 
+reset max_parallel_workers_per_gather;
+reset enable_hashagg;
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, x4, time LIMIT 10;
                                                              QUERY PLAN                                                              

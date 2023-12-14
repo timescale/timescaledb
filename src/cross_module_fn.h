@@ -38,8 +38,6 @@ typedef struct HypertableModifyState HypertableModifyState;
 
 typedef struct CrossModuleFunctions
 {
-	void (*add_tsl_telemetry_info)(JsonbParseState **parse_state);
-
 	PGFunction policy_compression_add;
 	PGFunction policy_compression_remove;
 	PGFunction policy_recompression_proc;
@@ -90,13 +88,6 @@ typedef struct CrossModuleFunctions
 
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
-	PGFunction move_chunk_proc;
-	PGFunction copy_chunk_proc;
-	PGFunction subscription_exec;
-	PGFunction copy_chunk_cleanup_proc;
-	void (*ddl_command_start)(ProcessUtilityArgs *args);
-	void (*ddl_command_end)(EventTriggerData *command);
-	void (*sql_drop)(List *dropped_objects);
 
 	/* Vectorized queries */
 	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
@@ -160,58 +151,17 @@ typedef struct CrossModuleFunctions
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
 
-	PGFunction data_node_add;
-	PGFunction data_node_delete;
-	PGFunction data_node_attach;
-	PGFunction data_node_ping;
-	PGFunction data_node_detach;
-	PGFunction data_node_alter;
-	PGFunction data_node_allow_new_chunks;
-	PGFunction data_node_block_new_chunks;
-
-	PGFunction chunk_set_default_data_node;
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	List *(*get_and_validate_data_node_list)(ArrayType *nodearr);
-	void (*hypertable_make_distributed)(Hypertable *ht, List *data_node_names);
-	PGFunction timescaledb_fdw_handler;
-	PGFunction timescaledb_fdw_validator;
 	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
-	PGFunction remote_txn_id_in;
-	PGFunction remote_txn_id_out;
-	PGFunction remote_txn_heal_data_node;
-	PGFunction remote_connection_cache_show;
-	void (*create_chunk_on_data_nodes)(const Chunk *chunk, const Hypertable *ht,
-									   const char *remote_chunk_name, List *data_nodes);
-	bool (*set_distributed_id)(Datum id);
-	void (*set_distributed_peer_id)(Datum id);
-	bool (*is_access_node_session)(void);
-	bool (*remove_from_distributed_db)(void);
-	PGFunction dist_remote_hypertable_info;
-	PGFunction dist_remote_chunk_info;
-	PGFunction dist_remote_compressed_chunk_info;
-	PGFunction dist_remote_hypertable_index_info;
-	void (*dist_update_stale_chunk_metadata)(Chunk *new_chunk, List *chunk_data_nodes);
-	void (*validate_as_data_node)(void);
-	void (*func_call_on_data_nodes)(FunctionCallInfo fcinfo, List *data_node_oids);
-	PGFunction distributed_exec;
-	PGFunction create_distributed_restore_point;
 	PGFunction chunk_get_relstats;
 	PGFunction chunk_get_colstats;
-	PGFunction hypertable_distributed_set_replication_factor;
 	PGFunction chunk_create_empty_table;
-	PGFunction chunk_create_replica_table;
-	PGFunction chunk_drop_replica;
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;
-	PGFunction chunks_drop_stale;
-	PGFunction health_check;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
-	void (*mn_get_foreign_join_paths)(PlannerInfo *root, RelOptInfo *joinrel, RelOptInfo *outerrel,
-									  RelOptInfo *innerrel, JoinType jointype,
-									  JoinPathExtraData *extra);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

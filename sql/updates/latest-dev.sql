@@ -74,3 +74,45 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable_compressi
 DROP VIEW IF EXISTS timescaledb_information.compression_settings;
 DROP TABLE _timescaledb_catalog.hypertable_compression;
 
+DROP FOREIGN DATA WRAPPER IF EXISTS timescaledb_fdw;
+DROP FUNCTION IF EXISTS @extschema@.timescaledb_fdw_handler();
+DROP FUNCTION IF EXISTS @extschema@.timescaledb_fdw_validator(text[], oid);
+
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.create_chunk_replica_table;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunk_drop_replica;
+DROP PROCEDURE IF EXISTS _timescaledb_functions.wait_subscription_sync;
+DROP FUNCTION IF EXISTS _timescaledb_functions.health;
+DROP FUNCTION IF EXISTS _timescaledb_functions.drop_stale_chunks;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.create_chunk_replica_table;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunk_drop_replica;
+DROP PROCEDURE IF EXISTS _timescaledb_internal.wait_subscription_sync;
+DROP FUNCTION IF EXISTS _timescaledb_internal.health;
+DROP FUNCTION IF EXISTS _timescaledb_internal.drop_stale_chunks;
+
+ALTER TABLE _timescaledb_catalog.remote_txn DROP CONSTRAINT remote_txn_remote_transaction_id_check;
+
+DROP TYPE IF EXISTS @extschema@.rxid CASCADE;
+DROP FUNCTION IF EXISTS _timescaledb_functions.rxid_in;
+DROP FUNCTION IF EXISTS _timescaledb_functions.rxid_out;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_hypertable_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_chunk_info;
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_compressed_chunk_stats;
+DROP FUNCTION IF EXISTS _timescaledb_functions.data_node_index_size;
+DROP FUNCTION IF EXISTS _timescaledb_internal.data_node_hypertable_info;
+DROP FUNCTION IF EXISTS _timescaledb_internal.data_node_chunk_info;
+DROP FUNCTION IF EXISTS _timescaledb_internal.data_node_compressed_chunk_stats;
+DROP FUNCTION IF EXISTS _timescaledb_internal.data_node_index_size;
+
+DROP FUNCTION IF EXISTS timescaledb_experimental.block_new_chunks;
+DROP FUNCTION IF EXISTS timescaledb_experimental.allow_new_chunks;
+DROP FUNCTION IF EXISTS timescaledb_experimental.subscription_exec;
+DROP PROCEDURE IF EXISTS timescaledb_experimental.move_chunk;
+DROP PROCEDURE IF EXISTS timescaledb_experimental.copy_chunk;
+DROP PROCEDURE IF EXISTS timescaledb_experimental.cleanup_copy_chunk_operation;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.set_chunk_default_data_node;
+DROP FUNCTION IF EXISTS _timescaledb_internal.set_chunk_default_data_node;
+

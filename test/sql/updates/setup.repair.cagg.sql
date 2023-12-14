@@ -8,10 +8,16 @@
 -- be differences and the update tests would fail.
 DO $$
 DECLARE
- ts_version TEXT;
+ ts_version INTEGER;
 BEGIN
-  SELECT extversion INTO ts_version FROM pg_extension WHERE extname = 'timescaledb';
-  IF ts_version >= '2.0.0' AND ts_version < '2.7.0' THEN
+  SELECT
+      split_part(extversion, '.', 1)::int * 100000 +
+      split_part(extversion, '.', 2)::int *    100
+  INTO ts_version
+  FROM
+      pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_version >= 200000 AND ts_version < 200700 THEN
 
     CREATE TABLE conditions_v3 (
           timec       TIMESTAMPTZ       NOT NULL,
@@ -40,6 +46,6 @@ BEGIN
     GROUP BY bucket, temperature
     WITH NO DATA;
 
-   END IF;
+  END IF;
 END
 $$;

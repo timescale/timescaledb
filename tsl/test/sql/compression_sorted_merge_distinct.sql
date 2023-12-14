@@ -43,3 +43,12 @@ explain (costs off) select * from t where high_card < 500 order by ts;
 set work_mem to 64;
 explain (costs off) select * from t where high_card < 10 order by ts;
 reset work_mem;
+
+-- Test for large values of memory limit bytes that don't fit into an int.
+-- Note that on i386 the max value is 2GB which is not enough to trigger the
+-- overflow we had on 64-bit systems, so we have to use different values based
+-- on the architecture.
+select least(4194304, max_val::bigint) large_work_mem from pg_settings where name = 'work_mem' \gset
+set work_mem to :large_work_mem;
+explain (costs off) select * from t where high_card < 10 order by ts;
+reset work_mem;

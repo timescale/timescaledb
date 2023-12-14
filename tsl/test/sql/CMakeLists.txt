@@ -70,7 +70,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_on_cagg_joins.sql
     cagg_tableam.sql
     cagg_policy_run.sql
-    ddl_hook.sql
     decompress_memory.sql
     decompress_vector_qual.sql
     hypertable_generalization.sql
@@ -139,13 +138,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_TEMPLATES
     cagg_bgw.sql.in
     cagg_ddl.sql.in
-    cagg_errors_deprecated.sql.in
     cagg_query.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_errors.sql.in
-    continuous_aggs.sql.in
-    continuous_aggs_deprecated.sql.in)
+    continuous_aggs.sql.in)
   if(USE_TELEMETRY)
     list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
   endif()
