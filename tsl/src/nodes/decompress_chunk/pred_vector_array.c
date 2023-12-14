@@ -90,7 +90,7 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 		}
 		Datum constvalue = fetch_att(array_data, typbyval, typlen);
 		array_data = att_addlength_pointer(array_data, typlen, array_data);
-		array_data = (char * restrict) att_align_nominal(array_data, typalign);
+		array_data = (char *restrict) att_align_nominal(array_data, typalign);
 
 		/*
 		 * For OR, we also need an intermediate storage for predicate result
