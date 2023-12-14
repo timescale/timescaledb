@@ -510,21 +510,41 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		(uint32 *) MemoryContextAllocZero(dest_mctx, pad64(sizeof(*offsets) * (n_total + 1)));
 	uint8 *arrow_bodies = (uint8 *) MemoryContextAllocZero(dest_mctx, pad64(si->len - si->cursor));
 
-	int offset = 0;
+	uint32 offset = 0;
 	for (int i = 0; i < n_notnull; i++)
 	{
 		void *vardata = consumeCompressedData(si, sizes[i]);
+		/*
+		 * Check for potentially corrupt varlena headers since we're reading them
+		 * directly from compressed data. We can only have a plain datum
+		 * with 1-byte or 4-byte header here, no TOAST or compressed data.
+		 */
 		CheckCompressedData(VARATT_IS_4B_U(vardata) ||
 							(VARATT_IS_1B(vardata) && !VARATT_IS_1B_E(vardata)));
+		/*
+		 * Full varsize must be larger or equal than the header size so that the
+		 * calculation of size without header doesn't overflow.
+		 */
+		CheckCompressedData((VARATT_IS_1B(vardata) && VARSIZE_1B(vardata) >= VARHDRSZ_SHORT) ||
+							(VARSIZE_4B(vardata) > VARHDRSZ));
+		/* Varsize must match the size stored in the sizes array for this element. */
 		CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
-		const int textlen = VARSIZE_ANY_EXHDR(vardata);
+
+		const uint16 textlen = VARSIZE_ANY_EXHDR(vardata);
 		memcpy(&arrow_bodies[offset], VARDATA_ANY(vardata), textlen);
 
-		//		fprintf(stderr, "%d: copied: '%s' len %d varsize %d result %.*s\n",
-		//			i, text_to_cstring(vardata), textlen, (int) VARSIZE_ANY(vardata), textlen,
-		//&arrow_bodies[offset]);
+		//		fprintf(stderr,
+		//				"%d: copied: '%s' len %d varsize %d result %.*s\n",
+		//				i,
+		//				text_to_cstring(vardata),
+		//				textlen,
+		//				(int) VARSIZE_ANY(vardata),
+		//				textlen,
+		//				&arrow_bodies[offset]);
 
 		offsets[i] = offset;
+
+		CheckCompressedData(offset <= offset + textlen); /* Check for overflow. */
 		offset += textlen;
 	}
 	offsets[n_notnull] = offset;

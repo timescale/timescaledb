@@ -446,10 +446,22 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		simple8brle_decompress_all_buf_int16(indices_serialized, indices, n_padded);
 	CheckCompressedData(n_decompressed == n_notnull);
 
+	/* Check that the dictionary indices that we've just read are not out of bounds. */
+	CheckCompressedData(header->num_distinct <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(header->num_distinct <= INT16_MAX);
+	bool have_incorrect_index = false;
+	for (int i = 0; i < n_notnull; i++)
+	{
+		have_incorrect_index |= indices[i] >= (int16) header->num_distinct;
+	}
+	CheckCompressedData(!have_incorrect_index);
+
+	/* Decompress the actual values in the dictionary. */
 	ArrowArray *dict =
 		text_array_decompress_all_serialized_no_header(&si, /* has_nulls = */ false, dest_mctx);
 	CheckCompressedData(header->num_distinct == dict->length);
 
+	/* Fill validity and indices of the array elements, reshuffling for nulls if needed. */
 	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n_total);
 	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);

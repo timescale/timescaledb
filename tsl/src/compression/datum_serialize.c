@@ -315,6 +315,13 @@ bytes_to_datum_and_advance(DatumDeserializer *deserializer, const char **ptr)
 		 * with 1-byte or 4-byte header here, no TOAST or compressed data.
 		 */
 		CheckCompressedData(VARATT_IS_4B_U(*ptr) || (VARATT_IS_1B(*ptr) && !VARATT_IS_1B_E(*ptr)));
+
+		/*
+		 * Full varsize must be larger or equal than the header size so that the
+		 * calculation of size without header doesn't overflow.
+		 */
+		CheckCompressedData((VARATT_IS_1B(*ptr) && VARSIZE_1B(*ptr) >= VARHDRSZ_SHORT) ||
+							(VARSIZE_4B(*ptr) > VARHDRSZ));
 	}
 	res = fetch_att(*ptr, deserializer->type_by_val, deserializer->type_len);
 	*ptr = att_addlength_pointer(*ptr, deserializer->type_len, *ptr);

@@ -1609,7 +1609,7 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-     4 | XX001       | XX001
+     5 | XX001       | XX001
      1 | true        | true
 (2 rows)
 
