@@ -70,17 +70,16 @@ get_compression_algorithm(char *name)
  * dispatch tables and specializations of test functions.
  */
 #define APPLY_FOR_TYPES(X)                                                                         \
-	X(GORILLA, FLOAT8, RowByRow)                                                                   \
-	X(GORILLA, FLOAT8, Bulk)                                                                       \
-	X(DELTADELTA, INT8, RowByRow)                                                                  \
-	X(DELTADELTA, INT8, Bulk)                                                                      \
-	X(ARRAY, TEXT, RowByRow)                                                                       \
-	X(DICTIONARY, TEXT, RowByRow)
+	X(GORILLA, FLOAT8, true)                                                                       \
+	X(GORILLA, FLOAT8, false)                                                                      \
+	X(DELTADELTA, INT8, true)                                                                      \
+	X(DELTADELTA, INT8, false)                                                                     \
+	X(ARRAY, TEXT, false)                                                                          \
+	X(DICTIONARY, TEXT, false)
 
-static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size,
-													DecompressionTestType test_type)
+static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size, bool bulk)
 {
-#define DISPATCH(ALGO, PGTYPE, KIND)                                                               \
+#define DISPATCH(ALGO, PGTYPE, BULK)                                                               \
 	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID)                               \
 	{                                                                                              \
 		return decompress_##ALGO##_##PGTYPE;                                                       \
@@ -142,9 +141,7 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, 
 
 	string[fsize] = 0;
 
-	*rows = get_decompress_fn(algo, type)((const uint8 *) string,
-										  fsize,
-										  /* test_type = */ bulk ? DTT_Bulk : DTT_RowByRow);
+	*rows = get_decompress_fn(algo, type)((const uint8 *) string, fsize, bulk);
 }
 
 TS_FUNCTION_INFO_V1(ts_read_compressed_data_file);
@@ -306,29 +303,12 @@ ts_read_compressed_data_directory(PG_FUNCTION_ARGS)
 
 #ifdef TS_COMPRESSION_FUZZING
 
-static DecompressionTestType
-get_fuzzing_kind(const char *s)
-{
-	if (strcmp(s, "bulk") == 0)
-	{
-		return DTT_BulkFuzzing;
-	}
-	else if (strcmp(s, "rowbyrow") == 0)
-	{
-		return DTT_RowByRowFuzzing;
-	}
-	else
-	{
-		elog(ERROR, "unknown fuzzing type '%s'", s);
-	}
-}
-
 /*
  * Fuzzing target for all supported types.
  */
 static int
 target_generic(const uint8 *Data, size_t Size, CompressionAlgorithm requested_algo, Oid pg_type,
-			   DecompressionTestType test_type)
+			   bool bulk)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -349,17 +329,16 @@ target_generic(const uint8 *Data, size_t Size, CompressionAlgorithm requested_al
 	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
 	Datum compressed_data = def->compressed_data_recv(&si);
 
-	if (test_type == DTT_RowByRowFuzzing)
+	if (bulk)
 	{
-		DecompressionIterator *iter = def->iterator_init_forward(compressed_data, pg_type);
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-			;
+		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo);
+		decompress_all(compressed_data, pg_type, CurrentMemoryContext);
 		return 0;
 	}
 
-	Assert(test_type == DTT_BulkFuzzing);
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo);
-	decompress_all(compressed_data, pg_type, CurrentMemoryContext);
+	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, pg_type);
+	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
+		;
 	return 0;
 }
 
@@ -369,7 +348,7 @@ target_generic(const uint8 *Data, size_t Size, CompressionAlgorithm requested_al
  */
 static int
 target_wrapper(const uint8_t *Data, size_t Size, CompressionAlgorithm requested_algo, Oid pg_type,
-			   DecompressionTestType test_type)
+			   bool bulk)
 {
 	MemoryContextReset(CurrentMemoryContext);
 
@@ -377,7 +356,7 @@ target_wrapper(const uint8_t *Data, size_t Size, CompressionAlgorithm requested_
 	PG_TRY();
 	{
 		CHECK_FOR_INTERRUPTS();
-		res = target_generic(Data, Size, requested_algo, pg_type, test_type);
+		res = target_generic(Data, Size, requested_algo, pg_type, bulk);
 	}
 	PG_CATCH();
 	{
@@ -398,14 +377,10 @@ target_wrapper(const uint8_t *Data, size_t Size, CompressionAlgorithm requested_
  * Specializations of fuzzing targets for supported types that will be directly
  * called by the fuzzing driver.
  */
-#define DECLARE_TARGET(ALGO, PGTYPE, KIND)                                                         \
-	static int target_##ALGO##_##PGTYPE##_##KIND(const uint8_t *D, size_t S)                       \
+#define DECLARE_TARGET(ALGO, PGTYPE, BULK)                                                         \
+	static int target_##ALGO##_##PGTYPE##_##BULK(const uint8_t *D, size_t S)                       \
 	{                                                                                              \
-		return target_wrapper(D,                                                                   \
-							  S,                                                                   \
-							  COMPRESSION_ALGORITHM_##ALGO,                                        \
-							  PGTYPE##OID,                                                         \
-							  DTT_##KIND##Fuzzing);                                                \
+		return target_wrapper(D, S, COMPRESSION_ALGORITHM_##ALGO, PGTYPE##OID, BULK);              \
 	}
 
 APPLY_FOR_TYPES(DECLARE_TARGET)
@@ -456,15 +431,14 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 
 	int algo = get_compression_algorithm(PG_GETARG_CSTRING(0));
 	Oid type = PG_GETARG_OID(1);
-	int kind = get_fuzzing_kind(PG_GETARG_CSTRING(2));
+	bool bulk = PG_GETARG_BOOL(2);
 
 	int (*target)(const uint8_t *, size_t) = NULL;
 
-#define DISPATCH(ALGO, PGTYPE, KIND)                                                               \
-	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID &&                             \
-		kind == DTT_##KIND##Fuzzing)                                                               \
+#define DISPATCH(ALGO, PGTYPE, BULK)                                                               \
+	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID && bulk == BULK)               \
 	{                                                                                              \
-		target = target_##ALGO##_##PGTYPE##_##KIND;                                                \
+		target = target_##ALGO##_##PGTYPE##_##BULK;                                                \
 	}
 
 	APPLY_FOR_TYPES(DISPATCH)

@@ -18,12 +18,11 @@
  * for arithmetic types.
  */
 static int
-decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType test_type,
-						int requested_algo)
+decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested_algo)
 {
-	if (!(test_type == DTT_RowByRow))
+	if (bulk)
 	{
-		elog(ERROR, "decompression test type %d not supported for text", test_type);
+		elog(ERROR, "bulk decompression not supported for text");
 	}
 
 	StringInfoData si = { .data = (char *) Data, .len = Size };
@@ -66,7 +65,7 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	 * after we compress and decompress back.
 	 * Don't perform this check for other types of tests.
 	 */
-	if (test_type != DTT_RowByRow)
+	if (bulk)
 	{
 		return n;
 	}
@@ -141,13 +140,13 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 }
 
 int
-decompress_ARRAY_TEXT(const uint8 *Data, size_t Size, DecompressionTestType test_type)
+decompress_ARRAY_TEXT(const uint8 *Data, size_t Size, bool bulk)
 {
-	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_ARRAY);
+	return decompress_generic_text(Data, Size, bulk, COMPRESSION_ALGORITHM_ARRAY);
 }
 
 int
-decompress_DICTIONARY_TEXT(const uint8 *Data, size_t Size, DecompressionTestType test_type)
+decompress_DICTIONARY_TEXT(const uint8 *Data, size_t Size, bool bulk)
 {
-	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_DICTIONARY);
+	return decompress_generic_text(Data, Size, bulk, COMPRESSION_ALGORITHM_DICTIONARY);
 }

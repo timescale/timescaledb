@@ -74,8 +74,7 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
  * for arithmetic types.
  */
 static int
-FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
-												 DecompressionTestType test_type)
+FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size, bool bulk)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -99,7 +98,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo);
 
 	ArrowArray *arrow = NULL;
-	if (test_type == DTT_Bulk)
+	if (bulk)
 	{
 		/*
 		 * Test bulk decompression. Have to do this before row-by-row decompression
@@ -125,7 +124,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	}
 
 	/* Check that both ways of decompression match. */
-	if (test_type == DTT_Bulk)
+	if (bulk)
 	{
 		FUNCTION_NAME2(check_arrow, CTYPE)(arrow, ERROR, results, n);
 		return n;

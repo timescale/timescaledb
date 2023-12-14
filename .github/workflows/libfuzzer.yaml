@@ -115,17 +115,17 @@ jobs:
       fail-fast: false
       matrix:
         case: [
-            { algo: gorilla   , pgtype: float8, kind: rowbyrow, runs:  500000000 },
-            { algo: deltadelta, pgtype: int8  , kind: rowbyrow, runs:  500000000 },
-            { algo: gorilla   , pgtype: float8, kind: bulk    , runs: 1000000000 },
-            { algo: deltadelta, pgtype: int8  , kind: bulk    , runs: 1000000000 },
+            { algo: gorilla   , pgtype: float8, bulk: false, runs:  500000000 },
+            { algo: deltadelta, pgtype: int8  , bulk: false, runs:  500000000 },
+            { algo: gorilla   , pgtype: float8, bulk: true , runs: 1000000000 },
+            { algo: deltadelta, pgtype: int8  , bulk: true , runs: 1000000000 },
             # array has a peculiar recv function that recompresses all input, so
             # fuzzing it is much slower. The dictionary recv also uses it.
-            { algo: array     , pgtype: text  , kind: rowbyrow, runs:   10000000 },
-            { algo: dictionary, pgtype: text  , kind: rowbyrow, runs:   10000000 },
+            { algo: array     , pgtype: text  , bulk: false, runs:   10000000 },
+            { algo: dictionary, pgtype: text  , bulk: false, runs:   10000000 },
             ]
 
-    name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.kind }}
+    name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk }}
     runs-on: ubuntu-22.04
     env:
       PG_SRC_DIR: pgbuild
@@ -158,24 +158,43 @@ jobs:
         initdb
         echo "shared_preload_libraries = 'timescaledb'" >> $PGDATA/postgresql.conf
 
-    - name: Restore the cached fuzzing corpus
-      id: restore-corpus-cache
+    - name: Restore the cached fuzzing corpus (bulk)
+      id: restore-corpus-cache-bulk
       uses: actions/cache/restore@v3
       with:
-        path: db/corpus
+        path: db/corpus-bulk
         # If the initial corpus changes, probably it was updated by hand with
         # some important examples, and it makes sense to start anew from it.
-        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.pgtype }}-\
+        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.pgtype }}-true\
           ${{ hashFiles(format('tsl/test/fuzzing/compression/{0}-{1}', matrix.case.algo, matrix.case.pgtype)) }}"
 
-    - name: Initialize the fuzzing corpus
+    # We save the row-by-row corpus separately from the bulk corpus, so that
+    # they don't overwrite each other. Now we are going to combine them.
+    - name: Restore the cached fuzzing corpus (rowbyrow)
+      id: restore-corpus-cache-rowbyrow
+      uses: actions/cache/restore@v3
+      with:
+        path: db/corpus-rowbyrow
+        key: "libfuzzer-corpus-2-${{ matrix.case.algo }}-${{ matrix.case.pgtype }}-false\
+          ${{ hashFiles(format('tsl/test/fuzzing/compression/{0}-{1}', matrix.case.algo, matrix.case.pgtype)) }}"
+
+    - name: Initialize the fuzzing corpus from repository
       # cache-hit is only true for exact key matches, and we use prefix matches.
-      if: steps.restore-corpus-cache.outputs.cache-matched-key == ''
+      if: steps.restore-corpus-cache-bulk.outputs.cache-matched-key == '' && steps.restore-corpus-cache-rowbyrow.outputs.cache-matched-key == ''
       run: |
         # Copy the intial corpus files from the repository. The github actions
         # cache doesn't follow symlinks.
         mkdir -p db/corpus
         find "tsl/test/fuzzing/compression/${{ matrix.case.algo }}-${{ matrix.case.pgtype }}" -type f -exec cp -t db/corpus {} +
+
+    - name: Initialize the fuzzing corpus from cache
+      if: !(steps.restore-corpus-cache-bulk.outputs.cache-matched-key == '' && steps.restore-corpus-cache-rowbyrow.outputs.cache-matched-key == '')
+      run: |
+        # Combine the corpus from rowbyrow and bulk fuzzing.
+        mkdir -p db/corpus{,-rowbyrow,-bulk}
+        find "db/corpus-rowbyrow" -type f -exec cp -t db/corpus {} +
+        find "db/corpus-bulk" -type f -exec cp -t db/corpus {} +
+        ls db/corpus | wc -l
 
     - name: Run libfuzzer for compression
       run: |
@@ -191,7 +210,7 @@ jobs:
 
         # Create the fuzzing function
         export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
-        psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype, kind cstring, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+        psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype, bulk bool, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
 
 
         # Start more fuzzing processes in the background. We won't even monitor
@@ -199,14 +218,14 @@ jobs:
         for x in {2..$(nproc)}
         do
           psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}',
-            '${{ matrix.case.pgtype }}', '${{ matrix.case.kind }}', ${{ matrix.case.runs }});" &
+            '${{ matrix.case.pgtype }}', '${{ matrix.case.bulk }}', ${{ matrix.case.runs }});" &
         done
 
         # Start the one fuzzing process that we will monitor, in foreground.
         # The LLVM fuzzing driver calls exit(), so we expect to lose the connection.
         ret=0
         psql -v ON_ERROR_STOP=1 -c "select fuzz('${{ matrix.case.algo }}',
-            '${{ matrix.case.pgtype }}', '${{ matrix.case.kind }}', ${{ matrix.case.runs }});" || ret=$?
+            '${{ matrix.case.pgtype }}', '${{ matrix.case.bulk }}', ${{ matrix.case.runs }});" || ret=$?
         if ! [ $ret -eq 2 ]
         then
             >&2 echo "Unexpected psql exit code $ret"
@@ -215,6 +234,8 @@ jobs:
 
         # Check that the server is still alive.
         psql -c "select 1"
+
+        ls db/corpus | wc -l
 
     - name: Collect the logs
       if: always()
@@ -231,26 +252,31 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: PostgreSQL log for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.kind }}
+        name: PostgreSQL log for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.bulk }}
         path: postgres.log
 
     - name: Save fuzzer-generated crash cases
       if: always()
       uses: actions/upload-artifact@v3
       with:
-        name: Crash cases for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.kind }}
+        name: Crash cases for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.bulk }}
         path: db/crash-*
 
     # We use separate restore/save actions, because the default action won't
     # save the updated folder after the cache hit. We also can't overwrite the
     # existing cache, so we add a unique suffix. The cache is matched by key
     # prefix, not exact key, and picks the newest matching item, so this works.
+    # The caches for rowbyrow and bulk fuzzing are saved separately, otherwise
+    # the slower job would always overwrite the cache from the faster one. We
+    # want to combine corpuses from bulk and rowbyrow fuzzing for better
+    # coverage.
     - name: Save fuzzer corpus
       uses: actions/cache/save@v3
       with:
         path: db/corpus
-        key: "${{ format('{0}-{1}-{2}',
+        key: "${{ format('{0}-{1}-{2}-{3}',
             steps.restore-corpus-cache.outputs.cache-primary-key,
+            matrix.case.bulk,
             github.run_id, github.run_attempt) }}"
 
     - name: Stack trace
@@ -277,5 +303,5 @@ jobs:
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
       uses: actions/upload-artifact@v3
       with:
-        name: Coredumps for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.kind }}
+        name: Coredumps for ${{ matrix.case.algo }} ${{ matrix.case.type }} ${{ matrix.case.bulk }}
         path: coredumps
