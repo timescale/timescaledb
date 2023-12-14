@@ -471,6 +471,7 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 			if (simple8brle_bitmap_get_at(&nulls, i))
 			{
 				arrow_set_row_validity(validity_bitmap, i, false);
+				indices[i] = 0;
 			}
 			else
 			{

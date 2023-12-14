@@ -222,23 +222,37 @@ select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
 
 -- Vectorized comparison for text
-create table t(ts timestamp, a text);
+create table t(ts int, d int, a text);
 select create_hypertable('t', 'ts');
-alter table t set (timescaledb.compress);
+alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
 
-insert into t select '2021-01-01 01:01:01'::timestamp + interval '1 second' * x, 'same'
-from generate_series(1, 1000) x
-;
-
-insert into t select '2021-01-01 02:01:01'::timestamp + interval '1 second' * x, 'different' || x
-from generate_series(1, 1000) x
-;
+insert into t select x, 1, '' from generate_series(1, 1000) x;
+insert into t select x, 2, 'same' from generate_series(1, 1000) x;
+insert into t select x, 3, 'different' || x from generate_series(1, 1000) x;
+insert into t select x, 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
+insert into t select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
 
 select count(compress_chunk(x, true)) from show_chunks('t') x;
 
 set timescaledb.debug_require_vector_qual to 'only';
+-- Uncomment to generate the test reference w/o the vector optimizations.
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
 
-select count(*), min(ts) from t where a = 'same';
-select count(*), min(ts) from t where a = 'different1';
-select count(*), min(ts) from t where a = 'different1000';
-select count(*), min(ts), max(ts) from t where a in ('same', 'different500');
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = '';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same-with-nulls';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different-with-nulls1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different1000';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different-with-nulls999';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same', 'different500');
+select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same-with-nulls', 'different-with-nulls499');
+
+-- Null tests are not vectorized yet.
+reset timescaledb.debug_require_vector_qual;
+select count(*), min(ts), max(ts), min(d), max(d) from t where a is null;
+select count(*), min(ts), max(ts), min(d), max(d) from t where a is not null;
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;

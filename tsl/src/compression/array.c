@@ -547,6 +547,19 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		{
 			Assert(i >= current_notnull_element);
 
+			/*
+			 * The index of the corresponding offset is higher by one than
+			 * the index of the element. The offset[0] is never affected by
+			 * this shuffling and is always 0.
+			 * Note that unlike the usual null reshuffling in other algorithms,
+			 * for offsets, even if all elements are null, the starting offset
+			 * is well-defined and we can do this assignment. This case is only
+			 * accessible through fuzzing. Through SQL, all-null batches result
+			 * in a null compressed value.
+			 */
+			Assert(current_notnull_element + 1 >= 0);
+			offsets[i + 1] = offsets[current_notnull_element + 1];
+
 			if (simple8brle_bitmap_get_at(&nulls, i))
 			{
 				arrow_set_row_validity(validity_bitmap, i, false);
@@ -554,12 +567,6 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 			else
 			{
 				Assert(current_notnull_element >= 0);
-				/*
-				 * The index of the corresponding offset is higher by one than
-				 * the index of the element. The offset[0] is never affected by
-				 * this shuffling and is always 0.
-				 */
-				offsets[i + 1] = offsets[current_notnull_element + 1];
 				current_notnull_element--;
 			}
 		}
