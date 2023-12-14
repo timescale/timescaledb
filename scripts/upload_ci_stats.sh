@@ -8,7 +8,8 @@ then
     exit 0
 fi
 
-PSQL=(psql "${CI_STATS_DB}" -qtAX "--set=ON_ERROR_STOP=1")
+PSQL=${PSQL:-psql}
+PSQL=("${PSQL}" "${CI_STATS_DB}" -qtAX "--set=ON_ERROR_STOP=1")
 
 # The tables we are going to use. This schema is here just as a reminder, you'll
 # have to create them manually. After you manually change the actual DB schema,
