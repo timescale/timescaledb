@@ -172,6 +172,7 @@ jobs:
       uses: actions/cache/restore@v3
       with:
         path: db/corpus-bulk
+        key: "${{ steps.config.outputs.cache_prefix }}-bulk"
         restore-keys: "${{ steps.config.outputs.cache_prefix }}-bulk"
 
     # We save the row-by-row corpus separately from the bulk corpus, so that
@@ -181,6 +182,7 @@ jobs:
       uses: actions/cache/restore@v3
       with:
         path: db/corpus-rowbyrow
+        key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
         restore-keys: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
 
     - name: Initialize the fuzzing corpus
