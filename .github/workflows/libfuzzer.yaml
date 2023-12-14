@@ -9,7 +9,9 @@ name: Libfuzzer
       - prerelease_test
       - trigger/libfuzzer
   pull_request:
-    paths: .github/workflows/libfuzzer.yaml
+    paths:
+      - .github/workflows/libfuzzer.yaml
+      - 'tsl/test/fuzzing/compression/**'
 
 jobs:
   build:
