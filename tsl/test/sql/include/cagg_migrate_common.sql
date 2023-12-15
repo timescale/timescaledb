@@ -4,7 +4,7 @@
 
 -- Setup some variables
 SELECT
-    format('\! zcat include/data/cagg_migrate_%1$s.sql.gz > %2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "ZCAT_CMD",
+    format('\! zcat < include/data/cagg_migrate_%1$s.sql.gz > %2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "ZCAT_CMD",
     format('%2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "TEST_SCHEMA_FILE"
 \gset
 

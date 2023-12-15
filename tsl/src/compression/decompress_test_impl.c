@@ -42,7 +42,7 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 		 * For routine fuzzing, we only run bulk decompression to make it faster
 		 * and the coverage space smaller.
 		 */
-		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo);
+		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
 		decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
 		return 0;
 	}
@@ -53,7 +53,7 @@ FUNCTION_NAME(ALGO, CTYPE)(const uint8 *Data, size_t Size, bool extra_checks)
 	 * the row-by-row is old and stable.
 	 */
 	ArrowArray *arrow = NULL;
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo);
+	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
 	if (decompress_all)
 	{
 		arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
