@@ -1194,10 +1194,6 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	/******************** row decompressor **************/
 
 	RowDecompressor decompressor = build_decompressor(compressed_chunk_rel, uncompressed_chunk_rel);
-	/* do not need the indexes on the uncompressed chunk as we do not write to it anymore */
-	ts_catalog_close_indexes(decompressor.indexstate);
-	/* also do not need estate because we don't insert into indexes */
-	FreeExecutorState(decompressor.estate);
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
 	row_compressor_init(settings,
