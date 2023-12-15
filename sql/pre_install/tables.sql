@@ -509,8 +509,7 @@ CREATE TABLE _timescaledb_catalog.remote_txn (
   data_node_name name, --this is really only to allow us to cleanup stuff on a per-node basis.
   remote_transaction_id text NOT NULL,
   -- table constraints
-  CONSTRAINT remote_txn_pkey PRIMARY KEY (remote_transaction_id),
-  CONSTRAINT remote_txn_remote_transaction_id_check CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL)
+  CONSTRAINT remote_txn_pkey PRIMARY KEY (remote_transaction_id)
 );
 
 CREATE INDEX remote_txn_data_node_name_idx ON _timescaledb_catalog.remote_txn (data_node_name);

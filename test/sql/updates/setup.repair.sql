@@ -7,13 +7,15 @@
 -- the dimension slice table. The repair script should then repair all
 -- of them and there should be no dimension slices missing.
 
-SELECT extversion < '2.10.0' AS test_repair_dimension
-FROM pg_extension
-WHERE extname = 'timescaledb' \gset
+SELECT
+     split_part(extversion, '.', 1)::int * 100000 +
+     split_part(extversion, '.', 2)::int *    100 AS extversion_num
+FROM
+     pg_extension WHERE extname = 'timescaledb' \gset
 
-SELECT extversion >= '2.10.0' AS has_cagg_joins
-FROM pg_extension
-WHERE extname = 'timescaledb' \gset
+SELECT
+     :extversion_num <  201000 AS test_repair_dimension,
+     :extversion_num >= 201000 AS has_cagg_joins \gset
 
 CREATE USER wizard;
 CREATE USER "Random L User";

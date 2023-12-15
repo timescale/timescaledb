@@ -9,8 +9,6 @@
 #include <lib/stringinfo.h>
 #include <nodes/pathnodes.h>
 #include <utils/guc.h>
-#include "fdw/fdw_utils.h"
-#include "fdw/relinfo.h"
 
 #ifdef TS_DEBUG
 extern void tsl_debug_log_rel_with_paths(PlannerInfo *root, RelOptInfo *rel,

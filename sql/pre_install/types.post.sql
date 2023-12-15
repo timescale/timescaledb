@@ -15,15 +15,6 @@ CREATE TYPE _timescaledb_internal.compressed_data (
   SEND = _timescaledb_functions.compressed_data_send
 );
 
---
--- Remote transaction ID
---
-CREATE TYPE @extschema@.rxid (
-  internallength = 16,
-  input = _timescaledb_functions.rxid_in,
-  output = _timescaledb_functions.rxid_out
-);
-
 -- Dimension type used in create_hypertable, add_dimension, etc. It is
 -- deliberately an opaque type.
 CREATE TYPE _timescaledb_internal.dimension_info (

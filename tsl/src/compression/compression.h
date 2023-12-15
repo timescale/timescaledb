@@ -320,7 +320,8 @@ extern void decompress_chunk(Oid in_table, Oid out_table);
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithm algorithm, bool reverse))(Datum, Oid element_type);
 
-extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithm algorithm);
+extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithm algorithm,
+															 Oid type);
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;

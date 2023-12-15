@@ -70,16 +70,6 @@ FROM
   hyper
 GROUP BY hour, device;
 NOTICE:  continuous aggregate "contagg" is already up-to-date
-CREATE MATERIALIZED VIEW contagg_old
-WITH (timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.finalized=false) AS
-SELECT
-  time_bucket('1 hour', time) AS hour,
-  device,
-  min(time)
-FROM
-  hyper
-GROUP BY hour, device;
-NOTICE:  continuous aggregate "contagg_old" is already up-to-date
 -- Create another view (already have the "relations" view)
 CREATE VIEW devices AS
 SELECT DISTINCT ON (device) device
@@ -116,9 +106,9 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "num_compressed_hypertables": 0,            +
              "compressed_row_count_frozen_immediately": 0+
          },                                              +
-         "indexes_size": 8192,                           +
+         "indexes_size": 24576,                          +
          "num_children": 0,                              +
-         "num_relations": 1,                             +
+         "num_relations": 2,                             +
          "num_reltuples": 0                              +
      },                                                  +
      "materialized_views": {                             +
@@ -153,56 +143,11 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          },                                              +
          "indexes_size": 0,                              +
          "num_children": 0,                              +
-         "num_relations": 2,                             +
+         "num_relations": 1,                             +
          "num_reltuples": 0,                             +
          "num_caggs_nested": 0,                          +
          "num_caggs_finalized": 1,                       +
-         "num_caggs_on_distributed_hypertables": 0,      +
-         "num_caggs_using_real_time_aggregation": 2      +
-     },                                                  +
-     "distributed_hypertables_data_node": {              +
-         "heap_size": 0,                                 +
-         "toast_size": 0,                                +
-         "compression": {                                +
-             "compressed_heap_size": 0,                  +
-             "compressed_row_count": 0,                  +
-             "compressed_toast_size": 0,                 +
-             "num_compressed_chunks": 0,                 +
-             "uncompressed_heap_size": 0,                +
-             "uncompressed_row_count": 0,                +
-             "compressed_indexes_size": 0,               +
-             "uncompressed_toast_size": 0,               +
-             "uncompressed_indexes_size": 0,             +
-             "num_compressed_hypertables": 0,            +
-             "compressed_row_count_frozen_immediately": 0+
-         },                                              +
-         "indexes_size": 0,                              +
-         "num_children": 0,                              +
-         "num_relations": 0,                             +
-         "num_reltuples": 0                              +
-     },                                                  +
-     "distributed_hypertables_access_node": {            +
-         "heap_size": 0,                                 +
-         "toast_size": 0,                                +
-         "compression": {                                +
-             "compressed_heap_size": 0,                  +
-             "compressed_row_count": 0,                  +
-             "compressed_toast_size": 0,                 +
-             "num_compressed_chunks": 0,                 +
-             "uncompressed_heap_size": 0,                +
-             "uncompressed_row_count": 0,                +
-             "compressed_indexes_size": 0,               +
-             "uncompressed_toast_size": 0,               +
-             "uncompressed_indexes_size": 0,             +
-             "num_compressed_hypertables": 0,            +
-             "compressed_row_count_frozen_immediately": 0+
-         },                                              +
-         "indexes_size": 0,                              +
-         "num_children": 0,                              +
-         "num_relations": 0,                             +
-         "num_reltuples": 0,                             +
-         "num_replica_chunks": 0,                        +
-         "num_replicated_distributed_hypertables": 0     +
+         "num_caggs_using_real_time_aggregation": 1      +
      }                                                   +
  }
 (1 row)
@@ -216,7 +161,6 @@ SELECT * FROM normal;
 INSERT INTO part
 SELECT * FROM normal;
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
-CALL refresh_continuous_aggregate('contagg_old', NULL, NULL);
 -- ANALYZE to get updated reltuples stats
 ANALYZE normal, hyper, part;
 SELECT count(c) FROM show_chunks('hyper') c;
@@ -226,12 +170,6 @@ SELECT count(c) FROM show_chunks('hyper') c;
 (1 row)
 
 SELECT count(c) FROM show_chunks('contagg') c;
- count 
--------
-     2
-(1 row)
-
-SELECT count(c) FROM show_chunks('contagg_old') c;
  count 
 -------
      2
@@ -254,7 +192,7 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                            +
      },                                                  +
      "hypertables": {                                    +
-         "heap_size": 73728,                             +
+         "heap_size": 163840,                            +
          "toast_size": 0,                                +
          "compression": {                                +
              "compressed_heap_size": 0,                  +
@@ -269,9 +207,9 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "num_compressed_hypertables": 0,            +
              "compressed_row_count_frozen_immediately": 0+
          },                                              +
-         "indexes_size": 155648,                         +
-         "num_children": 9,                              +
-         "num_relations": 1,                             +
+         "indexes_size": 286720,                         +
+         "num_children": 11,                             +
+         "num_relations": 2,                             +
          "num_reltuples": 697                            +
      },                                                  +
      "materialized_views": {                             +
@@ -289,8 +227,8 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                            +
      },                                                  +
      "continuous_aggregates": {                          +
-         "heap_size": 188416,                            +
-         "toast_size": 16384,                            +
+         "heap_size": 0,                                 +
+         "toast_size": 0,                                +
          "compression": {                                +
              "compressed_heap_size": 0,                  +
              "compressed_row_count": 0,                  +
@@ -304,58 +242,13 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "uncompressed_indexes_size": 0,             +
              "compressed_row_count_frozen_immediately": 0+
          },                                              +
-         "indexes_size": 229376,                         +
-         "num_children": 4,                              +
-         "num_relations": 2,                             +
+         "indexes_size": 0,                              +
+         "num_children": 0,                              +
+         "num_relations": 1,                             +
          "num_reltuples": 0,                             +
          "num_caggs_nested": 0,                          +
          "num_caggs_finalized": 1,                       +
-         "num_caggs_on_distributed_hypertables": 0,      +
-         "num_caggs_using_real_time_aggregation": 2      +
-     },                                                  +
-     "distributed_hypertables_data_node": {              +
-         "heap_size": 0,                                 +
-         "toast_size": 0,                                +
-         "compression": {                                +
-             "compressed_heap_size": 0,                  +
-             "compressed_row_count": 0,                  +
-             "compressed_toast_size": 0,                 +
-             "num_compressed_chunks": 0,                 +
-             "uncompressed_heap_size": 0,                +
-             "uncompressed_row_count": 0,                +
-             "compressed_indexes_size": 0,               +
-             "uncompressed_toast_size": 0,               +
-             "uncompressed_indexes_size": 0,             +
-             "num_compressed_hypertables": 0,            +
-             "compressed_row_count_frozen_immediately": 0+
-         },                                              +
-         "indexes_size": 0,                              +
-         "num_children": 0,                              +
-         "num_relations": 0,                             +
-         "num_reltuples": 0                              +
-     },                                                  +
-     "distributed_hypertables_access_node": {            +
-         "heap_size": 0,                                 +
-         "toast_size": 0,                                +
-         "compression": {                                +
-             "compressed_heap_size": 0,                  +
-             "compressed_row_count": 0,                  +
-             "compressed_toast_size": 0,                 +
-             "num_compressed_chunks": 0,                 +
-             "uncompressed_heap_size": 0,                +
-             "uncompressed_row_count": 0,                +
-             "compressed_indexes_size": 0,               +
-             "uncompressed_toast_size": 0,               +
-             "uncompressed_indexes_size": 0,             +
-             "num_compressed_hypertables": 0,            +
-             "compressed_row_count_frozen_immediately": 0+
-         },                                              +
-         "indexes_size": 0,                              +
-         "num_children": 0,                              +
-         "num_relations": 0,                             +
-         "num_reltuples": 0,                             +
-         "num_replica_chunks": 0,                        +
-         "num_replicated_distributed_hypertables": 0     +
+         "num_caggs_using_real_time_aggregation": 1      +
      }                                                   +
  }
 (1 row)
@@ -411,24 +304,24 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                             +
      },                                                   +
      "hypertables": {                                     +
-         "heap_size": 106496,                             +
-         "toast_size": 32768,                             +
+         "heap_size": 196608,                             +
+         "toast_size": 40960,                             +
          "compression": {                                 +
-             "compressed_heap_size": 65536,               +
-             "compressed_row_count": 4,                   +
-             "compressed_toast_size": 32768,              +
-             "num_compressed_chunks": 4,                  +
-             "uncompressed_heap_size": 32768,             +
-             "uncompressed_row_count": 284,               +
-             "compressed_indexes_size": 0,                +
+             "compressed_heap_size": 114688,              +
+             "compressed_row_count": 14,                  +
+             "compressed_toast_size": 40960,              +
+             "num_compressed_chunks": 5,                  +
+             "uncompressed_heap_size": 81920,             +
+             "uncompressed_row_count": 736,               +
+             "compressed_indexes_size": 16384,            +
              "uncompressed_toast_size": 0,                +
-             "uncompressed_indexes_size": 65536,          +
-             "num_compressed_hypertables": 1,             +
-             "compressed_row_count_frozen_immediately": 4 +
+             "uncompressed_indexes_size": 147456,         +
+             "num_compressed_hypertables": 2,             +
+             "compressed_row_count_frozen_immediately": 14+
          },                                               +
-         "indexes_size": 122880,                          +
-         "num_children": 9,                               +
-         "num_relations": 1,                              +
+         "indexes_size": 204800,                          +
+         "num_children": 11,                              +
+         "num_relations": 2,                              +
          "num_reltuples": 413                             +
      },                                                   +
      "materialized_views": {                              +
@@ -446,73 +339,28 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_reltuples": 697                             +
      },                                                   +
      "continuous_aggregates": {                           +
-         "heap_size": 188416,                             +
-         "toast_size": 24576,                             +
+         "heap_size": 0,                                  +
+         "toast_size": 0,                                 +
          "compression": {                                 +
-             "compressed_heap_size": 49152,               +
-             "compressed_row_count": 10,                  +
+             "compressed_heap_size": 0,                   +
+             "compressed_row_count": 0,                   +
              "num_compressed_caggs": 1,                   +
-             "compressed_toast_size": 8192,               +
-             "num_compressed_chunks": 1,                  +
-             "uncompressed_heap_size": 49152,             +
-             "uncompressed_row_count": 452,               +
-             "compressed_indexes_size": 16384,            +
+             "compressed_toast_size": 0,                  +
+             "num_compressed_chunks": 0,                  +
+             "uncompressed_heap_size": 0,                 +
+             "uncompressed_row_count": 0,                 +
+             "compressed_indexes_size": 0,                +
              "uncompressed_toast_size": 0,                +
-             "uncompressed_indexes_size": 81920,          +
-             "compressed_row_count_frozen_immediately": 10+
+             "uncompressed_indexes_size": 0,              +
+             "compressed_row_count_frozen_immediately": 0 +
          },                                               +
-         "indexes_size": 180224,                          +
-         "num_children": 4,                               +
-         "num_relations": 2,                              +
+         "indexes_size": 0,                               +
+         "num_children": 0,                               +
+         "num_relations": 1,                              +
          "num_reltuples": 0,                              +
          "num_caggs_nested": 0,                           +
          "num_caggs_finalized": 1,                        +
-         "num_caggs_on_distributed_hypertables": 0,       +
-         "num_caggs_using_real_time_aggregation": 1       +
-     },                                                   +
-     "distributed_hypertables_data_node": {               +
-         "heap_size": 0,                                  +
-         "toast_size": 0,                                 +
-         "compression": {                                 +
-             "compressed_heap_size": 0,                   +
-             "compressed_row_count": 0,                   +
-             "compressed_toast_size": 0,                  +
-             "num_compressed_chunks": 0,                  +
-             "uncompressed_heap_size": 0,                 +
-             "uncompressed_row_count": 0,                 +
-             "compressed_indexes_size": 0,                +
-             "uncompressed_toast_size": 0,                +
-             "uncompressed_indexes_size": 0,              +
-             "num_compressed_hypertables": 0,             +
-             "compressed_row_count_frozen_immediately": 0 +
-         },                                               +
-         "indexes_size": 0,                               +
-         "num_children": 0,                               +
-         "num_relations": 0,                              +
-         "num_reltuples": 0                               +
-     },                                                   +
-     "distributed_hypertables_access_node": {             +
-         "heap_size": 0,                                  +
-         "toast_size": 0,                                 +
-         "compression": {                                 +
-             "compressed_heap_size": 0,                   +
-             "compressed_row_count": 0,                   +
-             "compressed_toast_size": 0,                  +
-             "num_compressed_chunks": 0,                  +
-             "uncompressed_heap_size": 0,                 +
-             "uncompressed_row_count": 0,                 +
-             "compressed_indexes_size": 0,                +
-             "uncompressed_toast_size": 0,                +
-             "uncompressed_indexes_size": 0,              +
-             "num_compressed_hypertables": 0,             +
-             "compressed_row_count_frozen_immediately": 0 +
-         },                                               +
-         "indexes_size": 0,                               +
-         "num_children": 0,                               +
-         "num_relations": 0,                              +
-         "num_reltuples": 0,                              +
-         "num_replica_chunks": 0,                         +
-         "num_replicated_distributed_hypertables": 0      +
+         "num_caggs_using_real_time_aggregation": 0       +
      }                                                    +
  }
 (1 row)
@@ -560,24 +408,18 @@ select add_continuous_aggregate_policy('contagg', interval '3 weeks', NULL, inte
                             1002
 (1 row)
 
-select add_continuous_aggregate_policy('contagg_old', interval '3 weeks', NULL, interval '3 weeks', initial_start => now()); -- fixed
- add_continuous_aggregate_policy 
----------------------------------
-                            1003
-(1 row)
-
 -- add retention policy, fixed
 select add_retention_policy('hyper', interval '1 year', initial_start => now());
  add_retention_policy 
 ----------------------
-                 1004
+                 1003
 (1 row)
 
 -- add compression policy
 select add_compression_policy('hyper', interval '3 weeks', initial_start => now());
  add_compression_policy 
 ------------------------
-                   1005
+                   1004
 (1 row)
 
 select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_actions' AS UDA_drifting FROM get_telemetry_report() r;
@@ -589,7 +431,7 @@ select r->'num_user_defined_actions_fixed' as UDA_fixed, r->'num_user_defined_ac
 select r->'num_continuous_aggs_policies_fixed' as contagg_fixed, r->'num_continuous_aggs_policies' as contagg_drifting FROM get_telemetry_report() r;
  contagg_fixed | contagg_drifting 
 ---------------+------------------
- 1             | 1
+ 0             | 1
 (1 row)
 
 select r->'num_compression_policies_fixed' as compress_fixed, r->'num_retention_policies_fixed' as retention_fixed FROM get_telemetry_report() r;
@@ -711,7 +553,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
     create_hypertable    
 -------------------------
- (6,public,conditions,t)
+ (5,public,conditions,t)
 (1 row)
 
 CREATE MATERIALIZED VIEW conditions_summary_hourly_1

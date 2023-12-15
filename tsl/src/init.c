@@ -36,8 +36,6 @@
 #include "data_node.h"
 #include "dist_util.h"
 #include "export.h"
-#include "fdw/fdw.h"
-#include "fdw/relinfo.h"
 #include "hypertable.h"
 #include "license_guc.h"
 #include "nodes/decompress_chunk/planner.h"
@@ -52,13 +50,9 @@
 #include "remote/connection.h"
 #include "remote/dist_commands.h"
 #include "remote/dist_txn.h"
-#include "remote/healthcheck.h"
 #include "remote/txn_id.h"
 #include "remote/txn_resolve.h"
 #include "reorder.h"
-#ifdef USE_TELEMETRY
-#include "telemetry.h"
-#endif
 #include "dist_backup.h"
 
 #ifdef PG_MODULE_MAGIC
@@ -88,9 +82,6 @@ cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
  * Apache codebase.
  */
 CrossModuleFunctions tsl_cm_functions = {
-#ifdef USE_TELEMETRY
-	.add_tsl_telemetry_info = tsl_telemetry_add_info,
-#endif
 
 	.create_upper_paths_hook = tsl_create_upper_paths_hook,
 	.set_rel_pathlist_dml = tsl_set_rel_pathlist_dml,
@@ -133,10 +124,6 @@ CrossModuleFunctions tsl_cm_functions = {
 
 	.reorder_chunk = tsl_reorder_chunk,
 	.move_chunk = tsl_move_chunk,
-	.move_chunk_proc = tsl_move_chunk_proc,
-	.copy_chunk_proc = tsl_copy_chunk_proc,
-	.copy_chunk_cleanup_proc = tsl_copy_chunk_cleanup_proc,
-	.subscription_exec = tsl_subscription_exec,
 
 	.policies_add = policies_add,
 	.policies_remove = policies_remove,
@@ -195,56 +182,16 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_target_segments = NULL,
 #endif
 
-	.data_node_add = data_node_add,
-	.data_node_delete = data_node_delete,
-	.data_node_attach = data_node_attach,
-	.data_node_ping = data_node_ping,
-	.data_node_detach = data_node_detach,
-	.data_node_alter = data_node_alter,
-	.data_node_allow_new_chunks = data_node_allow_new_chunks,
-	.data_node_block_new_chunks = data_node_block_new_chunks,
-	.chunk_set_default_data_node = chunk_set_default_data_node,
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,
 	.create_chunk = chunk_create,
-	.create_chunk_on_data_nodes = chunk_api_create_on_data_nodes,
-	.chunk_drop_replica = chunk_drop_replica,
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
-	.chunks_drop_stale = chunk_drop_stale_chunks,
-	.hypertable_make_distributed = hypertable_make_distributed,
-	.get_and_validate_data_node_list = hypertable_get_and_validate_data_nodes,
-	.timescaledb_fdw_handler = timescaledb_fdw_handler,
-	.timescaledb_fdw_validator = timescaledb_fdw_validator,
-	.remote_txn_id_in = remote_txn_id_in_pg,
-	.remote_txn_id_out = remote_txn_id_out_pg,
-	.remote_txn_heal_data_node = remote_txn_heal_data_node,
-	.remote_connection_cache_show = remote_connection_cache_show,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
-	.ddl_command_start = tsl_ddl_command_start,
-	.ddl_command_end = tsl_ddl_command_end,
-	.sql_drop = tsl_sql_drop,
-	.set_distributed_id = dist_util_set_id,
-	.set_distributed_peer_id = dist_util_set_peer_id,
-	.is_access_node_session = dist_util_is_access_node_session_on_data_node,
-	.remove_from_distributed_db = dist_util_remove_from_db,
-	.dist_remote_hypertable_info = dist_util_remote_hypertable_info,
-	.dist_remote_chunk_info = dist_util_remote_chunk_info,
-	.dist_remote_compressed_chunk_info = dist_util_remote_compressed_chunk_info,
-	.dist_remote_hypertable_index_info = dist_util_remote_hypertable_index_info,
-	.dist_update_stale_chunk_metadata = chunk_update_stale_metadata,
-	.validate_as_data_node = validate_data_node_settings,
-	.distributed_exec = ts_dist_cmd_exec,
-	.create_distributed_restore_point = create_distributed_restore_point,
-	.func_call_on_data_nodes = ts_dist_cmd_func_call_on_data_nodes,
 	.chunk_get_relstats = chunk_api_get_chunk_relstats,
 	.chunk_get_colstats = chunk_api_get_chunk_colstats,
 	.chunk_create_empty_table = chunk_create_empty_table,
-	.chunk_create_replica_table = chunk_create_replica_table,
-	.hypertable_distributed_set_replication_factor = hypertable_set_replication_factor,
 	.cache_syscache_invalidate = cache_syscache_invalidate,
-	.health_check = ts_dist_health_check,
-	.mn_get_foreign_join_paths = tsl_mn_get_foreign_join_paths,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
@@ -253,7 +200,6 @@ CrossModuleFunctions tsl_cm_functions = {
 static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
-	_tsl_process_utility_fini();
 	_remote_dist_txn_fini();
 	_remote_connection_cache_fini();
 	_continuous_aggs_cache_inval_fini();
@@ -274,7 +220,6 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_skip_scan_init();
 	_remote_connection_cache_init();
 	_remote_dist_txn_init();
-	_tsl_process_utility_init();
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);

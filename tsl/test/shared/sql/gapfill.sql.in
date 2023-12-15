@@ -1537,3 +1537,37 @@ FROM
 GROUP BY 1;
 
 DROP TABLE month_timezone;
+
+-- Test gapfill with additional group pathkeys added for optimization (#6396)
+CREATE TABLE stocks_real_time (
+  time TIMESTAMPTZ NOT NULL,
+  symbol TEXT NOT NULL,
+  price DOUBLE PRECISION NULL,
+  day_volume INT NULL
+);
+
+INSERT INTO stocks_real_time
+  VALUES
+    (NOW(), 's1', 70.0, 50),
+    (NOW(), 's2', 66.5, 60),
+    (NOW(), 's3', 77.0, 65);
+
+SELECT
+  time_bucket_gapfill('1 day', time) AS day,
+  COUNT(DISTINCT symbol) AS symbol_count
+FROM stocks_real_time
+WHERE time > '2023-12-01'
+  AND time < '2023-12-10'
+GROUP BY 1;
+
+SELECT
+  time_bucket_gapfill('1 day', time) AS day,
+  COUNT(DISTINCT symbol) AS symbol_count
+FROM stocks_real_time
+WHERE time > '2023-12-01'
+  AND time < '2023-12-10'
+GROUP BY 1
+ORDER BY 1 DESC;
+
+DROP TABLE stocks_real_time;
+

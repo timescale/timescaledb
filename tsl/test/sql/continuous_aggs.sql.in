@@ -1490,32 +1490,16 @@ SELECT time_bucket('1day', timec), min(location), sum(temperature), sum(humidity
 FROM conditions
 GROUP BY time_bucket('1day', timec) WITH NO DATA;
 
-CREATE MATERIALIZED VIEW conditions_summary_old(timec, minl, sumt, sumh)
-WITH (timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.finalized=false)
-AS
-SELECT time_bucket('1day', timec), min(location), sum(temperature), sum(humidity)
-FROM conditions
-GROUP BY time_bucket('1day', timec) WITH NO DATA;
-
 \x ON
 SELECT *
 FROM timescaledb_information.continuous_aggregates
-WHERE view_name IN ('conditions_summary_new', 'conditions_summary_old');
+WHERE view_name = 'conditions_summary_new';
 \x OFF
 
 CALL refresh_continuous_aggregate('conditions_summary_new', NULL, NULL);
-CALL refresh_continuous_aggregate('conditions_summary_old', NULL, NULL);
 
 -- Check and compare number of returned rows
-SELECT count(*) FROM conditions_summary_new
-UNION
-SELECT count(*) FROM conditions_summary_old;
-
--- Should return 4 rows that is the same number of rows above
-SELECT *
-FROM conditions_summary_new
-NATURAL JOIN conditions_summary_old
-ORDER BY timec;
+SELECT count(*) FROM conditions_summary_new;
 
 -- Parallel planning test for realtime Continuous Aggregate
 DROP TABLE conditions CASCADE;

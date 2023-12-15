@@ -14,9 +14,7 @@ SELECT
  WHERE extname = 'timescaledb' \gset
 
 SELECT
-  :ts_major < 2 AS has_drop_chunks_policy
-  FROM pg_extension
- WHERE extname = 'timescaledb' \gset
+  :ts_major < 2 AS has_drop_chunks_policy \gset
 
 DO LANGUAGE PLPGSQL $$
 DECLARE

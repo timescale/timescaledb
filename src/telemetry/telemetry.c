@@ -594,7 +594,6 @@ format_iso8601(Datum value)
 #define REQ_RELKIND_COMPRESSED_CHUNKS "num_compressed_chunks"
 #define REQ_RELKIND_COMPRESSED_HYPERTABLES "num_compressed_hypertables"
 #define REQ_RELKIND_COMPRESSED_CAGGS "num_compressed_caggs"
-#define REQ_RELKIND_REPLICATED_HYPERTABLES "num_replicated_distributed_hypertables"
 
 #define REQ_RELKIND_UNCOMPRESSED_HEAP_SIZE "uncompressed_heap_size"
 #define REQ_RELKIND_UNCOMPRESSED_TOAST_SIZE "uncompressed_toast_size"
@@ -606,7 +605,6 @@ format_iso8601(Datum value)
 #define REQ_RELKIND_COMPRESSED_ROWCOUNT "compressed_row_count"
 #define REQ_RELKIND_COMPRESSED_ROWCOUNT_FROZEN_IMMEDIATELY "compressed_row_count_frozen_immediately"
 
-#define REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT "num_caggs_on_distributed_hypertables"
 #define REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT "num_caggs_using_real_time_aggregation"
 #define REQ_RELKIND_CAGG_FINALIZED "num_caggs_finalized"
 #define REQ_RELKIND_CAGG_NESTED "num_caggs_nested"
@@ -685,23 +683,12 @@ add_relkind_stats_object(JsonbParseState *parse_state, const char *relkindname,
 
 		if (reltype != RELTYPE_PARTITIONED_TABLE)
 			add_compression_stats_object(parse_state, reltype, hs);
-
-		if (reltype == RELTYPE_DISTRIBUTED_HYPERTABLE)
-		{
-			ts_jsonb_add_int64(parse_state,
-							   REQ_RELKIND_REPLICATED_HYPERTABLES,
-							   hs->replicated_hypertable_count);
-			ts_jsonb_add_int64(parse_state, REQ_RELKIND_REPLICA_CHUNKS, hs->replica_chunk_count);
-		}
 	}
 
 	if (statstype == STATS_TYPE_CAGG)
 	{
 		const CaggStats *cs = (const CaggStats *) stats;
 
-		ts_jsonb_add_int64(parse_state,
-						   REQ_RELKIND_CAGG_ON_DISTRIBUTED_HYPERTABLE_COUNT,
-						   cs->on_distributed_hypertable_count);
 		ts_jsonb_add_int64(parse_state,
 						   REQ_RELKIND_CAGG_USES_REAL_TIME_AGGREGATION_COUNT,
 						   cs->uses_real_time_aggregation_count);
@@ -767,8 +754,6 @@ add_replication_telemetry(JsonbParseState *state)
 #define REQ_RELS_MATVIEWS "materialized_views"
 #define REQ_RELS_VIEWS "views"
 #define REQ_RELS_HYPERTABLES "hypertables"
-#define REQ_RELS_DISTRIBUTED_HYPERTABLES_AN "distributed_hypertables_access_node"
-#define REQ_RELS_DISTRIBUTED_HYPERTABLES_DN "distributed_hypertables_data_node"
 #define REQ_RELS_CONTINUOUS_AGGS "continuous_aggregates"
 #define REQ_FUNCTIONS_USED "functions_used"
 #define REQ_REPLICATION "replication"
@@ -870,35 +855,6 @@ build_telemetry_report()
 							 RELTYPE_HYPERTABLE,
 							 STATS_TYPE_HYPER);
 
-	/*
-	 * Distinguish between distributed hypertables on access nodes and the
-	 * "partial" distributed hypertables on data nodes.
-	 *
-	 * Access nodes currently don't store data (chunks), but could potentially
-	 * do it in the future. We only report the data that is actually stored on
-	 * an access node, which currently is zero. One could report the aggregate
-	 * numbers across all data nodes, but that requires using, e.g., a
-	 * function like hypertable_size() that calls out to each data node to get
-	 * its size. However, telemetry probably shouldn't perform such
-	 * distributed calls across data nodes, as it could, e.g., revent the
-	 * access node from reporting telemetry if a data node is down.
-	 *
-	 * It is assumed that data nodes will report telemetry themselves, and the
-	 * size of the data they store will be reported under
-	 * "distributed_hypertables_data_node" to easily distinguish from an
-	 * access node. The aggregate information for the whole distributed
-	 * hypertable could be joined on the server side based on the dist_uuid.
-	 */
-	add_relkind_stats_object(parse_state,
-							 REQ_RELS_DISTRIBUTED_HYPERTABLES_AN,
-							 &relstats.distributed_hypertables.storage.base,
-							 RELTYPE_DISTRIBUTED_HYPERTABLE,
-							 STATS_TYPE_HYPER);
-	add_relkind_stats_object(parse_state,
-							 REQ_RELS_DISTRIBUTED_HYPERTABLES_DN,
-							 &relstats.distributed_hypertable_members.storage.base,
-							 RELTYPE_DISTRIBUTED_HYPERTABLE_MEMBER,
-							 STATS_TYPE_HYPER);
 	add_relkind_stats_object(parse_state,
 							 REQ_RELS_CONTINUOUS_AGGS,
 							 &relstats.continuous_aggs.hyp.storage.base,
@@ -927,10 +883,6 @@ build_telemetry_report()
 	else
 		ts_jsonb_add_str(parse_state, REQ_LICENSE_EDITION, REQ_LICENSE_EDITION_COMMUNITY);
 	pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
-
-	/* add distributed database fields */
-	if (!ts_license_is_apache())
-		ts_cm_functions->add_tsl_telemetry_info(&parse_state);
 
 	/* add tuned info, which is optional */
 	if (ts_last_tune_time != NULL)
