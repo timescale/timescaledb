@@ -48,7 +48,6 @@ env:
     log_exe_name=true print_suppressions=false exitcode=27
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
-  SKIPS: "remote_txn"
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -151,11 +150,8 @@ jobs:
     - name: make installcheck
       run: |
         set -o pipefail
-        # IGNORE some test since they fail under ASAN. At least the remote_txn
-        # test seems to fail due to a PostgreSQL bug where AbortStartTime in
-        # postmaster.c is not atomic but read/written across signal handlers
-        # and ServerLoop.
-        make -k -C build installcheck SKIPS="${SKIPS} ${{matrix.skips_version}}" \
+        # IGNORE some test since they fail under ASAN.
+        make -k -C build installcheck SKIPS="${{matrix.skips_version}}" \
           IGNORES="${IGNORES} ${{matrix.ignores_version}}" \
           PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
 

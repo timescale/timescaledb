@@ -517,8 +517,3 @@ ts_scanner_get_tupledesc(const TupleInfo *ti)
 	return ti->slot->tts_tupleDescriptor;
 }
 
-void *
-ts_scanner_alloc_result(const TupleInfo *ti, Size size)
-{
-	return MemoryContextAllocZero(ti->mctx, size);
-}

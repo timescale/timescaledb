@@ -216,14 +216,6 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 													  d->type,
 													  main_table_relid);
 
-		/* Closed "space" partitions might be explicitly partitioned if it is
-		 * the "first" space dimension. If it is not the first, the dimension
-		 * partitions state will be NULL */
-		if (IS_CLOSED_DIMENSION(d))
-			d->dimension_partitions = ts_dimension_partition_info_get(d->fd.id);
-		else
-			d->dimension_partitions = NULL;
-
 		MemoryContextSwitchTo(old);
 	}
 
@@ -692,8 +684,6 @@ dimension_tuple_delete(TupleInfo *ti, void *data)
 	if (NULL != delete_slices && *delete_slices)
 		ts_dimension_slice_delete_by_dimension_id(DatumGetInt32(dimension_id), false);
 
-	/* delete all dimension partitions */
-	ts_dimension_partition_info_delete(DatumGetInt32(dimension_id));
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	ts_catalog_restore_user(&sec_ctx);
@@ -926,16 +916,6 @@ ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval)
 				 errhint("dimension ID %d", dim->fd.id)));
 
 	dim->fd.compress_interval_length = compress_interval;
-
-	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
-}
-
-int
-ts_dimension_set_number_of_slices(Dimension *dim, int16 num_slices)
-{
-	Assert(IS_CLOSED_DIMENSION(dim));
-
-	dim->fd.num_slices = num_slices;
 
 	return dimension_scan_update(dim->fd.id, dimension_tuple_update, dim, RowExclusiveLock);
 }
@@ -1211,10 +1191,10 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 
 	Assert(dim->type == dimtype);
 
-	if (NULL != interval)
+	if (interval)
 	{
 		Oid dimtype = ts_dimension_get_partition_type(dim);
-		Assert(NULL != intervaltype);
+		Assert(intervaltype);
 
 		Assert(IS_OPEN_DIMENSION(dim));
 
@@ -1226,14 +1206,13 @@ ts_dimension_update(const Hypertable *ht, const NameData *dimname, DimensionType
 										   hypertable_adaptive_chunking_enabled(ht));
 	}
 
-	if (NULL != num_slices)
+	if (num_slices)
 	{
 		Assert(IS_CLOSED_DIMENSION(dim));
 		dim->fd.num_slices = *num_slices;
-		ts_hypertable_update_dimension_partitions(ht);
 	}
 
-	if (NULL != integer_now_func)
+	if (integer_now_func)
 	{
 		Oid pronamespace = get_func_namespace(*integer_now_func);
 		namestrcpy(&dim->fd.integer_now_func_schema, get_namespace_name(pronamespace));
@@ -1632,20 +1611,6 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 		ts_hypertable_set_num_dimensions(info->ht, info->ht->space->num_dimensions + 1);
 		dimension_id = ts_dimension_add_from_info(info);
 
-		/* If adding the first space dimension, also add dimension partition metadata */
-		if (info->type == DIMENSION_TYPE_CLOSED)
-		{
-			const Dimension *space_dim = hyperspace_get_closed_dimension(info->ht->space, 0);
-
-			if (space_dim != NULL)
-			{
-				ts_dimension_partition_info_recreate(dimension_id,
-													 info->num_slices,
-													 NIL,
-													 info->ht->fd.replication_factor);
-			}
-		}
-
 		/* Verify that existing indexes are compatible with a hypertable */
 
 		/*
@@ -1938,45 +1903,3 @@ ts_dimensions_rename_schema_name(const char *old_name, const char *new_name)
 	ts_scanner_scan(&scanctx);
 }
 
-/*
- * Create partitioning key expressions for a dimension.
- *
- * This function returns a list of Expr nodes that represent the dimension as
- * a partitioning key.
- */
-List *
-ts_dimension_get_partexprs(const Dimension *dim, Index hyper_varno)
-{
-	Expr *expr = NULL;
-	HeapTuple tuple;
-	Form_pg_attribute att;
-	List *exprs = NIL;
-
-	tuple = SearchSysCache2(ATTNUM,
-							ObjectIdGetDatum(dim->main_table_relid),
-							Int16GetDatum(dim->column_attno));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for attribute");
-
-	att = (Form_pg_attribute) GETSTRUCT(tuple);
-
-	if (!att->attisdropped)
-		expr = (Expr *) makeVar(hyper_varno,
-								dim->column_attno,
-								att->atttypid,
-								att->atttypmod,
-								att->attcollation,
-								0);
-
-	ReleaseSysCache(tuple);
-
-	/* The expression on the partitioning key can be the raw key or the
-	 * partitioning function on the key */
-	if (NULL != dim->partitioning)
-		exprs = list_make2(expr, dim->partitioning->partfunc.func_fmgr.fn_expr);
-	else
-		exprs = list_make1(expr);
-
-	return exprs;
-}

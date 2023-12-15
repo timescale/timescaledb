@@ -17,7 +17,6 @@
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "ts_catalog/tablespace.h"
-#include "ts_catalog/dimension_partition.h"
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"
@@ -165,7 +164,6 @@ extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
 extern TSDLLEXPORT void ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema,
 												   const char *name);
-extern TSDLLEXPORT bool ts_hypertable_update_dimension_partitions(const Hypertable *ht);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
@@ -177,9 +175,3 @@ extern TSDLLEXPORT bool ts_hypertable_update_dimension_partitions(const Hypertab
 
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
 	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)
-
-#define hypertable_is_distributed(ht) ((ht)->fd.replication_factor > 0)
-#define hypertable_chunk_relkind(ht)                                                               \
-	(hypertable_is_distributed(ht) ? RELKIND_FOREIGN_TABLE : RELKIND_RELATION)
-#define hypertable_is_distributed_member(ht)                                                       \
-	((ht)->fd.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)

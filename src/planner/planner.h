@@ -44,8 +44,6 @@ extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_contain_param(Node *node);
 
-extern TSDLLEXPORT DataFetcherType ts_data_node_fetcher_scan_type;
-
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)
 {

@@ -260,8 +260,6 @@ CREATE TYPE @extschema@.rxid (
   output = _timescaledb_functions.rxid_out
 );
 
-ALTER TABLE _timescaledb_catalog.remote_txn ADD CONSTRAINT remote_txn_remote_transaction_id_check CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL);
-
 CREATE FUNCTION _timescaledb_functions.data_node_hypertable_info(
     node_name              NAME,
     schema_name_in name,
@@ -343,4 +341,180 @@ AS '@MODULE_PATHNAME@', 'ts_chunk_set_default_data_node' LANGUAGE C VOLATILE;
 CREATE FUNCTION _timescaledb_functions.drop_dist_ht_invalidation_trigger(
     raw_hypertable_id INTEGER
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_drop_dist_ht_invalidation_trigger' LANGUAGE C STRICT VOLATILE;
+
+-- restore multinode catalog tables
+CREATE TABLE _timescaledb_catalog.remote_txn (
+  data_node_name name, --this is really only to allow us to cleanup stuff on a per-node basis.
+  remote_transaction_id text NOT NULL,
+  -- table constraints
+  CONSTRAINT remote_txn_pkey PRIMARY KEY (remote_transaction_id)
+);
+
+ALTER TABLE _timescaledb_catalog.remote_txn ADD CONSTRAINT remote_txn_remote_transaction_id_check CHECK (remote_transaction_id::@extschema@.rxid IS NOT NULL);
+
+CREATE INDEX remote_txn_data_node_name_idx ON _timescaledb_catalog.remote_txn (data_node_name);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
+GRANT SELECT ON TABLE _timescaledb_catalog.remote_txn TO PUBLIC;
+
+CREATE TABLE _timescaledb_catalog.hypertable_data_node (
+  hypertable_id integer NOT NULL,
+  node_hypertable_id integer NULL,
+  node_name name NOT NULL,
+  block_chunks boolean NOT NULL,
+  -- table constraints
+  CONSTRAINT hypertable_data_node_hypertable_id_node_name_key UNIQUE (hypertable_id, node_name),
+  CONSTRAINT hypertable_data_node_node_hypertable_id_node_name_key UNIQUE (node_hypertable_id, node_name),
+  CONSTRAINT hypertable_data_node_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
+);
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data_node', '');
+GRANT SELECT ON TABLE _timescaledb_catalog.hypertable_data_node TO PUBLIC;
+
+CREATE TABLE _timescaledb_catalog.chunk_data_node (
+  chunk_id integer NOT NULL,
+  node_chunk_id integer NOT NULL,
+  node_name name NOT NULL,
+  -- table constraints
+  CONSTRAINT chunk_data_node_chunk_id_node_name_key UNIQUE (chunk_id, node_name),
+  CONSTRAINT chunk_data_node_node_chunk_id_node_name_key UNIQUE (node_chunk_id, node_name),
+  CONSTRAINT chunk_data_node_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
+);
+
+CREATE INDEX chunk_data_node_node_name_idx ON _timescaledb_catalog.chunk_data_node (node_name);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node', '');
+GRANT SELECT ON TABLE _timescaledb_catalog.chunk_data_node TO PUBLIC;
+
+CREATE SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq MINVALUE 1;
+GRANT SELECT ON SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq TO PUBLIC;
+
+CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
+  operation_id name NOT NULL, -- the publisher/subscriber identifier used
+  backend_pid integer NOT NULL, -- the pid of the backend running this activity
+  completed_stage name NOT NULL, -- the completed stage/step
+  time_start timestamptz NOT NULL DEFAULT NOW(), -- start time of the activity
+  chunk_id integer NOT NULL,
+  compress_chunk_name name NOT NULL,
+  source_node_name name NOT NULL,
+  dest_node_name name NOT NULL,
+  delete_on_source_node bool NOT NULL, -- is a move or copy activity
+  -- table constraints
+  CONSTRAINT chunk_copy_operation_pkey PRIMARY KEY (operation_id),
+  CONSTRAINT chunk_copy_operation_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
+);
+
+GRANT SELECT ON TABLE _timescaledb_catalog.chunk_copy_operation TO PUBLIC;
+
+CREATE TABLE _timescaledb_catalog.dimension_partition (
+  dimension_id integer NOT NULL REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE,
+  range_start bigint NOT NULL,
+  data_nodes name[] NULL,
+  UNIQUE (dimension_id, range_start)
+);
+
+GRANT SELECT ON TABLE _timescaledb_catalog.dimension_partition TO PUBLIC;
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_partition', '');
+CREATE FUNCTION _timescaledb_functions.hypertable_remote_size(
+    schema_name_in name,
+    table_name_in name)
+RETURNS TABLE (
+    table_bytes bigint,
+    index_bytes bigint,
+    toast_bytes bigint,
+    total_bytes bigint,
+    node_name   NAME)
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.chunks_remote_size(
+    schema_name_in name,
+    table_name_in name)
+RETURNS TABLE (
+    chunk_id    integer,
+    chunk_schema NAME,
+    chunk_name  NAME,
+    table_bytes bigint,
+    index_bytes bigint,
+    toast_bytes bigint,
+    total_bytes bigint,
+    node_name NAME)
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.indexes_remote_size(
+    schema_name_in             NAME,
+    table_name_in              NAME,
+    index_name_in              NAME
+)
+RETURNS BIGINT
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.compressed_chunk_remote_stats(schema_name_in name, table_name_in name)
+    RETURNS TABLE (
+        chunk_schema name,
+        chunk_name name,
+        compression_status text,
+        before_compression_table_bytes bigint,
+        before_compression_index_bytes bigint,
+        before_compression_toast_bytes bigint,
+        before_compression_total_bytes bigint,
+        after_compression_table_bytes bigint,
+        after_compression_index_bytes bigint,
+        after_compression_toast_bytes bigint,
+        after_compression_total_bytes bigint,
+        node_name name)
+    LANGUAGE SQL
+    STABLE STRICT
+    AS
+$BODY$
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+DROP VIEW timescaledb_information.chunks;
+DROP VIEW timescaledb_information.hypertables;
+
+CREATE VIEW timescaledb_information.hypertables AS
+SELECT ht.schema_name AS hypertable_schema,
+  ht.table_name AS hypertable_name,
+  t.tableowner AS owner,
+  ht.num_dimensions,
+  (
+    SELECT count(1)
+    FROM _timescaledb_catalog.chunk ch
+    WHERE ch.hypertable_id = ht.id AND ch.dropped IS FALSE AND ch.osm_chunk IS FALSE) AS num_chunks,
+  (
+    CASE WHEN compression_state = 1 THEN
+      TRUE
+    ELSE
+      FALSE
+    END) AS compression_enabled,
+  (
+    CASE WHEN ht.replication_factor > 0 THEN
+      TRUE
+    ELSE
+      FALSE
+    END) AS is_distributed,
+  ht.replication_factor,
+  dn.node_list AS data_nodes,
+  srchtbs.tablespace_list AS tablespaces
+FROM _timescaledb_catalog.hypertable ht
+  INNER JOIN pg_tables t ON ht.table_name = t.tablename
+    AND ht.schema_name = t.schemaname
+  LEFT OUTER JOIN _timescaledb_catalog.continuous_agg ca ON ca.mat_hypertable_id = ht.id
+  LEFT OUTER JOIN (
+    SELECT hypertable_id,
+      array_agg(tablespace_name ORDER BY id) AS tablespace_list
+    FROM _timescaledb_catalog.tablespace
+    GROUP BY hypertable_id) srchtbs ON ht.id = srchtbs.hypertable_id
+  LEFT OUTER JOIN (
+  SELECT hypertable_id,
+    array_agg(node_name ORDER BY node_name) AS node_list
+  FROM _timescaledb_catalog.hypertable_data_node
+  GROUP BY hypertable_id) dn ON ht.id = dn.hypertable_id
+WHERE ht.compression_state != 2 --> no internal compression tables
+  AND ca.mat_hypertable_id IS NULL;
 

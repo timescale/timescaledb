@@ -147,9 +147,6 @@ owner               | default_perm_user
 num_dimensions      | 2
 num_chunks          | 2
 compression_enabled | f
-is_distributed      | f
-replication_factor  | 
-data_nodes          | 
 tablespaces         | {tablespace1,tablespace2}
 
 SELECT hypertable_schema,

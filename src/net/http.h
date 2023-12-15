@@ -91,7 +91,6 @@ extern ssize_t ts_http_response_state_buffer_remaining(HttpResponseState *state)
 extern const char *ts_http_response_state_body_start(HttpResponseState *state);
 extern size_t ts_http_response_state_content_length(HttpResponseState *state);
 extern int ts_http_response_state_status_code(HttpResponseState *state);
-extern HttpHeader *ts_http_response_state_headers(HttpResponseState *state);
 
 /*  Returns false if encountered an error during parsing */
 extern bool ts_http_response_state_parse(HttpResponseState *state, size_t bytes);

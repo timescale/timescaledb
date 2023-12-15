@@ -19,6 +19,4 @@ extern Oid ts_extension_schema_oid(void);
 extern TSDLLEXPORT char *ts_extension_schema_name(void);
 extern const char *ts_experimental_schema_name(void);
 extern const char *ts_extension_get_so_name(void);
-extern TSDLLEXPORT const char *ts_extension_get_version(void);
 extern bool ts_extension_is_proxy_table_relid(Oid relid);
-extern TSDLLEXPORT Oid ts_extension_get_oid(void);

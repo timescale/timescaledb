@@ -55,19 +55,9 @@ WARNING:  function _timescaledb_internal.chunks_local_size(name,name) is depreca
  chunks_local_size 
 (0 rows)
 
-SELECT _timescaledb_internal.chunks_remote_size(NULL,NULL);
-WARNING:  function _timescaledb_internal.chunks_remote_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- chunks_remote_size 
-(0 rows)
-
 SELECT _timescaledb_internal.compressed_chunk_local_stats(NULL,NULL);
 WARNING:  function _timescaledb_internal.compressed_chunk_local_stats(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  compressed_chunk_local_stats 
-(0 rows)
-
-SELECT _timescaledb_internal.compressed_chunk_remote_stats(NULL,NULL);
-WARNING:  function _timescaledb_internal.compressed_chunk_remote_stats(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- compressed_chunk_remote_stats 
 (0 rows)
 
 SELECT _timescaledb_internal.create_chunk(0,NULL,NULL,NULL,0);
@@ -145,21 +135,10 @@ WARNING:  function _timescaledb_internal.hypertable_local_size(name,name) is dep
  hypertable_local_size 
 (0 rows)
 
-SELECT _timescaledb_internal.hypertable_remote_size(NULL,NULL);
-WARNING:  function _timescaledb_internal.hypertable_remote_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- hypertable_remote_size 
-(0 rows)
-
 SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
 WARNING:  function _timescaledb_internal.indexes_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  indexes_local_size 
 (0 rows)
-
-SELECT _timescaledb_internal.indexes_remote_size(NULL,NULL,NULL);
-WARNING:  function _timescaledb_internal.indexes_remote_size(name,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- indexes_remote_size 
-                    
-(1 row)
 
 SELECT _timescaledb_internal.interval_to_usec(NULL);
 WARNING:  function _timescaledb_internal.interval_to_usec(interval) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.

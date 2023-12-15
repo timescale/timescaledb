@@ -178,14 +178,11 @@ extern TSDLLEXPORT void ts_chunk_free(Chunk *chunk);
 extern bool ts_chunk_exists(const char *schema_name, const char *table_name);
 extern TSDLLEXPORT int32 ts_chunk_get_hypertable_id_by_reloid(Oid relid);
 extern TSDLLEXPORT int32 ts_chunk_get_compressed_chunk_id(int32 chunk_id);
-extern bool ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id,
-														   int32 *chunk_status);
 extern TSDLLEXPORT FormData_chunk ts_chunk_get_formdata(int32 chunk_id);
 extern TSDLLEXPORT Oid ts_chunk_get_relid(int32 chunk_id, bool missing_ok);
 extern Oid ts_chunk_get_schema_id(int32 chunk_id, bool missing_ok);
 extern bool ts_chunk_get_id(const char *schema, const char *table, int32 *chunk_id,
 							bool missing_ok);
-extern TSDLLEXPORT int32 ts_chunk_get_id_by_relid(Oid relid);
 extern bool ts_chunk_exists_relid(Oid relid);
 extern TSDLLEXPORT int ts_chunk_num_of_chunks_created_after(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_exists_with_compression(int32 hypertable_id);
@@ -220,7 +217,6 @@ extern TSDLLEXPORT Chunk *ts_chunk_get_compressed_chunk_parent(const Chunk *chun
 extern TSDLLEXPORT bool ts_chunk_is_unordered(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_partial(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_is_compressed(const Chunk *chunk);
-extern TSDLLEXPORT bool ts_chunk_is_distributed(const Chunk *chunk);
 extern TSDLLEXPORT bool ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk,
 																	 ChunkOperation cmd,
 																	 bool throw_error);
@@ -229,7 +225,6 @@ extern TSDLLEXPORT bool ts_chunk_contains_compressed_data(const Chunk *chunk);
 extern TSDLLEXPORT ChunkCompressionStatus ts_chunk_get_compression_status(int32 chunk_id);
 extern TSDLLEXPORT Datum ts_chunk_id_from_relid(PG_FUNCTION_ARGS);
 extern TSDLLEXPORT List *ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id);
-extern TSDLLEXPORT List *ts_chunk_get_all_chunk_ids(LOCKMODE lockmode);
 
 extern TSDLLEXPORT Chunk *ts_chunk_create_only_table(Hypertable *ht, Hypercube *cube,
 													 const char *schema_name,

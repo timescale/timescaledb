@@ -211,8 +211,6 @@ extern TSDLLEXPORT void ts_alter_table_with_event_trigger(Oid relid, Node *cmd, 
 														  bool recurse);
 extern TSDLLEXPORT void ts_copy_relation_acl(const Oid source_relid, const Oid target_relid,
 											 const Oid owner_id);
-extern TSDLLEXPORT bool ts_data_node_is_available_by_server(const ForeignServer *server);
-extern TSDLLEXPORT bool ts_data_node_is_available(const char *node_name);
 
 extern TSDLLEXPORT bool ts_relation_has_tuples(Relation rel);
 extern TSDLLEXPORT bool ts_table_has_tuples(Oid table_relid, LOCKMODE lockmode);

@@ -505,13 +505,8 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange merged_refresh_window)
 {
 	CaggRefreshState refresh;
-	bool old_per_data_node_queries = ts_guc_enable_per_data_node_queries;
 
 	continuous_agg_refresh_init(&refresh, cagg, refresh_window);
-
-	/* Disable per-data-node optimization so that 'tableoid' system column is evaluated in the
-	 * Access Node to generate Access Node chunk-IDs for the materialization table. */
-	ts_guc_enable_per_data_node_queries = false;
 
 	/*
 	 * If we're refreshing a finalized CAgg then we should force
@@ -551,7 +546,6 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 														  (void *) &chunk_id /* arg2 */);
 		Assert(count);
 	}
-	ts_guc_enable_per_data_node_queries = old_per_data_node_queries;
 }
 
 static ContinuousAgg *

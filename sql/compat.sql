@@ -149,16 +149,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.chunks_remote_size(schema_name_in name,table_name_in name) RETURNS TABLE (chunk_id integer, chunk_schema NAME, chunk_name NAME, table_bytes bigint, index_bytes bigint, toast_bytes bigint, total_bytes bigint, node_name NAME) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.chunks_remote_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN QUERY SELECT * FROM _timescaledb_functions.chunks_remote_size($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.compressed_chunk_local_stats(schema_name_in name,table_name_in name) RETURNS TABLE (chunk_schema name, chunk_name name, compression_status text, before_compression_table_bytes bigint, before_compression_index_bytes bigint, before_compression_toast_bytes bigint, before_compression_total_bytes bigint, after_compression_table_bytes bigint, after_compression_index_bytes bigint, after_compression_toast_bytes bigint, after_compression_total_bytes bigint) LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
@@ -388,32 +378,12 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_remote_size(schema_name_in name,table_name_in name) RETURNS TABLE (table_bytes bigint, index_bytes bigint, toast_bytes bigint, total_bytes bigint, node_name NAME) LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.hypertable_remote_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN QUERY SELECT * FROM _timescaledb_functions.hypertable_remote_size($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_local_size(schema_name_in name,table_name_in name) RETURNS TABLE (hypertable_id INTEGER, total_bytes BIGINT) LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
     RAISE WARNING 'function _timescaledb_internal.indexes_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
   RETURN QUERY SELECT * FROM _timescaledb_functions.indexes_local_size($1,$2);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
-CREATE OR REPLACE FUNCTION _timescaledb_internal.indexes_remote_size(schema_name_in name,table_name_in name,index_name_in name) RETURNS bigint LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.indexes_remote_size(name,name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  RETURN _timescaledb_functions.indexes_remote_size($1,$2,$3);
 END$$
 SET search_path TO pg_catalog,pg_temp;
 

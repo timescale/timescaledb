@@ -159,4 +159,3 @@ extern TSDLLEXPORT ItemPointer ts_scanner_get_tuple_tid(TupleInfo *ti);
 extern TSDLLEXPORT HeapTuple ts_scanner_fetch_heap_tuple(const TupleInfo *ti, bool materialize,
 														 bool *should_free);
 extern TSDLLEXPORT TupleDesc ts_scanner_get_tupledesc(const TupleInfo *ti);
-extern TSDLLEXPORT void *ts_scanner_alloc_result(const TupleInfo *ti, Size size);
