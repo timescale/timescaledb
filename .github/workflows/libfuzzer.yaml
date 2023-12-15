@@ -164,7 +164,7 @@ jobs:
       id: config
       run: |
         set -x
-        echo "cache_prefix=${{ format('libfuzzer-2-{0}-{1}', matrix.case.algo, matrix.case.pgtype) }}" >> $GITHUB_OUTPUT
+        echo "cache_prefix=${{ format('libfuzzer-corpus-2-{0}-{1}', matrix.case.algo, matrix.case.pgtype) }}" >> $GITHUB_OUTPUT
         echo "name=${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}" >> $GITHUB_OUTPUT
 
     - name: Restore the cached fuzzing corpus (bulk)
