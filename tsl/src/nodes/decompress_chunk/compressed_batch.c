@@ -715,23 +715,15 @@ store_text_datum2(CompressedColumnValues2 *packed, int arrow_row)
 /*
  * Construct the next tuple in the decompressed scan slot.
  * Doesn't check the quals.
- *
- * It takes "reverse" and "num_compressed_columns" by value to avoid accessing
- * the DecompressContext, which would prevent the compiler to combine it with
- * vector_qual().
  */
 static void
-make_next_tuple(DecompressBatchState *batch_state, bool reverse, int num_compressed_columns)
+make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_compressed_columns)
 {
 	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
 	Assert(decompressed_scan_slot != NULL);
 
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
-
-	const uint16 output_row = batch_state->next_batch_row;
-	const uint16 arrow_row =
-		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
@@ -819,14 +811,10 @@ make_next_tuple(DecompressBatchState *batch_state, bool reverse, int num_compres
 }
 
 static bool
-vector_qual(DecompressBatchState *batch_state, bool reverse)
+vector_qual(DecompressBatchState *batch_state, uint16 arrow_row)
 {
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
-
-	const uint16 output_row = batch_state->next_batch_row;
-	const uint16 arrow_row =
-		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
 	if (!batch_state->vector_qual_result)
 	{
@@ -868,12 +856,15 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 	Assert(decompressed_scan_slot != NULL);
 
 	const bool reverse = dcontext->reverse;
+	const uint16 output_row = batch_state->next_batch_row;
+	const uint16 arrow_row =
+		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 	const int num_compressed_columns = dcontext->num_compressed_columns;
 
 	for (; batch_state->next_batch_row < batch_state->total_batch_rows;
 		 batch_state->next_batch_row++)
 	{
-		if (!vector_qual(batch_state, reverse))
+		if (!vector_qual(batch_state, arrow_row))
 		{
 			/*
 			 * This row doesn't pass the vectorized quals. Advance the iterated
@@ -893,7 +884,7 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 			continue;
 		}
 
-		make_next_tuple(batch_state, reverse, num_compressed_columns);
+		make_next_tuple(batch_state, arrow_row, num_compressed_columns);
 
 		if (!postgres_qual(dcontext, batch_state))
 		{
