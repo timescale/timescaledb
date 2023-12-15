@@ -141,24 +141,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (!chunk)
 			elog(ERROR, "no chunk found or created");
 
-		/* get the filtered list of "available" DNs for this chunk but only if it's replicated */
-		if (found && dispatch->hypertable->fd.replication_factor > 1)
-		{
-			List *chunk_data_nodes =
-				ts_chunk_data_node_scan_by_chunk_id_filter(chunk->fd.id, CurrentMemoryContext);
-
-			/*
-			 * If the chunk was not created as part of this insert, we need to check whether any
-			 * of the chunk's data nodes are currently unavailable and in that case consider the
-			 * chunk stale on those data nodes. Do that by removing the AN's chunk-datanode
-			 * mapping for the unavailable data nodes.
-			 */
-			if (dispatch->hypertable->fd.replication_factor > list_length(chunk_data_nodes))
-				ts_cm_functions->dist_update_stale_chunk_metadata(chunk, chunk_data_nodes);
-
-			list_free(chunk_data_nodes);
-		}
-
 		cis = ts_chunk_insert_state_create(chunk, dispatch);
 
 		/*

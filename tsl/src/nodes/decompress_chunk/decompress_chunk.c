@@ -411,14 +411,9 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 	 * we often read a small subset of columns in analytical queries. The
 	 * compressed chunk is never projected so we can't use it for that.
 	 */
-	const double work_mem_bytes = work_mem * 1024;
+	const double work_mem_bytes = work_mem * (double) 1024.0;
 	const double needed_memory_bytes = open_batches_clamped * DECOMPRESS_CHUNK_BATCH_SIZE *
 									   dcpath->custom_path.path.pathtarget->width;
-
-	fprintf(stderr,
-			"open batches %lf, needed_bytes %lf\n",
-			open_batches_clamped,
-			needed_memory_bytes);
 
 	/*
 	 * Next, calculate the cost penalty. It is a smooth step, starting at 75% of

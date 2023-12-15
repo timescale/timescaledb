@@ -59,10 +59,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_chunk(
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB, created BOOLEAN)
 AS '@MODULE_PATHNAME@', 'ts_chunk_create' LANGUAGE C VOLATILE;
 
--- change default data node for a chunk
-CREATE OR REPLACE FUNCTION _timescaledb_functions.set_chunk_default_data_node(chunk REGCLASS, node_name NAME) RETURNS BOOLEAN
-AS '@MODULE_PATHNAME@', 'ts_chunk_set_default_data_node' LANGUAGE C VOLATILE;
-
 -- Get chunk stats.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_chunk_relstats(relid REGCLASS)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, num_pages INTEGER, num_tuples REAL, num_allvisible INTEGER)

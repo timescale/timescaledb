@@ -337,3 +337,7 @@ CREATE PROCEDURE timescaledb_experimental.cleanup_copy_chunk_operation(
     operation_id NAME)
 AS '@MODULE_PATHNAME@', 'ts_copy_chunk_cleanup_proc' LANGUAGE C;
 
+CREATE FUNCTION _timescaledb_functions.set_chunk_default_data_node(chunk REGCLASS, node_name NAME) RETURNS BOOLEAN
+AS '@MODULE_PATHNAME@', 'ts_chunk_set_default_data_node' LANGUAGE C VOLATILE;
+
+

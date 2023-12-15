@@ -14,8 +14,6 @@
 #include "ts_catalog/continuous_agg.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
-#include "remote/dist_commands.h"
-#include "remote/connection_cache.h"
 
 /* AlterTableCmds that need tsl side processing invoke this function
  * we only process AddColumn command right now.
