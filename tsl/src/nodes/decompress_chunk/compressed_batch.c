@@ -791,7 +791,6 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		{
 			/* A compressed column with default value, do nothing. */
 			Assert(packed->decompression_type == DT_Default);
-			pg_unreachable();
 		}
 	}
 
