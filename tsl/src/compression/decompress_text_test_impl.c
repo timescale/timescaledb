@@ -3,6 +3,15 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include <postgres.h>
+
+#include <libpq/pqformat.h>
+
+#include "compression.h"
+
+#include "compression_test.h"
+
+#include "arrow_c_data_interface.h"
 
 static void
 arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str, size_t *len)
@@ -92,8 +101,7 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
  * for arithmetic types.
  */
 static int
-decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType test_type,
-						int requested_algo)
+decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested_algo)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
@@ -110,34 +118,12 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 		 */
 		return -1;
 	}
-
-	Datum compressed_data = definitions[data_algo].compressed_data_recv(&si);
-
+	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
+	Datum compressed_data = def->compressed_data_recv(&si);
 	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, TEXTOID);
 
-	if (test_type == DTT_Fuzzing)
-	{
-		/*
-		 * For routine fuzzing, we only run bulk decompression to make it faster
-		 * and the coverage space smaller.
-		 */
-
-		/*
-		DecompressionIterator *iter =
-			definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
-		for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
-		{
-		}
-		return 0;
-		/*/
-
-		decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
-		return 0;
-		//*/
-	}
-
 	ArrowArray *arrow = NULL;
-	if (test_type == DTT_Bulk)
+	if (bulk)
 	{
 		/*
 		 * Check that the arrow decompression works. Have to do this before the
@@ -149,8 +135,7 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	/*
 	 * Test row-by-row decompression.
 	 */
-	DecompressionIterator *iter =
-		definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
+	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, TEXTOID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
@@ -163,7 +148,7 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 		results[n++] = r;
 	}
 
-	if (test_type == DTT_Bulk)
+	if (bulk)
 	{
 		/*
 		 * Check that the arrow decompression result matches.
@@ -176,16 +161,10 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	 * For row-by-row decompression, check that the result is still the same
 	 * after we compress and decompress back.
 	 * Don't perform this check for other types of tests.
-	 */
-	if (test_type != DTT_RowByRow)
-	{
-		return n;
-	}
-
-	/*
+     *
 	 * 1) Compress.
 	 */
-	Compressor *compressor = definitions[data_algo].compressor_for_type(TEXTOID);
+	Compressor *compressor = def->compressor_for_type(TEXTOID);
 
 	for (int i = 0; i < n; i++)
 	{
@@ -202,14 +181,14 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	compressed_data = (Datum) compressor->finish(compressor);
 	if (compressed_data == 0)
 	{
-		/* The gorilla compressor returns NULL for all-null input sets. */
+		/* Some compressors return NULL when all rows are null. */
 		return n;
-	};
+	}
 
 	/*
 	 * 2) Decompress and check that it's the same.
 	 */
-	iter = definitions[data_algo].iterator_init_forward(compressed_data, TEXTOID);
+	iter = def->iterator_init_forward(compressed_data, TEXTOID);
 	int nn = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
@@ -258,14 +237,14 @@ decompress_generic_text(const uint8 *Data, size_t Size, DecompressionTestType te
 	return n;
 }
 
-static int
-decompress_array_text(const uint8 *Data, size_t Size, DecompressionTestType test_type)
+int
+decompress_ARRAY_TEXT(const uint8 *Data, size_t Size, bool bulk)
 {
-	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_ARRAY);
+	return decompress_generic_text(Data, Size, bulk, COMPRESSION_ALGORITHM_ARRAY);
 }
 
-static int
-decompress_dictionary_text(const uint8 *Data, size_t Size, DecompressionTestType test_type)
+int
+decompress_DICTIONARY_TEXT(const uint8 *Data, size_t Size, bool bulk)
 {
-	return decompress_generic_text(Data, Size, test_type, COMPRESSION_ALGORITHM_DICTIONARY);
+	return decompress_generic_text(Data, Size, bulk, COMPRESSION_ALGORITHM_DICTIONARY);
 }

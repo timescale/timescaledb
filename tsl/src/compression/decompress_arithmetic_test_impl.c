@@ -9,8 +9,9 @@
 #define FUNCTION_NAME_HELPER2(X, Y) X##_##Y
 #define FUNCTION_NAME2(X, Y) FUNCTION_NAME_HELPER2(X, Y)
 
-#define TOSTRING_HELPER(x) #x
-#define TOSTRING(x) TOSTRING_HELPER(x)
+#define PG_TYPE_OID_HELPER(X) X##OID
+#define PG_TYPE_OID_HELPER2(X) PG_TYPE_OID_HELPER(X)
+#define PG_TYPE_OID PG_TYPE_OID_HELPER2(PG_TYPE_PREFIX)
 
 static void
 FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, DecompressResult *results,
@@ -73,16 +74,15 @@ FUNCTION_NAME2(check_arrow, CTYPE)(ArrowArray *arrow, int error_type, Decompress
  * for arithmetic types.
  */
 static int
-FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size,
-										DecompressionTestType test_type)
+FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size, bool bulk)
 {
 	StringInfoData si = { .data = (char *) Data, .len = Size };
 
-	const int algo = pq_getmsgbyte(&si);
+	const int data_algo = pq_getmsgbyte(&si);
 
-	CheckCompressedData(algo > 0 && algo < _END_COMPRESSION_ALGORITHMS);
+	CheckCompressedData(data_algo > 0 && data_algo < _END_COMPRESSION_ALGORITHMS);
 
-	if (algo != get_compression_algorithm(TOSTRING(ALGO)))
+	if (data_algo != FUNCTION_NAME2(COMPRESSION_ALGORITHM, ALGO))
 	{
 		/*
 		 * It's convenient to fuzz only one algorithm at a time. We specialize
@@ -92,34 +92,25 @@ FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size,
 		return -1;
 	}
 
-	Datum compressed_data = definitions[algo].compressed_data_recv(&si);
+	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
+	Datum compressed_data = def->compressed_data_recv(&si);
 
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(algo, PGTYPE);
-
-	if (test_type == DTT_Fuzzing)
-	{
-		/*
-		 * For routine fuzzing, we only run bulk decompression to make it faster
-		 * and the coverage space smaller.
-		 */
-		decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
-		return 0;
-	}
+	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, PG_TYPE_OID);
 
 	ArrowArray *arrow = NULL;
-	if (test_type == DTT_Bulk)
+	if (bulk)
 	{
 		/*
 		 * Test bulk decompression. Have to do this before row-by-row decompression
 		 * so that the latter doesn't hide the errors.
 		 */
-		arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
+		arrow = decompress_all(compressed_data, PG_TYPE_OID, CurrentMemoryContext);
 	}
 
 	/*
 	 * Test row-by-row decompression.
 	 */
-	DecompressionIterator *iter = definitions[algo].iterator_init_forward(compressed_data, PGTYPE);
+	DecompressionIterator *iter = def->iterator_init_forward(compressed_data, PG_TYPE_OID);
 	DecompressResult results[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	int n = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
@@ -133,7 +124,7 @@ FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size,
 	}
 
 	/* Check that both ways of decompression match. */
-	if (test_type == DTT_Bulk)
+	if (bulk)
 	{
 		FUNCTION_NAME2(check_arrow, CTYPE)(arrow, ERROR, results, n);
 		return n;
@@ -145,7 +136,7 @@ FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size,
 	 *
 	 * 1) Compress.
 	 */
-	Compressor *compressor = definitions[algo].compressor_for_type(PGTYPE);
+	Compressor *compressor = def->compressor_for_type(PG_TYPE_OID);
 
 	for (int i = 0; i < n; i++)
 	{
@@ -169,7 +160,7 @@ FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size,
 	/*
 	 * 2) Decompress and check that it's the same.
 	 */
-	iter = definitions[algo].iterator_init_forward(compressed_data, PGTYPE);
+	iter = def->iterator_init_forward(compressed_data, PG_TYPE_OID);
 	int nn = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
@@ -209,16 +200,17 @@ FUNCTION_NAME3(decompress, ALGO, CTYPE)(const uint8 *Data, size_t Size,
 	 * 3) The bulk decompression must absolutely work on the correct compressed
 	 * data we've just generated.
 	 */
-	arrow = decompress_all(compressed_data, PGTYPE, CurrentMemoryContext);
+	arrow = decompress_all(compressed_data, PG_TYPE_OID, CurrentMemoryContext);
 	FUNCTION_NAME2(check_arrow, CTYPE)(arrow, PANIC, results, n);
 
 	return n;
 }
 
-#undef TOSTRING
-#undef TOSTRING_HELPER
-
 #undef FUNCTION_NAME3
 #undef FUNCTION_NAME_HELPER3
 #undef FUNCTION_NAME2
 #undef FUNCTION_NAME_HELPER2
+
+#undef PG_TYPE_OID
+#undef PG_TYPE_OID_HELPER
+#undef PG_TYPE_OID_HELPER2
