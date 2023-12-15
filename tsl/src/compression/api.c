@@ -1393,7 +1393,6 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 													   row_compressor.num_compressed_rows);
 
 	row_compressor_close(&row_compressor);
-	FreeBulkInsertState(decompressor.bistate);
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
