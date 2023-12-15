@@ -22,12 +22,18 @@ alter table :compressed_table set (toast_tuple_target = 512);
 
 
 -- Now, test compression and decompression with various string lengths.
-create function test(repeats int) returns table(ns bigint) as $$ begin
+create function test(repeats int, decompress bool) returns table(ns bigint) as $$ begin
     raise log 'repeats %', repeats;
     truncate longstr;
     insert into longstr(s1) select repeat('aaaa', repeats);
     perform count(compress_chunk(x, true)) from show_chunks('longstr') x;
+    if decompress then
+        perform decompress_chunk(x) from show_chunks('longstr') x;
+    end if;
     return query select sum(length(s1)) from longstr;
 end; $$ language plpgsql volatile;
 
-select sum(t) from generate_series(1, 30) x, lateral test(x * x * x) t;
+select sum(t) from generate_series(1, 30) x, lateral test(x * x * x, false) t;
+
+-- Also test decompression which uses the detoaster as well.
+select sum(t) from generate_series(1, 30) x, lateral test(x * x * x, true) t;
