@@ -36,7 +36,6 @@
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
 #include "loader/lwlocks.h"
-#include "loader/seclabel.h"
 
 /*
  * Loading process:
@@ -109,7 +108,6 @@ static shmem_startup_hook_type prev_shmem_startup_hook;
 #if PG15_GE
 static shmem_request_hook_type prev_shmem_request_hook;
 #endif
-static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 typedef struct TsExtension
 {
@@ -549,115 +547,6 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 	}
 }
 
-/*
- * Check if a string is an UUID and error out otherwise.
- */
-static void
-check_uuid(const char *label)
-{
-	const MemoryContext oldcontext = CurrentMemoryContext;
-	/* Volatile is to work around the incorrect GCC -Wclobbered diagnostics. */
-	const char *volatile uuid = strchr(label, SECLABEL_DIST_TAG_SEPARATOR);
-	if (!uuid || strncmp(label, SECLABEL_DIST_TAG, uuid - label) != 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-				 errmsg("TimescaleDB label is for internal use only"),
-				 errdetail("Security label is \"%s\".", label),
-				 errhint("Security label has to be of format \"dist_uuid:<UUID>\".")));
-
-	PG_TRY();
-	{
-		DirectFunctionCall1(uuid_in, CStringGetDatum(&uuid[1]));
-	}
-	PG_CATCH();
-	{
-		ErrorData *edata;
-		MemoryContextSwitchTo(oldcontext);
-		edata = CopyErrorData();
-		if (edata->sqlerrcode == ERRCODE_INVALID_TEXT_REPRESENTATION)
-		{
-			FlushErrorState();
-			edata->detail = edata->message;
-			edata->hint = psprintf("Security label has to be of format \"dist_uuid:<UUID>\".");
-			edata->message = psprintf("TimescaleDB label is for internal use only");
-		}
-		ReThrowError(edata);
-	}
-	PG_END_TRY();
-}
-
-static void
-loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
-#if PG14_GE
-							bool readonly_tree,
-#endif
-							ProcessUtilityContext context, ParamListInfo params,
-							QueryEnvironment *queryEnv, DestReceiver *dest,
-							QueryCompletion *completion_tag
-
-)
-{
-	bool is_distributed_database = false;
-	char *dist_uuid = NULL;
-	ProcessUtility_hook_type process_utility;
-
-	/* Check if we are dropping a distributed database and get its uuid */
-	switch (nodeTag(pstmt->utilityStmt))
-	{
-		case T_DropdbStmt:
-		{
-			DropdbStmt *stmt = castNode(DropdbStmt, pstmt->utilityStmt);
-			Oid dboid = get_database_oid(stmt->dbname, stmt->missing_ok);
-
-			if (OidIsValid(dboid))
-				is_distributed_database = ts_seclabel_get_dist_uuid(dboid, &dist_uuid);
-			break;
-		}
-		case T_SecLabelStmt:
-		{
-			SecLabelStmt *stmt = castNode(SecLabelStmt, pstmt->utilityStmt);
-
-			/*
-			 * Since this statement can be in a dump output, we only print an
-			 * error on anything that doesn't looks like a sane distributed
-			 * UUID.
-			 */
-			if (stmt->provider && strcmp(stmt->provider, SECLABEL_DIST_PROVIDER) == 0)
-				check_uuid(stmt->label);
-			break;
-		}
-		default:
-			break;
-	}
-
-	/* Process the command */
-	if (prev_ProcessUtility_hook)
-		process_utility = prev_ProcessUtility_hook;
-	else
-		process_utility = standard_ProcessUtility;
-
-	process_utility(pstmt,
-					query_string,
-#if PG14_GE
-					readonly_tree,
-#endif
-					context,
-					params,
-					queryEnv,
-					dest,
-					completion_tag);
-
-	/*
-	 * Show a NOTICE warning message in case of dropping a
-	 * distributed database
-	 */
-	if (is_distributed_database)
-		ereport(NOTICE,
-				(errmsg("TimescaleDB distributed database might require "
-						"additional cleanup on the data nodes"),
-				 errdetail("Distributed database UUID is \"%s\".", dist_uuid)));
-}
-
 static void
 timescaledb_shmem_startup_hook(void)
 {
@@ -714,7 +603,6 @@ _PG_init(void)
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
-	ts_seclabel_init();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
@@ -763,10 +651,6 @@ _PG_init(void)
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
 #endif
-
-	/* register utility hook to handle a distributed database drop */
-	prev_ProcessUtility_hook = ProcessUtility_hook;
-	ProcessUtility_hook = loader_process_utility_hook;
 }
 
 inline static void
