@@ -728,37 +728,8 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
-		if (packed->decompression_type == DT_Default)
+		if (packed->decompression_type > 0)
 		{
-			/* Do nothing. */
-		}
-		else if (packed->decompression_type == DT_Iterator)
-		{
-			DecompressionIterator *iterator = (DecompressionIterator *) packed->buffers[0];
-			DecompressResult result = iterator->try_next(iterator);
-
-			if (result.is_done)
-			{
-				elog(ERROR, "compressed column out of sync with batch counter");
-			}
-
-			*packed->output_isnull = result.is_null;
-			*packed->output_value = result.val;
-		}
-		else if (packed->decompression_type == DT_ArrowText)
-		{
-			store_text_datum2(packed, arrow_row);
-			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
-		}
-		else if (packed->decompression_type == DT_ArrowTextDict)
-		{
-			const int16 index = ((int16 *) packed->buffers[3])[arrow_row];
-			store_text_datum2(packed, index);
-			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
-		}
-		else
-		{
-			Assert(packed->decompression_type > 0);
 			Assert(packed->decompression_type <= 8);
 			const uint8 value_bytes = packed->decompression_type;
 			const char *restrict src = packed->buffers[1];
@@ -791,6 +762,36 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 #endif
 			*packed->output_value = datum;
 			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
+		}
+		else if (packed->decompression_type == DT_Iterator)
+		{
+			DecompressionIterator *iterator = (DecompressionIterator *) packed->buffers[0];
+			DecompressResult result = iterator->try_next(iterator);
+
+			if (result.is_done)
+			{
+				elog(ERROR, "compressed column out of sync with batch counter");
+			}
+
+			*packed->output_isnull = result.is_null;
+			*packed->output_value = result.val;
+		}
+		else if (packed->decompression_type == DT_ArrowText)
+		{
+			store_text_datum2(packed, arrow_row);
+			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
+		}
+		else if (packed->decompression_type == DT_ArrowTextDict)
+		{
+			const int16 index = ((int16 *) packed->buffers[3])[arrow_row];
+			store_text_datum2(packed, index);
+			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
+		}
+		else
+		{
+			/* A compressed column with default value, do nothing. */
+			Assert(packed->decompression_type == DT_Default);
+			pg_unreachable();
 		}
 	}
 
