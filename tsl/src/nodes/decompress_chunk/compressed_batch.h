@@ -47,7 +47,8 @@ typedef enum
 typedef struct CompressedColumnValues2
 {
 	DecompressionType decompression_type;
-	AttrNumber output_attno;
+	Datum *output_value;
+	bool *output_isnull;
 	// The buffers are as following:
 	// iterator:        iterator
 	// arrow fixed:     validity, value

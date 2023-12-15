@@ -653,7 +653,9 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 			}
 
 			CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
-			packed->output_attno = desc->output_attno;
+			const AttrNumber attr = AttrNumberGetAttrOffset(desc->output_attno);
+			packed->output_value = &batch_state->decompressed_scan_slot->tts_values[attr];
+			packed->output_isnull = &batch_state->decompressed_scan_slot->tts_isnull[attr];
 			if (wide->iterator)
 			{
 				packed->decompression_type = DT_Iterator;
@@ -698,16 +700,16 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 }
 
 static void
-store_text_datum2(CompressedColumnValues2 *packed, int arrow_row, Datum *dest)
+store_text_datum2(CompressedColumnValues2 *packed, int arrow_row)
 {
 	const uint32 start = ((uint32 *) packed->buffers[1])[arrow_row];
 	const int32 value_bytes = ((uint32 *) packed->buffers[1])[arrow_row + 1] - start;
 	Assert(value_bytes >= 0);
 
 	const int total_bytes = value_bytes + VARHDRSZ;
-	Assert(DatumGetPointer(*dest) != NULL);
-	SET_VARSIZE(*dest, total_bytes);
-	memcpy(VARDATA(*dest), &((uint8 *) packed->buffers[2])[start], value_bytes);
+	Assert(DatumGetPointer(*packed->output_value) != NULL);
+	SET_VARSIZE(*packed->output_value, total_bytes);
+	memcpy(VARDATA(*packed->output_value), &((uint8 *) packed->buffers[2])[start], value_bytes);
 }
 
 /*
@@ -734,7 +736,6 @@ make_next_tuple(DecompressBatchState *batch_state, bool reverse, int num_compres
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
-		const AttrNumber attr = AttrNumberGetAttrOffset(packed->output_attno);
 		if (packed->decompression_type == DT_Default)
 		{
 			/* Do nothing. */
@@ -749,28 +750,25 @@ make_next_tuple(DecompressBatchState *batch_state, bool reverse, int num_compres
 				elog(ERROR, "compressed column out of sync with batch counter");
 			}
 
-			const AttrNumber attr = AttrNumberGetAttrOffset(packed->output_attno);
-			decompressed_scan_slot->tts_isnull[attr] = result.is_null;
-			decompressed_scan_slot->tts_values[attr] = result.val;
+			*packed->output_isnull = result.is_null;
+			*packed->output_value = result.val;
 		}
 		else if (packed->decompression_type == DT_ArrowText)
 		{
-			store_text_datum2(packed, arrow_row, &decompressed_scan_slot->tts_values[attr]);
-			decompressed_scan_slot->tts_isnull[attr] =
-				!arrow_row_is_valid(packed->buffers[0], arrow_row);
+			store_text_datum2(packed, arrow_row);
+			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
 		}
 		else if (packed->decompression_type == DT_ArrowTextDict)
 		{
 			const int16 index = ((int16 *) packed->buffers[3])[arrow_row];
-			store_text_datum2(packed, index, &decompressed_scan_slot->tts_values[attr]);
-			decompressed_scan_slot->tts_isnull[attr] =
-				!arrow_row_is_valid(packed->buffers[0], arrow_row);
+			store_text_datum2(packed, index);
+			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
 		}
 		else
 		{
-			const int value_bytes = packed->decompression_type;
-			Assert(value_bytes > 0);
-			Assert(value_bytes <= 8);
+			Assert(packed->decompression_type > 0);
+			Assert(packed->decompression_type <= 8);
+			const uint8 value_bytes = packed->decompression_type;
 			const char *restrict src = packed->buffers[1];
 
 			/*
@@ -799,9 +797,8 @@ make_next_tuple(DecompressBatchState *batch_state, bool reverse, int num_compres
 				datum = Int64GetDatum(value);
 			}
 #endif
-			decompressed_scan_slot->tts_values[attr] = datum;
-			decompressed_scan_slot->tts_isnull[attr] =
-				!arrow_row_is_valid(packed->buffers[0], arrow_row);
+			*packed->output_value = datum;
+			*packed->output_isnull = !arrow_row_is_valid(packed->buffers[0], arrow_row);
 		}
 	}
 
@@ -828,7 +825,8 @@ vector_qual(DecompressBatchState *batch_state, bool reverse)
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
 	const uint16 output_row = batch_state->next_batch_row;
-	const uint16 arrow_row = unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
+	const uint16 arrow_row =
+		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
 	if (!batch_state->vector_qual_result)
 	{
