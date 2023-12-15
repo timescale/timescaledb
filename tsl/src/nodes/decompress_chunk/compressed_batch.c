@@ -251,7 +251,7 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	 * Allocate the bitmap that will hold the vectorized qual results. We will
 	 * initialize it to all ones and AND the individual quals to it.
 	 */
-	const int bitmap_bytes = sizeof(uint64) * ((batch_state->total_batch_rows + 63) / 64);
+	const int bitmap_bytes = sizeof(uint64) * (((uint64) batch_state->total_batch_rows + 63) / 64);
 	batch_state->vector_qual_result = palloc(bitmap_bytes);
 	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
 	if (batch_state->total_batch_rows % 64 != 0)
@@ -595,6 +595,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				}
 
 				Assert(batch_state->total_batch_rows == 0);
+				CheckCompressedData(count_value <= UINT16_MAX);
 				batch_state->total_batch_rows = count_value;
 
 				break;
@@ -708,9 +709,13 @@ store_text_datum2(CompressedColumnValues2 *packed, int arrow_row, Datum *dest)
 /*
  * Construct the next tuple in the decompressed scan slot.
  * Doesn't check the quals.
+ *
+ * It takes "reverse" and "num_compressed_columns" by value to avoid accessing
+ * the DecompressContext, which would prevent the compiler to combine it with
+ * vector_qual().
  */
 static void
-make_next_tuple(DecompressContext *dcontext, DecompressBatchState *batch_state)
+make_next_tuple(DecompressBatchState *batch_state, bool reverse, int num_compressed_columns)
 {
 	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
 	Assert(decompressed_scan_slot != NULL);
@@ -718,11 +723,10 @@ make_next_tuple(DecompressContext *dcontext, DecompressBatchState *batch_state)
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
-	const int output_row = batch_state->next_batch_row;
-	const size_t arrow_row =
-		unlikely(dcontext->reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
+	const uint16 output_row = batch_state->next_batch_row;
+	const uint16 arrow_row =
+		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
-	const int num_compressed_columns = dcontext->num_compressed_columns;
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
@@ -819,8 +823,8 @@ vector_qual(DecompressBatchState *batch_state, bool reverse)
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
-	const int output_row = batch_state->next_batch_row;
-	const size_t arrow_row = reverse ? batch_state->total_batch_rows - 1 - output_row : output_row;
+	const uint16 output_row = batch_state->next_batch_row;
+	const uint16 arrow_row = unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 
 	if (!batch_state->vector_qual_result)
 	{
@@ -861,12 +865,13 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 	TupleTableSlot *decompressed_scan_slot = batch_state->decompressed_scan_slot;
 	Assert(decompressed_scan_slot != NULL);
 
+	const bool reverse = dcontext->reverse;
 	const int num_compressed_columns = dcontext->num_compressed_columns;
 
 	for (; batch_state->next_batch_row < batch_state->total_batch_rows;
 		 batch_state->next_batch_row++)
 	{
-		if (!vector_qual(batch_state, dcontext->reverse))
+		if (!vector_qual(batch_state, reverse))
 		{
 			/*
 			 * This row doesn't pass the vectorized quals. Advance the iterated
@@ -886,7 +891,7 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 			continue;
 		}
 
-		make_next_tuple(dcontext, batch_state);
+		make_next_tuple(batch_state, reverse, num_compressed_columns);
 
 		if (!postgres_qual(dcontext, batch_state))
 		{
@@ -957,7 +962,7 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 #endif
 
 	/* Make the first tuple and save it. */
-	make_next_tuple(dcontext, batch_state);
+	make_next_tuple(batch_state, dcontext->reverse, dcontext->num_compressed_columns);
 	ExecCopySlot(first_tuple_slot, batch_state->decompressed_scan_slot);
 
 	/*

@@ -68,8 +68,8 @@ typedef struct DecompressBatchState
 	 * original tuple, and a batch outlives its source tuple.
 	 */
 	TupleTableSlot *compressed_slot;
-	int total_batch_rows;
-	int next_batch_row;
+	uint16 total_batch_rows;
+	uint16 next_batch_row;
 	Size block_size_bytes; /* Block size to use for memory context */
 	MemoryContext per_batch_context;
 
