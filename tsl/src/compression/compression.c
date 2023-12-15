@@ -447,7 +447,7 @@ compress_chunk(Hypertable *ht, Oid in_table, Oid out_table, int insert_options)
 		tuplesort_end(sorted_rel);
 	}
 
-	row_compressor_finish(&row_compressor);
+	row_compressor_close(&row_compressor);
 	DEBUG_WAITPOINT("compression_done_before_truncate_uncompressed");
 	truncate_relation(in_table);
 
@@ -1269,7 +1269,7 @@ row_compressor_reset(RowCompressor *row_compressor)
 }
 
 void
-row_compressor_finish(RowCompressor *row_compressor)
+row_compressor_close(RowCompressor *row_compressor)
 {
 	if (row_compressor->bistate)
 		FreeBulkInsertState(row_compressor->bistate);
@@ -1403,6 +1403,10 @@ build_decompressor(Relation in_rel, Relation out_rel)
 void
 row_decompressor_close(RowDecompressor *decompressor)
 {
+	FreeBulkInsertState(decompressor->bistate);
+	MemoryContextDelete(decompressor->per_compressed_row_ctx);
+	ts_catalog_close_indexes(decompressor->indexstate);
+	FreeExecutorState(decompressor->estate);
 	detoaster_close(&decompressor->detoaster);
 }
 
@@ -1446,10 +1450,6 @@ decompress_chunk(Oid in_table, Oid out_table)
 
 	table_endscan(scan);
 	ExecDropSingleTupleTableSlot(slot);
-	FreeBulkInsertState(decompressor.bistate);
-	MemoryContextDelete(decompressor.per_compressed_row_ctx);
-	ts_catalog_close_indexes(decompressor.indexstate);
-	FreeExecutorState(decompressor.estate);
 	row_decompressor_close(&decompressor);
 
 	table_close(out_rel, NoLock);
@@ -2213,9 +2213,6 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 
 	table_endscan(scan);
 	ExecDropSingleTupleTableSlot(compressed_slot);
-	ts_catalog_close_indexes(decompressor.indexstate);
-	FreeExecutorState(decompressor.estate);
-	FreeBulkInsertState(decompressor.bistate);
 	row_decompressor_close(&decompressor);
 
 	CommandCounterIncrement();
@@ -3407,9 +3404,6 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	if (chunk_status_changed == true)
 		ts_chunk_set_partial(chunk);
 
-	ts_catalog_close_indexes(decompressor.indexstate);
-	FreeExecutorState(decompressor.estate);
-	FreeBulkInsertState(decompressor.bistate);
 	row_decompressor_close(&decompressor);
 
 	table_close(chunk_rel, NoLock);

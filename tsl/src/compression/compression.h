@@ -355,7 +355,7 @@ extern void row_compressor_init(CompressionSettings *settings, RowCompressor *ro
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								bool reset_sequence, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
-extern void row_compressor_finish(RowCompressor *row_compressor);
+extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
