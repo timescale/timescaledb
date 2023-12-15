@@ -141,7 +141,7 @@ static void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i)
 {
 	CompressionColumnDescription *column_description = &dcontext->template_columns[i];
-	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+	CompressedColumnValues *column_values = &batch_state->compressed_columns_wide[i];
 	column_values->iterator = NULL;
 	column_values->arrow = NULL;
 	column_values->arrow_values = NULL;
@@ -321,7 +321,7 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 			   "only compressed columns are supported in vectorized quals");
 		Assert(column_index < dcontext->num_compressed_columns);
 
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[column_index];
+		CompressedColumnValues *column_values = &batch_state->compressed_columns_wide[column_index];
 
 		if (column_values->value_bytes == 0)
 		{
@@ -519,6 +519,9 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 
 		batch_state->decompressed_scan_slot =
 			MakeSingleTupleTableSlot(dcontext->decompressed_slot_scan_tdesc, slot->tts_ops);
+
+		batch_state->compressed_columns_wide =
+			palloc0(sizeof(CompressedColumnValues) * dcontext->num_compressed_columns);
 	}
 	else
 	{
@@ -555,7 +558,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				 * skip decompressing some columns if the entire batch doesn't pass
 				 * the quals. Skip them for now.
 				 */
-				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+				CompressedColumnValues *column_values = &batch_state->compressed_columns_wide[i];
 				column_values->value_bytes = 0;
 				column_values->arrow = NULL;
 				column_values->iterator = NULL;
@@ -636,12 +639,53 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		const int num_compressed_columns = dcontext->num_compressed_columns;
 		for (int i = 0; i < num_compressed_columns; i++)
 		{
-			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-			if (column_values->value_bytes == 0)
+			CompressionColumnDescription *desc = &dcontext->template_columns[i];
+			CompressedColumnValues *wide = &batch_state->compressed_columns_wide[i];
+			if (wide->value_bytes == 0)
 			{
 				decompress_column(dcontext, batch_state, i);
-				Assert(column_values->value_bytes != 0);
+				Assert(wide->value_bytes != 0);
 			}
+
+			CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
+			packed->output_attno = desc->output_attno;
+			if (wide->iterator)
+			{
+				packed->decompression_type = DT_Iterator;
+				packed->buffers[0] = wide->iterator;
+				continue;
+			}
+
+			if (wide->arrow == NULL)
+			{
+				packed->decompression_type = DT_Default;
+				continue;
+			}
+
+			if (wide->value_bytes > 0)
+			{
+				packed->decompression_type = wide->value_bytes;
+				packed->buffers[0] = wide->arrow->buffers[0];
+				packed->buffers[1] = wide->arrow->buffers[1];
+				continue;
+			}
+
+			Assert(wide->value_bytes == -1);
+
+			if (wide->arrow->dictionary == NULL)
+			{
+				packed->decompression_type = DT_ArrowText;
+				packed->buffers[0] = wide->arrow->buffers[0];
+				packed->buffers[1] = wide->arrow->buffers[1];
+				packed->buffers[2] = wide->arrow->buffers[2];
+				continue;
+			}
+
+			packed->decompression_type = DT_ArrowTextDict;
+			packed->buffers[0] = wide->arrow->buffers[0];
+			packed->buffers[1] = wide->arrow->dictionary->buffers[1];
+			packed->buffers[2] = wide->arrow->dictionary->buffers[2];
+			packed->buffers[3] = wide->arrow->buffers[1];
 		}
 	}
 
@@ -649,17 +693,16 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 }
 
 static void
-store_text_datum(ArrowArray *arrow, int arrow_row, Datum *dest)
+store_text_datum2(CompressedColumnValues2 *packed, int arrow_row, Datum *dest)
 {
-	Assert(arrow->dictionary == NULL);
-	const uint32 start = ((uint32 *) arrow->buffers[1])[arrow_row];
-	const int32 value_bytes = ((uint32 *) arrow->buffers[1])[arrow_row + 1] - start;
+	const uint32 start = ((uint32 *) packed->buffers[1])[arrow_row];
+	const int32 value_bytes = ((uint32 *) packed->buffers[1])[arrow_row + 1] - start;
 	Assert(value_bytes >= 0);
 
 	const int total_bytes = value_bytes + VARHDRSZ;
 	Assert(DatumGetPointer(*dest) != NULL);
 	SET_VARSIZE(*dest, total_bytes);
-	memcpy(VARDATA(*dest), &((uint8 *) arrow->buffers[2])[start], value_bytes);
+	memcpy(VARDATA(*dest), &((uint8 *) packed->buffers[2])[start], value_bytes);
 }
 
 /*
@@ -682,79 +725,75 @@ make_next_tuple(DecompressContext *dcontext, DecompressBatchState *batch_state)
 	const int num_compressed_columns = dcontext->num_compressed_columns;
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-		Ensure(column_values->value_bytes != 0, "the column is not decompressed");
-		if (column_values->iterator != NULL)
+		CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
+		const AttrNumber attr = AttrNumberGetAttrOffset(packed->output_attno);
+		if (packed->decompression_type == DT_Default)
 		{
-			DecompressResult result = column_values->iterator->try_next(column_values->iterator);
+			/* Do nothing. */
+		}
+		else if (packed->decompression_type == DT_Iterator)
+		{
+			DecompressionIterator *iterator = (DecompressionIterator *) packed->buffers[0];
+			DecompressResult result = iterator->try_next(iterator);
 
 			if (result.is_done)
 			{
 				elog(ERROR, "compressed column out of sync with batch counter");
 			}
 
-			const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
+			const AttrNumber attr = AttrNumberGetAttrOffset(packed->output_attno);
 			decompressed_scan_slot->tts_isnull[attr] = result.is_null;
 			decompressed_scan_slot->tts_values[attr] = result.val;
 		}
-		else if (column_values->arrow_values != NULL)
+		else if (packed->decompression_type == DT_ArrowText)
 		{
-			Assert(column_values->value_bytes != 0);
-			const AttrNumber attr = AttrNumberGetAttrOffset(column_values->output_attno);
-			if (column_values->value_bytes == -1)
-			{
-				if (column_values->arrow->dictionary == NULL)
-				{
-					store_text_datum(column_values->arrow,
-									 arrow_row,
-									 &decompressed_scan_slot->tts_values[attr]);
-				}
-				else
-				{
-					const int16 index = ((int16 *) column_values->arrow->buffers[1])[arrow_row];
-					store_text_datum(column_values->arrow->dictionary,
-									 index,
-									 &decompressed_scan_slot->tts_values[attr]);
-				}
+			store_text_datum2(packed, arrow_row, &decompressed_scan_slot->tts_values[attr]);
+			decompressed_scan_slot->tts_isnull[attr] =
+				!arrow_row_is_valid(packed->buffers[0], arrow_row);
+		}
+		else if (packed->decompression_type == DT_ArrowTextDict)
+		{
+			const int16 index = ((int16 *) packed->buffers[3])[arrow_row];
+			store_text_datum2(packed, index, &decompressed_scan_slot->tts_values[attr]);
+			decompressed_scan_slot->tts_isnull[attr] =
+				!arrow_row_is_valid(packed->buffers[0], arrow_row);
+		}
+		else
+		{
+			const int value_bytes = packed->decompression_type;
+			Assert(value_bytes > 0);
+			Assert(value_bytes <= 8);
+			const char *restrict src = packed->buffers[1];
 
-				decompressed_scan_slot->tts_isnull[attr] =
-					!arrow_row_is_valid(column_values->arrow->buffers[0], arrow_row);
+			/*
+			 * The conversion of Datum to more narrow types will truncate
+			 * the higher bytes, so we don't care if we read some garbage
+			 * into them, and can always read 8 bytes. These are unaligned
+			 * reads, so technically we have to do memcpy.
+			 */
+			uint64 value;
+			memcpy(&value, &src[value_bytes * arrow_row], 8);
+
+#ifdef USE_FLOAT8_BYVAL
+			Datum datum = Int64GetDatum(value);
+#else
+			/*
+			 * On 32-bit systems, the data larger than 4 bytes go by
+			 * reference, so we have to jump through these hoops.
+			 */
+			Datum datum;
+			if (value_bytes <= 4)
+			{
+				datum = Int32GetDatum((uint32) value);
 			}
 			else
 			{
-				Assert(column_values->value_bytes > 0);
-				const char *restrict src = column_values->arrow_values;
-
-				/*
-				 * The conversion of Datum to more narrow types will truncate
-				 * the higher bytes, so we don't care if we read some garbage
-				 * into them, and can always read 8 bytes. These are unaligned
-				 * reads, so technically we have to do memcpy.
-				 */
-				uint64 value;
-				memcpy(&value, &src[column_values->value_bytes * arrow_row], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-				Datum datum = Int64GetDatum(value);
-#else
-				/*
-				 * On 32-bit systems, the data larger than 4 bytes go by
-				 * reference, so we have to jump through these hoops.
-				 */
-				Datum datum;
-				if (column_values->value_bytes <= 4)
-				{
-					datum = Int32GetDatum((uint32) value);
-				}
-				else
-				{
-					datum = Int64GetDatum(value);
-				}
-#endif
-				decompressed_scan_slot->tts_values[attr] = datum;
-				decompressed_scan_slot->tts_isnull[attr] =
-					!arrow_row_is_valid(column_values->arrow_validity, arrow_row);
+				datum = Int64GetDatum(value);
 			}
+#endif
+			decompressed_scan_slot->tts_values[attr] = datum;
+			decompressed_scan_slot->tts_isnull[attr] =
+				!arrow_row_is_valid(packed->buffers[0], arrow_row);
 		}
 	}
 
@@ -835,11 +874,11 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 			 */
 			for (int i = 0; i < num_compressed_columns; i++)
 			{
-				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-				Ensure(column_values->value_bytes != 0, "the column is not decompressed");
-				if (column_values->iterator)
+				CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
+				if (packed->decompression_type == DT_Iterator)
 				{
-					column_values->iterator->try_next(column_values->iterator);
+					DecompressionIterator *iterator = (DecompressionIterator *) packed->buffers[0];
+					iterator->try_next(iterator);
 				}
 			}
 
@@ -871,11 +910,11 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 	Assert(batch_state->next_batch_row == batch_state->total_batch_rows);
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-		if (column_values->iterator)
+		CompressedColumnValues2 *packed = &batch_state->compressed_columns_packed[i];
+		if (packed->decompression_type == DT_Iterator)
 		{
-			Assert(column_values->value_bytes != 0);
-			DecompressResult result = column_values->iterator->try_next(column_values->iterator);
+			DecompressionIterator *iterator = (DecompressionIterator *) packed->buffers[0];
+			DecompressResult result = iterator->try_next(iterator);
 			if (!result.is_done)
 			{
 				elog(ERROR, "compressed column out of sync with batch counter");
@@ -912,7 +951,7 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	const int num_compressed_columns = dcontext->num_compressed_columns;
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		CompressedColumnValues *column_values = &batch_state->compressed_columns_wide[i];
 		Assert(column_values->value_bytes != 0);
 	}
 #endif

@@ -21,7 +21,7 @@ batch_array_init(BatchArray *array, int nbatches, int ncolumns_per_batch,
 	array->unused_batch_states = bms_add_range(NULL, 0, nbatches - 1);
 	array->batch_memory_context_bytes = memory_context_block_size_bytes;
 	array->n_batch_state_bytes =
-		sizeof(DecompressBatchState) + sizeof(CompressedColumnValues) * ncolumns_per_batch;
+		sizeof(DecompressBatchState) + sizeof(CompressedColumnValues2) * ncolumns_per_batch;
 	array->batch_states = palloc0(array->n_batch_state_bytes * nbatches);
 	Assert(bms_num_members(array->unused_batch_states) == array->n_batch_states);
 }

@@ -161,7 +161,7 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 	 * For row-by-row decompression, check that the result is still the same
 	 * after we compress and decompress back.
 	 * Don't perform this check for other types of tests.
-     *
+	 *
 	 * 1) Compress.
 	 */
 	Compressor *compressor = def->compressor_for_type(TEXTOID);
