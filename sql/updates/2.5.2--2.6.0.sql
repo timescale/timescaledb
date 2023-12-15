@@ -28,13 +28,14 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs
 
 DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
 
+-- create stub to not introduce shared library dependency
 CREATE FUNCTION @extschema@.delete_data_node(
     node_name              NAME,
     if_exists              BOOLEAN = FALSE,
     force                  BOOLEAN = FALSE,
     repartition            BOOLEAN = TRUE,
 	drop_database          BOOLEAN = FALSE
-) RETURNS BOOLEAN AS '@MODULE_PATHNAME@', 'ts_data_node_delete' LANGUAGE C VOLATILE;
+) RETURNS BOOLEAN AS $$SELECT true;$$ LANGUAGE SQL VOLATILE;
 
 CREATE FUNCTION @extschema@.get_telemetry_report() RETURNS jsonb
     AS '@MODULE_PATHNAME@', 'ts_telemetry_get_report_jsonb'

@@ -89,50 +89,15 @@ CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
 CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
 CROSSMODULE_WRAPPER(cagg_try_repair);
 
-CROSSMODULE_WRAPPER(data_node_ping);
-CROSSMODULE_WRAPPER(data_node_block_new_chunks);
-CROSSMODULE_WRAPPER(data_node_allow_new_chunks);
-CROSSMODULE_WRAPPER(data_node_add);
-CROSSMODULE_WRAPPER(data_node_delete);
-CROSSMODULE_WRAPPER(data_node_attach);
-CROSSMODULE_WRAPPER(data_node_detach);
-CROSSMODULE_WRAPPER(data_node_alter);
-CROSSMODULE_WRAPPER(chunk_drop_replica);
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
-CROSSMODULE_WRAPPER(chunks_drop_stale);
 
-CROSSMODULE_WRAPPER(chunk_set_default_data_node);
 CROSSMODULE_WRAPPER(chunk_get_relstats);
 CROSSMODULE_WRAPPER(chunk_get_colstats);
 CROSSMODULE_WRAPPER(chunk_create_empty_table);
-CROSSMODULE_WRAPPER(chunk_create_replica_table);
 
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
-
-TS_FUNCTION_INFO_V1(ts_dist_set_id);
-Datum
-ts_dist_set_id(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_BOOL(ts_cm_functions->set_distributed_id(PG_GETARG_DATUM(0)));
-}
-
-TS_FUNCTION_INFO_V1(ts_dist_set_peer_id);
-Datum
-ts_dist_set_peer_id(PG_FUNCTION_ARGS)
-{
-	ts_cm_functions->set_distributed_peer_id(PG_GETARG_DATUM(0));
-	PG_RETURN_VOID();
-}
-
-TS_FUNCTION_INFO_V1(ts_dist_validate_as_data_node);
-Datum
-ts_dist_validate_as_data_node(PG_FUNCTION_ARGS)
-{
-	ts_cm_functions->validate_as_data_node();
-	PG_RETURN_VOID();
-}
 
 /*
  * casting a function pointer to a pointer of another type is undefined
@@ -255,21 +220,6 @@ process_cagg_try_repair(PG_FUNCTION_ARGS)
 }
 
 static void
-hypertable_make_distributed_default_fn(Hypertable *ht, List *data_node_names)
-{
-	error_no_default_fn_community();
-}
-
-static List *
-get_and_validate_data_node_list_default_fn(ArrayType *nodearr)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-
-	return NIL;
-}
-
-static void
 cache_syscache_invalidate_default(Datum arg, int cacheid, uint32 hashvalue)
 {
 	/* The default is a no-op */
@@ -315,58 +265,12 @@ continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation c
 	pg_unreachable();
 }
 
-static Datum
-empty_fn(PG_FUNCTION_ARGS)
-{
-	PG_RETURN_VOID();
-}
-
-static void
-create_chunk_on_data_nodes_default(const Chunk *chunk, const Hypertable *ht,
-								   const char *remote_chunk_name, List *data_nodes)
-{
-	error_no_default_fn_community();
-}
-
-static bool
-set_distributed_id_default(Datum d)
-{
-	return error_no_default_fn_bool_void_community();
-}
-
-static void
-set_distributed_peer_id_default(Datum d)
-{
-	error_no_default_fn_community();
-}
-
-static void
-func_call_on_data_nodes_default(FunctionCallInfo finfo, List *data_node_oids)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
-static void
-dist_update_stale_chunk_metadata_default(Chunk *new_chunk, List *chunk_data_nodes)
-{
-	error_no_default_fn_community();
-	pg_unreachable();
-}
-
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
 ts_tsl_loaded(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(ts_cm_functions != &ts_cm_functions_default);
-}
-
-static void
-mn_get_foreign_join_path_default_fn_pg_community(PlannerInfo *root, RelOptInfo *joinrel,
-												 RelOptInfo *outerrel, RelOptInfo *innerrel,
-												 JoinType jointype, JoinPathExtraData *extra)
-{
 }
 
 /*
@@ -441,9 +345,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
 	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
-	.remote_invalidation_log_delete = NULL,
 	.drop_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
-	.remote_drop_dist_ht_invalidation_trigger = NULL,
 	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
 	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
@@ -468,52 +370,16 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
 
-	.data_node_add = error_no_default_fn_pg_community,
-	.data_node_delete = error_no_default_fn_pg_community,
-	.data_node_attach = error_no_default_fn_pg_community,
-	.data_node_ping = error_no_default_fn_pg_community,
-	.data_node_detach = error_no_default_fn_pg_community,
-	.data_node_alter = error_no_default_fn_pg_community,
-	.data_node_allow_new_chunks = error_no_default_fn_pg_community,
-	.data_node_block_new_chunks = error_no_default_fn_pg_community,
-	.distributed_exec = error_no_default_fn_pg_community,
-	.create_distributed_restore_point = error_no_default_fn_pg_community,
-	.chunk_set_default_data_node = error_no_default_fn_pg_community,
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
-	.create_chunk_on_data_nodes = create_chunk_on_data_nodes_default,
-	.chunk_drop_replica = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
-	.chunks_drop_stale = error_no_default_fn_pg_community,
-	.hypertable_make_distributed = hypertable_make_distributed_default_fn,
-	.get_and_validate_data_node_list = get_and_validate_data_node_list_default_fn,
-	.timescaledb_fdw_handler = error_no_default_fn_pg_community,
-	.timescaledb_fdw_validator = empty_fn,
 	.cache_syscache_invalidate = cache_syscache_invalidate_default,
-	.remote_txn_id_in = error_no_default_fn_pg_community,
-	.remote_txn_id_out = error_no_default_fn_pg_community,
-	.remote_txn_heal_data_node = error_no_default_fn_pg_community,
-	.remote_connection_cache_show = error_no_default_fn_pg_community,
-	.set_distributed_id = set_distributed_id_default,
-	.set_distributed_peer_id = set_distributed_peer_id_default,
-	.is_access_node_session = error_no_default_fn_bool_void_community,
-	.remove_from_distributed_db = error_no_default_fn_bool_void_community,
-	.dist_remote_hypertable_info = error_no_default_fn_pg_community,
-	.dist_remote_chunk_info = error_no_default_fn_pg_community,
-	.dist_remote_compressed_chunk_info = error_no_default_fn_pg_community,
-	.dist_remote_hypertable_index_info = error_no_default_fn_pg_community,
-	.dist_update_stale_chunk_metadata = dist_update_stale_chunk_metadata_default,
-	.validate_as_data_node = error_no_default_fn_community,
-	.func_call_on_data_nodes = func_call_on_data_nodes_default,
 	.chunk_get_relstats = error_no_default_fn_pg_community,
 	.chunk_get_colstats = error_no_default_fn_pg_community,
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
-	.chunk_create_replica_table = error_no_default_fn_pg_community,
-	.hypertable_distributed_set_replication_factor = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
-	.mn_get_foreign_join_paths = mn_get_foreign_join_path_default_fn_pg_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

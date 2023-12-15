@@ -113,3 +113,6 @@ DROP PROCEDURE IF EXISTS timescaledb_experimental.move_chunk;
 DROP PROCEDURE IF EXISTS timescaledb_experimental.copy_chunk;
 DROP PROCEDURE IF EXISTS timescaledb_experimental.cleanup_copy_chunk_operation;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.set_chunk_default_data_node;
+DROP FUNCTION IF EXISTS _timescaledb_internal.set_chunk_default_data_node;
+
