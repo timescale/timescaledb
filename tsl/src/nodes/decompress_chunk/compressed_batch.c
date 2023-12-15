@@ -856,14 +856,15 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 	Assert(decompressed_scan_slot != NULL);
 
 	const bool reverse = dcontext->reverse;
-	const uint16 output_row = batch_state->next_batch_row;
-	const uint16 arrow_row =
-		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 	const int num_compressed_columns = dcontext->num_compressed_columns;
 
 	for (; batch_state->next_batch_row < batch_state->total_batch_rows;
 		 batch_state->next_batch_row++)
 	{
+		const uint16 output_row = batch_state->next_batch_row;
+		const uint16 arrow_row =
+			unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
+
 		if (!vector_qual(batch_state, arrow_row))
 		{
 			/*
