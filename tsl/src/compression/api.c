@@ -943,7 +943,7 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 	table_close(compressed_chunk_rel, NoLock);
 	table_close(uncompressed_chunk_rel, NoLock);
 
-	row_compressor_finish(&row_compressor);
+	row_compressor_close(&row_compressor);
 
 	if (OidIsValid(row_compressor.index_oid))
 	{
@@ -1392,12 +1392,13 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 													   row_compressor.rowcnt_pre_compression,
 													   row_compressor.num_compressed_rows);
 
-	row_compressor_finish(&row_compressor);
+	row_compressor_close(&row_compressor);
 	FreeBulkInsertState(decompressor.bistate);
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
 	index_close(index_rel, AccessExclusiveLock);
+	row_decompressor_close(&decompressor);
 
 #if PG14_LT
 	int options = 0;

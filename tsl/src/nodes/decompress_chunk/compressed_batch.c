@@ -171,8 +171,12 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		return;
 	}
 
+	/* Detoast the compressed datum. */
+	value = PointerGetDatum(
+		detoaster_detoast_attr((struct varlena *) DatumGetPointer(value), &dcontext->detoaster));
+
 	/* Decompress the entire batch if it is supported. */
-	CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
+	CompressedDataHeader *header = (CompressedDataHeader *) value;
 	ArrowArray *arrow = NULL;
 	if (dcontext->enable_bulk_decompression && column_description->bulk_decompression_supported)
 	{

@@ -472,6 +472,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		dcontext->vectorized_quals_constified =
 			lappend(dcontext->vectorized_quals_constified, constified);
 	}
+
+	detoaster_init(&dcontext->detoaster, CurrentMemoryContext);
 }
 
 /*
@@ -546,6 +548,9 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				break;
 			}
 
+			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
+			MemoryContextReset(batch_state->per_batch_context);
+
 			bool isnull_value, isnull_elements;
 			Datum value = slot_getattr(compressed_slot,
 									   column_description->compressed_scan_attno,
@@ -582,6 +587,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 							(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 							 errmsg("bigint out of range")));
 			}
+			MemoryContextSwitchTo(old_mctx);
 		}
 	}
 	else if (column_description->type == COMPRESSED_COLUMN)
@@ -600,6 +606,9 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				break;
 			}
 
+			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
+			MemoryContextReset(batch_state->per_batch_context);
+
 			/* Decompress data */
 			bool isnull;
 			Datum value =
@@ -610,7 +619,11 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			/* We have at least one value */
 			decompressed_scan_slot->tts_isnull[0] = false;
 
-			CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(value);
+			CompressedDataHeader *header =
+				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
+																	value),
+																&dcontext->detoaster);
+
 			ArrowArray *arrow = NULL;
 
 			DecompressAllFunction decompress_all =
@@ -618,8 +631,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 												column_description->typid);
 			Assert(decompress_all != NULL);
 
-			MemoryContext context_before_decompression =
-				MemoryContextSwitchTo(dcontext->bulk_decompression_context);
+			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 			arrow = decompress_all(PointerGetDatum(header),
 								   column_description->typid,
@@ -628,7 +640,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			Assert(arrow != NULL);
 
 			MemoryContextReset(dcontext->bulk_decompression_context);
-			MemoryContextSwitchTo(context_before_decompression);
+			MemoryContextSwitchTo(batch_state->per_batch_context);
 
 			/* A compressed batch consists of 1000 tuples (see MAX_ROWS_PER_COMPRESSION). The
 			 * attribute value is a int32 with a max value of 2^32. Even if all tuples have the max
@@ -655,6 +667,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				ereport(ERROR,
 						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 						 errmsg("bigint out of range")));
+			MemoryContextSwitchTo(old_mctx);
 		}
 	}
 	else
@@ -794,6 +807,8 @@ decompress_chunk_end(CustomScanState *node)
 
 	bq->funcs->free(bq);
 	ExecEndNode(linitial(node->custom_ps));
+
+	detoaster_close(&chunk_state->decompress_context.detoaster);
 }
 
 /*
