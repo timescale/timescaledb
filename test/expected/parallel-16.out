@@ -643,11 +643,11 @@ SET max_parallel_workers_per_gather TO 2;
  Finalize Aggregate
    ->  Gather
          Workers Planned: 2
-         ->  Result
-               One-Time Filter: (length(version()) > 0)
-               ->  Parallel Custom Scan (ChunkAppend) on test
-                     Chunks excluded during startup: 0
-                     ->  Partial Aggregate
+         ->  Partial Aggregate
+               ->  Result
+                     One-Time Filter: (length(version()) > 0)
+                     ->  Parallel Custom Scan (ChunkAppend) on test
+                           Chunks excluded during startup: 0
                            ->  Result
                                  One-Time Filter: (length(version()) > 0)
                                  ->  Parallel Seq Scan on _hyper_1_2_chunk

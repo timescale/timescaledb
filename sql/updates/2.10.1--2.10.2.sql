@@ -1,7 +1,10 @@
 DROP FUNCTION _timescaledb_internal.ping_data_node(NAME);
 
+-- We only create stub here to not introduce shared library dependencies in update chains
+-- the proper function definition will be created at end of update script when all functions
+-- are recreated.
 CREATE OR REPLACE FUNCTION _timescaledb_internal.ping_data_node(node_name NAME, timeout INTERVAL = NULL) RETURNS BOOLEAN
-AS '@MODULE_PATHNAME@', 'ts_data_node_ping' LANGUAGE C VOLATILE;
+AS $$SELECT false;$$ LANGUAGE SQL VOLATILE;
 
 -- drop dependent views
 DROP VIEW IF EXISTS timescaledb_information.job_errors;

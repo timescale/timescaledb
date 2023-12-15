@@ -461,6 +461,15 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 	if (subpaths == NIL)
 		return;
 
+	if (list_length(subpaths) < 2)
+	{
+		/*
+		 * Doesn't make sense to add per-chunk aggregation paths if there's
+		 * only one chunk.
+		 */
+		return;
+	}
+
 	/* Generate agg paths on top of the append children */
 	List *sorted_subpaths = NIL;
 	List *hashed_subpaths = NIL;
@@ -580,6 +589,14 @@ generate_partial_agg_pushdown_path(PlannerInfo *root, Path *cheapest_partial_pat
 	if (subpaths == NIL)
 		return;
 
+	if (list_length(subpaths) < 2)
+	{
+		/*
+		 * Doesn't make sense to add per-chunk aggregation paths if there's
+		 * only one chunk.
+		 */
+		return;
+	}
 	/* Generate agg paths on top of the append children */
 	ListCell *lc;
 	List *sorted_subpaths = NIL;

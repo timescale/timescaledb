@@ -1,0 +1,3 @@
+Implements: #6360 Remove support for creating Continuous Aggregates with old format
+
+Thanks: @pdipesh02 for working on removing the old Continuous Aggregate format
