@@ -196,8 +196,6 @@ SELECT * FROM _timescaledb_catalog.hypertable;
 ----------------------+--------------------------------------------------+-------+------------
  _timescaledb_catalog | chunk                                            | table | super_user
  _timescaledb_catalog | chunk_constraint                                 | table | super_user
- _timescaledb_catalog | chunk_copy_operation                             | table | super_user
- _timescaledb_catalog | chunk_data_node                                  | table | super_user
  _timescaledb_catalog | chunk_index                                      | table | super_user
  _timescaledb_catalog | compression_algorithm                            | table | super_user
  _timescaledb_catalog | compression_chunk_size                           | table | super_user
@@ -211,15 +209,12 @@ SELECT * FROM _timescaledb_catalog.hypertable;
  _timescaledb_catalog | continuous_aggs_materialization_invalidation_log | table | super_user
  _timescaledb_catalog | continuous_aggs_watermark                        | table | super_user
  _timescaledb_catalog | dimension                                        | table | super_user
- _timescaledb_catalog | dimension_partition                              | table | super_user
  _timescaledb_catalog | dimension_slice                                  | table | super_user
  _timescaledb_catalog | hypertable                                       | table | super_user
- _timescaledb_catalog | hypertable_data_node                             | table | super_user
  _timescaledb_catalog | metadata                                         | table | super_user
- _timescaledb_catalog | remote_txn                                       | table | super_user
  _timescaledb_catalog | tablespace                                       | table | super_user
  _timescaledb_catalog | telemetry_event                                  | table | super_user
-(25 rows)
+(20 rows)
 
 \dt "_timescaledb_internal".*
                           List of relations

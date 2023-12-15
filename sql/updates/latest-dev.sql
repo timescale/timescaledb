@@ -1,4 +1,35 @@
 
+-- ERROR if trying to update the extension while multinode is present
+DO $$
+DECLARE
+  data_nodes TEXT;
+  dist_hypertables TEXT;
+BEGIN
+  SELECT string_agg(format('%I.%I', schema_name, table_name), ', ')
+  INTO dist_hypertables
+  FROM _timescaledb_catalog.hypertable
+  WHERE replication_factor > 0;
+
+  IF dist_hypertables IS NOT NULL THEN
+    RAISE USING
+      ERRCODE = 'feature_not_supported',
+      MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
+      DETAIL = 'The following distributed hypertables should be migrated to regular: '||dist_hypertables;
+  END IF;
+
+  SELECT string_agg(format('%I', srv.srvname), ', ')
+  INTO data_nodes
+  FROM pg_foreign_server srv
+  JOIN pg_foreign_data_wrapper fdw ON srv.srvfdw = fdw.oid AND fdw.fdwname = 'timescaledb_fdw';
+
+  IF data_nodes IS NOT NULL THEN
+    RAISE USING
+      ERRCODE = 'feature_not_supported',
+      MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
+      DETAIL = 'The following data nodes should be removed: '||data_nodes;
+  END IF;
+END $$;
+
 DROP FUNCTION IF EXISTS _timescaledb_functions.ping_data_node;
 DROP FUNCTION IF EXISTS _timescaledb_internal.ping_data_node;
 DROP FUNCTION IF EXISTS _timescaledb_functions.remote_txn_heal_data_node;
@@ -118,3 +149,32 @@ DROP FUNCTION IF EXISTS _timescaledb_internal.set_chunk_default_data_node;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.drop_dist_ht_invalidation_trigger;
 DROP FUNCTION IF EXISTS _timescaledb_internal.drop_dist_ht_invalidation_trigger;
+
+-- remove multinode catalog tables
+DROP VIEW IF EXISTS timescaledb_information.chunks;
+DROP VIEW IF EXISTS timescaledb_information.data_nodes;
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+DROP VIEW IF EXISTS timescaledb_experimental.chunk_replication_status;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.remote_txn;
+DROP TABLE _timescaledb_catalog.remote_txn;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable_data_node;
+DROP TABLE _timescaledb_catalog.hypertable_data_node;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_data_node;
+DROP TABLE _timescaledb_catalog.chunk_data_node;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq;
+DROP SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_partition;
+DROP TABLE _timescaledb_catalog.dimension_partition;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunks_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunks_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_functions.indexes_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_internal.indexes_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_chunk_remote_stats;
+DROP FUNCTION IF EXISTS _timescaledb_internal.compressed_chunk_remote_stats;
+

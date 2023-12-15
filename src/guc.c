@@ -41,28 +41,6 @@ static const struct config_enum_entry telemetry_level_options[] = {
 };
 #endif
 
-static const struct config_enum_entry remote_data_fetchers[] = {
-	{ "auto", AutoFetcherType, false },
-	{ "copy", CopyFetcherType, false },
-	{ "cursor", CursorFetcherType, false },
-	{ "prepared", PreparedStatementFetcherType, false },
-	{ NULL, 0, false }
-};
-
-static const struct config_enum_entry hypertable_distributed_types[] = {
-	{ "auto", HYPERTABLE_DIST_AUTO, false },
-	{ "local", HYPERTABLE_DIST_LOCAL, false },
-	{ "distributed", HYPERTABLE_DIST_DISTRIBUTED, false },
-	{ NULL, 0, false }
-};
-
-static const struct config_enum_entry dist_copy_transfer_formats[] = {
-	{ "auto", DCTF_Auto, false },
-	{ "binary", DCTF_Binary, false },
-	{ "text", DCTF_Text, false },
-	{ NULL, 0, false }
-};
-
 /* Copied from contrib/auto_explain/auto_explain.c */
 static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
@@ -88,8 +66,6 @@ TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
-bool ts_guc_enable_per_data_node_queries = true;
-bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
@@ -109,17 +85,7 @@ char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
-TSDLLEXPORT bool ts_guc_enable_2pc = true;
 TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
-TSDLLEXPORT bool ts_guc_enable_connection_binary_data = true;
-TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format = DCTF_Auto;
-TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
-TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
-TSDLLEXPORT char *ts_guc_passfile = NULL;
-TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
-TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
-TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
-TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
 
@@ -442,41 +408,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_2pc",
-							 "Enable two-phase commit",
-							 "Enable two-phase commit on distributed hypertables",
-							 &ts_guc_enable_2pc,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_per_data_node_queries",
-							 "Enable the per data node query optimization for hypertables",
-							 "Enable the optimization that combines different chunks belonging to "
-							 "the same hypertable into a single query per data_node",
-							 &ts_guc_enable_per_data_node_queries,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_parameterized_data_node_scan",
-							 "Enable parameterized data node scans",
-							 "Disable this as a workaround in case these plans are incorrectly "
-							 "chosen by the query planner when they are suboptimal",
-							 &ts_guc_enable_parameterized_data_node_scan,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
 	DefineCustomBoolVariable("timescaledb.enable_tiered_reads",
 							 "Enable tiered data reads",
 							 "Enable reading of tiered data by including a foreign table "
@@ -505,47 +436,6 @@ _guc_init(void)
 							NULL,
 							NULL,
 							NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_connection_binary_data",
-							 "Enable binary format for connection",
-							 "Enable binary format for data exchanged between nodes in the cluster",
-							 &ts_guc_enable_connection_binary_data,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	/*
-	 * The default is 'auto', so that the dist COPY could use text transfer
-	 * format for text input. It has a passthrough optimization for this case,
-	 * which greatly reduces the CPU usage. Ideally we would implement the same
-	 * optimization for binary, but the Postgres COPY code doesn't provide
-	 * enough APIs for that.
-	 */
-	DefineCustomEnumVariable("timescaledb.dist_copy_transfer_format",
-							 "Data format used by distributed COPY to send data to data nodes",
-							 "auto, binary or text",
-							 (int *) &ts_guc_dist_copy_transfer_format,
-							 DCTF_Auto,
-							 dist_copy_transfer_formats,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_client_ddl_on_data_nodes",
-							 "Enable DDL operations on data nodes by a client",
-							 "Do not restrict execution of DDL operations only by access node",
-							 &ts_guc_enable_client_ddl_on_data_nodes,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
 
 	DefineCustomBoolVariable("timescaledb.enable_async_append",
 							 "Enable async query execution on data nodes",
@@ -582,17 +472,6 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_remote_explain",
-							 "Show explain from remote nodes when using VERBOSE flag",
-							 "Enable getting and showing EXPLAIN output from remote nodes",
-							 &ts_guc_enable_remote_explain,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
 	DefineCustomBoolVariable("timescaledb.enable_compression_indexscan",
 							 "Enable compression to take indexscan path",
 							 "Enable indexscan during compression, if matching index is found",
@@ -615,43 +494,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-
-	DefineCustomEnumVariable("timescaledb.remote_data_fetcher",
-							 "Set remote data fetcher type",
-							 "Pick data fetcher type based on type of queries you plan to run "
-							 "(copy or cursor)",
-							 (int *) &ts_guc_remote_data_fetcher,
-							 AutoFetcherType,
-							 remote_data_fetchers,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomStringVariable("timescaledb.ssl_dir",
-							   "TimescaleDB user certificate directory",
-							   "Determines a path which is used to search user certificates and "
-							   "private keys",
-							   &ts_guc_ssl_dir,
-							   NULL,
-							   PGC_SIGHUP,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomStringVariable("timescaledb.passfile",
-							   "TimescaleDB password file path",
-							   "Specifies the name of the file used to store passwords used for "
-							   "data node connections",
-							   &ts_guc_passfile,
-							   NULL,
-							   PGC_SIGHUP,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
 
 	DefineCustomIntVariable("timescaledb.max_open_chunks_per_insert",
 							"Maximum open chunks per insert",
@@ -814,33 +656,6 @@ _guc_init(void)
 							 /* show_hook= */ NULL);
 #endif
 
-	DefineCustomEnumVariable("timescaledb.hypertable_distributed_default",
-							 "Set distributed hypertables default creation policy",
-							 "Set default policy to create local or distributed hypertables "
-							 "(auto, local or distributed)",
-							 (int *) &ts_guc_hypertable_distributed_default,
-							 HYPERTABLE_DIST_AUTO,
-							 hypertable_distributed_types,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("timescaledb.hypertable_replication_factor_default",
-							"Default replication factor value to use with a hypertables",
-							"Global default value for replication factor to use with hypertables "
-							"when the `replication_factor` argument is not provided",
-							&ts_guc_hypertable_replication_factor_default,
-							1,
-							1,
-							65536,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
 	/* register feature flags */
 	ts_feature_flag_add(FEATURE_HYPERTABLE);
 	ts_feature_flag_add(FEATURE_HYPERTABLE_COMPRESSION);
@@ -851,9 +666,4 @@ _guc_init(void)
 
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable,
 							   ts_guc_max_open_chunks_per_insert);
-}
-
-void
-_guc_fini(void)
-{
 }

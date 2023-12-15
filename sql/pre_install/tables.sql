@@ -73,19 +73,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_s
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
 
-CREATE TABLE _timescaledb_catalog.hypertable_data_node (
-  hypertable_id integer NOT NULL,
-  node_hypertable_id integer NULL,
-  node_name name NOT NULL,
-  block_chunks boolean NOT NULL,
-  -- table constraints
-  CONSTRAINT hypertable_data_node_hypertable_id_node_name_key UNIQUE (hypertable_id, node_name),
-  CONSTRAINT hypertable_data_node_node_hypertable_id_node_name_key UNIQUE (node_hypertable_id, node_name),
-  CONSTRAINT hypertable_data_node_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
-);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_data_node', '');
-
 -- The tablespace table maps tablespaces to hypertables.
 -- This allows spreading a hypertable's chunks across multiple disks.
 CREATE TABLE _timescaledb_catalog.tablespace (
@@ -132,29 +119,6 @@ CREATE TABLE _timescaledb_catalog.dimension (
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension', '');
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.dimension', 'id'), '');
-
--- A dimension partition represents the current division of a (space)
--- dimension into partitions, and the mapping of those partitions to
--- data nodes. When a chunk is created, it will use the partition and
--- data nodes information in this table to decide range and node
--- placement of the chunk.
---
--- Normally, only closed/space dimensions are pre-partitioned and
--- present in this table. The dimension stretches from -INF to +INF
--- and the range_start value for a partition represents where the
--- partition starts, stretching to the start of the next partition
--- (non-inclusive). There is no range_end since it is implicit by the
--- start of the next partition and thus uses less space. Having no end
--- also makes it easier to split partitions by inserting a new row
--- instead of potentially updating multiple rows.
-CREATE TABLE _timescaledb_catalog.dimension_partition (
-  dimension_id integer NOT NULL REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE,
-  range_start bigint NOT NULL,
-  data_nodes name[] NULL,
-  UNIQUE (dimension_id, range_start)
-);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.dimension_partition', '');
 
 -- A dimension slice defines a keyspace range along a dimension
 -- axis. A chunk references a slice in each of its dimensions, forming
@@ -247,20 +211,6 @@ CREATE TABLE _timescaledb_catalog.chunk_index (
 CREATE INDEX chunk_index_hypertable_id_hypertable_index_name_idx ON _timescaledb_catalog.chunk_index (hypertable_id, hypertable_index_name);
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_index', '');
-
-CREATE TABLE _timescaledb_catalog.chunk_data_node (
-  chunk_id integer NOT NULL,
-  node_chunk_id integer NOT NULL,
-  node_name name NOT NULL,
-  -- table constraints
-  CONSTRAINT chunk_data_node_chunk_id_node_name_key UNIQUE (chunk_id, node_name),
-  CONSTRAINT chunk_data_node_node_chunk_id_node_name_key UNIQUE (node_chunk_id, node_name),
-  CONSTRAINT chunk_data_node_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id)
-);
-
-CREATE INDEX chunk_data_node_node_name_idx ON _timescaledb_catalog.chunk_data_node (node_name);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.chunk_data_node', '');
 
 -- Default jobs are given the id space [1,1000). User-installed jobs and any jobs created inside tests
 -- are given the id space [1000, INT_MAX). That way, we do not pg_dump jobs that are always default-installed
@@ -500,22 +450,6 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
 
---This stores commit decisions for 2pc remote txns. Abort decisions are never stored.
---If a PREPARE TRANSACTION fails for any data node then the entire
---frontend transaction will be rolled back and no rows will be stored.
---the frontend_transaction_id represents the entire distributed transaction
---each datanode will have a unique remote_transaction_id.
-CREATE TABLE _timescaledb_catalog.remote_txn (
-  data_node_name name, --this is really only to allow us to cleanup stuff on a per-node basis.
-  remote_transaction_id text NOT NULL,
-  -- table constraints
-  CONSTRAINT remote_txn_pkey PRIMARY KEY (remote_transaction_id)
-);
-
-CREATE INDEX remote_txn_data_node_name_idx ON _timescaledb_catalog.remote_txn (data_node_name);
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', '');
-
 -- This table stores information about the stage that has been completed of a
 -- chunk move/copy activity
 --
@@ -533,23 +467,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.remote_txn', ''
 -- could be part of a totally different multinode setup and we don't want to
 -- carry over chunk copy/move operations from earlier (if it makes sense at all)
 --
-
-CREATE SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq MINVALUE 1;
-
-CREATE TABLE _timescaledb_catalog.chunk_copy_operation (
-  operation_id name NOT NULL, -- the publisher/subscriber identifier used
-  backend_pid integer NOT NULL, -- the pid of the backend running this activity
-  completed_stage name NOT NULL, -- the completed stage/step
-  time_start timestamptz NOT NULL DEFAULT NOW(), -- start time of the activity
-  chunk_id integer NOT NULL,
-  compress_chunk_name name NOT NULL,
-  source_node_name name NOT NULL,
-  dest_node_name name NOT NULL,
-  delete_on_source_node bool NOT NULL, -- is a move or copy activity
-  -- table constraints
-  CONSTRAINT chunk_copy_operation_pkey PRIMARY KEY (operation_id),
-  CONSTRAINT chunk_copy_operation_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES _timescaledb_catalog.chunk (id) ON DELETE CASCADE
-);
 
 CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (
   mat_hypertable_id integer NOT NULL,

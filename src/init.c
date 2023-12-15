@@ -79,7 +79,6 @@ cleanup_on_pg_proc_exit(int code, Datum arg)
 	_conn_ssl_fini();
 #endif
 	_conn_plain_fini();
-	_guc_fini();
 	_process_utility_fini();
 	_event_trigger_fini();
 	_planner_fini();

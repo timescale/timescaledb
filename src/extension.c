@@ -66,19 +66,6 @@ static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
  */
 static Oid ts_extension_oid = InvalidOid;
 
-Oid
-ts_extension_get_oid(void)
-{
-	if (OidIsValid(ts_extension_oid))
-	{
-		Assert(ts_extension_oid == get_extension_oid(EXTENSION_NAME, true));
-		return ts_extension_oid;
-	}
-
-	ts_extension_oid = get_extension_oid(EXTENSION_NAME, false);
-	return ts_extension_oid;
-}
-
 static bool
 extension_loader_present()
 {
@@ -339,15 +326,6 @@ const char *
 ts_extension_get_so_name(void)
 {
 	return EXTENSION_NAME "-" TIMESCALEDB_VERSION_MOD;
-}
-
-/*
- * Get the currently installed extension version.
- */
-const char *
-ts_extension_get_version(void)
-{
-	return extension_version(EXTENSION_NAME);
 }
 
 bool

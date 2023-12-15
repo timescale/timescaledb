@@ -472,9 +472,6 @@ owner               | default_perm_user
 num_dimensions      | 1
 num_chunks          | 2
 compression_enabled | t
-is_distributed      | f
-replication_factor  | 
-data_nodes          | 
 tablespaces         | 
 -[ RECORD 2 ]-------+------------------
 hypertable_schema   | public
@@ -483,9 +480,6 @@ owner               | default_perm_user
 num_dimensions      | 1
 num_chunks          | 4
 compression_enabled | t
-is_distributed      | f
-replication_factor  | 
-data_nodes          | 
 tablespaces         | 
 
 \x

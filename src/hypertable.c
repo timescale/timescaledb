@@ -927,33 +927,6 @@ ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const cha
 									   CStringGetDatum(schema));
 }
 
-/*
- * Find hypertable by name and retrieve catalog form attributes.
- *
- * In case if some of the requested attributes marked as NULL value, nulls[] array will be
- * modified and appropriate attribute position bit will be set to true.
- *
- * Return true if hypertable is found, false otherwise.
- */
-bool
-ts_hypertable_get_attributes_by_name(const char *schema, const char *name,
-									 FormData_hypertable *form)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
-
-	ts_hypertable_scan_by_name(&iterator, schema, name);
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_hypertable_formdata_fill(form, ti);
-		ts_scan_iterator_close(&iterator);
-		return true;
-	}
-
-	return false;
-}
-
 Hypertable *
 ts_hypertable_get_by_id(int32 hypertable_id)
 {
@@ -2059,10 +2032,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	{
 		closed_dim_info->ht = time_dim_info->ht;
 		ts_dimension_add_from_info(closed_dim_info);
-		ts_dimension_partition_info_recreate(closed_dim_info->dimension_id,
-											 closed_dim_info->num_slices,
-											 data_node_names,
-											 replication_factor);
 	}
 
 	/* Refresh the cache to get the updated hypertable with added dimensions */
@@ -2523,25 +2492,6 @@ ts_hypertable_has_compression_table(const Hypertable *ht)
 		Assert(ht->fd.compression_state == HypertableCompressionEnabled);
 		return true;
 	}
-	return false;
-}
-
-bool
-ts_hypertable_update_dimension_partitions(const Hypertable *ht)
-{
-	const Dimension *closed_dim = hyperspace_get_closed_dimension(ht->space, 0);
-
-	if (NULL != closed_dim)
-	{
-		List *data_node_names = NIL;
-
-		ts_dimension_partition_info_recreate(closed_dim->fd.id,
-											 closed_dim->fd.num_slices,
-											 data_node_names,
-											 ht->fd.replication_factor);
-		return true;
-	}
-
 	return false;
 }
 

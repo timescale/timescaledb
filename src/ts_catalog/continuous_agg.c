@@ -572,55 +572,6 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 }
 
 /*
- * Serializes ContinuousAggsBucketFunction* into a string like:
- *
- *     ver;bucket_width;origin;timezone;
- *
- * ... where ver is a version of the serialization format. This particular format
- * was chosen because of it's simplicity and good performance. Future versions
- * of the procedure can use other format (like key=value or JSON) and/or add
- * extra fields. NULL pointer is serialized to an empty string.
- *
- * Note that the schema and the name of the function are not serialized. This
- * is intentional since this information is currently not used for anything.
- * We can serialize the name of the function as well when and if this would be
- * necessary.
- */
-static const char *
-bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
-{
-	const char *bucket_width_str;
-	const char *origin_str = "";
-	StringInfo str;
-
-	if (NULL == bf)
-		return "";
-
-	str = makeStringInfo();
-
-	/* We are pretty sure that user can't place ';' character in this field */
-	Assert(strstr(bf->timezone, ";") == NULL);
-
-	bucket_width_str =
-		DatumGetCString(DirectFunctionCall1(interval_out, IntervalPGetDatum(bf->bucket_width)));
-
-	if (!TIMESTAMP_NOT_FINITE(bf->origin))
-	{
-		origin_str =
-			DatumGetCString(DirectFunctionCall1(timestamp_out, TimestampGetDatum(bf->origin)));
-	}
-
-	appendStringInfo(str,
-					 "%d;%s;%s;%s;",
-					 BUCKET_FUNCTION_SERIALIZE_VERSION,
-					 bucket_width_str,
-					 origin_str,
-					 bf->timezone);
-
-	return str->data;
-}
-
-/*
  * Deserielizes a string into a palloc'ated ContinuousAggsBucketFunction*. Note
  * that NULL is also a valid return value.
  *
@@ -729,62 +680,6 @@ ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *buc
 	array_free_iterator(it_htids);
 	array_free_iterator(it_widths);
 	array_free_iterator(it_bfs);
-}
-
-/*
- * Does not do deep copy of Datums For performance reasons. Make sure the Caggsinfo is not
- * deallocated before the arrays.
- */
-TSDLLEXPORT void
-ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
-								 ArrayType **bucket_widths, ArrayType **bucket_functions)
-{
-	ListCell *lc1, *lc2, *lc3;
-	unsigned i;
-
-	Datum *matiddatums = palloc(sizeof(Datum) * list_length(all_caggs->mat_hypertable_ids));
-	Datum *widthdatums = palloc(sizeof(Datum) * list_length(all_caggs->bucket_widths));
-	Datum *bucketfunctions = palloc(sizeof(Datum) * list_length(all_caggs->bucket_functions));
-
-	i = 0;
-	forthree (lc1,
-			  all_caggs->mat_hypertable_ids,
-			  lc2,
-			  all_caggs->bucket_widths,
-			  lc3,
-			  all_caggs->bucket_functions)
-	{
-		int32 cagg_hyper_id = lfirst_int(lc1);
-		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
-
-		widthdatums[i] = PointerGetDatum(lfirst(lc2));
-
-		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc3);
-		bucketfunctions[i] = CStringGetTextDatum(bucket_function_serialize(bucket_function));
-
-		++i;
-	}
-
-	*mat_hypertable_ids = construct_array(matiddatums,
-										  list_length(all_caggs->mat_hypertable_ids),
-										  INT4OID,
-										  4,
-										  true,
-										  TYPALIGN_INT);
-
-	*bucket_widths = construct_array(widthdatums,
-									 list_length(all_caggs->bucket_widths),
-									 INT8OID,
-									 8,
-									 FLOAT8PASSBYVAL,
-									 TYPALIGN_DOUBLE);
-
-	*bucket_functions = construct_array(bucketfunctions,
-										list_length(all_caggs->bucket_functions),
-										TEXTOID,
-										-1,
-										false,
-										TYPALIGN_INT);
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus

@@ -128,18 +128,6 @@ static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, Lis
 static const char *TS_CTE_EXPAND = "ts_expand";
 
 /*
- * Controls which type of fetcher to use to fetch data from the data nodes.
- * There is no place to store planner-global custom information (such as in
- * PlannerInfo). Because of this, we have to use the global variable that is
- * valid inside the scope of timescaledb_planner().
- * Note that that function can be called recursively, e.g. when evaluating a
- * SQL function at the planning time. We only have to determine the fetcher type
- * in the outermost scope, so we distinguish it by that the fetcher type is set
- * to the invalid value of 'auto'.
- */
-DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
-
-/*
  * A simplehash hash table that records the chunks and their corresponding
  * hypertables, and also the plain baserels. We use it to tell whether a
  * relation is a hypertable chunk, inside the classify_relation function.
@@ -427,7 +415,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 	 * Volatile is needed because these are the local variables that are
 	 * modified between setjmp/longjmp calls.
 	 */
-	volatile bool reset_fetcher_type = false;
 	volatile bool reset_baserel_info = false;
 
 	/*
@@ -542,11 +529,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			BaserelInfo_destroy(ts_baserel_info);
 			ts_baserel_info = NULL;
 		}
-
-		if (reset_fetcher_type)
-		{
-			ts_data_node_fetcher_scan_type = AutoFetcherType;
-		}
 	}
 	PG_CATCH();
 	{
@@ -555,11 +537,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			Assert(ts_baserel_info != NULL);
 			BaserelInfo_destroy(ts_baserel_info);
 			ts_baserel_info = NULL;
-		}
-
-		if (reset_fetcher_type)
-		{
-			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
 
 		/* Pop the cache, but do not release since caches are auto-released on

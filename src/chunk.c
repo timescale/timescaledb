@@ -844,7 +844,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 {
 	const Hyperspace *hs = ht->space;
 	Chunk *chunk;
-	const char relkind = hypertable_chunk_relkind(ht);
+	const char relkind = RELKIND_RELATION;
 
 	if (NULL == schema_name || schema_name[0] == '\0')
 		schema_name = NameStr(ht->fd.associated_schema_name);
@@ -1858,7 +1858,7 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 
 		/* Create data table and related objects */
 		chunk->hypertable_relid = ht->main_table_relid;
-		chunk->relkind = hypertable_chunk_relkind(ht);
+		chunk->relkind = RELKIND_RELATION;
 		chunk->table_id = chunk_create_table(chunk, ht);
 		chunk_create_table_constraints(ht, chunk);
 
@@ -2703,15 +2703,6 @@ ts_chunk_id_from_relid(PG_FUNCTION_ARGS)
 	PG_RETURN_INT32(last_id);
 }
 
-int32
-ts_chunk_get_id_by_relid(Oid relid)
-{
-	FormData_chunk form;
-
-	chunk_simple_scan_by_reloid(relid, &form, /* missing_ok = */ false);
-	return form.id;
-}
-
 bool
 ts_chunk_exists_relid(Oid relid)
 {
@@ -2747,24 +2738,6 @@ ts_chunk_get_compressed_chunk_id(int32 chunk_id)
 		chunk_simple_scan_by_id(chunk_id, &form, /* missing_ok = */ false);
 	Assert(result);
 	return form.compressed_chunk_id;
-}
-
-/*
- * Returns false if there is no chunk with such reloid.
- */
-bool
-ts_chunk_get_hypertable_id_and_status_by_relid(Oid relid, int32 *hypertable_id, int32 *chunk_status)
-{
-	FormData_chunk form;
-
-	Assert(hypertable_id != NULL && chunk_status != NULL);
-	if (chunk_simple_scan_by_reloid(relid, &form, /* missing_ok = */ true))
-	{
-		*hypertable_id = form.hypertable_id;
-		*chunk_status = form.status;
-		return true;
-	}
-	return false;
 }
 
 FormData_chunk
@@ -3172,28 +3145,6 @@ ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
-	ts_scanner_foreach(&iterator)
-	{
-		bool isnull;
-		Datum id = slot_getattr(ts_scan_iterator_slot(&iterator), Anum_chunk_id, &isnull);
-		if (!isnull)
-			chunkids = lappend_int(chunkids, DatumGetInt32(id));
-	}
-
-	return chunkids;
-}
-
-List *
-ts_chunk_get_all_chunk_ids(LOCKMODE lockmode)
-{
-	List *chunkids = NIL;
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, lockmode, CurrentMemoryContext);
-	ts_scan_iterator_set_index(&iterator, CHUNK, CHUNK_ID_INDEX);
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_chunk_idx_id,
-								   BTEqualStrategyNumber,
-								   F_INT4GE,
-								   Int32GetDatum(0));
 	ts_scanner_foreach(&iterator)
 	{
 		bool isnull;
