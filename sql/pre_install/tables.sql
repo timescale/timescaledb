@@ -51,7 +51,6 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   chunk_target_size bigint NOT NULL, -- size in bytes
   compression_state smallint NOT NULL DEFAULT 0,
   compressed_hypertable_id integer,
-  replication_factor smallint NULL,
   status int NOT NULL DEFAULT 0,
   -- table constraints
   CONSTRAINT hypertable_pkey PRIMARY KEY (id),
@@ -62,10 +61,6 @@ CREATE TABLE _timescaledb_catalog.hypertable (
   CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
   CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0),
   CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL)),
-  -- replication_factor NULL: regular hypertable
-  -- replication_factor > 0: distributed hypertable on access node
-  -- replication_factor -1: distributed hypertable on data node, which is part of a larger table
-  CONSTRAINT hypertable_replication_factor_check CHECK (replication_factor > 0 OR replication_factor = -1),
   CONSTRAINT hypertable_compressed_hypertable_id_fkey FOREIGN KEY (compressed_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id)
 );
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
@@ -449,24 +444,6 @@ CREATE TABLE _timescaledb_catalog.compression_chunk_size (
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_chunk_size', '');
-
--- This table stores information about the stage that has been completed of a
--- chunk move/copy activity
---
--- A cleanup activity can query and check if the backend is running. If the
--- backend has exited then we can commence cleanup. The cleanup
--- activity can also do a diff with the "time_start" value to ascertain if
--- the entire end-to-end activity is going on for too long
---
--- We also track the end time of every stage. A diff with the current time
--- will give us an idea about how long the current stage has been running
---
--- Entry for a chunk move/copy activity gets deleted on successful completion
---
--- We don't want to pg_dump this table's contents. A node restored using it
--- could be part of a totally different multinode setup and we don't want to
--- carry over chunk copy/move operations from earlier (if it makes sense at all)
---
 
 CREATE TABLE _timescaledb_catalog.continuous_agg_migrate_plan (
   mat_hypertable_id integer NOT NULL,

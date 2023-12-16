@@ -45,7 +45,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	Chunk **locked_chunks = NULL;
 	int locked_chunk_count = 0;
 	ListCell *lc;
-	int remote_chunk_count = 0;
 
 	Assert(OidIsValid(hs->main_table_relid));
 	MemoryContext orig_mcxt = MemoryContextSwitchTo(work_mcxt);
@@ -132,8 +131,6 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 	{
 		Chunk *chunk = locked_chunks[i];
 		chunk->relkind = get_rel_relkind(chunk->table_id);
-		if (chunk->relkind == RELKIND_FOREIGN_TABLE)
-			remote_chunk_count++;
 	}
 
 	/*

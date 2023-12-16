@@ -1902,4 +1902,3 @@ ts_dimensions_rename_schema_name(const char *old_name, const char *new_name)
 
 	ts_scanner_scan(&scanctx);
 }
-

@@ -1047,7 +1047,7 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 
 	if (osm_chunk_insert_hook)
 	{
-		/* OSM only uses first dimension . doesn't work with multinode tables yet*/
+		/* OSM only uses first dimension. */
 		Dimension *dim = &ht->space->dimensions[0];
 		/* convert to PG timestamp from timescaledb internal format */
 		int64 range_start =

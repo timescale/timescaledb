@@ -836,9 +836,9 @@ SELECT count(*) from test1 where new_colv  = '101t';
 CREATE INDEX new_index ON test1(new_colv);
 -- TEST 2:  ALTER TABLE rename column
 SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------+--------
- 13 | public      | test1      | _timescaledb_internal  | _hyper_13               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       14 |                    |      0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
+ 13 | public      | test1      | _timescaledb_internal  | _hyper_13               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       14 |      0
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
@@ -849,9 +849,9 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::reg
 
 ALTER TABLE test1 RENAME new_coli TO coli;
 SELECT * from _timescaledb_catalog.hypertable WHERE table_name = 'test1';
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------+--------
- 13 | public      | test1      | _timescaledb_internal  | _hyper_13               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       14 |                    |      0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
+ 13 | public      | test1      | _timescaledb_internal  | _hyper_13               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       14 |      0
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='test1'::regclass;
@@ -1155,9 +1155,9 @@ SELECT * FROM test_drop ORDER BY 1;
 -- only segmentby and orderby are in catalog which we dont support removing
 -- atm, so nothing to see here
 SELECT * FROM _timescaledb_catalog.hypertable WHERE table_name = 'test_drop';
- id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | replication_factor | status 
-----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------------------+--------
- 17 | public      | test_drop  | _timescaledb_internal  | _hyper_17               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       18 |                    |      0
+ id | schema_name | table_name | associated_schema_name | associated_table_prefix | num_dimensions | chunk_sizing_func_schema |  chunk_sizing_func_name  | chunk_target_size | compression_state | compressed_hypertable_id | status 
+----+-------------+------------+------------------------+-------------------------+----------------+--------------------------+--------------------------+-------------------+-------------------+--------------------------+--------
+ 17 | public      | test_drop  | _timescaledb_internal  | _hyper_17               |              1 | _timescaledb_functions   | calculate_chunk_interval |                 0 |                 1 |                       18 |      0
 (1 row)
 
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'test_drop'::regclass;

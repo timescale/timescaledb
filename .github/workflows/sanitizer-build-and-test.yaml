@@ -73,9 +73,6 @@ jobs:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
         os: ["ubuntu-22.04"]
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
-        include:
-          - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
-            skips_version: 002_replication_telemetry 003_connections_privs 004_multinode_rdwr_1pc
     steps:
     - name: Install Linux Dependencies
       run: |

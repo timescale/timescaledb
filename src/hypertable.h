@@ -89,22 +89,12 @@ typedef enum HypertableCreateFlags
 	HYPERTABLE_CREATE_MIGRATE_DATA = 1 << 2,
 } HypertableCreateFlags;
 
-/* Hypertable type defined by replication_factor value */
-typedef enum HypertableType
-{
-	/* Hypertable created on a data node as part of any other
-	 * distributed hypertable */
-	HYPERTABLE_DISTRIBUTED_MEMBER = -1,
-	/* Non-replicated hypertable (default for a single node) */
-	HYPERTABLE_REGULAR = 0,
-	/* Replicated hypertable (replication_factor is >= 1) */
-	HYPERTABLE_DISTRIBUTED
-} HypertableType;
-
-extern TSDLLEXPORT bool ts_hypertable_create_from_info(
-	Oid table_relid, int32 hypertable_id, uint32 flags, DimensionInfo *time_dim_info,
-	DimensionInfo *space_dim_info, Name associated_schema_name, Name associated_table_prefix,
-	ChunkSizingInfo *chunk_sizing_info, int16 replication_factor, List *data_node_names);
+extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id,
+													   uint32 flags, DimensionInfo *time_dim_info,
+													   DimensionInfo *space_dim_info,
+													   Name associated_schema_name,
+													   Name associated_table_prefix,
+													   ChunkSizingInfo *chunk_sizing_info);
 extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id);
 
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);

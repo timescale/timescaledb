@@ -71,14 +71,15 @@ osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString,
 		}
 	}
 
-	prev_ProcessUtility_hook(pstmt,
-							 queryString,
+	if (prev_ProcessUtility_hook)
+		prev_ProcessUtility_hook(pstmt,
+								 queryString,
 #if PG14_GE
-							 readOnlyTree,
+								 readOnlyTree,
 #endif
-							 context,
-							 params,
-							 queryEnv,
-							 dest,
-							 qc);
+								 context,
+								 params,
+								 queryEnv,
+								 dest,
+								 qc);
 }
