@@ -169,11 +169,6 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 	else
 		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
 			Int32GetDatum(fd->compressed_hypertable_id);
-	if (fd->replication_factor == 0)
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] = true;
-	else
-		values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] =
-			Int16GetDatum(fd->replication_factor);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_status)] = Int32GetDatum(fd->status);
 
 	return heap_form_tuple(desc, values, nulls);
@@ -236,11 +231,6 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	else
 		fd->compressed_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)]);
-	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)])
-		fd->replication_factor = INVALID_HYPERTABLE_ID;
-	else
-		fd->replication_factor =
-			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)]);
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_status)]);
 
 	if (should_free)
@@ -792,7 +782,6 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 }
 
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
-#define DEFAULT_ASSOCIATED_DISTRIBUTED_TABLE_PREFIX_FORMAT "_dist_hyper_%d"
 static const size_t MAXIMUM_PREFIX_LENGTH = NAMEDATALEN - 16;
 
 static void
@@ -813,8 +802,7 @@ static void
 hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 				  Name associated_schema_name, Name associated_table_prefix,
 				  Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
-				  int64 chunk_target_size, int16 num_dimensions, bool compressed,
-				  int16 replication_factor)
+				  int64 chunk_target_size, int16 num_dimensions, bool compressed)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -837,17 +825,10 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	{
 		NameData default_associated_table_prefix;
 		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
-		Assert(replication_factor >= 0);
-		if (replication_factor == 0)
-			snprintf(NameStr(default_associated_table_prefix),
-					 NAMEDATALEN,
-					 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
-					 fd.id);
-		else
-			snprintf(NameStr(default_associated_table_prefix),
-					 NAMEDATALEN,
-					 DEFAULT_ASSOCIATED_DISTRIBUTED_TABLE_PREFIX_FORMAT,
-					 fd.id);
+		snprintf(NameStr(default_associated_table_prefix),
+				 NAMEDATALEN,
+				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
+				 fd.id);
 		namestrcpy(&fd.associated_table_prefix, NameStr(default_associated_table_prefix));
 	}
 	else
@@ -876,9 +857,6 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 
 	/* new hypertable does not have OSM chunk */
 	fd.status = HYPERTABLE_STATUS_DEFAULT;
-
-	/* finally, set replication factor */
-	fd.replication_factor = replication_factor;
 
 	rel = table_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel, &fd);
@@ -1249,7 +1227,7 @@ hypertable_create_schema(const char *schema_name)
  * parent table, which will have no tuples.
  */
 static void
-hypertable_validate_constraints(Oid relid, int replication_factor)
+hypertable_validate_constraints(Oid relid)
 {
 	Relation catalog;
 	SysScanDesc scan;
@@ -1278,14 +1256,6 @@ hypertable_validate_constraints(Oid relid, int replication_factor)
 					 errhint("Remove all NO INHERIT constraints from table \"%s\" before "
 							 "making it a hypertable.",
 							 get_rel_name(relid))));
-
-		if (form->contype == CONSTRAINT_FOREIGN && replication_factor > 0)
-			ereport(WARNING,
-					(errmsg("distributed hypertable \"%s\" has a foreign key to"
-							" a non-distributed table",
-							get_rel_name(relid)),
-					 errdetail("Non-distributed tables that are referenced by a distributed"
-							   " hypertable must exist and be identical on all data nodes.")));
 	}
 
 	systable_endscan(scan);
@@ -1489,17 +1459,13 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 							  DimensionInfo *open_dim_info, DimensionInfo *closed_dim_info,
 							  Name associated_schema_name, Name associated_table_prefix,
 							  bool create_default_indexes, bool if_not_exists, bool migrate_data,
-							  text *target_size, Oid sizing_func, bool replication_factor_is_null,
-							  int32 replication_factor_in, ArrayType *data_node_arr,
-							  bool distributed_is_null, bool distributed, bool is_generic)
+							  text *target_size, Oid sizing_func, bool is_generic)
 {
-	int16 replication_factor;
 	Cache *hcache;
 	Hypertable *ht;
 	Datum retval;
 	bool created;
 	uint32 flags = 0;
-	List *data_nodes = NIL;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE);
 
@@ -1512,17 +1478,6 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 	};
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
-
-	if (migrate_data && distributed)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot migrate data for distributed hypertable")));
-
-	if (NULL != data_node_arr && ARR_NDIM(data_node_arr) > 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid data nodes format"),
-				 errhint("Specify a one-dimensional array of data nodes.")));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (ht)
@@ -1550,20 +1505,12 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 		 * Validate data nodes and check permissions on them if this is a
 		 * distributed hypertable.
 		 */
-		replication_factor = 0;
 
 		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
 			/* If the number of partitions isn't specified, default to setting it
 			 * to the number of data nodes */
 			int16 num_partitions = closed_dim_info->num_slices;
-			if (num_partitions < 1 && replication_factor > 0)
-			{
-				int num_nodes = list_length(data_nodes);
-
-				Assert(num_nodes >= 0);
-				num_partitions = num_nodes & 0xFFFF;
-			}
 			closed_dim_info->num_slices = num_partitions;
 			closed_dim_info->num_slices_is_set = true;
 		}
@@ -1582,9 +1529,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 												 closed_dim_info,
 												 associated_schema_name,
 												 associated_table_prefix,
-												 &chunk_sizing_info,
-												 replication_factor,
-												 data_nodes);
+												 &chunk_sizing_info);
 
 		Assert(created);
 		ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
@@ -1614,9 +1559,6 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
  * chunk_target_size       TEXT = NULL
  * chunk_sizing_func       OID = NULL
  * time_partitioning_func  REGPROC = NULL
- * replication_factor      INTEGER = NULL
- * data nodes              NAME[] = NULL
- * distributed             BOOLEAN = NULL (not present for dist call)
  */
 static Datum
 ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
@@ -1637,12 +1579,6 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
 	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
 	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
-	bool replication_factor_is_null = true;
-	int32 replication_factor_in = 0;
-	ArrayType *data_node_arr = NULL;
-
-	bool distributed_is_null;
-	bool distributed;
 
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
@@ -1652,9 +1588,6 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("partition column cannot be NULL")));
-
-	distributed_is_null = true;
-	distributed = false;
 
 	DimensionInfo *open_dim_info =
 		ts_dimension_info_create_open(table_relid,
@@ -1684,11 +1617,6 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 										 migrate_data,
 										 target_size,
 										 sizing_func,
-										 replication_factor_is_null,
-										 replication_factor_in,
-										 data_node_arr,
-										 distributed_is_null,
-										 distributed,
 										 false);
 }
 
@@ -1770,11 +1698,6 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 										 migrate_data,
 										 NULL,
 										 sizing_func,
-										 true,
-										 0,
-										 NULL,
-										 true,
-										 false,
 										 true);
 }
 
@@ -1827,8 +1750,7 @@ bool
 ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flags,
 							   DimensionInfo *time_dim_info, DimensionInfo *closed_dim_info,
 							   Name associated_schema_name, Name associated_table_prefix,
-							   ChunkSizingInfo *chunk_sizing_info, int16 replication_factor,
-							   List *data_node_names)
+							   ChunkSizingInfo *chunk_sizing_info)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -1916,7 +1838,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	}
 
 	/* Check that the table doesn't have any unsupported constraints */
-	hypertable_validate_constraints(table_relid, replication_factor);
+	hypertable_validate_constraints(table_relid);
 
 	table_has_data = ts_relation_has_tuples(rel);
 
@@ -2018,8 +1940,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
 					  DIMENSION_INFO_IS_SET(closed_dim_info) ? 2 : 1,
-					  false,
-					  replication_factor);
+					  false);
 
 	/* Get the a Hypertable object via the cache */
 	time_dim_info->ht =
@@ -2381,8 +2302,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
 					  0 /*num_dimensions*/,
-					  true,
-					  0 /* replication factor */);
+					  true);
 
 	/* No indexes are created for the compressed hypertable here */
 

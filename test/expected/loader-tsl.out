@@ -568,4 +568,3 @@ NOTICE:  OSM-mock-1 got DROP TABLE 'test'
 DROP DATABASE :"TEST_DBNAME_2" WITH (FORCE);
 WARNING:  mock init "mock-2"
 WARNING:  mock post_analyze_hook "mock-2"
-WARNING:  OSM-mock-1 _PG_init

@@ -516,4 +516,3 @@ ts_scanner_get_tupledesc(const TupleInfo *ti)
 {
 	return ti->slot->tts_tupleDescriptor;
 }
-

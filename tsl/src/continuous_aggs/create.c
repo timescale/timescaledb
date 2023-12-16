@@ -262,9 +262,7 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 											 NULL,
 											 NULL,
 											 NULL,
-											 chunk_sizing_info,
-											 HYPERTABLE_REGULAR,
-											 NULL);
+											 chunk_sizing_info);
 	if (!created)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
