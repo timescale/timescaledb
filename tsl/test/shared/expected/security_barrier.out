@@ -1,0 +1,56 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE TABLE test_security_barrier (time TIMESTAMPTZ NOT NULL, tenant TEXT NOT NULL, data TEXT);
+SELECT FROM create_hypertable('test_security_barrier', by_range('time'));
+(1 row)
+
+INSERT INTO test_security_barrier(time, tenant, data) VALUES
+('2020-01-01', :'ROLE_DEFAULT_PERM_USER','data1'),
+('2020-01-01', :'ROLE_DEFAULT_PERM_USER_2','data2');
+CREATE VIEW test_security_barrier_view WITH (security_barrier) AS SELECT * FROM test_security_barrier WHERE tenant = current_user;
+GRANT SELECT ON test_security_barrier_view TO :ROLE_DEFAULT_PERM_USER;
+GRANT SELECT ON test_security_barrier_view TO :ROLE_DEFAULT_PERM_USER_2;
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM test_security_barrier_view;
+             time             |      tenant       | data  
+------------------------------+-------------------+-------
+ Wed Jan 01 00:00:00 2020 PST | default_perm_user | data1
+(1 row)
+
+RESET ROLE;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+SELECT * FROM test_security_barrier_view;
+             time             |       tenant        | data  
+------------------------------+---------------------+-------
+ Wed Jan 01 00:00:00 2020 PST | default_perm_user_2 | data2
+(1 row)
+
+RESET ROLE;
+ALTER TABLE test_security_barrier SET (timescaledb.compress);
+-- Compress the chunk
+SELECT compress_chunk(show_chunks('test_security_barrier')) IS NOT NULL AS compressed;
+ compressed 
+ t
+(1 row)
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+SELECT * FROM test_security_barrier_view;
+             time             |      tenant       | data  
+------------------------------+-------------------+-------
+ Wed Jan 01 00:00:00 2020 PST | default_perm_user | data1
+(1 row)
+
+RESET ROLE;
+SET ROLE :ROLE_DEFAULT_PERM_USER_2;
+SELECT * FROM test_security_barrier_view;
+             time             |       tenant        | data  
+------------------------------+---------------------+-------
+ Wed Jan 01 00:00:00 2020 PST | default_perm_user_2 | data2
+(1 row)
+
+RESET ROLE;
+DROP TABLE test_security_barrier CASCADE;
+NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_X_X_chunk
+NOTICE:  drop cascades to view test_security_barrier_view
