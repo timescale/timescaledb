@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <catalog/pg_attribute.h>
+#include <executor/execdebug.h>
 #include <executor/tuptable.h>
 #include <storage/itemptr.h>
 
@@ -673,6 +674,21 @@ arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
 	}
 
 	return aslot->arrow_columns[attoff];
+}
+
+/*
+ * Store columns that the arrow slot will decompress.
+ *
+ * Also set the flag that this TTS is using column select so that we can
+ * handle uses of slot_getallattrs() that are not part of normal plan
+ * execution. */
+void
+arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs)
+{
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, { aslot->referenced_attrs = bms_copy(attrs); });
 }
 
 const TupleTableSlotOps TTSOpsArrowTuple = { .base_slot_size = sizeof(ArrowTupleTableSlot),

@@ -121,7 +121,7 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                Rows Removed by Filter: 223
  Decompression Cache Hits: 2453
  Decompression Cache Misses: 6
- Decompress Count: 24
+ Decompress Count: 18
 (29 rows)
 
 -- Check the explain cache information output.
@@ -160,7 +160,7 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                Rows Removed by Filter: 223
  Decompression Cache Hits: 2453
  Decompression Cache Misses: 6
- Decompress Count: 24
+ Decompress Count: 18
 (29 rows)
 
 -- Check the explain cache information output. Query 1 and 3 should
@@ -209,7 +209,7 @@ select device, humidity from readings where device between 5 and 10;
          Index Cond: ((device >= 5) AND (device <= 10))
  Decompression Cache Hits: 2453
  Decompression Cache Misses: 6
- Decompress Count: 24
+ Decompress Count: 6
 (16 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
@@ -249,7 +249,7 @@ group by device;
                            Index Cond: ((device >= 5) AND (device <= 10))
  Decompression Cache Hits: 2453
  Decompression Cache Misses: 6
- Decompress Count: 24
+ Decompress Count: 6
 (33 rows)
 
 -- Test on conflict: insert the same data as before, but throw away
