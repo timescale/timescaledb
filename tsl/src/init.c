@@ -22,6 +22,7 @@
 #include "compression/algorithms/gorilla.h"
 #include "compression/api.h"
 #include "compression/arrow_cache_explain.h"
+#include "compression/attr_capture.h"
 #include "compression/compression.h"
 #include "compression/compressionam_handler.h"
 #include "compression/create.h"
@@ -207,6 +208,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_decompress_chunk_init();
 	_columnar_scan_init();
 	_arrow_cache_explain_init();
+	_attr_capture_init();
 	_skip_scan_init();
 	_vector_agg_init();
 	/* Register a cleanup function to be called when the backend exits */
