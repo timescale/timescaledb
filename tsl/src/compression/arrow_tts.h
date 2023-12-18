@@ -66,6 +66,10 @@ typedef struct ArrowTupleTableSlot
 						 * child slot points to a non-compressed tuple. */
 	uint16 total_row_count;
 	ArrowColumnCache arrow_cache;
+
+	/* Decompress only these columns. If no columns are set, all columns will
+	 * be decompressed. */
+	Bitmapset *referenced_attrs;
 	Bitmapset *segmentby_attrs;
 	Bitmapset *valid_columns; /* Per-column validity replacing "nvalid" */
 	int16 *attrs_offset_map;
@@ -289,5 +293,6 @@ arrow_slot_is_consumed(const TupleTableSlot *slot)
 
 extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
 extern const ArrowArray *arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno);
+extern void arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs);
 
 #endif /* PG_ARROW_TUPTABLE_H */
