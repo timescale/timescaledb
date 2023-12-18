@@ -1643,6 +1643,20 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 	root->simple_rel_array[compressed_index] = NULL;
 
 	RelOptInfo *compressed_rel = build_simple_rel(root, compressed_index, NULL);
+
+#if PG16_GE
+	/*
+	 * When initially creating the RTE we add a RTEPerminfo entry for the
+	 * RTE but that is only to make build_simple_rel happy.
+	 * Asserts in the permission check code will fail with an RTEPerminfo
+	 * with no permissions to check so we remove it again here as we don't
+	 * want permission checks on the compressed chunks when querying
+	 * hypertables with compressed data.
+	 */
+	root->parse->rteperminfos = list_delete_last(root->parse->rteperminfos);
+	info->compressed_rte->perminfoindex = 0;
+#endif
+
 	/* github issue :1558
 	 * set up top_parent_relids for this rel as the same as the
 	 * original hypertable, otherwise eq classes are not computed correctly
@@ -1857,9 +1871,8 @@ decompress_chunk_make_rte(Oid compressed_relid, LOCKMODE lockmode, Query *parse)
 	rte->insertedCols = NULL;
 	rte->updatedCols = NULL;
 #else
-	/* add perminfo for the new RTE */
-	RTEPermissionInfo *perminfo = addRTEPermissionInfo(&parse->rteperminfos, rte);
-	perminfo->requiredPerms |= ACL_SELECT;
+	/* Add empty perminfo for the new RTE to make build_simple_rel happy. */
+	addRTEPermissionInfo(&parse->rteperminfos, rte);
 #endif
 
 	return rte;
