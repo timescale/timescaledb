@@ -95,7 +95,7 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	const CompressionAlgorithmDefinition *def = algorithm_definition(data_algo);
 	Datum compressed_data = def->compressed_data_recv(&si);
 
-	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo);
+	DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, PG_TYPE_OID);
 
 	ArrowArray *arrow = NULL;
 	if (bulk)

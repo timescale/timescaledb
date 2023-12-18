@@ -331,7 +331,7 @@ target_generic(const uint8 *Data, size_t Size, CompressionAlgorithm requested_al
 
 	if (bulk)
 	{
-		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo);
+		DecompressAllFunction decompress_all = tsl_get_decompress_all_function(data_algo, pg_type);
 		decompress_all(compressed_data, pg_type, CurrentMemoryContext);
 		return 0;
 	}
