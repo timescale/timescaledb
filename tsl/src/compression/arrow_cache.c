@@ -213,9 +213,19 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	for (; entry->nvalid < attnum; entry->nvalid++)
 	{
 		const int16 cattoff = attrs_map[entry->nvalid];
+		const AttrNumber attno = AttrOffsetGetAttrNumber(entry->nvalid);
 		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
 
-		if (is_compressed_col(compressed_tupdesc, cattno))
+		/*
+		 * Only decompress columns that are actually needed, but only if the
+		 * node is marked for decompression.
+		 *
+		 * There are other cases (in particular in ATRewriteTable) where the
+		 * decompression columns are not set up at all and in these cases we
+		 * should read all columns up to the attribute number.
+		 */
+		if (is_compressed_col(compressed_tupdesc, cattno) &&
+			(!aslot->referenced_attrs || bms_is_member(attno, aslot->referenced_attrs)))
 		{
 			bool isnull;
 			Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
