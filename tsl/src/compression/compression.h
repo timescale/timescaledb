@@ -390,8 +390,7 @@ inline static void *
 consumeCompressedData(StringInfo si, int bytes)
 {
 	CheckCompressedData(bytes >= 0);
-	CheckCompressedData(bytes < PG_INT32_MAX / 2);
-	CheckCompressedData(si->cursor + bytes >= 0);
+	CheckCompressedData(si->cursor + bytes >= si->cursor); /* Check for overflow. */
 	CheckCompressedData(si->cursor + bytes <= si->len);
 
 	void *result = si->data + si->cursor;

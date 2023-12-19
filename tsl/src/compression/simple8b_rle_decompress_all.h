@@ -56,10 +56,13 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 			const uint16 n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(decompressed_index + n_block_values <= n_buffer_elements);
 
-			const ELEMENT_TYPE repeated_value = simple8brle_rledata_value(block_data);
+			const uint64 repeated_value_raw = simple8brle_rledata_value(block_data);
+			const ELEMENT_TYPE repeated_value_converted = repeated_value_raw;
+			CheckCompressedData(repeated_value_raw == (uint64) repeated_value_converted);
+
 			for (uint16 i = 0; i < n_block_values; i++)
 			{
-				decompressed_values[decompressed_index + i] = repeated_value;
+				decompressed_values[decompressed_index + i] = repeated_value_converted;
 			}
 
 			decompressed_index += n_block_values;
@@ -77,7 +80,7 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 		 * produces, which is easier for testing.                                                  \
 		 */                                                                                        \
 		const uint8 bits_per_value = SIMPLE8B_BIT_LENGTH[X];                                       \
-		CheckCompressedData(bits_per_value / 8 <= sizeof(ELEMENT_TYPE));                           \
+		CheckCompressedData(bits_per_value <= sizeof(ELEMENT_TYPE) * 8);                           \
                                                                                                    \
 		/*                                                                                         \
 		 * The last block might have less values than normal, but we have                          \
