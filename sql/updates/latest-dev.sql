@@ -1,4 +1,35 @@
 
+-- ERROR if trying to update the extension while multinode is present
+DO $$
+DECLARE
+  data_nodes TEXT;
+  dist_hypertables TEXT;
+BEGIN
+  SELECT string_agg(format('%I.%I', schema_name, table_name), ', ')
+  INTO dist_hypertables
+  FROM _timescaledb_catalog.hypertable
+  WHERE replication_factor > 0;
+
+  IF dist_hypertables IS NOT NULL THEN
+    RAISE USING
+      ERRCODE = 'feature_not_supported',
+      MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
+      DETAIL = 'The following distributed hypertables should be migrated to regular: '||dist_hypertables;
+  END IF;
+
+  SELECT string_agg(format('%I', srv.srvname), ', ')
+  INTO data_nodes
+  FROM pg_foreign_server srv
+  JOIN pg_foreign_data_wrapper fdw ON srv.srvfdw = fdw.oid AND fdw.fdwname = 'timescaledb_fdw';
+
+  IF data_nodes IS NOT NULL THEN
+    RAISE USING
+      ERRCODE = 'feature_not_supported',
+      MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
+      DETAIL = 'The following data nodes should be removed: '||data_nodes;
+  END IF;
+END $$;
+
 DROP FUNCTION IF EXISTS _timescaledb_functions.ping_data_node;
 DROP FUNCTION IF EXISTS _timescaledb_internal.ping_data_node;
 DROP FUNCTION IF EXISTS _timescaledb_functions.remote_txn_heal_data_node;
@@ -116,3 +147,172 @@ DROP PROCEDURE IF EXISTS timescaledb_experimental.cleanup_copy_chunk_operation;
 DROP FUNCTION IF EXISTS _timescaledb_functions.set_chunk_default_data_node;
 DROP FUNCTION IF EXISTS _timescaledb_internal.set_chunk_default_data_node;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.drop_dist_ht_invalidation_trigger;
+DROP FUNCTION IF EXISTS _timescaledb_internal.drop_dist_ht_invalidation_trigger;
+
+-- remove multinode catalog tables
+DROP VIEW IF EXISTS timescaledb_information.chunks;
+DROP VIEW IF EXISTS timescaledb_information.data_nodes;
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+DROP VIEW IF EXISTS timescaledb_experimental.chunk_replication_status;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.remote_txn;
+DROP TABLE _timescaledb_catalog.remote_txn;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable_data_node;
+DROP TABLE _timescaledb_catalog.hypertable_data_node;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_data_node;
+DROP TABLE _timescaledb_catalog.chunk_data_node;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+DROP TABLE _timescaledb_catalog.chunk_copy_operation;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq;
+DROP SEQUENCE _timescaledb_catalog.chunk_copy_operation_id_seq;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.dimension_partition;
+DROP TABLE _timescaledb_catalog.dimension_partition;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunks_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunks_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_functions.indexes_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_internal.indexes_remote_size;
+DROP FUNCTION IF EXISTS _timescaledb_functions.compressed_chunk_remote_stats;
+DROP FUNCTION IF EXISTS _timescaledb_internal.compressed_chunk_remote_stats;
+
+-- rebuild _timescaledb_catalog.hypertable
+ALTER TABLE _timescaledb_config.bgw_job
+    DROP CONSTRAINT bgw_job_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.chunk
+    DROP CONSTRAINT chunk_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.chunk_index
+    DROP CONSTRAINT chunk_index_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_agg
+    DROP CONSTRAINT continuous_agg_mat_hypertable_id_fkey,
+    DROP CONSTRAINT continuous_agg_raw_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_bucket_function
+    DROP CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    DROP CONSTRAINT continuous_aggs_invalidation_threshold_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.dimension
+    DROP CONSTRAINT dimension_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.hypertable
+    DROP CONSTRAINT hypertable_compressed_hypertable_id_fkey;
+ALTER TABLE _timescaledb_catalog.tablespace
+    DROP CONSTRAINT tablespace_hypertable_id_fkey;
+
+DROP VIEW IF EXISTS timescaledb_information.hypertables;
+DROP VIEW IF EXISTS timescaledb_information.job_stats;
+DROP VIEW IF EXISTS timescaledb_information.jobs;
+DROP VIEW IF EXISTS timescaledb_information.continuous_aggregates;
+DROP VIEW IF EXISTS timescaledb_information.chunks;
+DROP VIEW IF EXISTS timescaledb_information.dimensions;
+DROP VIEW IF EXISTS timescaledb_information.compression_settings;
+DROP VIEW IF EXISTS _timescaledb_internal.hypertable_chunk_local_size;
+DROP VIEW IF EXISTS _timescaledb_internal.compressed_chunk_stats;
+DROP VIEW IF EXISTS timescaledb_experimental.chunk_replication_status;
+DROP VIEW IF EXISTS timescaledb_experimental.policies;
+
+-- recreate table
+CREATE TABLE _timescaledb_catalog.hypertable_tmp AS SELECT * FROM _timescaledb_catalog.hypertable;
+CREATE TABLE _timescaledb_catalog.tmp_hypertable_seq_value AS SELECT last_value, is_called FROM _timescaledb_catalog.hypertable_id_seq;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
+ALTER EXTENSION timescaledb DROP SEQUENCE _timescaledb_catalog.hypertable_id_seq;
+
+SET timescaledb.restoring = on; -- must disable the hooks otherwise we can't do anything without the table _timescaledb_catalog.hypertable
+
+DROP TABLE _timescaledb_catalog.hypertable;
+
+CREATE SEQUENCE _timescaledb_catalog.hypertable_id_seq MINVALUE 1;
+SELECT setval('_timescaledb_catalog.hypertable_id_seq', last_value, is_called) FROM _timescaledb_catalog.tmp_hypertable_seq_value;
+DROP TABLE _timescaledb_catalog.tmp_hypertable_seq_value;
+
+CREATE TABLE _timescaledb_catalog.hypertable (
+    id INTEGER PRIMARY KEY NOT NULL DEFAULT nextval('_timescaledb_catalog.hypertable_id_seq'),
+    schema_name name NOT NULL,
+    table_name name NOT NULL,
+    associated_schema_name name NOT NULL,
+    associated_table_prefix name NOT NULL,
+    num_dimensions smallint NOT NULL,
+    chunk_sizing_func_schema name NOT NULL,
+    chunk_sizing_func_name name NOT NULL,
+    chunk_target_size bigint NOT NULL, -- size in bytes
+    compression_state smallint NOT NULL DEFAULT 0,
+    compressed_hypertable_id integer,
+    status integer NOT NULL DEFAULT 0
+);
+
+SET timescaledb.restoring = off;
+
+INSERT INTO _timescaledb_catalog.hypertable (
+    id,
+    schema_name,
+    table_name,
+    associated_schema_name,
+    associated_table_prefix,
+    num_dimensions,
+    chunk_sizing_func_schema,
+    chunk_sizing_func_name,
+    chunk_target_size,
+    compression_state,
+    compressed_hypertable_id
+)
+SELECT
+    id,
+    schema_name,
+    table_name,
+    associated_schema_name,
+    associated_table_prefix,
+    num_dimensions,
+    chunk_sizing_func_schema,
+    chunk_sizing_func_name,
+    chunk_target_size,
+    compression_state,
+    compressed_hypertable_id
+FROM
+    _timescaledb_catalog.hypertable_tmp
+ORDER BY id;
+
+UPDATE _timescaledb_catalog.hypertable h
+SET status = 3
+WHERE EXISTS (
+  SELECT FROM _timescaledb_catalog.chunk c WHERE c.osm_chunk AND c.hypertable_id = h.id
+);
+
+ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
+
+GRANT SELECT ON _timescaledb_catalog.hypertable TO PUBLIC;
+GRANT SELECT ON _timescaledb_catalog.hypertable_id_seq TO PUBLIC;
+
+DROP TABLE _timescaledb_catalog.hypertable_tmp;
+-- now add any constraints
+ALTER TABLE _timescaledb_catalog.hypertable
+    ADD CONSTRAINT hypertable_associated_schema_name_associated_table_prefix_key UNIQUE (associated_schema_name, associated_table_prefix),
+    ADD CONSTRAINT hypertable_table_name_schema_name_key UNIQUE (table_name, schema_name),
+    ADD CONSTRAINT hypertable_schema_name_check CHECK (schema_name != '_timescaledb_catalog'),
+    ADD CONSTRAINT hypertable_dim_compress_check CHECK (num_dimensions > 0 OR compression_state = 2),
+    ADD CONSTRAINT hypertable_chunk_target_size_check CHECK (chunk_target_size >= 0),
+    ADD CONSTRAINT hypertable_compress_check CHECK ( (compression_state = 0 OR compression_state = 1 )  OR (compression_state = 2 AND compressed_hypertable_id IS NULL)),
+    ADD CONSTRAINT hypertable_compressed_hypertable_id_fkey FOREIGN KEY (compressed_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id);
+
+GRANT SELECT ON TABLE _timescaledb_catalog.hypertable TO PUBLIC;
+
+-- 3. reestablish constraints on other tables
+ALTER TABLE _timescaledb_config.bgw_job
+    ADD CONSTRAINT bgw_job_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.chunk
+    ADD CONSTRAINT chunk_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id);
+ALTER TABLE _timescaledb_catalog.chunk_index
+    ADD CONSTRAINT chunk_index_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_agg
+    ADD CONSTRAINT continuous_agg_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE,
+    ADD CONSTRAINT continuous_agg_raw_hypertable_id_fkey FOREIGN KEY (raw_hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_bucket_function
+    ADD CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.continuous_aggs_invalidation_threshold
+    ADD CONSTRAINT continuous_aggs_invalidation_threshold_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.dimension
+    ADD CONSTRAINT dimension_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+ALTER TABLE _timescaledb_catalog.tablespace
+    ADD CONSTRAINT tablespace_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;

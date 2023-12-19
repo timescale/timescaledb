@@ -128,18 +128,6 @@ static void cagg_reorder_groupby_clause(RangeTblEntry *subq_rte, Index rtno, Lis
 static const char *TS_CTE_EXPAND = "ts_expand";
 
 /*
- * Controls which type of fetcher to use to fetch data from the data nodes.
- * There is no place to store planner-global custom information (such as in
- * PlannerInfo). Because of this, we have to use the global variable that is
- * valid inside the scope of timescaledb_planner().
- * Note that that function can be called recursively, e.g. when evaluating a
- * SQL function at the planning time. We only have to determine the fetcher type
- * in the outermost scope, so we distinguish it by that the fetcher type is set
- * to the invalid value of 'auto'.
- */
-DataFetcherType ts_data_node_fetcher_scan_type = AutoFetcherType;
-
-/*
  * A simplehash hash table that records the chunks and their corresponding
  * hypertables, and also the plain baserels. We use it to tell whether a
  * relation is a hypertable chunk, inside the classify_relation function.
@@ -274,12 +262,9 @@ ts_planner_get_hypertable(const Oid relid, const unsigned int flags)
 }
 
 bool
-ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed)
+ts_rte_is_hypertable(const RangeTblEntry *rte)
 {
 	Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
-
-	if (isdistributed && ht != NULL)
-		*isdistributed = hypertable_is_distributed(ht);
 
 	return ht != NULL;
 }
@@ -292,15 +277,6 @@ typedef struct
 	Query *rootquery;
 	Query *current_query;
 	PlannerInfo *root;
-	/*
-	 * The number of distributed hypertables in the query and its subqueries.
-	 * Specifically, we count range table entries here, so using the same
-	 * distributed table twice counts as two tables. No matter whether it's the
-	 * same physical table or not, the range table entries can be scanned
-	 * concurrently, and more than one of them being distributed means we have
-	 * to use the cursor fetcher so that these scans can be interleaved.
-	 */
-	int num_distributed_tables;
 } PreprocessQueryContext;
 
 /*
@@ -388,11 +364,6 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 							query->rowMarks == NIL && rte->inh)
 							rte_mark_for_expansion(rte);
 
-						if (hypertable_is_distributed(ht))
-						{
-							context->num_distributed_tables++;
-						}
-
 						if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 						{
 							int compr_htid = ht->fd.compressed_hypertable_id;
@@ -444,7 +415,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 	 * Volatile is needed because these are the local variables that are
 	 * modified between setjmp/longjmp calls.
 	 */
-	volatile bool reset_fetcher_type = false;
 	volatile bool reset_baserel_info = false;
 
 	/*
@@ -504,62 +474,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */
 			preprocess_query((Node *) parse, &context);
-
-			/*
-			 * Determine which type of fetcher to use. If set by GUC, use what
-			 * is set. If the GUC says 'auto', use the COPY fetcher if we
-			 * have at most one distributed table in the query. This enables
-			 * parallel plans on data nodes, which speeds up the query.
-			 * We can't use parallel plans with the cursor fetcher, because the
-			 * cursors don't support parallel execution. This is because a
-			 * cursor can be suspended at any time, then some arbitrary user
-			 * code can be executed, and then the cursor is resumed. The
-			 * parallel infrastructure doesn't have enough reentrability to
-			 * survive this.
-			 * We have to use a cursor fetcher when we have multiple distributed
-			 * tables, because we might first have to get some rows from one
-			 * table and then from another, without running either of them to
-			 * completion first. This happens e.g. when doing a join. If we had
-			 * a connection per table, we could avoid this requirement.
-			 *
-			 * Note that this function can be called recursively, e.g. when
-			 * trying to evaluate an SQL function at the planning stage. We must
-			 * only set/reset the fetcher type at the topmost level, that's why
-			 * we check it's not already set.
-			 */
-			if (ts_data_node_fetcher_scan_type == AutoFetcherType)
-			{
-				reset_fetcher_type = true;
-
-				if (context.num_distributed_tables >= 2)
-				{
-					if (ts_guc_remote_data_fetcher != CursorFetcherType &&
-						ts_guc_remote_data_fetcher != AutoFetcherType)
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("only cursor fetcher is supported for this query"),
-								 errhint("COPY or prepared statement fetching of data is not "
-										 "supported in "
-										 "queries with multiple distributed hypertables."
-										 " Use cursor fetcher instead.")));
-					}
-					ts_data_node_fetcher_scan_type = CursorFetcherType;
-				}
-				else
-				{
-					if (ts_guc_remote_data_fetcher == AutoFetcherType)
-					{
-						ts_data_node_fetcher_scan_type = CopyFetcherType;
-					}
-					else
-					{
-						ts_data_node_fetcher_scan_type = ts_guc_remote_data_fetcher;
-					}
-				}
-			}
-
-			Assert(ts_data_node_fetcher_scan_type != AutoFetcherType);
 		}
 
 		if (prev_planner_hook != NULL)
@@ -615,11 +529,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			BaserelInfo_destroy(ts_baserel_info);
 			ts_baserel_info = NULL;
 		}
-
-		if (reset_fetcher_type)
-		{
-			ts_data_node_fetcher_scan_type = AutoFetcherType;
-		}
 	}
 	PG_CATCH();
 	{
@@ -628,11 +537,6 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			Assert(ts_baserel_info != NULL);
 			BaserelInfo_destroy(ts_baserel_info);
 			ts_baserel_info = NULL;
-		}
-
-		if (reset_fetcher_type)
-		{
-			ts_data_node_fetcher_scan_type = AutoFetcherType;
 		}
 
 		/* Pop the cache, but do not release since caches are auto-released on
@@ -832,17 +736,12 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 	*ht = entry->ht;
 	if (*ht)
 	{
-		if (rte->relkind == RELKIND_FOREIGN_TABLE && !hypertable_is_distributed(*ht))
+		if (rte->relkind == RELKIND_FOREIGN_TABLE)
 		{
 			/*
 			 * OSM chunk or other foreign chunk. We can't even access the
 			 * fdw_private for it, because it's a foreign chunk managed by a
 			 * different extension. Try to ignore it as much as possible.
-			 *
-			 * Note that we also have to disambiguate them from distributed
-			 * hypertable chunks, which are also foreign. We can't use the
-			 * fdwroutine here because it is set later, in
-			 * tsl_set_rel_pathlist().
 			 */
 			return TS_REL_OTHER;
 		}
@@ -869,7 +768,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
 		 bms_num_members(root->all_baserels) > 1) ||
 #endif
-		!ts_guc_enable_chunk_append || hypertable_is_distributed(ht))
+		!ts_guc_enable_chunk_append)
 		return false;
 
 	switch (nodeTag(path))
@@ -993,7 +892,7 @@ should_constraint_aware_append(PlannerInfo *root, Hypertable *ht, Path *path)
 	 * per-server relations without a corresponding "real" table in the
 	 * system. Further, per-server appends shouldn't need runtime pruning in any
 	 * case. */
-	if (root->parse->commandType != CMD_SELECT || hypertable_is_distributed(ht))
+	if (root->parse->commandType != CMD_SELECT)
 		return false;
 
 	return ts_constraint_aware_append_possible(path);
@@ -1002,7 +901,7 @@ should_constraint_aware_append(PlannerInfo *root, Hypertable *ht, Path *path)
 static bool
 rte_should_expand(const RangeTblEntry *rte)
 {
-	bool is_hypertable = ts_rte_is_hypertable(rte, NULL);
+	bool is_hypertable = ts_rte_is_hypertable(rte);
 
 	return is_hypertable && !rte->inh && ts_rte_is_marked_for_expansion(rte);
 }
@@ -1081,43 +980,10 @@ reenable_inheritance(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 
 	if (set_pathlist_for_current_rel)
 	{
-		bool do_distributed;
-
-		Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_NOCREATE);
-		Assert(ht != NULL);
-
-		/* the hypertable will have been planned as if it was a regular table
-		 * with no data. Since such a plan would be cheaper than any real plan,
-		 * it would always be used, and we need to remove these plans before
-		 * adding ours.
-		 *
-		 * Also, if it's a distributed hypertable and per data node queries are
-		 * enabled then we will be throwing this below append path away. So only
-		 * build it otherwise
-		 */
-		do_distributed = !IS_DUMMY_REL(rel) && hypertable_is_distributed(ht) &&
-						 ts_guc_enable_per_data_node_queries;
-
 		rel->pathlist = NIL;
 		rel->partial_pathlist = NIL;
-		/* allow a session parameter to override the use of this datanode only path */
-#ifdef TS_DEBUG
-		if (do_distributed)
-		{
-			const char *allow_dn_path =
-				GetConfigOption("timescaledb.debug_allow_datanode_only_path", true, false);
-			if (allow_dn_path && pg_strcasecmp(allow_dn_path, "on") != 0)
-			{
-				do_distributed = false;
-				elog(DEBUG2, "creating per chunk append paths");
-			}
-			else
-				elog(DEBUG2, "avoiding per chunk append paths");
-		}
-#endif
 
-		if (!do_distributed)
-			ts_set_append_rel_pathlist(root, rel, rti, rte);
+		ts_set_append_rel_pathlist(root, rel, rti, rte);
 	}
 }
 
@@ -1404,7 +1270,7 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * the trigger behaviour on access nodes, which would otherwise
 			 * no longer fire.
 			 */
-			if (IS_UPDL_CMD(root->parse) && !hypertable_is_distributed(ht))
+			if (IS_UPDL_CMD(root->parse))
 				mark_dummy_rel(rel);
 			break;
 		case TS_REL_OTHER:
@@ -1517,7 +1383,7 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 #endif
 				mt->operation == CMD_INSERT)
 			{
-				if (ht && (mt->operation == CMD_INSERT || !hypertable_is_distributed(ht)))
+				if (ht)
 				{
 					path = ts_hypertable_modify_path_create(root, mt, ht, input_rel);
 				}

@@ -176,6 +176,7 @@ select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz::t
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - interval '1 day';
 -- Expression that evaluates to Null.
 select count(*) from vectorqual where ts > case when '2021-01-01'::timestamp < '2022-01-01'::timestamptz then null else '2021-01-01 00:00:00'::timestamp end;
+select count(*) from vectorqual where ts < LOCALTIMESTAMP + '3 years'::interval;
 
 -- This filter is not vectorized because the 'timestamp > timestamptz'
 -- operator is stable, not immutable, because it uses the current session
@@ -220,6 +221,8 @@ select * from date_table where ts >= '2021-01-02';
 select * from date_table where ts =  '2021-01-02';
 select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
+select * from date_table where ts <  CURRENT_DATE;
+
 
 -- Vectorized comparison for text
 create table t(ts int, d int, a text);

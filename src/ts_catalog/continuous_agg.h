@@ -176,10 +176,6 @@ extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypert
 														   ArrayType *bucket_widths,
 														   ArrayType *bucket_functions,
 														   CaggsInfo *all_caggs);
-TSDLLEXPORT void ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs,
-												  ArrayType **mat_hypertable_ids,
-												  ArrayType **bucket_widths,
-												  ArrayType **bucket_functions);
 
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);

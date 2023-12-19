@@ -46,7 +46,7 @@ jobs:
           only-labels: 'waiting-for-author'
 
           # Stale only issues with one of these labels
-          any-of-issue-labels: 'bug,enhancement'
+          any-of-issue-labels: 'bug,enhancement,stale-issue'
 
           # Exclude issues with the 'in-progress' label
           exempt-issue-labels: 'in-progress'

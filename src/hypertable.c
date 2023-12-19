@@ -40,7 +40,6 @@
 
 #include "hypertable.h"
 #include "ts_catalog/compression_settings.h"
-#include "ts_catalog/hypertable_data_node.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/metadata.h"
 #include "hypercube.h"
@@ -170,11 +169,6 @@ hypertable_formdata_make_tuple(const FormData_hypertable *fd, TupleDesc desc)
 	else
 		values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)] =
 			Int32GetDatum(fd->compressed_hypertable_id);
-	if (fd->replication_factor == 0)
-		nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] = true;
-	else
-		values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)] =
-			Int16GetDatum(fd->replication_factor);
 	values[AttrNumberGetAttrOffset(Anum_hypertable_status)] = Int32GetDatum(fd->status);
 
 	return heap_form_tuple(desc, values, nulls);
@@ -237,11 +231,6 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	else
 		fd->compressed_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_hypertable_compressed_hypertable_id)]);
-	if (nulls[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)])
-		fd->replication_factor = INVALID_HYPERTABLE_ID;
-	else
-		fd->replication_factor =
-			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_replication_factor)]);
 	fd->status = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_status)]);
 
 	if (should_free)
@@ -260,7 +249,6 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
-	h->data_nodes = ts_hypertable_data_node_scan(h->fd.id, ti->mctx);
 
 	return h;
 }
@@ -619,7 +607,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	ts_tablespace_delete(hypertable_id, NULL, InvalidOid);
 	ts_chunk_delete_by_hypertable_id(hypertable_id);
 	ts_dimension_delete_by_hypertable_id(hypertable_id, true);
-	ts_hypertable_data_node_delete_by_hypertable_id(hypertable_id);
 
 	/* Also remove any policy argument / job that uses this hypertable */
 	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
@@ -795,7 +782,6 @@ ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 }
 
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
-#define DEFAULT_ASSOCIATED_DISTRIBUTED_TABLE_PREFIX_FORMAT "_dist_hyper_%d"
 static const size_t MAXIMUM_PREFIX_LENGTH = NAMEDATALEN - 16;
 
 static void
@@ -816,8 +802,7 @@ static void
 hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 				  Name associated_schema_name, Name associated_table_prefix,
 				  Name chunk_sizing_func_schema, Name chunk_sizing_func_name,
-				  int64 chunk_target_size, int16 num_dimensions, bool compressed,
-				  int16 replication_factor)
+				  int64 chunk_target_size, int16 num_dimensions, bool compressed)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -840,17 +825,10 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 	{
 		NameData default_associated_table_prefix;
 		memset(NameStr(default_associated_table_prefix), '\0', NAMEDATALEN);
-		Assert(replication_factor >= 0);
-		if (replication_factor == 0)
-			snprintf(NameStr(default_associated_table_prefix),
-					 NAMEDATALEN,
-					 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
-					 fd.id);
-		else
-			snprintf(NameStr(default_associated_table_prefix),
-					 NAMEDATALEN,
-					 DEFAULT_ASSOCIATED_DISTRIBUTED_TABLE_PREFIX_FORMAT,
-					 fd.id);
+		snprintf(NameStr(default_associated_table_prefix),
+				 NAMEDATALEN,
+				 DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT,
+				 fd.id);
 		namestrcpy(&fd.associated_table_prefix, NameStr(default_associated_table_prefix));
 	}
 	else
@@ -879,9 +857,6 @@ hypertable_insert(int32 hypertable_id, Name schema_name, Name table_name,
 
 	/* new hypertable does not have OSM chunk */
 	fd.status = HYPERTABLE_STATUS_DEFAULT;
-
-	/* finally, set replication factor */
-	fd.replication_factor = replication_factor;
 
 	rel = table_open(catalog_get_table_id(catalog, HYPERTABLE), RowExclusiveLock);
 	hypertable_insert_relation(rel, &fd);
@@ -928,33 +903,6 @@ ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const cha
 									   BTEqualStrategyNumber,
 									   F_NAMEEQ,
 									   CStringGetDatum(schema));
-}
-
-/*
- * Find hypertable by name and retrieve catalog form attributes.
- *
- * In case if some of the requested attributes marked as NULL value, nulls[] array will be
- * modified and appropriate attribute position bit will be set to true.
- *
- * Return true if hypertable is found, false otherwise.
- */
-bool
-ts_hypertable_get_attributes_by_name(const char *schema, const char *name,
-									 FormData_hypertable *form)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(HYPERTABLE, AccessShareLock, CurrentMemoryContext);
-
-	ts_hypertable_scan_by_name(&iterator, schema, name);
-	ts_scanner_foreach(&iterator)
-	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		ts_hypertable_formdata_fill(form, ti);
-		ts_scan_iterator_close(&iterator);
-		return true;
-	}
-
-	return false;
 }
 
 Hypertable *
@@ -1279,7 +1227,7 @@ hypertable_create_schema(const char *schema_name)
  * parent table, which will have no tuples.
  */
 static void
-hypertable_validate_constraints(Oid relid, int replication_factor)
+hypertable_validate_constraints(Oid relid)
 {
 	Relation catalog;
 	SysScanDesc scan;
@@ -1308,14 +1256,6 @@ hypertable_validate_constraints(Oid relid, int replication_factor)
 					 errhint("Remove all NO INHERIT constraints from table \"%s\" before "
 							 "making it a hypertable.",
 							 get_rel_name(relid))));
-
-		if (form->contype == CONSTRAINT_FOREIGN && replication_factor > 0)
-			ereport(WARNING,
-					(errmsg("distributed hypertable \"%s\" has a foreign key to"
-							" a non-distributed table",
-							get_rel_name(relid)),
-					 errdetail("Non-distributed tables that are referenced by a distributed"
-							   " hypertable must exist and be identical on all data nodes.")));
 	}
 
 	systable_endscan(scan);
@@ -1506,69 +1446,6 @@ create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool crea
 	return HeapTupleGetDatum(tuple);
 }
 
-/*
- * Check that the partitioning is reasonable and raise warnings if
- * not. Typically called after applying updates to a partitioning dimension.
- */
-void
-ts_hypertable_check_partitioning(const Hypertable *ht, int32 id_of_updated_dimension)
-{
-	const Dimension *dim;
-
-	Assert(OidIsValid(id_of_updated_dimension));
-
-	dim = ts_hyperspace_get_dimension_by_id(ht->space, id_of_updated_dimension);
-
-	Assert(dim);
-
-	if (hypertable_is_distributed(ht))
-	{
-		const Dimension *first_closed_dim = hyperspace_get_closed_dimension(ht->space, 0);
-		int num_nodes = list_length(ht->data_nodes);
-
-		/* Warn the user that there aren't enough slices to make use of all
-		 * servers. Only do this if this is the first closed (space) dimension. */
-		if (first_closed_dim != NULL && dim->fd.id == first_closed_dim->fd.id &&
-			num_nodes > first_closed_dim->fd.num_slices)
-			ereport(WARNING,
-					(errcode(ERRCODE_WARNING),
-					 errmsg("insufficient number of partitions for dimension \"%s\"",
-							NameStr(dim->fd.column_name)),
-					 errdetail("There are not enough partitions to make"
-							   " use of all data nodes."),
-					 errhint("Increase the number of partitions in dimension \"%s\" to match or"
-							 " exceed the number of attached data nodes.",
-							 NameStr(dim->fd.column_name))));
-	}
-}
-
-extern int16
-ts_validate_replication_factor(const char *hypertable_name, int32 replication_factor,
-							   int num_data_nodes)
-{
-	bool valid = replication_factor >= 1 && replication_factor <= PG_INT16_MAX;
-
-	if (num_data_nodes < replication_factor)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
-				 errmsg("replication factor too large for hypertable \"%s\"", hypertable_name),
-				 errdetail("The hypertable has %d data nodes attached, while "
-						   "the replication factor is %d.",
-						   num_data_nodes,
-						   replication_factor),
-				 errhint("Decrease the replication factor or attach more data "
-						 "nodes to the hypertable.")));
-
-	if (!valid)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid replication factor"),
-				 errhint("A hypertable's replication factor must be between 1 and %d.",
-						 PG_INT16_MAX)));
-
-	return (int16) (replication_factor & 0xFFFF);
-}
-
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_create_general);
@@ -1582,17 +1459,13 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 							  DimensionInfo *open_dim_info, DimensionInfo *closed_dim_info,
 							  Name associated_schema_name, Name associated_table_prefix,
 							  bool create_default_indexes, bool if_not_exists, bool migrate_data,
-							  text *target_size, Oid sizing_func, bool replication_factor_is_null,
-							  int32 replication_factor_in, ArrayType *data_node_arr,
-							  bool distributed_is_null, bool distributed, bool is_generic)
+							  text *target_size, Oid sizing_func, bool is_generic)
 {
-	int16 replication_factor;
 	Cache *hcache;
 	Hypertable *ht;
 	Datum retval;
 	bool created;
 	uint32 flags = 0;
-	List *data_nodes = NIL;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE);
 
@@ -1605,17 +1478,6 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 	};
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
-
-	if (migrate_data && distributed)
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot migrate data for distributed hypertable")));
-
-	if (NULL != data_node_arr && ARR_NDIM(data_node_arr) > 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid data nodes format"),
-				 errhint("Specify a one-dimensional array of data nodes.")));
 
 	ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (ht)
@@ -1643,20 +1505,12 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 		 * Validate data nodes and check permissions on them if this is a
 		 * distributed hypertable.
 		 */
-		replication_factor = 0;
 
 		if (closed_dim_info && !closed_dim_info->num_slices_is_set)
 		{
 			/* If the number of partitions isn't specified, default to setting it
 			 * to the number of data nodes */
 			int16 num_partitions = closed_dim_info->num_slices;
-			if (num_partitions < 1 && replication_factor > 0)
-			{
-				int num_nodes = list_length(data_nodes);
-
-				Assert(num_nodes >= 0);
-				num_partitions = num_nodes & 0xFFFF;
-			}
 			closed_dim_info->num_slices = num_partitions;
 			closed_dim_info->num_slices_is_set = true;
 		}
@@ -1675,14 +1529,10 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 												 closed_dim_info,
 												 associated_schema_name,
 												 associated_table_prefix,
-												 &chunk_sizing_info,
-												 replication_factor,
-												 data_nodes);
+												 &chunk_sizing_info);
 
 		Assert(created);
 		ht = ts_hypertable_cache_get_cache_and_entry(table_relid, CACHE_FLAG_NONE, &hcache);
-		if (NULL != closed_dim_info)
-			ts_hypertable_check_partitioning(ht, closed_dim_info->dimension_id);
 	}
 
 	retval = create_hypertable_datum(fcinfo, ht, created, is_generic);
@@ -1709,9 +1559,6 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
  * chunk_target_size       TEXT = NULL
  * chunk_sizing_func       OID = NULL
  * time_partitioning_func  REGPROC = NULL
- * replication_factor      INTEGER = NULL
- * data nodes              NAME[] = NULL
- * distributed             BOOLEAN = NULL (not present for dist call)
  */
 static Datum
 ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
@@ -1732,12 +1579,6 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 	text *target_size = PG_ARGISNULL(11) ? NULL : PG_GETARG_TEXT_P(11);
 	Oid sizing_func = PG_ARGISNULL(12) ? InvalidOid : PG_GETARG_OID(12);
 	regproc open_partitioning_func = PG_ARGISNULL(13) ? InvalidOid : PG_GETARG_OID(13);
-	bool replication_factor_is_null = true;
-	int32 replication_factor_in = 0;
-	ArrayType *data_node_arr = NULL;
-
-	bool distributed_is_null;
-	bool distributed;
 
 	if (!OidIsValid(table_relid))
 		ereport(ERROR,
@@ -1747,9 +1588,6 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("partition column cannot be NULL")));
-
-	distributed_is_null = true;
-	distributed = false;
 
 	DimensionInfo *open_dim_info =
 		ts_dimension_info_create_open(table_relid,
@@ -1779,11 +1617,6 @@ ts_hypertable_create_time_prev(PG_FUNCTION_ARGS, bool is_dist_call)
 										 migrate_data,
 										 target_size,
 										 sizing_func,
-										 replication_factor_is_null,
-										 replication_factor_in,
-										 data_node_arr,
-										 distributed_is_null,
-										 distributed,
 										 false);
 }
 
@@ -1865,11 +1698,6 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 										 migrate_data,
 										 NULL,
 										 sizing_func,
-										 true,
-										 0,
-										 NULL,
-										 true,
-										 false,
 										 true);
 }
 
@@ -1922,8 +1750,7 @@ bool
 ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flags,
 							   DimensionInfo *time_dim_info, DimensionInfo *closed_dim_info,
 							   Name associated_schema_name, Name associated_table_prefix,
-							   ChunkSizingInfo *chunk_sizing_info, int16 replication_factor,
-							   List *data_node_names)
+							   ChunkSizingInfo *chunk_sizing_info)
 {
 	Cache *hcache;
 	Hypertable *ht;
@@ -2011,7 +1838,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	}
 
 	/* Check that the table doesn't have any unsupported constraints */
-	hypertable_validate_constraints(table_relid, replication_factor);
+	hypertable_validate_constraints(table_relid);
 
 	table_has_data = ts_relation_has_tuples(rel);
 
@@ -2113,8 +1940,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
 					  DIMENSION_INFO_IS_SET(closed_dim_info) ? 2 : 1,
-					  false,
-					  replication_factor);
+					  false);
 
 	/* Get the a Hypertable object via the cache */
 	time_dim_info->ht =
@@ -2127,10 +1953,6 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	{
 		closed_dim_info->ht = time_dim_info->ht;
 		ts_dimension_add_from_info(closed_dim_info);
-		ts_dimension_partition_info_recreate(closed_dim_info->dimension_id,
-											 closed_dim_info->num_slices,
-											 data_node_names,
-											 replication_factor);
 	}
 
 	/* Refresh the cache to get the updated hypertable with added dimensions */
@@ -2141,7 +1963,7 @@ ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id, uint32 flag
 	ts_indexing_verify_indexes(ht);
 
 	/* Attach tablespace, if any */
-	if (OidIsValid(tspc_oid) && !hypertable_is_distributed(ht))
+	if (OidIsValid(tspc_oid))
 	{
 		NameData tspc_name;
 
@@ -2376,8 +2198,7 @@ ts_hypertable_set_compressed(Hypertable *ht, int32 compressed_hypertable_id)
 	/* distr. hypertables do not have a internal compression table
 	 * on the access node
 	 */
-	if (!hypertable_is_distributed(ht))
-		ht->fd.compressed_hypertable_id = compressed_hypertable_id;
+	ht->fd.compressed_hypertable_id = compressed_hypertable_id;
 	return ts_hypertable_update(ht) > 0;
 }
 
@@ -2481,8 +2302,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 					  &chunk_sizing_info->func_name,
 					  chunk_sizing_info->target_size_bytes,
 					  0 /*num_dimensions*/,
-					  true,
-					  0 /* replication factor */);
+					  true);
 
 	/* No indexes are created for the compressed hypertable here */
 
@@ -2519,215 +2339,6 @@ ts_hypertable_clone_constraints_to_compressed(const Hypertable *user_ht, List *c
 							 Int32GetDatum(user_ht->fd.compressed_hypertable_id));
 	}
 	ts_catalog_restore_user(&sec_ctx);
-}
-
-#if defined(USE_ASSERT_CHECKING)
-static void
-assert_chunk_data_nodes_is_a_set(const List *chunk_data_nodes)
-{
-	Bitmapset *chunk_data_node_oids = NULL;
-	ListCell *lc;
-
-	foreach (lc, chunk_data_nodes)
-	{
-		const char *nodename = lfirst(lc);
-		const ForeignServer *server = GetForeignServerByName(nodename, false);
-		chunk_data_node_oids = bms_add_member(chunk_data_node_oids, server->serverid);
-	}
-
-	Assert(list_length(chunk_data_nodes) == bms_num_members(chunk_data_node_oids));
-}
-#endif
-
-/*
- * Assign data nodes to a chunk.
- *
- * For space-partitioned tables, the first "closed" space dimension should
- * have explicit partitioning information to map the chunk to a set of data
- * nodes (dimension partition metadata). Otherwise compute the set of data
- * nodes dynamically.
- *
- * A chunk should be assigned up to replication_factor number of data
- * nodes. Dynamic assignment happens similar to tablespaces, i.e., based on
- * dimension type.
- *
- * Returns a list of data node name strings (char *).
- */
-List *
-ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht, const Hypercube *cube)
-{
-	List *chunk_data_nodes = NIL;
-	const Dimension *closed_dim = hyperspace_get_closed_dimension(ht->space, 0);
-
-	if (NULL != closed_dim && NULL != closed_dim->dimension_partitions)
-	{
-		const DimensionSlice *slice =
-			ts_hypercube_get_slice_by_dimension_id(cube, closed_dim->fd.id);
-		const DimensionPartition *dp =
-			ts_dimension_partition_find(closed_dim->dimension_partitions, slice->fd.range_start);
-		ListCell *lc;
-
-		/* Filter out data nodes that aren't available */
-		foreach (lc, dp->data_nodes)
-		{
-			char *node_name = lfirst(lc);
-
-			if (ts_data_node_is_available(node_name))
-				chunk_data_nodes = lappend(chunk_data_nodes, node_name);
-		}
-	}
-	else
-	{
-		List *available_nodes = ts_hypertable_get_available_data_nodes(ht, false);
-		int num_assigned = MIN(ht->fd.replication_factor, list_length(available_nodes));
-		int n, i;
-
-		n = hypertable_get_chunk_round_robin_index(ht, cube);
-
-		for (i = 0; i < num_assigned; i++)
-		{
-			int j = (n + i) % list_length(available_nodes);
-			HypertableDataNode *hdn = list_nth(available_nodes, j);
-			chunk_data_nodes = lappend(chunk_data_nodes, NameStr(hdn->fd.node_name));
-		}
-	}
-
-	if (chunk_data_nodes == NIL)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
-				 (errmsg("insufficient number of data nodes"),
-				  errhint("Increase the number of available data nodes on hypertable \"%s\".",
-						  get_rel_name(ht->main_table_relid)))));
-
-	if (list_length(chunk_data_nodes) < ht->fd.replication_factor)
-		ereport(WARNING,
-				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
-				 errmsg("insufficient number of data nodes"),
-				 errdetail("There are not enough data nodes to replicate chunks according to the"
-						   " configured replication factor."),
-				 errhint("Attach %d or more data nodes to hypertable \"%s\".",
-						 ht->fd.replication_factor - list_length(chunk_data_nodes),
-						 NameStr(ht->fd.table_name))));
-
-#if defined(USE_ASSERT_CHECKING)
-	assert_chunk_data_nodes_is_a_set(chunk_data_nodes);
-#endif
-
-	return chunk_data_nodes;
-}
-
-typedef bool (*hypertable_data_node_filter)(const HypertableDataNode *hdn);
-
-static bool
-filter_non_blocked_data_nodes(const HypertableDataNode *node)
-{
-	if (!ts_data_node_is_available(NameStr(node->fd.node_name)))
-		return false;
-
-	return !node->fd.block_chunks;
-}
-
-typedef void *(*get_value)(const HypertableDataNode *hdn);
-
-static void *
-get_hypertable_data_node_name(const HypertableDataNode *node)
-{
-	return pstrdup(NameStr(node->fd.node_name));
-}
-
-static void *
-get_hypertable_data_node(const HypertableDataNode *node)
-{
-	HypertableDataNode *copy = palloc(sizeof(HypertableDataNode));
-
-	memcpy(copy, node, sizeof(HypertableDataNode));
-	return copy;
-}
-
-static List *
-get_hypertable_data_node_values(const Hypertable *ht, hypertable_data_node_filter filter,
-								get_value valuefunc)
-{
-	List *list = NULL;
-	ListCell *cell;
-
-	foreach (cell, ht->data_nodes)
-	{
-		HypertableDataNode *node = lfirst(cell);
-		if (filter == NULL || filter(node))
-			list = lappend(list, valuefunc(node));
-	}
-
-	return list;
-}
-
-List *
-ts_hypertable_get_data_node_name_list(const Hypertable *ht)
-{
-	return get_hypertable_data_node_values(ht, NULL, get_hypertable_data_node_name);
-}
-
-static List *
-get_available_data_nodes(const Hypertable *ht, get_value valuefunc, bool error_if_missing)
-{
-	List *available_nodes =
-		get_hypertable_data_node_values(ht, filter_non_blocked_data_nodes, valuefunc);
-	if (available_nodes == NIL && error_if_missing)
-		ereport(ERROR,
-				(errcode(ERRCODE_TS_INSUFFICIENT_NUM_DATA_NODES),
-				 (errmsg("insufficient number of data nodes"),
-				  errhint("Increase the number of available data nodes on hypertable \"%s\".",
-						  get_rel_name(ht->main_table_relid)))));
-	return available_nodes;
-}
-
-List *
-ts_hypertable_get_available_data_nodes(const Hypertable *ht, bool error_if_missing)
-{
-	return get_available_data_nodes(ht, get_hypertable_data_node, error_if_missing);
-}
-
-List *
-ts_hypertable_get_available_data_node_names(const Hypertable *ht, bool error_if_missing)
-{
-	return get_available_data_nodes(ht, get_hypertable_data_node_name, error_if_missing);
-}
-
-static List *
-get_hypertable_data_node_ids(const Hypertable *ht, hypertable_data_node_filter filter)
-{
-	List *nodeids = NIL;
-	ListCell *lc;
-
-	foreach (lc, ht->data_nodes)
-	{
-		HypertableDataNode *node = lfirst(lc);
-		if (filter == NULL || filter(node))
-			nodeids = lappend_oid(nodeids, node->foreign_server_oid);
-	}
-
-	return nodeids;
-}
-
-List *
-ts_hypertable_get_data_node_serverids_list(const Hypertable *ht)
-{
-	return get_hypertable_data_node_ids(ht, NULL);
-}
-
-List *
-ts_hypertable_get_available_data_node_server_oids(const Hypertable *ht)
-{
-	return get_hypertable_data_node_ids(ht, filter_non_blocked_data_nodes);
-}
-
-HypertableType
-ts_hypertable_get_type(const Hypertable *ht)
-{
-	Assert(ht->fd.replication_factor >= -1);
-	if (ht->fd.replication_factor < 1)
-		return (HypertableType) ht->fd.replication_factor;
-	return HYPERTABLE_DISTRIBUTED;
 }
 
 /*
@@ -2801,28 +2412,6 @@ ts_hypertable_has_compression_table(const Hypertable *ht)
 		Assert(ht->fd.compression_state == HypertableCompressionEnabled);
 		return true;
 	}
-	return false;
-}
-
-bool
-ts_hypertable_update_dimension_partitions(const Hypertable *ht)
-{
-	const Dimension *closed_dim = hyperspace_get_closed_dimension(ht->space, 0);
-
-	if (NULL != closed_dim)
-	{
-		List *data_node_names = NIL;
-
-		if (hypertable_is_distributed(ht))
-			data_node_names = ts_hypertable_get_available_data_node_names(ht, false);
-
-		ts_dimension_partition_info_recreate(closed_dim->fd.id,
-											 closed_dim->fd.num_slices,
-											 data_node_names,
-											 ht->fd.replication_factor);
-		return true;
-	}
-
 	return false;
 }
 

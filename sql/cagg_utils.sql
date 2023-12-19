@@ -34,11 +34,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.materialization_invalidation_l
     mat_hypertable_id INTEGER
 ) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_materialization_invalidation_log_delete' LANGUAGE C STRICT VOLATILE;
 
--- raw_hypertable_id - The hypertable ID of the original distributed hypertable in the Access Node
-CREATE OR REPLACE FUNCTION _timescaledb_functions.drop_dist_ht_invalidation_trigger(
-    raw_hypertable_id INTEGER
-) RETURNS VOID AS '@MODULE_PATHNAME@', 'ts_drop_dist_ht_invalidation_trigger' LANGUAGE C STRICT VOLATILE;
-
 -- Processes the hypertable invalidation log in a data node for all the CAGGs that belong to the
 -- distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node. The
 -- invalidations are cut, merged and moved to the materialization invalidation log.

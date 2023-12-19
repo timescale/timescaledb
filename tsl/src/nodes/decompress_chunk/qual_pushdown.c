@@ -354,6 +354,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 		case T_Const:
 		case T_NullTest:
 		case T_Param:
+		case T_SQLValueFunction:
 			break;
 		case T_Var:
 		{

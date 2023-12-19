@@ -101,23 +101,6 @@ cache_invalidate_relcache_callback(Datum arg, Oid relid)
 	}
 }
 
-/* Registration for given cache ids happens in non-TSL code when the extension
- * is created.
- *
- * Cache entries get invalidated when either the foreign server entry or the
- * role entry in the PostgreSQL catalog changes.
- *
- * When the foreign server entry changes, connection parameters might have
- * changed. When the role entry changes, the certificate used for client
- * authentication with backend data nodes might no longer be valid.
- */
-static void
-cache_invalidate_syscache_callback(Datum arg, int cacheid, uint32 hashvalue)
-{
-	Assert(cacheid == FOREIGNSERVEROID || cacheid == AUTHOID);
-	ts_cm_functions->cache_syscache_invalidate(arg, cacheid, hashvalue);
-}
-
 TS_FUNCTION_INFO_V1(ts_timescaledb_invalidate_cache);
 
 /*
@@ -183,14 +166,6 @@ _cache_invalidate_init(void)
 	RegisterXactCallback(cache_invalidate_xact_end, NULL);
 	RegisterSubXactCallback(cache_invalidate_subxact_end, NULL);
 	CacheRegisterRelcacheCallback(cache_invalidate_relcache_callback, PointerGetDatum(NULL));
-
-	/* Specific syscache callbacks */
-	CacheRegisterSyscacheCallback(FOREIGNSERVEROID,
-								  cache_invalidate_syscache_callback,
-								  PointerGetDatum(NULL));
-	CacheRegisterSyscacheCallback(AUTHOID,
-								  cache_invalidate_syscache_callback,
-								  PointerGetDatum(NULL));
 }
 
 void

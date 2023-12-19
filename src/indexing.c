@@ -289,7 +289,7 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
  */
 extern ObjectAddress
 ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
-									bool is_multitransaction, bool is_distributed)
+									bool is_multitransaction)
 {
 	Oid relid;
 	LOCKMODE lockmode;
@@ -324,7 +324,7 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	 * table, i.e., we do not recurse to chunks. Therefore, there is no need to
 	 * take locks on the chunks here.
 	 */
-	if (!is_multitransaction && !is_distributed)
+	if (!is_multitransaction)
 	{
 		ListCell *lc;
 		List *inheritors = NIL;

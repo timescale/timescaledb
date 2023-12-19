@@ -15,10 +15,6 @@
 # In particular, we cannot create new roles and we cannot create new
 # databases.
 #
-# For this version, we focus on single-node update and smoke testing
-# cannot (necessarily) be done with multinode setups. Feel free to try
-# though.
-#
 # The following environment variables can be set:
 # - UPDATE_FROM_TAG is the version to update from (optional).
 #

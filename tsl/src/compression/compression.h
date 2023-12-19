@@ -277,10 +277,15 @@ typedef struct BatchFilter
 	NameData column_name;
 	/* Filter operation used */
 	StrategyNumber strategy;
+	/* Collation to be used by the operator */
+	Oid collation;
+	/* Operator code used */
+	RegProcedure opcode;
 	/* Value to compare with */
 	Const *value;
 	/* IS NULL or IS NOT NULL */
 	bool is_null_check;
+	bool is_null;
 } BatchFilter;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);

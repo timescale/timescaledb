@@ -49,7 +49,6 @@ extern bool ts_partitioning_func_is_valid(regproc funcoid, DimensionType dimtype
 extern PartitioningInfo *ts_partitioning_info_create(const char *schema, const char *partfunc,
 													 const char *partcol, DimensionType dimtype,
 													 Oid relid);
-extern List *ts_partitioning_func_qualified_name(PartitioningFunc *pf);
 extern TSDLLEXPORT Datum ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation,
 													Datum value);
 

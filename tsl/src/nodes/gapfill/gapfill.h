@@ -13,7 +13,6 @@
 #define GAPFILL_LOCF_FUNCTION "locf"
 #define GAPFILL_INTERPOLATE_FUNCTION "interpolate"
 
-bool gapfill_in_expression(Expr *node);
 void plan_add_gapfill(PlannerInfo *root, RelOptInfo *group_rel);
 void gapfill_adjust_window_targetlist(PlannerInfo *root, RelOptInfo *input_rel,
 									  RelOptInfo *output_rel);

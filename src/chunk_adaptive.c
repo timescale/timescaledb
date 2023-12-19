@@ -441,11 +441,6 @@ ts_calculate_chunk_interval(PG_FUNCTION_ARGS)
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
 				 errmsg("permission denied for table %s", NameStr(ht->fd.table_name))));
 
-	if (hypertable_is_distributed(ht))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("adaptive chunking not supported on distributed hypertables")));
-
 	dim = ts_hyperspace_get_dimension_by_id(ht->space, dimension_id);
 
 	Assert(dim != NULL);

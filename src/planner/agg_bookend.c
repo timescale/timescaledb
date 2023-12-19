@@ -672,7 +672,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	{
 		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
 
-		if (ts_rte_is_hypertable(rte, NULL))
+		if (ts_rte_is_hypertable(rte))
 		{
 			ListCell *prev = NULL;
 			ListCell *next = list_head(subroot->append_rel_list);
@@ -715,7 +715,7 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	{
 		RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc);
 
-		if (ts_rte_is_hypertable(rte, NULL))
+		if (ts_rte_is_hypertable(rte))
 			rte->inh = true;
 	}
 

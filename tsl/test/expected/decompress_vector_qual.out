@@ -569,6 +569,12 @@ select count(*) from vectorqual where ts > case when '2021-01-01'::timestamp < '
      0
 (1 row)
 
+select count(*) from vectorqual where ts < LOCALTIMESTAMP + '3 years'::interval;
+ count 
+-------
+     5
+(1 row)
+
 -- This filter is not vectorized because the 'timestamp > timestamptz'
 -- operator is stable, not immutable, because it uses the current session
 -- timezone. We could transform it to something like
@@ -663,6 +669,14 @@ select * from date_table where ts <  '2021-01-02';
 ------------
  01-01-2021
 (1 row)
+
+select * from date_table where ts <  CURRENT_DATE;
+     ts     
+------------
+ 01-03-2021
+ 01-02-2021
+ 01-01-2021
+(3 rows)
 
 -- Vectorized comparison for text
 create table t(ts int, d int, a text);

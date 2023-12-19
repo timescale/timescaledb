@@ -25,7 +25,6 @@
 
 typedef struct Chunk Chunk;
 typedef struct Hypertable Hypertable;
-typedef struct TsFdwRelInfo TsFdwRelInfo;
 typedef struct TimescaleDBPrivate
 {
 	bool appends_ordered;
@@ -33,9 +32,6 @@ typedef struct TimescaleDBPrivate
 	int order_attno;
 	List *nested_oids;
 	List *chunk_oids;
-	List *serverids;
-	Relids server_relids;
-	TsFdwRelInfo *fdw_relation_info;
 
 	/* Cached chunk data for the chunk relinfo. */
 	Chunk *cached_chunk_struct;
@@ -44,11 +40,9 @@ typedef struct TimescaleDBPrivate
 	List *compressed_ec_em_pairs;
 } TimescaleDBPrivate;
 
-extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);
+extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_contain_param(Node *node);
-
-extern TSDLLEXPORT DataFetcherType ts_data_node_fetcher_scan_type;
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)
