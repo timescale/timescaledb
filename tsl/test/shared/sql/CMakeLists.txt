@@ -7,6 +7,7 @@ set(TEST_FILES_SHARED
     constraint_exclusion_prepared.sql
     decompress_join.sql
     decompress_placeholdervar.sql
+    security_barrier.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED

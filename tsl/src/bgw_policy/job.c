@@ -427,62 +427,6 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 	}
 }
 
-/*
- * Invoke recompress_chunk via fmgr so that the call can be deparsed and sent to
- * remote data nodes.
- */
-static void
-policy_invoke_recompress_chunk(Chunk *chunk)
-{
-	EState *estate;
-	ExprContext *econtext;
-	FuncExpr *fexpr;
-	Oid relid = chunk->table_id;
-	Oid restype;
-	Oid func_oid;
-	List *args = NIL;
-	bool isnull;
-	Const *argarr[RECOMPRESS_CHUNK_NARGS] = {
-		makeConst(REGCLASSOID,
-				  -1,
-				  InvalidOid,
-				  sizeof(relid),
-				  ObjectIdGetDatum(relid),
-				  false,
-				  false),
-		castNode(Const, makeBoolConst(true, false)),
-	};
-	Oid type_id[RECOMPRESS_CHUNK_NARGS] = { REGCLASSOID, BOOLOID };
-	char *schema_name = ts_extension_schema_name();
-	List *fqn = list_make2(makeString(schema_name), makeString(RECOMPRESS_CHUNK_FUNCNAME));
-
-	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
-					 "argarr and type_id should have matching lengths");
-
-	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
-	Assert(func_oid); /* LookupFuncName should not return an invalid OID */
-
-	/* Prepare the function expr with argument list */
-	get_func_result_type(func_oid, &restype, NULL);
-
-	for (size_t i = 0; i < lengthof(argarr); i++)
-		args = lappend(args, argarr[i]);
-
-	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
-	fexpr->funcretset = false;
-
-	estate = CreateExecutorState();
-	econtext = CreateExprContext(estate);
-
-	ExprState *exprstate = ExecInitExpr(&fexpr->xpr, NULL);
-
-	ExecEvalExprSwitchContext(exprstate, econtext, &isnull);
-
-	/* Cleanup */
-	FreeExprContext(econtext, false);
-	FreeExecutorState(estate);
-}
-
 /* Read configuration for compression job from config object. */
 void
 policy_compression_read_and_validate_config(Jsonb *config, PolicyCompressionData *policy_data)
@@ -521,12 +465,11 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	ListCell *lc;
 	const Dimension *dim;
 	PolicyCompressionData policy_data;
-	bool distributed, used_portalcxt = false;
+	bool used_portalcxt = false;
 	MemoryContext saved_cxt, multitxn_cxt;
 
 	policy_recompression_read_and_validate_config(config, &policy_data);
 	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
-	distributed = hypertable_is_distributed(policy_data.hypertable);
 	/* we want the chunk id list to survive across transactions. So alloc in
 	 * a different context
 	 */
@@ -570,10 +513,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
 		if (!chunk || !ts_chunk_is_unordered(chunk))
 			continue;
-		if (distributed)
-			policy_invoke_recompress_chunk(chunk);
-		else
-			tsl_recompress_chunk_wrapper(chunk);
+		tsl_recompress_chunk_wrapper(chunk);
 
 		elog(LOG,
 			 "completed recompressing chunk \"%s.%s\"",

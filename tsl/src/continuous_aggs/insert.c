@@ -326,11 +326,6 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	if (!entry->value_is_set)
 		return;
 
-	Cache *ht_cache = ts_hypertable_cache_pin();
-	Hypertable *ht = ts_hypertable_cache_get_entry_by_id(ht_cache, entry->hypertable_id);
-	bool is_distributed_member = hypertable_is_distributed_member(ht);
-	ts_cache_release(ht_cache);
-
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
 	 * use a stronger isolation level, the isolation thereshold could update without us seeing the
 	 * new value. In order to prevent serialization errors, we always append invalidation entries in
@@ -338,7 +333,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	 * threshold. The same applies for distributed member invalidation triggers of hypertables.
 	 * The materializer can handle invalidations that are beyond the threshold gracefully.
 	 */
-	if (IsolationUsesXactSnapshot() || is_distributed_member)
+	if (IsolationUsesXactSnapshot())
 	{
 		invalidation_hyper_log_add_entry(entry->entry_id,
 										 entry->lowest_modified_value,

@@ -146,12 +146,6 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 	fmgr_info_cxt(funcoid, &pf->func_fmgr, CurrentMemoryContext);
 }
 
-List *
-ts_partitioning_func_qualified_name(PartitioningFunc *pf)
-{
-	return list_make2(makeString(NameStr(pf->schema)), makeString(NameStr(pf->name)));
-}
-
 static Oid
 find_text_coercion_func(Oid type)
 {

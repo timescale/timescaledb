@@ -30,8 +30,6 @@ extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
-extern TSDLLEXPORT bool ts_guc_enable_per_data_node_queries;
-extern TSDLLEXPORT bool ts_guc_enable_parameterized_data_node_scan;
 extern TSDLLEXPORT bool ts_guc_enable_async_append;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
 extern TSDLLEXPORT bool ts_guc_enable_chunkwise_aggregation;
@@ -57,47 +55,9 @@ extern char *ts_last_tune_time;
 extern char *ts_last_tune_version;
 extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT int ts_guc_max_insert_batch_size;
-extern TSDLLEXPORT bool ts_guc_enable_connection_binary_data;
-extern TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes;
-extern TSDLLEXPORT char *ts_guc_ssl_dir;
-extern TSDLLEXPORT char *ts_guc_passfile;
-extern TSDLLEXPORT bool ts_guc_enable_remote_explain;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
-
-typedef enum DataFetcherType
-{
-	AutoFetcherType = 1, /* Skip 0 to better catch uninitialized values. */
-	CopyFetcherType,
-	CursorFetcherType,
-	PreparedStatementFetcherType,
-} DataFetcherType;
-
-extern TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher;
-
-typedef enum HypertableDistType
-{
-	HYPERTABLE_DIST_AUTO,
-	HYPERTABLE_DIST_LOCAL,
-	HYPERTABLE_DIST_DISTRIBUTED
-} HypertableDistType;
-
-extern TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default;
-extern TSDLLEXPORT int ts_guc_hypertable_replication_factor_default;
-
-typedef enum DistCopyTransferFormat
-{
-	DCTF_Auto,
-	DCTF_Binary,
-	DCTF_Text
-} DistCopyTransferFormat;
-
-extern TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format;
-
-/* Hook for plugins to allow additional SSL options */
-typedef void (*set_ssl_options_hook_type)(const char *user_name);
-extern TSDLLEXPORT set_ssl_options_hook_type ts_set_ssl_options_hook;
 
 #ifdef TS_DEBUG
 extern bool ts_shutdown_bgw;
@@ -120,8 +80,6 @@ extern TSDLLEXPORT bool ts_guc_debug_compression_path_info;
 extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
 void _guc_init(void);
-void _guc_fini(void);
-extern TSDLLEXPORT void ts_assign_ssl_options_hook(void *fn);
 
 typedef enum
 {

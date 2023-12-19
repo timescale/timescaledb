@@ -22,7 +22,6 @@
 #include "dimension.h"
 #include "guc.h"
 #include "nodes/hypertable_modify.h"
-#include "ts_catalog/chunk_data_node.h"
 #include "hypercube.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
@@ -164,7 +163,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 	if (found)
 	{
-		if (cis->chunk_compressed && cis->chunk_data_nodes == NIL)
+		if (cis->chunk_compressed)
 		{
 			/*
 			 * If this is an INSERT into a compressed chunk with UNIQUE or

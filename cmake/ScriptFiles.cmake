@@ -77,7 +77,8 @@ list(APPEND SOURCE_FILES
 
 # These files should be pre-pended to update scripts so that they are executed
 # before anything else during updates
-set(PRE_UPDATE_FILES updates/pre-update.sql)
+set(PRE_UPDATE_FILES updates/pre-version-change.sql updates/pre-update.sql)
+set(PRE_DOWNGRADE_FILES updates/pre-version-change.sql)
 
 # The POST_UPDATE_FILES should be executed as the last part of the update
 # script. sets state for executing POST_UPDATE_FILES during ALTER EXTENSION

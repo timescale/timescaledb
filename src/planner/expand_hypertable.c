@@ -1157,106 +1157,6 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	return find_children_chunks(hri, ht, num_chunks);
 }
 
-/*
- * Create partition expressions for a hypertable.
- *
- * Build an array of partition expressions where each element represents valid
- * expressions on a particular partitioning key.
- *
- * The partition expressions are used by, e.g., group_by_has_partkey() to check
- * whether a GROUP BY clause covers all partitioning dimensions.
- *
- * For dimensions with a partitioning function, we can support either
- * expressions on the plain key (column) or the partitioning function applied
- * to the key. For instance, the queries
- *
- * SELECT time, device, avg(temp)
- * FROM hypertable
- * GROUP BY 1, 2;
- *
- * and
- *
- * SELECT time_func(time), device, avg(temp)
- * FROM hypertable
- * GROUP BY 1, 2;
- *
- * are both amenable to aggregate push down if "time" is supported by the
- * partitioning function "time_func" and "device" is also a partitioning
- * dimension.
- */
-static List **
-get_hypertable_partexprs(Hypertable *ht, Query *parse, Index varno)
-{
-	int i;
-	List **partexprs;
-
-	Assert(NULL != ht->space);
-
-	partexprs = palloc0(sizeof(List *) * ht->space->num_dimensions);
-
-	for (i = 0; i < ht->space->num_dimensions; i++)
-	{
-		Dimension *dim = &ht->space->dimensions[i];
-
-		partexprs[i] = ts_dimension_get_partexprs(dim, varno);
-	}
-
-	return partexprs;
-}
-
-#define PARTITION_STRATEGY_MULTIDIM 'm'
-
-/*
- * Partition info for hypertables.
- *
- * Build a "fake" partition scheme for a hypertable that makes the planner
- * believe this is a PostgreSQL partitioned table for planning purposes. In
- * particular, this will make the planner consider partitionwise aggregations
- * when applicable.
- *
- * Partitionwise aggregation can either be FULL or PARTIAL. The former means
- * that the aggregation can be performed independently on each partition
- * (chunk) without a finalize step which is needed in PARTIAL. FULL requires
- * that the GROUP BY clause contains all hypertable partitioning
- * dimensions. This requirement is enforced by creating a partitioning scheme
- * that covers multiple attributes, i.e., one per dimension. This works well
- * since the "shallow" (one-level hierarchy) of a multi-dimensional hypertable
- * is similar to a one-level partitioned PostgreSQL table where the
- * partitioning key covers multiple attributes.
- *
- * Note that we use a partition scheme with a strategy that does not exist in
- * PostgreSQL. This makes PostgreSQL raise errors when this partition scheme is
- * used in places that require a valid partition scheme with a supported
- * strategy.
- */
-static void
-build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *hyper_rel,
-								int nparts)
-{
-	PartitionScheme part_scheme = palloc0(sizeof(PartitionSchemeData));
-	PartitionBoundInfo boundinfo = palloc0(sizeof(PartitionBoundInfoData));
-
-	/* We only set the info needed for planning */
-	part_scheme->partnatts = ht->space->num_dimensions;
-	part_scheme->strategy = PARTITION_STRATEGY_MULTIDIM;
-	hyper_rel->nparts = nparts;
-	part_scheme->partopfamily = palloc0(part_scheme->partnatts * sizeof(Oid));
-	part_scheme->partopcintype = palloc0(part_scheme->partnatts * sizeof(Oid));
-	part_scheme->partcollation = palloc0(part_scheme->partnatts * sizeof(Oid));
-	hyper_rel->part_scheme = part_scheme;
-	hyper_rel->partexprs = get_hypertable_partexprs(ht, root->parse, hyper_rel->relid);
-	hyper_rel->nullable_partexprs = (List **) palloc0(sizeof(List *) * part_scheme->partnatts);
-
-	/* PartitionBoundInfo is used for ordered append. We use a strategy that
-	 * will avoid triggering an ordered append. */
-	boundinfo->strategy = PARTITION_STRATEGY_MULTIDIM;
-	boundinfo->default_index = -1;
-	boundinfo->null_index = -1;
-
-	hyper_rel->boundinfo = boundinfo;
-	hyper_rel->part_rels = palloc0(sizeof(*hyper_rel->part_rels) * nparts);
-}
-
 static bool
 timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 {
@@ -1308,7 +1208,6 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 void
 ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel)
 {
-	TimescaleDBPrivate *priv = rel->fdw_private;
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
 	List *inh_oids = NIL;
@@ -1368,7 +1267,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	/* nothing to do here if we have no chunks and no data nodes */
-	if (list_length(inh_oids) + list_length(ht->data_nodes) == 0)
+	if (list_length(inh_oids) == 0)
 		return;
 
 	oldrelation = table_open(parent_oid, NoLock);
@@ -1378,15 +1277,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * children to them. We include potential data node rels we might need to
 	 * create in case of a distributed hypertable.
 	 */
-	expand_planner_arrays(root, list_length(inh_oids) + list_length(ht->data_nodes));
-
-	/* Adding partition info will make PostgreSQL consider the inheritance
-	 * children as part of a partitioned relation. This will enable
-	 * partitionwise aggregation for distributed queries. */
-	if (hypertable_is_distributed(ht))
-	{
-		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
-	}
+	expand_planner_arrays(root, list_length(inh_oids));
 
 	foreach (l, inh_oids)
 	{
@@ -1459,44 +1350,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	table_close(oldrelation, NoLock);
-
-	priv->serverids = ts_hypertable_get_data_node_serverids_list(ht);
-
-	/* For distributed hypertables, we'd like to turn per-chunk plans into
-	 * per-data_node plans. We proactively add RTEs for the per-data_node rels here
-	 * because the PostgreSQL planning code that we call to replan the
-	 * per-data_node queries assumes there are RTEs for each rel that is considered
-	 * a "partition."
-	 *
-	 * Note that each per-data_node RTE reuses the relid (OID) of the parent
-	 * hypertable relation. This makes sense since each data node's
-	 * hypertable is an identical (albeit partial) version of the access node's
-	 * hypertable. The upside of this is that the planner can plan remote
-	 * queries to take into account the indexes on the hypertable to produce
-	 * more efficient remote queries. In contrast, chunks are foreign tables so
-	 * they do not have indexes.
-	 */
-	foreach (l, priv->serverids)
-	{
-		RangeTblEntry *data_node_rte = copyObject(rte);
-
-		data_node_rte->inh = false;
-		data_node_rte->ctename = NULL;
-		data_node_rte->securityQuals = NIL;
-#if PG16_LT
-		data_node_rte->requiredPerms = 0;
-#else
-		/* Since PG16, the permission info is maintained separetely. Unlink
-		 * the old perminfo from the RTE to disable permission checking.
-		 */
-		data_node_rte->perminfoindex = 0;
-#endif
-		parse->rtable = lappend(parse->rtable, data_node_rte);
-		rti = list_length(parse->rtable);
-		root->simple_rte_array[rti] = data_node_rte;
-		root->simple_rel_array[rti] = NULL;
-		priv->server_relids = bms_add_member(priv->server_relids, rti);
-	}
 
 	ts_add_append_rel_infos(root, appinfos);
 

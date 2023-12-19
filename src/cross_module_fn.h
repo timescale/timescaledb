@@ -113,10 +113,6 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_validate_query;
 	PGFunction invalidation_cagg_log_add_entry;
 	PGFunction invalidation_hyper_log_add_entry;
-	void (*remote_invalidation_log_delete)(int32 raw_hypertable_id,
-										   ContinuousAggHypertableStatus caggstatus);
-	PGFunction drop_dist_ht_invalidation_trigger;
-	void (*remote_drop_dist_ht_invalidation_trigger)(int32 raw_hypertable_id);
 	PGFunction invalidation_process_hypertable_log;
 	PGFunction invalidation_process_cagg_log;
 	PGFunction cagg_try_repair;
@@ -154,7 +150,6 @@ typedef struct CrossModuleFunctions
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	void (*cache_syscache_invalidate)(Datum arg, int cacheid, uint32 hashvalue);
 	PGFunction chunk_get_relstats;
 	PGFunction chunk_get_colstats;
 	PGFunction chunk_create_empty_table;

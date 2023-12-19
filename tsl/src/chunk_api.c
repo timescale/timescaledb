@@ -31,17 +31,14 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "chunk_api.h"
-#include "data_node.h"
 #include "errors.h"
 #include "error_utils.h"
 #include "hypercube.h"
 #include "hypertable_cache.h"
 #include "utils.h"
-#include "deparse.h"
 
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
-#include "ts_catalog/chunk_data_node.h"
 
 /*
  * These values come from the pg_type table.

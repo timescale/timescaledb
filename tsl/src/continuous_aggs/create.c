@@ -62,7 +62,6 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include "ts_catalog/hypertable_data_node.h"
 #include "dimension.h"
 #include "extension_constants.h"
 #include "func_cache.h"
@@ -75,8 +74,6 @@
 #include "utils.h"
 #include "errors.h"
 #include "refresh.h"
-#include "remote/dist_commands.h"
-#include "deparse.h"
 #include "timezones.h"
 #include "guc.h"
 
@@ -265,9 +262,7 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 											 NULL,
 											 NULL,
 											 NULL,
-											 chunk_sizing_info,
-											 HYPERTABLE_REGULAR,
-											 NULL);
+											 chunk_sizing_info);
 	if (!created)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -348,43 +343,6 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 #endif
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
-	if (hypertable_is_distributed(ht))
-	{
-		DistCmdResult *result;
-		List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
-		List *cmd_descriptors = NIL; /* same order as ht->data_nodes */
-		DistCmdDescr *cmd_descr_data = NULL;
-		ListCell *cell;
-
-		unsigned i = 0;
-		cmd_descr_data = palloc(list_length(data_node_list) * sizeof(*cmd_descr_data));
-		foreach (cell, ht->data_nodes)
-		{
-			HypertableDataNode *node = lfirst(cell);
-			char node_hypertable_id_str[12];
-			CreateTrigStmt remote_stmt = stmt_template;
-
-			pg_ltoa(node->fd.node_hypertable_id, node_hypertable_id_str);
-			pg_ltoa(node->fd.hypertable_id, hypertable_id_str);
-
-			remote_stmt.args =
-				list_make2(makeString(node_hypertable_id_str), makeString(hypertable_id_str));
-			cmd_descr_data[i].sql = deparse_create_trigger(&remote_stmt);
-			cmd_descr_data[i].params = NULL;
-			cmd_descriptors = lappend(cmd_descriptors, &cmd_descr_data[i++]);
-		}
-
-		result =
-			ts_dist_multi_cmds_params_invoke_on_data_nodes(cmd_descriptors, data_node_list, true);
-		if (result)
-			ts_dist_cmd_close_response(result);
-		/*
-		 * FALL-THROUGH
-		 * We let the Access Node create a trigger as well, even though it is not used for data
-		 * modifications. We use the Access Node trigger as a check for existence of the remote
-		 * triggers.
-		 */
-	}
 	CreateTrigStmt local_stmt = stmt_template;
 	pg_ltoa(hypertable_id, hypertable_id_str);
 	local_stmt.args = list_make1(makeString(hypertable_id_str));

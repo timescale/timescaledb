@@ -150,12 +150,6 @@ ts_http_response_state_content_length(HttpResponseState *state)
 	return state->content_length;
 }
 
-HttpHeader *
-ts_http_response_state_headers(HttpResponseState *state)
-{
-	return state->headers;
-}
-
 static bool
 http_parse_version(HttpResponseState *state)
 {

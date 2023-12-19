@@ -84,7 +84,6 @@ CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
 CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);
 CROSSMODULE_WRAPPER(invalidation_hyper_log_add_entry);
-CROSSMODULE_WRAPPER(drop_dist_ht_invalidation_trigger);
 CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
 CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
 CROSSMODULE_WRAPPER(cagg_try_repair);
@@ -219,12 +218,6 @@ process_cagg_try_repair(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
-static void
-cache_syscache_invalidate_default(Datum arg, int cacheid, uint32 hashvalue)
-{
-	/* The default is a no-op */
-}
-
 static DDLResult
 process_cagg_viewstmt_default(Node *stmt, const char *query_string, void *pstmt,
 							  WithClauseResult *with_clause_options)
@@ -345,7 +338,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
 	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
-	.drop_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
 	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
 	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
@@ -374,7 +366,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
-	.cache_syscache_invalidate = cache_syscache_invalidate_default,
 	.chunk_get_relstats = error_no_default_fn_pg_community,
 	.chunk_get_colstats = error_no_default_fn_pg_community,
 	.chunk_create_empty_table = error_no_default_fn_pg_community,

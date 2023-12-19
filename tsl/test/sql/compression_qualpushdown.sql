@@ -153,3 +153,31 @@ EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123
 
 DROP table deleteme;
 DROP table deleteme_with_bytea;
+
+-- test sqlvaluefunction pushdown
+CREATE TABLE svf_pushdown(time timestamptz, c_date date, c_time time, c_timetz timetz, c_timestamp timestamptz, c_name text);
+SELECT table_name FROM create_hypertable('svf_pushdown', 'time');
+ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentby='c_date,c_time, c_timetz,c_timestamp,c_name');
+
+INSERT INTO svf_pushdown SELECT '2020-01-01';
+SELECT compress_chunk(show_chunks('svf_pushdown'));
+
+-- constraints should be pushed down into scan below decompresschunk in all cases
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_date = CURRENT_DATE;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timetz = CURRENT_TIME(1);
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = CURRENT_TIMESTAMP(1);
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_time = LOCALTIME(1);
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_timestamp = LOCALTIMESTAMP(1);
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = USER;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = SESSION_USER;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_CATALOG;
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
+
+-- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = current_query();
+
