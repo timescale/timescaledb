@@ -15,6 +15,7 @@
 typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "compat/compat.h"
+#include "nodes/decompress_chunk/detoaster.h"
 #include "hypertable.h"
 #include "segment_meta.h"
 #include "ts_catalog/compression_settings.h"
@@ -148,6 +149,8 @@ typedef struct RowDecompressor
 	int64 tuples_decompressed;
 
 	TupleTableSlot **decompressed_slots;
+
+	Detoaster detoaster;
 } RowDecompressor;
 
 /*
@@ -358,13 +361,14 @@ extern void row_compressor_init(CompressionSettings *settings, RowCompressor *ro
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								bool reset_sequence, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
-extern void row_compressor_finish(RowCompressor *row_compressor);
+extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
+extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if

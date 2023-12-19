@@ -943,7 +943,7 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 	table_close(compressed_chunk_rel, NoLock);
 	table_close(uncompressed_chunk_rel, NoLock);
 
-	row_compressor_finish(&row_compressor);
+	row_compressor_close(&row_compressor);
 
 	if (OidIsValid(row_compressor.index_oid))
 	{
@@ -1194,10 +1194,6 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	/******************** row decompressor **************/
 
 	RowDecompressor decompressor = build_decompressor(compressed_chunk_rel, uncompressed_chunk_rel);
-	/* do not need the indexes on the uncompressed chunk as we do not write to it anymore */
-	ts_catalog_close_indexes(decompressor.indexstate);
-	/* also do not need estate because we don't insert into indexes */
-	FreeExecutorState(decompressor.estate);
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
 	row_compressor_init(settings,
@@ -1392,12 +1388,12 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 													   row_compressor.rowcnt_pre_compression,
 													   row_compressor.num_compressed_rows);
 
-	row_compressor_finish(&row_compressor);
-	FreeBulkInsertState(decompressor.bistate);
+	row_compressor_close(&row_compressor);
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
 	index_close(index_rel, AccessExclusiveLock);
+	row_decompressor_close(&decompressor);
 
 #if PG14_LT
 	int options = 0;
