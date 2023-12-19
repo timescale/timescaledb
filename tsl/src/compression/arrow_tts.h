@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/tupdesc.h>
+#include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
 #include <lib/ilist.h>
 #include <nodes/bitmapset.h>
@@ -57,12 +58,13 @@ typedef struct ArrowTupleTableSlot
 	TupleTableSlot *noncompressed_slot;
 	/* compressed slot: used when reading from the compressed child relation */
 	TupleTableSlot *compressed_slot;
+	AttrNumber count_attnum; /* Attribute number of the count metadata in compressed slot */
 	ArrowArray **arrow_columns;
 	uint16 tuple_index; /* Index of this particular tuple in the compressed
 						 * (columnar data) child tuple. Note that the first
 						 * value has index 1. If the index is 0 it means the
 						 * child slot points to a non-compressed tuple. */
-
+	uint16 total_row_count;
 	size_t arrow_column_cache_lru_count; /* Arrow column cache LRU list count */
 	dlist_head arrow_column_cache_lru;	 /* Arrow column cache LRU list */
 	HTAB *arrow_column_cache;			 /* Arrow column cache */
@@ -71,6 +73,7 @@ typedef struct ArrowTupleTableSlot
 	MemoryContext arrowdata_mcxt;
 	MemoryContext decompression_mcxt;
 	Bitmapset *segmentby_columns;
+	Bitmapset *valid_columns; /* Per-column validity replacing "nvalid" */
 	int16 *attrs_offset_map;
 } ArrowTupleTableSlot;
 
@@ -133,6 +136,7 @@ build_attribute_offset_map(const TupleDesc tupdesc, const TupleDesc ctupdesc,
 	return attrs_offset_map;
 }
 
+extern const int16 *arrow_slot_get_attribute_offset_map(TupleTableSlot *slot);
 extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_index);
 
 #define TTS_IS_ARROWTUPLE(slot) ((slot)->tts_ops == &TTSOpsArrowTuple)
@@ -226,6 +230,24 @@ arrow_slot_get_compressed_slot(TupleTableSlot *slot, const TupleDesc tupdesc)
 
 		oldmctx = MemoryContextSwitchTo(slot->tts_mcxt);
 		aslot->compressed_slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsBufferHeapTuple);
+		/* Set total row count */
+
+		aslot->count_attnum = InvalidAttrNumber;
+
+		for (int i = 0; i < tupdesc->natts; i++)
+		{
+			Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
+
+			if (namestrcmp(&attr->attname, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
+			{
+				aslot->count_attnum = AttrOffsetGetAttrNumber(i);
+				break;
+			}
+		}
+
+		if (aslot->count_attnum == InvalidAttrNumber)
+			elog(ERROR, "missing count metadata in compressed relation");
+
 		MemoryContextSwitchTo(oldmctx);
 	}
 
@@ -243,6 +265,72 @@ arrow_slot_get_noncompressed_slot(TupleTableSlot *slot)
 	return aslot->noncompressed_slot;
 }
 
-bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
+static inline uint16
+arrow_slot_total_row_count(TupleTableSlot *slot)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	Assert(aslot->total_row_count > 0);
+
+	return aslot->total_row_count;
+}
+
+static inline bool
+arrow_slot_is_compressed(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	return aslot->tuple_index != InvalidTupleIndex;
+}
+
+/*
+ * Get the row index into the compressed tuple.
+ *
+ * The index is 1-based (starts at 1).
+ * InvalidTupleindex means this is not a compressed tuple.
+ */
+static inline uint16
+arrow_slot_row_index(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	return aslot->tuple_index;
+}
+
+/*
+ * Get the current offset into the arrow array.
+ *
+ * The offset is 0-based. Returns 0 also for a non-compressed tuple.
+ */
+static inline uint16
+arrow_slot_arrow_offset(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	return aslot->tuple_index == InvalidTupleIndex ? 0 : aslot->tuple_index - 1;
+}
+
+static inline void
+arrow_slot_mark_consumed(TupleTableSlot *slot)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+	aslot->tuple_index = aslot->total_row_count;
+}
+
+static inline bool
+arrow_slot_is_consumed(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	return aslot->tuple_index == aslot->total_row_count;
+}
+
+extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
+extern const ArrowArray *arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno);
 
 #endif /* PG_ARROW_TUPTABLE_H */
