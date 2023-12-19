@@ -24,7 +24,7 @@
  * columns, the new column's attribute number will be higher on the compressed
  * relation compared to the regular one.
  */
-static const int16 *
+const int16 *
 arrow_slot_get_attribute_offset_map(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
@@ -55,7 +55,9 @@ tts_arrow_init(TupleTableSlot *slot)
 
 	aslot->arrow_columns = NULL;
 	aslot->segmentby_columns = NULL;
+	aslot->valid_columns = NULL;
 	aslot->tuple_index = InvalidTupleIndex;
+	aslot->total_row_count = 0;
 	aslot->decompression_mcxt = AllocSetContextCreate(slot->tts_mcxt,
 													  "bulk decompression",
 													  /* minContextSize = */ 0,
@@ -168,9 +170,14 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 		/* Stored a non-compressed tuple so clear the compressed slot */
 		if (NULL != aslot->compressed_slot)
 			ExecClearTuple(aslot->compressed_slot);
+
+		/* Total row count is always 1 for a regular (non-compressed) tuple */
+		aslot->total_row_count = 1;
 	}
 	else
 	{
+		bool isnull;
+
 		/* The slot could already hold the decompressed data for the index we
 		 * are storing, so only clear the decompressed data if this is truly a
 		 * new compressed tuple being stored. */
@@ -197,10 +204,20 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 		tid_to_compressed_tid(&slot->tts_tid, &child_slot->tts_tid, tuple_index);
 		/* Stored a compressed tuple so clear the non-compressed slot */
 		ExecClearTuple(aslot->noncompressed_slot);
+
+		/* Set total row count */
+		aslot->total_row_count = slot_getattr(child_slot, aslot->count_attnum, &isnull);
+		Assert(!isnull);
 	}
 
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;
+
+	if (aslot->valid_columns != NULL)
+	{
+		pfree(aslot->valid_columns);
+		aslot->valid_columns = NULL;
+	}
 	aslot->child_slot = child_slot;
 	aslot->tuple_index = tuple_index;
 }
@@ -304,6 +321,67 @@ is_compressed_col(const TupleDesc tupdesc, AttrNumber attno)
 }
 
 static void
+set_attr_value(TupleTableSlot *slot, AttrNumber attno)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	const int16 *attrs_map = arrow_slot_get_attribute_offset_map(slot);
+	const int16 attoff = AttrNumberGetAttrOffset(attno);
+	const int16 cattoff = attrs_map[attoff];
+	const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
+
+	/* Check if value is already set */
+	if (bms_is_member(attno, aslot->valid_columns))
+		return;
+
+	if (bms_is_member(attno, aslot->segmentby_columns))
+	{
+		/* Segment-by column. Value is not compressed so get directly from
+		 * child slot. */
+		slot->tts_values[attoff] =
+			slot_getattr(aslot->child_slot, cattno, &slot->tts_isnull[attoff]);
+	}
+	else if (aslot->arrow_columns[attoff] == NULL)
+	{
+		/* Since the column is not the segment-by column, and there is no
+		 * decompressed data, the column must be NULL. Use the default
+		 * value. */
+		slot->tts_values[attoff] =
+			getmissingattr(slot->tts_tupleDescriptor, attno, &slot->tts_isnull[attoff]);
+	}
+	else
+	{
+		const char *restrict values = aslot->arrow_columns[attoff]->buffers[1];
+		const uint64 *restrict validity = aslot->arrow_columns[attoff]->buffers[0];
+		int16 value_bytes = get_typlen(slot->tts_tupleDescriptor->attrs[attoff].atttypid);
+
+		/*
+		 * The conversion of Datum to more narrow types will truncate
+		 * the higher bytes, so we don't care if we read some garbage
+		 * into them, and can always read 8 bytes. These are unaligned
+		 * reads, so technically we have to do memcpy.
+		 */
+		uint64 value;
+		memcpy(&value, &values[value_bytes * (aslot->tuple_index - 1)], 8);
+
+#ifdef USE_FLOAT8_BYVAL
+		Datum datum = Int64GetDatum(value);
+#else
+		/*
+		 * On 32-bit systems, the data larger than 4 bytes go by
+		 * reference, so we have to jump through these hoops.
+		 */
+		Datum datum = (value_bytes <= 4) ? Int32GetDatum((uint32) value) : Int64GetDatum(value);
+#endif
+		slot->tts_values[attoff] = datum;
+		slot->tts_isnull[attoff] = !arrow_row_is_valid(validity, (aslot->tuple_index - 1));
+	}
+
+	MemoryContext oldmcxt = MemoryContextSwitchTo(slot->tts_mcxt);
+	aslot->valid_columns = bms_add_member(aslot->valid_columns, attno);
+	MemoryContextSwitchTo(oldmcxt);
+}
+
+static void
 tts_arrow_getsomeattrs(TupleTableSlot *slot, int attnum)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
@@ -352,61 +430,7 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int attnum)
 
 	/* Build the non-compressed tuple values array from the cached data. */
 	for (int i = 0; i < attnum; i++)
-	{
-		const int16 cattoff = attrs_map[i];
-		const AttrNumber attno = AttrOffsetGetAttrNumber(i);
-		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
-
-		if (bms_is_member(attno, aslot->segmentby_columns))
-		{
-			/* Segment-by column. Value is not compressed so get directly from
-			 * child slot. */
-			slot->tts_values[i] = slot_getattr(aslot->child_slot, cattno, &slot->tts_isnull[i]);
-		}
-		else if (aslot->arrow_columns[i] == NULL)
-		{
-			/* Since the column is not the segment-by column, and there is no
-			 * decompressed data, the column must be NULL. Use the default
-			 * value. */
-			slot->tts_values[i] =
-				getmissingattr(slot->tts_tupleDescriptor, attno, &slot->tts_isnull[i]);
-		}
-		else
-		{
-			const char *restrict values = aslot->arrow_columns[i]->buffers[1];
-			const uint64 *restrict validity = aslot->arrow_columns[i]->buffers[0];
-			int16 value_bytes = get_typlen(slot->tts_tupleDescriptor->attrs[i].atttypid);
-
-			/*
-			 * The conversion of Datum to more narrow types will truncate
-			 * the higher bytes, so we don't care if we read some garbage
-			 * into them, and can always read 8 bytes. These are unaligned
-			 * reads, so technically we have to do memcpy.
-			 */
-			uint64 value;
-			memcpy(&value, &values[value_bytes * (aslot->tuple_index - 1)], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-			Datum datum = Int64GetDatum(value);
-#else
-			/*
-			 * On 32-bit systems, the data larger than 4 bytes go by
-			 * reference, so we have to jump through these hoops.
-			 */
-			Datum datum;
-			if (value_bytes <= 4)
-			{
-				datum = Int32GetDatum((uint32) value);
-			}
-			else
-			{
-				datum = Int64GetDatum(value);
-			}
-#endif
-			slot->tts_values[i] = datum;
-			slot->tts_isnull[i] = !arrow_row_is_valid(validity, (aslot->tuple_index - 1));
-		}
-	}
+		set_attr_value(slot, AttrOffsetGetAttrNumber(i));
 
 	slot->tts_nvalid = attnum;
 }
@@ -557,6 +581,36 @@ tts_arrow_copy_minimal_tuple(TupleTableSlot *slot)
 	slot_getallattrs(slot);
 	copy_slot_values(slot, aslot->noncompressed_slot, slot->tts_tupleDescriptor->natts);
 	return ExecCopySlotMinimalTuple(aslot->noncompressed_slot);
+}
+
+const ArrowArray *
+arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	int attoff = AttrNumberGetAttrOffset(attno);
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	if (attno > slot->tts_tupleDescriptor->natts)
+		elog(ERROR, "invalid attribute number");
+
+	/* Regular (non-compressed) tuple has no arrow array */
+	if (aslot->tuple_index == InvalidTupleIndex)
+	{
+		slot_getsomeattrs(slot, attno);
+		return NULL;
+	}
+
+	if (aslot->arrow_columns == NULL)
+	{
+		ArrowColumnCacheEntry *restrict entry = arrow_column_cache_read(aslot, attno);
+
+		aslot->segmentby_columns = entry->segmentby_columns;
+		aslot->arrow_columns = entry->arrow_columns;
+		set_attr_value(slot, attno);
+	}
+
+	return aslot->arrow_columns[attoff];
 }
 
 const TupleTableSlotOps TTSOpsArrowTuple = { .base_slot_size = sizeof(ArrowTupleTableSlot),
