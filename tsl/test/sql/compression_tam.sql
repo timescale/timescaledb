@@ -5,7 +5,8 @@
 CREATE TABLE readings(time timestamptz UNIQUE, location int, device int, temp float, humidity float);
 
 SELECT create_hypertable('readings', 'time');
-
+-- Disable incremental sort to make tests stable
+SET enable_incremental_sort = false;
 SELECT setseed(1);
 
 INSERT INTO readings (time, location, device, temp, humidity)
