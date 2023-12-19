@@ -286,20 +286,27 @@ jobs:
         path: db/crash-*
 
     # We use separate restore/save actions, because the default action won't
-    # save the updated folder after the cache hit. We also can't overwrite the
-    # existing cache, so we add a unique suffix. The cache is matched by key
-    # prefix, not exact key, and picks the newest matching item, so this works.
+    # save the updated folder after the cache hit. We also want to save the
+    # cache after fuzzing errors, and the default action doesn't save after
+    # errors.
+    # We can't overwrite the existing cache, so we add a unique suffix. The
+    # cache is matched by key prefix, not exact key, and picks the newest
+    # matching item, so this works.
     # The caches for rowbyrow and bulk fuzzing are saved separately, otherwise
     # the slower job would always overwrite the cache from the faster one. We
     # want to combine corpuses from bulk and rowbyrow fuzzing for better
-    # coverage. Note that the cache action cannot be restored on a path
-    # different from the one it was saved from. To make our lives more
-    # interesting, it is not directly documented anywhere, but we can deduce it
-    # from path influencing the version.
-    - name: Copy the fuzzer corpus to please the actions/cache
+    # coverage.
+    # Note that the cache action cannot be restored on a path different from the
+    # one it was saved from. To make our lives more interesting, it is not
+    # directly documented anywhere, but we can deduce it from path influencing
+    # the version.
+    - name: Change corpus path to please the 'actions/cache' GitHub Action
+      if: always()
       run: |
-        find "db/corpus" -type f -exec cp -t db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }} {} +
+        mv -f db/corpus{,-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}}
+
     - name: Save fuzzer corpus
+      if: always()
       uses: actions/cache/save@v3
       with:
         path: db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
