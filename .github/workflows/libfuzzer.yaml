@@ -246,13 +246,14 @@ jobs:
         ls db/corpus | wc -l
 
         # Show the statistics about fuzzing corpus
-        psql -c "select count(*), location from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
-            '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')
+        psql -c "select count(*), location, min(sqlstate), min(path)
+            from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
+                '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')
             group by location order by count(*) desc
         "
 
         # Check that we don't have any internal errors
-        errors = $(psql -qtAX --set=ON_ERROR_STOP=1 -c "select count(*)
+        errors=$(psql -qtAX --set=ON_ERROR_STOP=1 -c "select count(*)
             from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
                 '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')
             where sqlstate = 'XX000'")
