@@ -21,6 +21,7 @@
 #include <time_utils.h>
 #include <time_bucket.h>
 
+#include "debug_point.h"
 #include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "invalidation_threshold.h"
@@ -74,10 +75,23 @@ typedef struct InvalidationThresholdData
 static ScanTupleResult
 invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 {
+	DEBUG_WAITPOINT("invalidation_threshold_scan_update_enter");
+
 	InvalidationThresholdData *invthresh = (InvalidationThresholdData *) data;
 
+	/* If the tuple was modified concurrently, retry the operation */
+	if (ti->lockresult == TM_Updated)
+		return SCAN_RESCAN;
+
 	if (ti->lockresult != TM_Ok)
-		return SCAN_CONTINUE;
+	{
+		elog(ERROR,
+			 "unable to lock invalidation threshold tuple for hypertable %d (lock result %d)",
+			 invthresh->cagg->data.raw_hypertable_id,
+			 ti->lockresult);
+
+		pg_unreachable();
+	}
 
 	bool isnull;
 	Datum datum =

@@ -461,15 +461,26 @@ ts_scanner_scan(ScannerCtx *ctx)
 
 	for (ts_scanner_start_scan(ctx); (tinfo = ts_scanner_next(ctx));)
 	{
-		/* Call tuple_found handler. Abort the scan if the handler wants us to */
-		if (ctx->tuple_found != NULL && ctx->tuple_found(tinfo, ctx->data) == SCAN_DONE)
+		if (ctx->tuple_found != NULL)
 		{
-			if (!(ctx->flags & SCANNER_F_NOEND))
-				ts_scanner_end_scan(ctx);
+			ScanTupleResult scan_result = ctx->tuple_found(tinfo, ctx->data);
 
-			if (!(ctx->flags & SCANNER_F_NOEND_AND_NOCLOSE))
-				ts_scanner_close(ctx);
-			break;
+			/* Call tuple_found handler. Abort the scan if the handler wants us to */
+			if (scan_result == SCAN_DONE)
+			{
+				if (!(ctx->flags & SCANNER_F_NOEND))
+					ts_scanner_end_scan(ctx);
+
+				if (!(ctx->flags & SCANNER_F_NOEND_AND_NOCLOSE))
+					ts_scanner_close(ctx);
+				break;
+			}
+			else if (scan_result == SCAN_RESCAN)
+			{
+				ctx->internal.tinfo.count = 0;
+				ts_scanner_rescan(ctx, NULL);
+				continue;
+			}
 		}
 	}
 
