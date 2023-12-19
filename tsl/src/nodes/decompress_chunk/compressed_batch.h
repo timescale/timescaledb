@@ -10,52 +10,46 @@
 
 typedef struct ArrowArray ArrowArray;
 
-typedef struct CompressedColumnValues
-{
-	/* For row-by-row decompression. */
-	DecompressionIterator *iterator;
-
-	/*
-	 * For bulk decompression and vectorized filters, mutually exclusive
-	 * with the above.
-	 */
-	ArrowArray *arrow;
-
-	/*
-	 * These are the arrow buffers cached here to reduce the amount of
-	 * indirections (we have about three there, so it matters).
-	 */
-	const void *arrow_validity;
-	const void *arrow_values;
-
-	/*
-	 * The following fields are copied here for better data locality.
-	 */
-	AttrNumber output_attno;
-	int8 value_bytes;
-} CompressedColumnValues;
-
+/* How to obtain the decompressed datum for individual row. */
 typedef enum
 {
 	DT_ArrowTextDict = -4,
 	DT_ArrowText = -3,
 	DT_Default = -2,
 	DT_Iterator = -1,
-	Invalid = 0,
+	DT_Invalid = 0,
+	/*
+	 * Any positive number is also valid for the decompression type. It means
+	 * arrow array of a fixed-size by-value type, with size given by the number.
+	 */
 } DecompressionType;
 
-typedef struct CompressedColumnValues2
+typedef struct CompressedColumnValues
 {
+	/* How to obtain the decompressed datum for individual row. */
 	DecompressionType decompression_type;
+
+	/* Where to put the decompressed datum. */
 	Datum *output_value;
 	bool *output_isnull;
-	// The buffers are as following:
-	// iterator:        iterator
-	// arrow fixed:     validity, value
-	// arrow text:      validity, uint32* offsets, void* bodies
-	// arrow dict text: validity, uint32* dict offsets, void* dict bodies, int16* indices
+
+	/*
+	 * The flattened source buffers for getting the decompressed datum.
+	 * Depending on decompression type, they are as follows:
+	 * iterator:        iterator
+	 * arrow fixed:     validity, value
+	 * arrow text:      validity, uint32* offsets, void* bodies
+	 * arrow dict text: validity, uint32* dict offsets, void* dict bodies, int16* indices
+	 */
 	const void *restrict buffers[4];
-} CompressedColumnValues2;
+
+	/*
+	 * The source arrow array, if any. We don't use it for building the
+	 * individual rows, and use the flattened buffers instead to lessen the
+	 * amount of indirections. However, it is used for vectorized filters.
+	 */
+	ArrowArray *arrow;
+} CompressedColumnValues;
 
 /*
  * All the information needed to decompress a batch.
@@ -81,9 +75,7 @@ typedef struct DecompressBatchState
 	 */
 	uint64 *vector_qual_result;
 
-	CompressedColumnValues *compressed_columns_wide;
-
-	CompressedColumnValues2 compressed_columns_packed[FLEXIBLE_ARRAY_MEMBER];
+	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
 extern void compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
