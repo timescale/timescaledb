@@ -9,6 +9,8 @@ NOTICE:  adding not-null constraint to column "time"
  (1,public,readings,t)
 (1 row)
 
+-- Disable incremental sort to make tests stable
+SET enable_incremental_sort = false;
 SELECT setseed(1);
  setseed 
 ---------
@@ -272,14 +274,14 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = true;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+                         QUERY PLAN                         
+------------------------------------------------------------
  Limit
-   ->  Incremental Sort
+   ->  Sort
          Sort Key: "time", device
-         Presorted Key: "time"
-         ->  Index Scan using "1_1_readings_time_key" on _hyper_1_1_chunk
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                Filter: (device < 4)
+               Scankey: (device < 4)
 (6 rows)
 
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
@@ -334,9 +336,8 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
    ->  Sort
          Sort Key: "time", device
          ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               Filter: (location < 4)
-               Scankey: (location < 4)
-(6 rows)
+               Vectorized Filter: (location < 4)
+(5 rows)
 
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
@@ -352,15 +353,14 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = true;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
  Limit
-   ->  Incremental Sort
+   ->  Sort
          Sort Key: "time", device
-         Presorted Key: "time"
-         ->  Index Scan using "1_1_readings_time_key" on _hyper_1_1_chunk
-               Filter: (location < 4)
-(6 rows)
+         ->  Index Scan using _hyper_1_1_chunk_readings_location_idx on _hyper_1_1_chunk
+               Index Cond: (location < 4)
+(5 rows)
 
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
@@ -428,9 +428,9 @@ SELECT * FROM :chunk WHERE device < 4 AND location = 2 LIMIT 5;
 ------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=5 loops=1)
-         Filter: ((device < 4) AND (location = 2))
+         Scankey: (device < 4)
+         Vectorized Filter: (location = 2)
          Rows Removed by Filter: 27
-         Scankey: ((device < 4) AND (location = 2))
 (5 rows)
 
 -- Test that columnar scan can be turned off
