@@ -1595,9 +1595,13 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-     2 | XX001       | XX001
+    14 | XX001       | XX001
+     4 | 08P01       | 08P01
      2 | true        | true
-(2 rows)
+     1 | 22021       | 22021
+     1 | 3F000       | 3F000
+     1 | false       | false
+(6 rows)
 
 \set algo dictionary
 \set type text
@@ -1609,7 +1613,11 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-     6 | XX001       | XX001
+    23 | XX001       | XX001
+     4 | 08P01       | 08P01
      2 | true        | true
-(2 rows)
+     1 | 22021       | 22021
+     1 | 3F000       | 3F000
+     1 | false       | false
+(6 rows)
 

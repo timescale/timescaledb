@@ -27,7 +27,7 @@ jobs:
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
         sudo apt-get update
-        sudo apt-get install 7zip clang lld llvm flex bison lcov systemd-coredump gdb libipc-run-perl \
+        sudo apt-get install 7zip clang lld llvm flex bison libipc-run-perl \
           libtest-most-perl tree
 
     - name: Checkout TimescaleDB
@@ -65,7 +65,7 @@ jobs:
         CC=clang ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug CC=clang \
-          CFLAGS="-DTS_COMPRESSION_FUZZING=1 -fuse-ld=lld -ggdb3 -Og -fno-omit-frame-pointer"
+          CFLAGS="-DTS_COMPRESSION_FUZZING=1 -fuse-ld=lld -ggdb3 -O2 -fno-omit-frame-pointer"
         make -j$(nproc)
 
     - name: Install PostgreSQL
@@ -91,7 +91,7 @@ jobs:
         # http://web.archive.org/web/20231101091231/https://github.com/cms-sw/cmssw/issues/40680
 
         cmake -B build -S . -DASSERTIONS=ON -DLINTER=OFF -DCMAKE_VERBOSE_MAKEFILE=1 \
-            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang \
             -DCMAKE_C_FLAGS="-fsanitize=fuzzer-no-link -lstdc++ -L$LIBFUZZER_PATH -l:libclang_rt.fuzzer_no_main-x86_64.a -static-libsan" \
             -DPG_PATH=$HOME/$PG_INSTALL_DIR
 
@@ -126,7 +126,7 @@ jobs:
             { algo: array     , pgtype: text  , bulk: true , runs:   10000000 },
             { algo: dictionary, pgtype: text  , bulk: true , runs:   10000000 },
             { algo: array     , pgtype: text  , bulk: false, runs:   10000000 },
-            { algo: dictionary, pgtype: text  , bulk: false, runs:   10000000 },
+            { algo: dictionary, pgtype: text  , bulk: false, runs:  100000000 },
             ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
@@ -137,7 +137,7 @@ jobs:
 
     steps:
     - name: Install Linux dependencies
-      run: sudo apt install 7zip
+      run: sudo apt install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
@@ -202,7 +202,7 @@ jobs:
         export PGPORT=5432
         export PGDATABASE=postgres
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
-        pg_ctl -l postmaster.log start
+        pg_ctl -l postgres.log start
 
         psql -c "create extension timescaledb;"
 
@@ -243,26 +243,36 @@ jobs:
 
         ls db/corpus | wc -l
 
+        fn="ts_read_compressed_data_directory('${{ matrix.case.algo }}',
+                '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')"
+
         # Show the statistics about fuzzing corpus
         psql -c "select count(*), location, min(sqlstate), min(path)
-            from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
-                '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')
+            from $fn
             group by location order by count(*) desc
         "
 
+        # Save interesting cases because the caches are not available for download from UI
+        mkdir -p interesting
+        psql -qtAX -c "select distinct on (location) 'db/' || path from $fn
+            order by location, bytes
+        " | xargs cp -t interesting
+
         # Check that we don't have any internal errors
         errors=$(psql -qtAX --set=ON_ERROR_STOP=1 -c "select count(*)
-            from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
-                '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')
+            from $fn
             where sqlstate = 'XX000'")
         echo "Internal program errors: $errors"
         [ $errors -eq 0 ] || exit 1
+
+
+        # Shouldn't have any WARNINGS in the log.
+        ! grep -F "] WARNING: " postgres.log
 
     - name: Collect the logs
       if: always()
       id: collectlogs
       run: |
-        find . -name postmaster.log -exec cat {} + > postgres.log
         # wait in case there are in-progress coredumps
         sleep 10
         if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
@@ -282,6 +292,13 @@ jobs:
       with:
         name: Crash cases for ${{ steps.config.outputs.name }}
         path: db/crash-*
+
+    - name: Save interesting cases
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: Interesting cases for ${{ steps.config.outputs.name }}
+        path: interesting/
 
     # We use separate restore/save actions, because the default action won't
     # save the updated folder after the cache hit. We also want to save the
