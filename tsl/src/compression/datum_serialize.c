@@ -361,8 +361,7 @@ binary_string_get_type(StringInfo buffer)
 							   Anum_pg_type_oid,
 							   PointerGetDatum(element_type_name),
 							   ObjectIdGetDatum(namespace_oid));
-	if (!OidIsValid(type_oid))
-		elog(ERROR, "could not find type %s.%s", element_type_namespace, element_type_name);
+	CheckCompressedData(OidIsValid(type_oid));
 
 	return type_oid;
 }
