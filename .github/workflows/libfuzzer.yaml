@@ -252,7 +252,7 @@ jobs:
 
         # Save interesting cases because the caches are not available for download from UI
         mkdir -p interesting
-        psql -qtAX "select distinct on (location) 'db/corpus/' || path from $fn
+        psql -qtAX -c "select distinct on (location) 'db/corpus/' || path from $fn
             order by location, bytes desc
         " | xargs cp -t interesting
 
