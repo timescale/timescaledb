@@ -241,17 +241,24 @@ jobs:
 
         ls db/corpus | wc -l
 
+        fn="ts_read_compressed_data_directory('${{ matrix.case.algo }}',
+                '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')"
+
         # Show the statistics about fuzzing corpus
         psql -c "select count(*), location, min(sqlstate), min(path)
-            from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
-                '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')
+            from $fn
             group by location order by count(*) desc
         "
 
+        # Save interesting cases because the caches are not available for download from UI
+        mkdir -p interesting
+        psql -qtAX "select distinct on (location) 'db/corpus/' || path from $fn
+            order by location, bytes desc
+        " | xargs cp -t interesting
+
         # Check that we don't have any internal errors
         errors=$(psql -qtAX --set=ON_ERROR_STOP=1 -c "select count(*)
-            from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
-                '${{ matrix.case.pgtype }}', 'corpus', '${{ matrix.case.bulk }}')
+            from $fn
             where sqlstate = 'XX000'")
         echo "Internal program errors: $errors"
         [ $errors -eq 0 ] || exit 1
@@ -283,6 +290,13 @@ jobs:
       with:
         name: Crash cases for ${{ steps.config.outputs.name }}
         path: db/crash-*
+
+    - name: Save interesting cases
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: Interesting cases for ${{ steps.config.outputs.name }}
+        path: interesting/
 
     # We use separate restore/save actions, because the default action won't
     # save the updated folder after the cache hit. We also want to save the
