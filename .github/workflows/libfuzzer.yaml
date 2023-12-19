@@ -173,9 +173,6 @@ jobs:
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
-        # I think the key used to match by prefix, but somehow it doesn't match
-        # anymore, so add "restore-keys" as well to be absolutely sure.
-        restore-keys: "${{ steps.config.outputs.cache_prefix }}-bulk"
 
     # We save the row-by-row corpus separately from the bulk corpus, so that
     # they don't overwrite each other. Now we are going to combine them.
@@ -185,7 +182,6 @@ jobs:
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
-        restore-keys: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
 
     - name: Initialize the fuzzing corpus
       run: |
