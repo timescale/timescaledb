@@ -187,9 +187,9 @@ jobs:
       run: |
         # Combine the cached corpus from rowbyrow and bulk fuzzing, and from repository.
         mkdir -p db/corpus{,-rowbyrow,-bulk}
-        find "db/corpus-rowbyrow" -type f -exec cp -t db/corpus {} +
-        find "db/corpus-bulk" -type f -exec cp -t db/corpus {} +
-        find "tsl/test/fuzzing/compression/${{ matrix.case.algo }}-${{ matrix.case.pgtype }}" -type f -exec cp -t db/corpus {} +
+        find "tsl/test/fuzzing/compression/${{ matrix.case.algo }}-${{ matrix.case.pgtype }}" -type f -exec cp -n -t db/corpus {} +
+        find "db/corpus-rowbyrow" -type f -exec cp -n -t db/corpus {} +
+        find "db/corpus-bulk" -type f -exec cp -n -t db/corpus {} +
         ls db/corpus | wc -l
 
     - name: Run libfuzzer for compression
