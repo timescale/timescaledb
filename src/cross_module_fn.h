@@ -75,6 +75,7 @@ typedef struct CrossModuleFunctions
 	void (*set_rel_pathlist_query)(PlannerInfo *, RelOptInfo *, Index, RangeTblEntry *,
 								   Hypertable *);
 	void (*set_rel_pathlist)(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
+	bool (*process_explain_def)(DefElem *def);
 
 	/* gapfill */
 	PGFunction gapfill_marker;

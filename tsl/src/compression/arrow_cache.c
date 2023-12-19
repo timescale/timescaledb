@@ -3,6 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 #include <postgres.h>
 #include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
@@ -14,6 +15,7 @@
 #include <utils/memutils.h>
 
 #include "arrow_cache.h"
+#include "arrow_cache_explain.h"
 #include "arrow_tts.h"
 #include "compression.h"
 #include "debug_assert.h"
@@ -94,9 +96,6 @@ arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 													   /* minContextSize = */ 0,
 													   /* initBlockSize = */ 64 * 1024,
 													   /* maxBlockSize = */ 64 * 1024);
-
-	acache->cache_total = 0;
-	acache->cache_misses = 0;
 	acache->maxsize = get_cache_maxsize();
 
 	elog(DEBUG2, "arrow decompression cache is under memory context '%s'", mcxt->name);
@@ -113,10 +112,6 @@ arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 void
 arrow_column_cache_release(ArrowColumnCache *acache)
 {
-	elog(DEBUG2,
-		 "cache hits=%zu misses=%zu",
-		 acache->cache_total - acache->cache_misses,
-		 acache->cache_misses);
 	hash_destroy(acache->htab);
 	MemoryContextDelete(acache->mcxt);
 }
@@ -131,8 +126,6 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	bool found;
 
 	ArrowColumnCacheEntry *restrict entry = hash_search(acache->htab, &key, HASH_FIND, &found);
-
-	acache->cache_total++;
 
 	/* If entry was not found, we might have to prune the LRU list before
 	 * allocating a new entry */
@@ -200,12 +193,13 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 		entry->nvalid = 0;
 		entry->arrow_columns =
 			MemoryContextAllocZero(acache->mcxt, sizeof(ArrowArray *) * compressed_tupdesc->natts);
-		acache->cache_misses++;
+		decompress_cache_misses++;
 	}
 	else
 	{
 		/* Move the entry found to the front of the LRU list */
 		dlist_move_tail(&acache->arrow_column_cache_lru, &entry->node);
+		decompress_cache_hits++;
 	}
 
 	const int16 *attrs_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
@@ -255,6 +249,7 @@ arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum d
 		   header->compression_algorithm);
 	MemoryContext oldcxt = MemoryContextSwitchTo(acache->decompression_mcxt);
 	ArrowArray *arrow_column = decompress_all(PointerGetDatum(header), typid, acache->mcxt);
+	decompress_cache_decompress_count++;
 
 	/*
 	 * Not sure how necessary this reset is, but keeping it for now.
