@@ -91,7 +91,7 @@ jobs:
         # http://web.archive.org/web/20231101091231/https://github.com/cms-sw/cmssw/issues/40680
 
         cmake -B build -S . -DASSERTIONS=ON -DLINTER=OFF -DCMAKE_VERBOSE_MAKEFILE=1 \
-            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
+            -DWARNINGS_AS_ERRORS=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang \
             -DCMAKE_C_FLAGS="-fsanitize=fuzzer-no-link -lstdc++ -L$LIBFUZZER_PATH -l:libclang_rt.fuzzer_no_main-x86_64.a -static-libsan" \
             -DPG_PATH=$HOME/$PG_INSTALL_DIR
 
