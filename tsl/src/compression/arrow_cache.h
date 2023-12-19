@@ -63,8 +63,6 @@ typedef struct ArrowColumnCache
 	dlist_head arrow_column_cache_lru;	 /* Arrow column cache LRU list */
 	HTAB *htab;							 /* Arrow column cache */
 	uint16 maxsize;
-	size_t cache_total;
-	size_t cache_misses;
 } ArrowColumnCache;
 
 /*
