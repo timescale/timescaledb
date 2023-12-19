@@ -58,37 +58,6 @@ static void convert_to_compressionam_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transcation */
-
-typedef struct ColumnCompressionSettings
-{
-	NameData attname;
-	AttrNumber attnum;
-	bool is_orderby;
-	bool is_segmentby;
-	bool orderby_desc;
-	bool nulls_first;
-} ColumnCompressionSettings;
-
-/*
- * Compression info cache struct for access method.
- *
- * This struct is cached in a relcache entry's rd_amcache pointer and needs to
- * have a structure that can be palloc'ed in a single memory chunk.
- */
-typedef struct CompressionAmInfo
-{
-	int32 hypertable_id;		  /* TimescaleDB ID of parent hypertable */
-	int32 relation_id;			  /* TimescaleDB ID of relation (chunk ID) */
-	int32 compressed_relation_id; /* TimescaleDB ID of compressed relation (chunk ID) */
-	Oid compressed_relid;		  /* Relid of compressed relation */
-	int num_columns;
-	int num_segmentby;
-	int num_orderby;
-	int num_keys;
-	/* Per-column information follows. */
-	ColumnCompressionSettings columns[FLEXIBLE_ARRAY_MEMBER];
-} CompressionAmInfo;
-
 #define COMPRESSION_AM_INFO_SIZE(natts)                                                            \
 	(sizeof(CompressionAmInfo) + sizeof(ColumnCompressionSettings) * (natts))
 
@@ -125,6 +94,17 @@ lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
 	caminfo->num_columns = tupdesc->natts;
 	caminfo->hypertable_id = hyper_id;
 
+	/* Only optionally include information about the compressed chunk because
+	 * it might not exist when this cache is built. The information will be
+	 * added the next time the function is called instead. */
+	FormData_chunk form = ts_chunk_get_formdata(caminfo->relation_id);
+	caminfo->compressed_relation_id = form.compressed_chunk_id;
+
+	if (caminfo->compressed_relation_id > 0)
+		caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
+	else
+		caminfo->compressed_relid = InvalidOid;
+
 	for (int i = 0; i < caminfo->num_columns; i++)
 	{
 		const Form_pg_attribute attr = &tupdesc->attrs[i];
@@ -135,6 +115,7 @@ lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
 
 		namestrcpy(&colsettings->attname, attname);
 		colsettings->attnum = attr->attnum;
+		colsettings->typid = attr->atttypid;
 		colsettings->is_segmentby = segmentby_pos > 0;
 		colsettings->is_orderby = orderby_pos > 0;
 
@@ -152,28 +133,21 @@ lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
 
 		if (colsettings->is_segmentby || colsettings->is_orderby)
 			caminfo->num_keys += 1;
+
+		if (OidIsValid(caminfo->compressed_relid))
+			colsettings->cattnum = get_attnum(caminfo->compressed_relid, attname);
+		else
+			colsettings->cattnum = InvalidAttrNumber;
 	}
 
 	Assert(caminfo->num_segmentby == ts_array_length(settings->fd.segmentby));
 	Assert(caminfo->num_orderby == ts_array_length(settings->fd.orderby));
-
 	Ensure(caminfo->relation_id > 0, "invalid chunk ID");
-
-	/* Only optionally include information about the compressed chunk because
-	 * it might not exist when this cache is built. The information will be
-	 * added the next time the function is called instead. */
-	FormData_chunk form = ts_chunk_get_formdata(caminfo->relation_id);
-	caminfo->compressed_relation_id = form.compressed_chunk_id;
-
-	if (caminfo->compressed_relation_id > 0)
-		caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
-	else
-		caminfo->compressed_relid = InvalidOid;
 
 	return caminfo;
 }
 
-static inline CompressionAmInfo *
+CompressionAmInfo *
 RelationGetCompressionAmInfo(Relation rel)
 {
 	if (NULL == rel->rd_amcache)
@@ -277,8 +251,8 @@ initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 					scan->rs_base.rs_key[nvalidkeys] = *key;
 					/* Remap the attribute number to the corresponding
 					 * compressed rel attribute number */
-					scan->rs_base.rs_key[nvalidkeys++].sk_attno =
-						get_attnum(caminfo->compressed_relid, NameStr(column->attname));
+					scan->rs_base.rs_key[nvalidkeys].sk_attno = column->cattnum;
+					nvalidkeys++;
 					break;
 				}
 			}
@@ -438,12 +412,9 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		return result;
 	}
 
-	Assert(scan->compressed_tuple_index == 1 ||
-		   scan->compressed_tuple_index <= scan->compressed_row_count);
-
 	child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(scan->compressed_rel));
 
-	if (TupIsNull(child_slot) || (scan->compressed_tuple_index == scan->compressed_row_count))
+	if (TupIsNull(child_slot) || arrow_slot_is_consumed(slot))
 	{
 		if (!table_scan_getnextslot(scan->cscan_desc, direction, child_slot))
 		{
@@ -453,23 +424,17 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		}
 
 		Assert(ItemPointerIsValid(&child_slot->tts_tid));
-
-		bool isnull;
-		Datum count = slot_getattr(child_slot, scan->count_colattno, &isnull);
-
-		Assert(!isnull);
-		scan->compressed_row_count = DatumGetInt32(count);
 		scan->compressed_tuple_index = 1;
-		scan->returned_compressed_count++;
 		ExecStoreArrowTuple(slot, scan->compressed_tuple_index);
+		scan->compressed_row_count = arrow_slot_total_row_count(slot);
 	}
 	else
 	{
-		scan->compressed_tuple_index++;
-		scan->returned_compressed_count++;
+		scan->compressed_tuple_index = arrow_slot_row_index(slot) + 1;
 		ExecStoreArrowTuple(slot, scan->compressed_tuple_index);
 	}
 
+	scan->returned_compressed_count++;
 	pgstat_count_compression_getnext(sscan->rs_rd);
 
 	return true;
