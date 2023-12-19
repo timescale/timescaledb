@@ -700,7 +700,20 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-		if (column_values->decompression_type > 0)
+		if (column_values->decompression_type == DT_Iterator)
+		{
+			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
+			DecompressResult result = iterator->try_next(iterator);
+
+			if (result.is_done)
+			{
+				elog(ERROR, "compressed column out of sync with batch counter");
+			}
+
+			*column_values->output_isnull = result.is_null;
+			*column_values->output_value = result.val;
+		}
+		else if (column_values->decompression_type > 0)
 		{
 			Assert(column_values->decompression_type <= 8);
 			const uint8 value_bytes = column_values->decompression_type;
@@ -735,19 +748,6 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			*column_values->output_value = datum;
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
-		}
-		else if (column_values->decompression_type == DT_Iterator)
-		{
-			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
-			DecompressResult result = iterator->try_next(iterator);
-
-			if (result.is_done)
-			{
-				elog(ERROR, "compressed column out of sync with batch counter");
-			}
-
-			*column_values->output_isnull = result.is_null;
-			*column_values->output_value = result.val;
 		}
 		else if (column_values->decompression_type == DT_ArrowText)
 		{
