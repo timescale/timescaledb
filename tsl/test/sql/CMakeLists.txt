@@ -14,6 +14,7 @@ set(TEST_FILES
     cagg_utils.sql
     cagg_watermark.sql
     compress_default.sql
+    compressed_detoaster.sql
     compressed_collation.sql
     compression_create_compressed_table.sql
     compression_conflicts.sql
