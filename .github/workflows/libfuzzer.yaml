@@ -27,7 +27,7 @@ jobs:
         # Don't add ddebs here because the ddebs mirror is always 503 Service Unavailable.
         # If needed, install them before opening the core dump.
         sudo apt-get update
-        sudo apt-get install 7zip clang lld llvm flex bison lcov systemd-coredump gdb libipc-run-perl \
+        sudo apt-get install 7zip clang lld llvm flex bison libipc-run-perl \
           libtest-most-perl tree
 
     - name: Checkout TimescaleDB
@@ -135,7 +135,7 @@ jobs:
 
     steps:
     - name: Install Linux dependencies
-      run: sudo apt install 7zip
+      run: sudo apt install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
@@ -252,8 +252,8 @@ jobs:
 
         # Save interesting cases because the caches are not available for download from UI
         mkdir -p interesting
-        psql -qtAX -c "select distinct on (location) 'db/corpus/' || path from $fn
-            order by location, bytes desc
+        psql -qtAX -c "select distinct on (location) 'db/' || path from $fn
+            order by location, bytes
         " | xargs cp -t interesting
 
         # Check that we don't have any internal errors
