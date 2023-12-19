@@ -173,6 +173,9 @@ jobs:
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
+        # I think the key used to match by prefix, but somehow it doesn't match
+        # anymore, so add "restore-keys" as well to be absolutely sure.
+        restore-keys: "${{ steps.config.outputs.cache_prefix }}-bulk"
 
     # We save the row-by-row corpus separately from the bulk corpus, so that
     # they don't overwrite each other. Now we are going to combine them.
@@ -182,6 +185,7 @@ jobs:
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
+        restore-keys: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
 
     - name: Initialize the fuzzing corpus
       run: |
@@ -204,10 +208,18 @@ jobs:
 
         psql -c "create extension timescaledb;"
 
-        # Create the fuzzing function
+        # Create the fuzzing functions
         export MODULE_NAME=$(basename $(find $HOME/$PG_INSTALL_DIR -name "timescaledb-tsl-*.so"))
-        psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype, bulk bool, runs int) returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;"
+        psql -a -c "create or replace function fuzz(algo cstring, pgtype regtype,
+                bulk bool, runs int)
+            returns int as '"$MODULE_NAME"', 'ts_fuzz_compression' language c;
 
+            create or replace function ts_read_compressed_data_directory(algo cstring,
+                pgtype regtype, path cstring, bulk bool)
+            returns table(path text, bytes int, rows int, sqlstate text, location text)
+            as '"$MODULE_NAME"', 'ts_read_compressed_data_directory' language c;
+
+            "
 
         # Start more fuzzing processes in the background. We won't even monitor
         # their progress, because the server will panic if they find an error.
@@ -232,6 +244,20 @@ jobs:
         psql -c "select 1"
 
         ls db/corpus | wc -l
+
+        # Show the statistics about fuzzing corpus
+        psql -c "select count(*), location from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
+            '${{ matrix.case.pgtype }}', 'corpus', '${{ matirx.case.bulk }}')
+            group by location order by count(*) desc
+        "
+
+        # Check that we don't have any internal errors
+        errors = $(psql -qtAX --set=ON_ERROR_STOP=1 -c "select count(*)
+            from ts_read_compressed_data_directory('${{ matrix.case.algo }}',
+                '${{ matrix.case.pgtype }}', 'corpus', '${{ matirx.case.bulk }}')
+            where sqlstate = 'XX000'")
+        echo "Internal program errors: $errors"
+        [ $errors -eq 0 ] || exit 1
 
     - name: Collect the logs
       if: always()
