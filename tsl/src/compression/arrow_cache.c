@@ -162,6 +162,7 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	if (!found)
 	{
 		MemoryContext oldmctx = MemoryContextSwitchTo(aslot->arrowdata_mcxt);
+		const int16 *attrs_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
 
 		entry->nvalid = 0;
 		entry->segmentby_columns = NULL;
@@ -175,7 +176,7 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 		 */
 		for (int i = 0; i < uncompressed_natts; i++)
 		{
-			const int16 cattoff = aslot->attrs_offset_map[i];
+			const int16 cattoff = attrs_map[i];
 			const AttrNumber attno = AttrOffsetGetAttrNumber(i);
 			const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
 

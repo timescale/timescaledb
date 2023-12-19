@@ -26,4 +26,38 @@ extern void compressionam_alter_access_method_finish(Oid relid, bool to_other_am
 extern Datum compressionam_handler(PG_FUNCTION_ARGS);
 extern void compressionam_xact_event(XactEvent event, void *arg);
 
+typedef struct ColumnCompressionSettings
+{
+	NameData attname;
+	AttrNumber attnum;
+	AttrNumber cattnum; /* Attribute number in the compressed relation */
+	Oid typid;
+	bool is_orderby;
+	bool is_segmentby;
+	bool orderby_desc;
+	bool nulls_first;
+} ColumnCompressionSettings;
+
+/*
+ * Compression info cache struct for access method.
+ *
+ * This struct is cached in a relcache entry's rd_amcache pointer and needs to
+ * have a structure that can be palloc'ed in a single memory chunk.
+ */
+typedef struct CompressionAmInfo
+{
+	int32 hypertable_id;		  /* TimescaleDB ID of parent hypertable */
+	int32 relation_id;			  /* TimescaleDB ID of relation (chunk ID) */
+	int32 compressed_relation_id; /* TimescaleDB ID of compressed relation (chunk ID) */
+	Oid compressed_relid;		  /* Relid of compressed relation */
+	int num_columns;
+	int num_segmentby;
+	int num_orderby;
+	int num_keys;
+	/* Per-column information follows. */
+	ColumnCompressionSettings columns[FLEXIBLE_ARRAY_MEMBER];
+} CompressionAmInfo;
+
+extern CompressionAmInfo *RelationGetCompressionAmInfo(Relation rel);
+
 #endif /* TIMESCALEDB_TSL_COMPRESSIONAM_HANDLER_H */
