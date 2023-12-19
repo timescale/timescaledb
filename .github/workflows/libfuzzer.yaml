@@ -65,7 +65,7 @@ jobs:
         CC=clang ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug CC=clang \
-          CFLAGS="-DTS_COMPRESSION_FUZZING=1 -fuse-ld=lld -ggdb3 -Og -fno-omit-frame-pointer"
+          CFLAGS="-DTS_COMPRESSION_FUZZING=1 -fuse-ld=lld -ggdb3 -O2 -fno-omit-frame-pointer"
         make -j$(nproc)
 
     - name: Install PostgreSQL
@@ -200,7 +200,7 @@ jobs:
         export PGPORT=5432
         export PGDATABASE=postgres
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
-        pg_ctl -l postmaster.log start
+        pg_ctl -l postgres.log start
 
         psql -c "create extension timescaledb;"
 
@@ -256,11 +256,14 @@ jobs:
         echo "Internal program errors: $errors"
         [ $errors -eq 0 ] || exit 1
 
+
+        # Shouldn't have any WARNINGS in the log.
+        ! grep -F "] WARNING: " postgres.log
+
     - name: Collect the logs
       if: always()
       id: collectlogs
       run: |
-        find . -name postmaster.log -exec cat {} + > postgres.log
         # wait in case there are in-progress coredumps
         sleep 10
         if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
