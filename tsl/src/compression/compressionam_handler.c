@@ -42,6 +42,7 @@
 
 #include "compression.h"
 #include "compression/api.h"
+#include "compression/arrow_cache.h"
 #include "compression/arrow_tts.h"
 #include "compressionam_handler.h"
 #include "create.h"
