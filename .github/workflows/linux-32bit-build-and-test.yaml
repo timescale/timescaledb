@@ -87,7 +87,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
+        key: "linux-32-bit-postgresql-${{ matrix.pg }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}

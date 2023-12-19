@@ -99,7 +99,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
+        key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}${{ env.CACHE_SUFFIX }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }}${{ matrix.snapshot }}
