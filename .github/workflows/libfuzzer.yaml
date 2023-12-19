@@ -299,7 +299,10 @@ jobs:
     - name: Change corpus path to please the 'actions/cache' GitHub Action
       if: always()
       run: |
-        mv -f db/corpus{,-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}}
+        tree db/corpus
+        tree db/corpus-bulk
+        tree db/corpus-rowbyrow
+        mv -fT db/corpus{,-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}}
 
     - name: Save fuzzer corpus
       if: always()
