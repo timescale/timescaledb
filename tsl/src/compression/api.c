@@ -53,7 +53,6 @@
 typedef struct CompressChunkCxt
 {
 	Hypertable *srcht;
-	CompressionSettings *settings;
 	Chunk *srcht_chunk;		 /* chunk from srcht */
 	Hypertable *compress_ht; /*compressed table for srcht */
 } CompressChunkCxt;
@@ -294,8 +293,6 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
 
-	cxt->settings = ts_compression_settings_get(srcht->main_table_relid);
-
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(srcht))
 	{
 		NameData cagg_ht_name;
@@ -418,8 +415,11 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 		return true;
 	}
 
+	CompressionSettings *ht_settings =
+		ts_compression_settings_get(mergable_chunk->hypertable_relid);
+
 	char *attname = get_attname(cxt->srcht->main_table_relid, time_dim->column_attno, false);
-	int index = ts_array_position(cxt->settings->fd.orderby, attname);
+	int index = ts_array_position(ht_settings->fd.orderby, attname);
 
 	/* Primary dimension column should be first compress_orderby column. */
 	if (index != 1)
@@ -430,7 +430,7 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	 * NULLS FIRST/LAST here because partitioning columns have NOT NULL
 	 * constraint.
 	 */
-	if (ts_array_get_element_bool(cxt->settings->fd.orderby_desc, index))
+	if (ts_array_get_element_bool(ht_settings->fd.orderby_desc, index))
 		return true;
 
 	return false;
@@ -507,10 +507,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
-	cstat = compress_chunk(cxt.srcht,
-						   cxt.srcht_chunk->table_id,
-						   compress_ht_chunk->table_id,
-						   insert_options);
+	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
 
 	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
 	 * cascading deleted data in FK-referenced tables, while blocking deleting data
@@ -651,6 +648,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
+	ts_compression_settings_delete(compressed_chunk->table_id);
 
 	/*
 	 * Lock the compressed chunk that is going to be deleted. At this point,
@@ -911,14 +909,12 @@ tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 	if (NULL == uncompressed_chunk)
 		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
 
-	int32 srcht_id = uncompressed_chunk->fd.hypertable_id;
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
 
-	Hypertable *ht = ts_hypertable_get_by_id(srcht_id);
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
+	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
 
 	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
 	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
@@ -1117,10 +1113,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 			 NameStr(uncompressed_chunk->fd.table_name));
 
 	/* need it to find the segby cols from the catalog */
-	int32 srcht_id = uncompressed_chunk->fd.hypertable_id;
-	Hypertable *ht = ts_hypertable_get_by_id(srcht_id);
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
 
 	int nsegmentby_cols = ts_array_length(settings->fd.segmentby);
 

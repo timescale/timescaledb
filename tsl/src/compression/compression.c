@@ -223,7 +223,7 @@ truncate_relation(Oid table_oid)
 }
 
 CompressionStats
-compress_chunk(Hypertable *ht, Oid in_table, Oid out_table, int insert_options)
+compress_chunk(Oid in_table, Oid out_table, int insert_options)
 {
 	int n_keys;
 	ListCell *lc;
@@ -235,7 +235,7 @@ compress_chunk(Hypertable *ht, Oid in_table, Oid out_table, int insert_options)
 	HeapTuple in_table_tp = NULL, index_tp = NULL;
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
 	CompressionStats cstat;
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
+	CompressionSettings *settings = ts_compression_settings_get(out_table);
 
 	/* We want to prevent other compressors from compressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our compression.
@@ -1951,14 +1951,14 @@ compression_get_default_algorithm(Oid typeoid)
  * columns of the uncompressed chunk.
  */
 static ScanKeyData *
-build_scankeys(int32 hypertable_id, Oid hypertable_relid, RowDecompressor *decompressor,
+build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
 			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
 			   int *num_scankeys)
 {
 	int key_index = 0;
 	ScanKeyData *scankeys = NULL;
 
-	CompressionSettings *settings = ts_compression_settings_get(hypertable_relid);
+	CompressionSettings *settings = ts_compression_settings_get(out_rel);
 	Assert(settings);
 
 	if (!bms_is_empty(key_columns))
@@ -2137,8 +2137,8 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	Bitmapset *null_columns = NULL;
 
 	int num_scankeys;
-	ScanKeyData *scankeys = build_scankeys(chunk->fd.hypertable_id,
-										   chunk->hypertable_relid,
+	ScanKeyData *scankeys = build_scankeys(chunk->hypertable_relid,
+										   in_rel->rd_id,
 										   &decompressor,
 										   key_columns,
 										   &null_columns,
@@ -2380,13 +2380,9 @@ find_matching_index(Relation comp_chunk_rel, List **index_filters, List **heap_f
  * be used to build scan keys later.
  */
 static void
-fill_predicate_context(Chunk *ch, List *predicates, List **heap_filters, List **index_filters,
-					   List **is_null)
+fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicates,
+					   List **heap_filters, List **index_filters, List **is_null)
 {
-	Hypertable *ht = ts_hypertable_get_by_id(ch->fd.hypertable_id);
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
-	Assert(settings);
-
 	ListCell *lc;
 	foreach (lc, predicates)
 	{
@@ -2940,10 +2936,12 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	ScanKeyData *index_scankeys = NULL;
 	int num_index_scankeys = 0;
 
-	fill_predicate_context(chunk, predicates, &heap_filters, &index_filters, &is_null);
+	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
+	CompressionSettings *settings = ts_compression_settings_get(comp_chunk->table_id);
+
+	fill_predicate_context(chunk, settings, predicates, &heap_filters, &index_filters, &is_null);
 
 	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
-	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
 	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
 

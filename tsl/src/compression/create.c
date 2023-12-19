@@ -575,7 +575,6 @@ create_compression_table(Oid owner, CompressColInfo *compress_cols, Oid tablespa
 Chunk *
 create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 {
-	Hyperspace *hs = compress_ht->space;
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
 	Chunk *compress_chunk;
@@ -583,14 +582,15 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	Oid tablespace_oid;
 	const char *tablespace;
 
-	/* Create a new chunk based on the hypercube */
+	Assert(compress_ht->space->num_dimensions == 0);
+
+	/* Create a new catalog entry for chunk based on the hypercube */
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_chunk = ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK),
-										  hs->num_dimensions,
-										  RELKIND_RELATION);
+	compress_chunk =
+		ts_chunk_create_base(ts_catalog_table_next_seq_id(catalog, CHUNK), 0, RELKIND_RELATION);
 	ts_catalog_restore_user(&sec_ctx);
 
-	compress_chunk->fd.hypertable_id = hs->hypertable_id;
+	compress_chunk->fd.hypertable_id = compress_ht->fd.id;
 	compress_chunk->cube = src_chunk->cube;
 	compress_chunk->hypertable_relid = compress_ht->main_table_relid;
 	compress_chunk->constraints = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
@@ -647,6 +647,9 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 
 	if (!OidIsValid(compress_chunk->table_id))
 		elog(ERROR, "could not create compressed chunk table");
+
+	/* Materialize current compression settings for this chunk */
+	ts_compression_settings_materialize(src_chunk->hypertable_relid, compress_chunk->table_id);
 
 	/* if the src chunk is not in the default tablespace, the compressed indexes
 	 * should also be in a non-default tablespace. IN the usual case, this is inferred
@@ -1135,9 +1138,6 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								with_clause_options,
 								segmentby_cols,
 								orderby_cols);
-
-	settings = ts_compression_settings_get(ht->main_table_relid);
-	Assert(settings);
 
 	/* Check if we can create a compressed hypertable with existing
 	 * constraints and indexes. */

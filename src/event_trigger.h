@@ -36,6 +36,7 @@ typedef struct EventTriggerDropTableConstraint
 typedef struct EventTriggerDropRelation
 {
 	EventTriggerDropObject obj;
+	Oid relid;
 	const char *name;
 	const char *schema;
 } EventTriggerDropRelation;
