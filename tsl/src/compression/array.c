@@ -469,7 +469,7 @@ pad64(uint64 value)
 	return ((value + 63) / 64) * 64;
 }
 
-#define ELEMENT_TYPE uint16
+#define ELEMENT_TYPE uint32
 #include "simple8b_rle_decompress_all.h"
 #undef ELEMENT_TYPE
 
@@ -499,9 +499,9 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 
 	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(si);
 
-	uint16 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	uint32 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION];
 	const uint16 n_notnull =
-		simple8brle_decompress_all_buf_uint16(sizes_serialized,
+		simple8brle_decompress_all_buf_uint32(sizes_serialized,
 											  sizes,
 											  sizeof(sizes) / sizeof(sizes[0]));
 	const int n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
@@ -530,7 +530,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		/* Varsize must match the size stored in the sizes array for this element. */
 		CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
 
-		const uint16 textlen = VARSIZE_ANY_EXHDR(vardata);
+		const uint32 textlen = VARSIZE_ANY_EXHDR(vardata);
 		memcpy(&arrow_bodies[offset], VARDATA_ANY(vardata), textlen);
 
 		//		fprintf(stderr,
