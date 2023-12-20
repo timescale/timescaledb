@@ -282,6 +282,10 @@ jobs:
             GITHUB_PR_NUMBER=0
         fi
         export GITHUB_PR_NUMBER
-        PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql"
-        export PSQL
+        if [[ "${{ runner.os }}" == "macOS" ]] ;
+        then
+          # Add libpq to PATH so psql can be used for uploading
+          # test results
+          export PATH="/usr/local/opt/libpq/bin:$PATH"
+        fi
         scripts/upload_ci_stats.sh
