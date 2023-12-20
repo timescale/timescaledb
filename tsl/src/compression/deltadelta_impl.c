@@ -75,6 +75,9 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 *
 	 * Also tried using SIMD prefix sum from here twice:
 	 * https://en.algorithmica.org/hpc/algorithms/prefix/, it's slower.
+	 *
+	 * Also tried zig-zag decoding in a separate loop, seems to be slightly
+	 * slower, around the noise threshold.
 	 */
 #define INNER_LOOP_SIZE 8
 	Assert(n_notnull_padded % INNER_LOOP_SIZE == 0);
@@ -82,15 +85,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	{
 		for (uint16 inner = 0; inner < INNER_LOOP_SIZE; inner++)
 		{
-			deltas_zigzag[outer + inner] = zig_zag_decode(deltas_zigzag[outer + inner]);
-		}
-	}
-
-	for (uint16 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
-	{
-		for (uint16 inner = 0; inner < INNER_LOOP_SIZE; inner++)
-		{
-			current_delta += deltas_zigzag[outer + inner];
+			current_delta += zig_zag_decode(deltas_zigzag[outer + inner]);
 			current_element += current_delta;
 			decompressed_values[outer + inner] = current_element;
 		}
