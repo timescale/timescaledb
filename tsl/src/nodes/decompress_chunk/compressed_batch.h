@@ -10,29 +10,41 @@
 
 typedef struct ArrowArray ArrowArray;
 
+/* How to obtain the decompressed datum for individual row. */
+typedef enum
+{
+	DT_Default = -2,
+	DT_Iterator = -1,
+	DT_Invalid = 0,
+	/*
+	 * Any positive number is also valid for the decompression type. It means
+	 * arrow array of a fixed-size by-value type, with size given by the number.
+	 */
+} DecompressionType;
+
 typedef struct CompressedColumnValues
 {
-	/* For row-by-row decompression. */
-	DecompressionIterator *iterator;
+	/* How to obtain the decompressed datum for individual row. */
+	DecompressionType decompression_type;
+
+	/* Where to put the decompressed datum. */
+	Datum *output_value;
+	bool *output_isnull;
 
 	/*
-	 * For bulk decompression and vectorized filters, mutually exclusive
-	 * with the above.
+	 * The flattened source buffers for getting the decompressed datum.
+	 * Depending on decompression type, they are as follows:
+	 * iterator:        iterator
+	 * arrow fixed:     validity, value
+	 */
+	const void *restrict buffers[2];
+
+	/*
+	 * The source arrow array, if any. We don't use it for building the
+	 * individual rows, and use the flattened buffers instead to lessen the
+	 * amount of indirections. However, it is used for vectorized filters.
 	 */
 	ArrowArray *arrow;
-
-	/*
-	 * These are the arrow buffers cached here to reduce the amount of
-	 * indirections (we have about three there, so it matters).
-	 */
-	const void *arrow_validity;
-	const void *arrow_values;
-
-	/*
-	 * The following fields are copied here for better data locality.
-	 */
-	AttrNumber output_attno;
-	int8 value_bytes;
 } CompressedColumnValues;
 
 /*
@@ -47,8 +59,8 @@ typedef struct DecompressBatchState
 	 * original tuple, and a batch outlives its source tuple.
 	 */
 	TupleTableSlot *compressed_slot;
-	int total_batch_rows;
-	int next_batch_row;
+	uint16 total_batch_rows;
+	uint16 next_batch_row;
 	Size block_size_bytes; /* Block size to use for memory context */
 	MemoryContext per_batch_context;
 
