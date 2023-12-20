@@ -200,6 +200,7 @@ SELECT timescaledb_pre_restore();
 SELECT bgw_wait(:'TEST_DBNAME', 60, FALSE);
 
 -- Force other sessions connected to the TEST_DBNAME to be finished
+REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
 SET client_min_messages TO ERROR;
 SELECT COUNT(pg_catalog.pg_terminate_backend(pid))>=0
 FROM pg_stat_activity
@@ -208,6 +209,7 @@ AND datname = ':TEST_DBNAME';
 RESET client_min_messages;
 
 CREATE DATABASE :TEST_DBNAME_EXTRA WITH TEMPLATE :TEST_DBNAME;
+GRANT CONNECT ON DATABASE :TEST_DBNAME TO public;
 
 -- Connect to the database and do some basic stuff to check that the
 -- extension works.
