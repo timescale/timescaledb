@@ -376,22 +376,21 @@ extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
  * to pollute the logs.
  */
 #ifndef TS_COMPRESSION_FUZZING
-#define CORRUPT_DATA_MESSAGE                                                                       \
-	(errmsg("the compressed data is corrupt"), errcode(ERRCODE_DATA_CORRUPTED))
+#define CORRUPT_DATA_MESSAGE(X)                                                                    \
+	(errmsg("the compressed data is corrupt"), errdetail(X), errcode(ERRCODE_DATA_CORRUPTED))
 #else
-#define CORRUPT_DATA_MESSAGE (errcode(ERRCODE_DATA_CORRUPTED))
+#define CORRUPT_DATA_MESSAGE(X) (errcode(ERRCODE_DATA_CORRUPTED))
 #endif
 
 #define CheckCompressedData(X)                                                                     \
 	if (unlikely(!(X)))                                                                            \
-	ereport(ERROR, CORRUPT_DATA_MESSAGE)
+	ereport(ERROR, CORRUPT_DATA_MESSAGE(#X))
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)
 {
 	CheckCompressedData(bytes >= 0);
-	CheckCompressedData(bytes < PG_INT32_MAX / 2);
-	CheckCompressedData(si->cursor + bytes >= 0);
+	CheckCompressedData(si->cursor + bytes >= si->cursor); /* Check for overflow. */
 	CheckCompressedData(si->cursor + bytes <= si->len);
 
 	void *result = si->data + si->cursor;

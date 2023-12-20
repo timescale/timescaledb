@@ -240,6 +240,7 @@ array_compression_serialization_size(ArrayCompressorSerializationInfo *info)
 uint32
 array_compression_serialization_num_elements(ArrayCompressorSerializationInfo *info)
 {
+	CheckCompressedData(info->sizes != NULL);
 	return info->sizes->num_elements;
 }
 
@@ -405,12 +406,12 @@ array_decompression_iterator_try_next_forward(DecompressionIterator *general_ite
 			.is_done = true,
 		};
 
-	Assert(iter->data_offset + datum_size.val <= iter->num_data_bytes);
+	CheckCompressedData(iter->data_offset + datum_size.val <= iter->num_data_bytes);
 
 	start_pointer = iter->data + iter->data_offset;
 	val = bytes_to_datum_and_advance(iter->deserializer, &start_pointer);
 	iter->data_offset += datum_size.val;
-	Assert(iter->data + iter->data_offset == start_pointer);
+	CheckCompressedData(iter->data + iter->data_offset == start_pointer);
 
 	return (DecompressResult){
 		.val = val,
@@ -602,7 +603,6 @@ array_compressed_data_send(StringInfo buffer, const char *_serialized_data, Size
 Datum
 array_compressed_recv(StringInfo buffer)
 {
-	ArrayCompressorSerializationInfo *data;
 	uint8 has_nulls;
 	Oid element_type;
 
@@ -611,9 +611,12 @@ array_compressed_recv(StringInfo buffer)
 
 	element_type = binary_string_get_type(buffer);
 
-	data = array_compressed_data_recv(buffer, element_type);
+	ArrayCompressorSerializationInfo *info = array_compressed_data_recv(buffer, element_type);
 
-	PG_RETURN_POINTER(array_compressed_from_serialization_info(data, element_type));
+	CheckCompressedData(info->sizes != NULL);
+	CheckCompressedData(has_nulls == (info->nulls != NULL));
+
+	PG_RETURN_POINTER(array_compressed_from_serialization_info(info, element_type));
 }
 
 void
