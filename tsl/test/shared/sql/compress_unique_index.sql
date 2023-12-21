@@ -20,6 +20,12 @@ SELECT compress_chunk(show_chunks('compress_unique')) IS NOT NULL AS compress;
 INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');
 \set ON_ERROR_STOP 1
 
+-- should only decompress 1 batch
+EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
+
+-- should decompress no batches
+EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');
+
 SELECT * FROM compress_unique ORDER BY compress_unique;
 
 DROP TABLE compress_unique;
