@@ -1,0 +1,33 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test unique expression indexes
+CREATE TABLE compress_unique(offset_timestamp timestamptz not null, meter_id text, meter_channel_id text, timestamp timestamptz);
+SELECT table_name FROM create_hypertable('compress_unique','offset_timestamp');
+   table_name    
+ compress_unique
+(1 row)
+
+CREATE UNIQUE INDEX uniq_expr ON compress_unique USING btree (lower((meter_id)::text), meter_channel_id, offset_timestamp, "timestamp");
+ALTER TABLE compress_unique SET (timescaledb.compress,timescaledb.compress_segmentby='meter_id,meter_channel_id');
+WARNING:  column "timestamp" should be used for segmenting or ordering
+INSERT INTO compress_unique VALUES ('2000-01-01','m1','c1','2000-01-01');
+INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');
+SELECT compress_chunk(show_chunks('compress_unique')) IS NOT NULL AS compress;
+ compress 
+ t
+(1 row)
+
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');
+ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_uniq_expr"
+\set ON_ERROR_STOP 1
+SELECT * FROM compress_unique ORDER BY compress_unique;
+       offset_timestamp       | meter_id | meter_channel_id |          timestamp           
+------------------------------+----------+------------------+------------------------------
+ Sat Jan 01 00:00:00 2000 PST | m1       | c1               | Sat Jan 01 00:00:00 2000 PST
+ Sat Jan 01 00:00:00 2000 PST | m1       | c2               | Sat Jan 01 00:00:00 2000 PST
+(2 rows)
+
+DROP TABLE compress_unique;
