@@ -77,6 +77,23 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	return arrow;
 }
 
+static int
+get_max_text_datum_size(ArrowArray *text_array)
+{
+	int maxbytes = 0;
+	uint32 *offsets = (uint32 *) text_array->buffers[1];
+	for (int i = 0; i < text_array->length; i++)
+	{
+		const int curbytes = offsets[i + 1] - offsets[i];
+		if (curbytes > maxbytes)
+		{
+			maxbytes = curbytes;
+		}
+	}
+
+	return maxbytes;
+}
+
 static void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i)
 {
@@ -170,8 +187,37 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	}
 	else
 	{
-		/* No variable-width columns support bulk decompression. */
-		Assert(false);
+		/*
+		 * Text column. Pre-allocate memory for its text Datum in the
+		 * decompressed scan slot. We can't put direct references to Arrow
+		 * memory there, because it doesn't have the varlena headers that
+		 * Postgres expects for text.
+		 */
+		const int maxbytes =
+			VARHDRSZ + (arrow->dictionary ? get_max_text_datum_size(arrow->dictionary) :
+											get_max_text_datum_size(arrow));
+
+		*column_values->output_value =
+			PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
+
+		/*
+		 * Set up the datum conversion based on whether we use the dictionary.
+		 */
+		if (arrow->dictionary == NULL)
+		{
+			column_values->decompression_type = DT_ArrowText;
+			column_values->buffers[0] = arrow->buffers[0];
+			column_values->buffers[1] = arrow->buffers[1];
+			column_values->buffers[2] = arrow->buffers[2];
+		}
+		else
+		{
+			column_values->decompression_type = DT_ArrowTextDict;
+			column_values->buffers[0] = arrow->buffers[0];
+			column_values->buffers[1] = arrow->dictionary->buffers[1];
+			column_values->buffers[2] = arrow->dictionary->buffers[2];
+			column_values->buffers[3] = arrow->buffers[1];
+		}
 	}
 }
 
@@ -552,6 +598,21 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	MemoryContextSwitchTo(old_context);
 }
 
+static void
+store_text_datum(CompressedColumnValues *column_values, int arrow_row)
+{
+	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
+	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
+	Assert(value_bytes >= 0);
+
+	const int total_bytes = value_bytes + VARHDRSZ;
+	Assert(DatumGetPointer(*column_values->output_value) != NULL);
+	SET_VARSIZE(*column_values->output_value, total_bytes);
+	memcpy(VARDATA(*column_values->output_value),
+		   &((uint8 *) column_values->buffers[2])[start],
+		   value_bytes);
+}
+
 /*
  * Construct the next tuple in the decompressed scan slot.
  * Doesn't check the quals.
@@ -614,6 +675,19 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			}
 #endif
 			*column_values->output_value = datum;
+			*column_values->output_isnull =
+				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+		}
+		else if (column_values->decompression_type == DT_ArrowText)
+		{
+			store_text_datum(column_values, arrow_row);
+			*column_values->output_isnull =
+				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+		}
+		else if (column_values->decompression_type == DT_ArrowTextDict)
+		{
+			const int16 index = ((int16 *) column_values->buffers[3])[arrow_row];
+			store_text_datum(column_values, index);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}

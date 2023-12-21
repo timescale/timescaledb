@@ -410,16 +410,18 @@ group by 2, 3 order by 1 desc
 \set algo array
 \set type text
 select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
     , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
-from :fn false) rowbyrow
-group by 2 order by 1 desc
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
 ;
 
 \set algo dictionary
 \set type text
 select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
     , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
-from :fn false) rowbyrow
-group by 2 order by 1 desc
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
 ;
 

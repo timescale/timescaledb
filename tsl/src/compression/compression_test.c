@@ -75,7 +75,9 @@ get_compression_algorithm(char *name)
 	X(DELTADELTA, INT8, true)                                                                      \
 	X(DELTADELTA, INT8, false)                                                                     \
 	X(ARRAY, TEXT, false)                                                                          \
-	X(DICTIONARY, TEXT, false)
+	X(ARRAY, TEXT, true)                                                                           \
+	X(DICTIONARY, TEXT, false)                                                                     \
+	X(DICTIONARY, TEXT, true)
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size, bool bulk)
 {

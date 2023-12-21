@@ -362,9 +362,14 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			CompressionColumnDescription *column = &dcontext->template_columns[i];
 			if (column->bulk_decompression_supported)
 			{
-				/* Values array, with 64 element padding (actually we have less). */
-				batch_memory_context_bytes +=
-					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) * column->value_bytes;
+				/*
+				 * Values array, with 64 element padding (actually we have less).
+				 *
+				 * For variable-length types (we only have text) we can't
+				 * estimate the width currently.
+				 */
+				batch_memory_context_bytes += (GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) *
+											  (column->value_bytes > 0 ? column->value_bytes : 16);
 				/* Also nulls bitmap. */
 				batch_memory_context_bytes +=
 					GLOBAL_MAX_ROWS_PER_COMPRESSION / (64 * sizeof(uint64));

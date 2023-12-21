@@ -124,7 +124,9 @@ jobs:
             # array has a peculiar recv function that recompresses all input, so
             # fuzzing it is much slower. The dictionary recv also uses it.
             { algo: array     , pgtype: text  , bulk: false, runs:   10000000 },
+            { algo: array     , pgtype: text  , bulk: true , runs:   10000000 },
             { algo: dictionary, pgtype: text  , bulk: false, runs:  100000000 },
+            { algo: dictionary, pgtype: text  , bulk: true , runs:  100000000 },
             ]
 
     name: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}

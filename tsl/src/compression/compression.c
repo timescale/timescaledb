@@ -133,6 +133,13 @@ tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
 
+	if (type != TEXTOID &&
+		(algorithm == COMPRESSION_ALGORITHM_DICTIONARY || algorithm == COMPRESSION_ALGORITHM_ARRAY))
+	{
+		/* Bulk decompression of array and dictionary is only supported for text. */
+		return NULL;
+	}
+
 	return definitions[algorithm].decompress_all;
 }
 

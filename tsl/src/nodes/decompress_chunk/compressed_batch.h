@@ -13,6 +13,8 @@ typedef struct ArrowArray ArrowArray;
 /* How to obtain the decompressed datum for individual row. */
 typedef enum
 {
+	DT_ArrowTextDict = -4,
+	DT_ArrowText = -3,
 	DT_Default = -2,
 	DT_Iterator = -1,
 	DT_Invalid = 0,
@@ -36,8 +38,10 @@ typedef struct CompressedColumnValues
 	 * Depending on decompression type, they are as follows:
 	 * iterator:        iterator
 	 * arrow fixed:     validity, value
+	 * arrow text:      validity, uint32* offsets, void* bodies
+	 * arrow dict text: validity, uint32* dict offsets, void* dict bodies, int16* indices
 	 */
-	const void *restrict buffers[2];
+	const void *restrict buffers[4];
 
 	/*
 	 * The source arrow array, if any. We don't use it for building the
