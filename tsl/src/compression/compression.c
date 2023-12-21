@@ -2101,6 +2101,72 @@ create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filte
 	return num_scankeys;
 }
 
+/*
+ * For insert into compressed chunks with unique index determine the
+ * columns which are safe to use for batch filtering.
+ *
+ * This is based on RelationGetIndexAttrBitmap from postgres with changes
+ * to also track unique expression indexes.
+ */
+static Bitmapset *
+compressed_insert_key_columns(Relation relation)
+{
+	Bitmapset *indexattrs = NULL; /* indexed columns */
+	ListCell *l;
+
+	/* Fast path if definitely no indexes */
+	if (!RelationGetForm(relation)->relhasindex)
+		return NULL;
+
+	List *indexoidlist = RelationGetIndexList(relation);
+
+	/* Fall out if no indexes (but relhasindex was set) */
+	if (indexoidlist == NIL)
+		return NULL;
+
+	/*
+	 * For each index, add referenced attributes to indexattrs.
+	 *
+	 * Note: we consider all indexes returned by RelationGetIndexList, even if
+	 * they are not indisready or indisvalid.  This is important because an
+	 * index for which CREATE INDEX CONCURRENTLY has just started must be
+	 * included in HOT-safety decisions (see README.HOT).  If a DROP INDEX
+	 * CONCURRENTLY is far enough along that we should ignore the index, it
+	 * won't be returned at all by RelationGetIndexList.
+	 */
+	foreach (l, indexoidlist)
+	{
+		Oid indexOid = lfirst_oid(l);
+		Relation indexDesc = index_open(indexOid, AccessShareLock);
+
+		if (!indexDesc->rd_index->indisunique)
+		{
+			index_close(indexDesc, AccessShareLock);
+			continue;
+		}
+
+		/* Collect simple attribute references.
+		 * For covering indexes we only need to collect the key attributes.
+		 * Unlike RelationGetIndexAttrBitmap we allow expression indexes
+		 * but we do not extract attributes from the expressions as that
+		 * would not be a safe filter as the expression can alter attributes
+		 * which would not make them sufficient for batch filtering.
+		 */
+		for (int i = 0; i < indexDesc->rd_index->indnkeyatts; i++)
+		{
+			int attrnum = indexDesc->rd_index->indkey.values[i];
+			if (attrnum != 0)
+			{
+				indexattrs =
+					bms_add_member(indexattrs, attrnum - FirstLowInvalidHeapAttributeNumber);
+			}
+		}
+		index_close(indexDesc, AccessShareLock);
+	}
+
+	return indexattrs;
+}
+
 void
 decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlot *slot)
 {
@@ -2133,7 +2199,7 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 	Relation in_rel = relation_open(comp->table_id, RowExclusiveLock);
 
 	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
-	Bitmapset *key_columns = RelationGetIndexAttrBitmap(out_rel, INDEX_ATTR_BITMAP_KEY);
+	Bitmapset *key_columns = compressed_insert_key_columns(out_rel);
 	Bitmapset *null_columns = NULL;
 
 	int num_scankeys;
