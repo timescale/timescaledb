@@ -23,11 +23,33 @@ SELECT compress_chunk(show_chunks('compress_unique')) IS NOT NULL AS compress;
 INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');
 ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_uniq_expr"
 \set ON_ERROR_STOP 1
+-- should only decompress 1 batch
+EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Insert on compress_unique (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(6 rows)
+
+-- should decompress no batches
+EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on compress_unique (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(4 rows)
+
 SELECT * FROM compress_unique ORDER BY compress_unique;
        offset_timestamp       | meter_id | meter_channel_id |          timestamp           
 ------------------------------+----------+------------------+------------------------------
  Sat Jan 01 00:00:00 2000 PST | m1       | c1               | Sat Jan 01 00:00:00 2000 PST
  Sat Jan 01 00:00:00 2000 PST | m1       | c2               | Sat Jan 01 00:00:00 2000 PST
-(2 rows)
+ Sat Jan 01 00:00:00 2000 PST | m1       | c2               | Sun Jan 02 00:00:00 2000 PST
+ Sat Jan 01 00:00:00 2000 PST | m1       | c3               | Sun Jan 02 00:00:00 2000 PST
+(4 rows)
 
 DROP TABLE compress_unique;
