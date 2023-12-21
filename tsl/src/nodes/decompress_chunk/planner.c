@@ -444,10 +444,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	{
 		saop = castNode(ScalarArrayOpExpr, qual);
 		opno = saop->opno;
-		if (list_length(saop->args) != 2)
-		{
-			return NULL;
-		}
+		Assert(list_length(saop->args) == 2);
 		arg1 = (Node *) linitial(saop->args);
 		arg2 = (Node *) lsecond(saop->args);
 	}
@@ -494,7 +491,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	}
 
 	Var *var = castNode(Var, arg1);
-	if((Index) var->varno != path->info->chunk_rel->relid)
+	if ((Index) var->varno != path->info->chunk_rel->relid)
 	{
 		/*
 		 * We have a Var from other relation (join clause), can't vectorize it

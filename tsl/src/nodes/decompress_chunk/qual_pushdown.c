@@ -360,6 +360,14 @@ modify_expression(Node *node, QualPushdownContext *context)
 		{
 			Var *var = castNode(Var, node);
 			Assert((Index) var->varno == context->chunk_rel->relid);
+
+			if (var->varattno <= 0)
+			{
+				/* Can't do this for system columns such as whole-row var. */
+				context->can_pushdown = false;
+				return NULL;
+			}
+
 			char *attname = get_attname(context->chunk_rte->relid, var->varattno, false);
 			/* we can only push down quals for segmentby columns */
 			if (!ts_array_is_member(context->settings->fd.segmentby, attname))
