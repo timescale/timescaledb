@@ -574,7 +574,7 @@ _guc_init(void)
 							 /* valueAddr= */ &ts_guc_bgw_log_level,
 							 /* bootValue= */ WARNING,
 							 /* options= */ loglevel_options,
-							 /* context= */ PGC_SIGHUP,
+							 /* context= */ PGC_SUSET,
 							 0,
 							 NULL,
 							 NULL,
