@@ -788,3 +788,6 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
 ALTER EXTENSION timescaledb ADD TABLE _timescaledb_catalog.hypertable;
 -- include this now in the config
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
+DROP FUNCTION IF EXISTS _timescaledb_functions.relation_approximate_size(relation REGCLASS);
+DROP FUNCTION IF EXISTS @extschema@.hypertable_approximate_detailed_size(relation REGCLASS);
+DROP FUNCTION IF EXISTS @extschema@.hypertable_approximate_size(hypertable REGCLASS);

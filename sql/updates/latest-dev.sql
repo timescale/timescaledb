@@ -427,3 +427,21 @@ ALTER EXTENSION timescaledb ADD TABLE _timescaledb_internal.job_errors;
 ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
 ALTER EXTENSION timescaledb ADD TABLE _timescaledb_catalog.hypertable;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
+
+CREATE FUNCTION _timescaledb_functions.relation_approximate_size(relation REGCLASS)
+RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
+AS '@MODULE_PATHNAME@', 'ts_relation_approximate_size' LANGUAGE C STRICT VOLATILE;
+
+CREATE FUNCTION @extschema@.hypertable_approximate_detailed_size(relation REGCLASS)
+RETURNS TABLE (table_bytes BIGINT, index_bytes BIGINT, toast_bytes BIGINT, total_bytes BIGINT)
+AS '@MODULE_PATHNAME@', 'ts_hypertable_approximate_size' LANGUAGE C VOLATILE;
+
+--- returns approximate total-bytes for a hypertable (includes table + index)
+CREATE FUNCTION @extschema@.hypertable_approximate_size(
+    hypertable              REGCLASS)
+RETURNS BIGINT
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+   SELECT sum(total_bytes)::bigint
+   FROM @extschema@.hypertable_approximate_detailed_size(hypertable);
+$BODY$ SET search_path TO pg_catalog, pg_temp;
