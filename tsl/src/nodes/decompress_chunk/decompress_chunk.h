@@ -43,6 +43,7 @@ typedef struct CompressionInfo
 	Bitmapset *compressed_attnos_in_compressed_chunk;
 
 	bool single_chunk; /* query on explicit chunk */
+	bool has_seq_num;  /* legacy sequence number support */
 
 } CompressionInfo;
 

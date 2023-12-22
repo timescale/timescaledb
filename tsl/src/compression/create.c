@@ -326,14 +326,8 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 	/*
 	 * Add the metadata columns. Count is always accessed, so put it first.
-	 * Sequence number should probably go after all orderby columns, but we
-	 * put it here for simplicity.
 	 */
-	List *all_column_defs = list_make2(makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
-													 INT4OID,
-													 -1 /* typemod */,
-													 0 /*collation*/),
-									   makeColumnDef(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+	List *all_column_defs = list_make1(makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
 													 INT4OID,
 													 -1 /* typemod */,
 													 0 /*collation*/));
