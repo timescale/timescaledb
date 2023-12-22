@@ -126,7 +126,7 @@ SELECT tablename
 FROM pg_tables WHERE tablespace = 'tablespace1';
 
 \set ON_ERROR_STOP 0
-SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_sequence_num_idx"');
+SELECT move_chunk(chunk=>:'COMPRESSED_CHUNK_NAME', destination_tablespace=>'tablespace1', index_destination_tablespace=>'tablespace1',  reorder_index=>'_timescaledb_internal."compress_hyper_2_28_chunk_b__ts_meta_min_1__ts_meta_max_1_idx"');
 \set ON_ERROR_STOP 1
 
 -- ensure that both compressed and uncompressed chunks moved

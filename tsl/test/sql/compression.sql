@@ -161,7 +161,7 @@ where uncompressed.compressed_chunk_id = compressed.id AND uncompressed.id = :'C
 SELECT count(*) from :CHUNK_NAME;
 SELECT count(*) from :COMPRESSED_CHUNK_NAME;
 SELECT sum(_ts_meta_count) from :COMPRESSED_CHUNK_NAME;
-SELECT location, _ts_meta_sequence_num from :COMPRESSED_CHUNK_NAME ORDER BY 1,2;
+SELECT location, _ts_meta_min_1, _ts_meta_max_1 from :COMPRESSED_CHUNK_NAME ORDER BY 1,2;
 
 \x
 SELECT chunk_id, numrows_pre_compression, numrows_post_compression
@@ -712,6 +712,8 @@ ORDER BY 1;
 
 SELECT count(*) FROM metrics;
 
+-- TODO: remove this test in a separate PR since it introduces
+-- a lot of changes which hurt readability of test output
 -- test sequence number is local to segment by
 CREATE TABLE local_seq(time timestamptz, device int);
 SELECT table_name FROM create_hypertable('local_seq','time');
@@ -724,15 +726,6 @@ INSERT INTO local_seq SELECT '2000-01-01',4 FROM generate_series(1,3000);
 INSERT INTO local_seq SELECT '2000-01-01', generate_series(5,8);
 
 SELECT compress_chunk(c) FROM show_chunks('local_seq') c;
-
-SELECT
-	format('%s.%s',chunk.schema_name,chunk.table_name) AS "COMP_CHUNK"
-FROM _timescaledb_catalog.hypertable ht
-  INNER JOIN _timescaledb_catalog.hypertable ht_comp ON ht_comp.id = ht.compressed_hypertable_id
-  INNER JOIN _timescaledb_catalog.chunk ON chunk.hypertable_id = ht_comp.id
-WHERE ht.table_name = 'local_seq' \gset
-
-SELECT device, _ts_meta_sequence_num, _ts_meta_count FROM :COMP_CHUNK ORDER BY 1,2;
 
 -- github issue 4872
 -- If subplan of ConstraintAwareAppend is TidRangeScan, then SELECT on

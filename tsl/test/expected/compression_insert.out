@@ -789,11 +789,11 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                               QUERY PLAN                                
--------------------------------------------------------------------------
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
    ->  Sort
-         Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+         Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
          ->  Seq Scan on compress_hyper_14_21_chunk
 (4 rows)
 
@@ -806,15 +806,15 @@ INSERT INTO test_ordering SELECT 1;
 -- It was hard to include a path without pushed down sort for consideration, as `add_path` would reject
 -- the path with sort pushdown, which is desirable in most cases
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
@@ -824,15 +824,15 @@ INSERT INTO test_ordering SELECT 1;
 INSERT INTO test_ordering VALUES (105),(104),(103);
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                              QUERY PLAN                                              
-------------------------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Merge Append
          Sort Key: _hyper_13_20_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
                ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_14_21_chunk._ts_meta_min_1, compress_hyper_14_21_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_14_21_chunk
          ->  Sort
                Sort Key: _hyper_13_20_chunk."time"
@@ -880,17 +880,17 @@ SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timesc
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
    ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_14_23_chunk._ts_meta_min_1, compress_hyper_14_23_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_14_23_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
          ->  Sort
-               Sort Key: compress_hyper_14_24_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_14_24_chunk._ts_meta_min_1, compress_hyper_14_24_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_14_24_chunk
 (10 rows)
 

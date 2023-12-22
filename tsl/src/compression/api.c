@@ -32,6 +32,7 @@
 #include "cache.h"
 #include "chunk.h"
 #include "compression.h"
+#include "compression_storage.h"
 #include "create.h"
 #include "debug_point.h"
 #include "error_utils.h"
@@ -315,6 +316,11 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+		return NULL;
+
+	/* We don't support merging chunks with sequence numbers */
+	if (get_attnum(prev_comp_reloid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) !=
+		InvalidAttrNumber)
 		return NULL;
 
 	return previous_chunk;
@@ -1212,7 +1218,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 						compressed_chunk_rel,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
-						true /*reset_sequence*/,
 						0 /*insert options*/);
 
 	/* create an array of the segmentby column offsets in the compressed chunk */

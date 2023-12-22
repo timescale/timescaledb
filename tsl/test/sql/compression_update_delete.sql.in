@@ -1276,7 +1276,7 @@ SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_cat
 -- create multiple indexes on compressed hypertable
 DROP INDEX _timescaledb_internal.compress_hyper_2_2_chunk_device_id_filler_1_filler_2_filler_idx;
 CREATE INDEX ON :CHUNK (_ts_meta_min_1);
-CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_sequence_num);
+CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_count);
 CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_max_1, filler_1);
 
 CREATE INDEX filler_1 ON :CHUNK (filler_1);
@@ -1350,8 +1350,8 @@ SELECT compress_chunk(c) FROM show_chunks('t6367') c;
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK1" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 \gset
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK2" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 OFFSET 1 \gset
 
-DROP INDEX _timescaledb_internal.compress_hyper_2_3_chunk_source_id_label__ts_meta_sequence__idx;
-DROP INDEX _timescaledb_internal.compress_hyper_2_4_chunk_source_id_label__ts_meta_sequence__idx;
+DROP INDEX _timescaledb_internal.compress_hyper_2_3_chunk_source_id_label__ts_meta_min_1__ts_idx;
+DROP INDEX _timescaledb_internal.compress_hyper_2_4_chunk_source_id_label__ts_meta_min_1__ts_idx;
 -- testcase with no index, should use seq scan
 set timescaledb.debug_compression_path_info to on;
 BEGIN;

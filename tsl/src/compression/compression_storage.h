@@ -19,3 +19,4 @@ int32 compression_hypertable_create(Hypertable *ht, Oid owner, Oid tablespace_oi
 Oid compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid tablespace_oid);
 void modify_compressed_toast_table_storage(CompressionSettings *settings, List *coldefs,
 										   Oid compress_relid);
+void create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings);

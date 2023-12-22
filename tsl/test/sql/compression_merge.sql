@@ -133,9 +133,6 @@ SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
   JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
   JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test5' \gset
 
--- Make sure sequence numbers are correctly fetched from index.
-SELECT _ts_meta_sequence_num FROM :CHUNK  where i = 1;
-
 SELECT schemaname || '.' || indexname AS "INDEXNAME"
 FROM pg_indexes i
 INNER JOIN _timescaledb_catalog.chunk cc ON i.schemaname = cc.schema_name and i.tablename = cc.table_name
@@ -145,12 +142,8 @@ LIMIT 1 \gset
 
 DROP INDEX :INDEXNAME;
 
--- We dropped the index from compressed chunk thats needed to determine sequence numbers
--- during merge, merging will fallback to doing heap scans and work just fine.
+-- Merging works without indexes on compressed chunks
 SELECT compress_chunk(i, true) FROM show_chunks('test5') i LIMIT 5;
-
--- Make sure sequence numbers are correctly fetched from heap.
-SELECT _ts_meta_sequence_num FROM :CHUNK where i = 1;
 
 SELECT 'test5' AS "HYPERTABLE_NAME" \gset
 \ir include/compression_test_merge.sql

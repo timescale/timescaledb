@@ -241,7 +241,6 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	 * targetlist.
 	 */
 	bool missing_count = true;
-	bool missing_sequence = path->needs_sequence_num;
 	Bitmapset *uncompressed_attrs_found = NULL;
 	Bitmapset *selectedCols = NULL;
 
@@ -365,12 +364,6 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 				destination_attno = DECOMPRESS_CHUNK_COUNT_ID;
 				missing_count = false;
 			}
-			else if (path->needs_sequence_num &&
-					 strcmp(column_name, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) == 0)
-			{
-				destination_attno = DECOMPRESS_CHUNK_SEQUENCE_NUM_ID;
-				missing_sequence = false;
-			}
 		}
 
 		const bool is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
@@ -426,11 +419,6 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 	if (missing_count)
 	{
 		elog(ERROR, "the count column was not found in the compressed targetlist");
-	}
-
-	if (missing_sequence)
-	{
-		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
 	}
 
 	/*

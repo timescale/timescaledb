@@ -30,6 +30,7 @@ set(TEST_FILES
     compression_policy.sql
     compression_qualpushdown.sql
     compression_settings.sql
+    compression_sequence_num_removal.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_columns.sql
     decompress_index.sql

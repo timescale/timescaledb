@@ -185,19 +185,19 @@ select sum(c) from dvagg having sum(c) > 0;
 -- Some negative cases.
 set timescaledb.debug_require_vector_agg to 'forbid';
 explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
  MixedAggregate
    Hash Key: _hyper_1_1_chunk.a
    Group Key: ()
    ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
                ->  Sort
-                     Sort Key: compress_hyper_2_2_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_2_2_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
                ->  Sort
-                     Sort Key: compress_hyper_2_4_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_2_4_chunk._ts_meta_min_1, compress_hyper_2_4_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_2_4_chunk
 (12 rows)
 

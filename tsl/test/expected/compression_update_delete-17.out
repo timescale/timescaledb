@@ -1059,7 +1059,7 @@ WHERE attrelid IN (:'COMPRESS_CHUNK_1'::regclass, :'UNCOMPRESS_CHUNK_1'::regclas
 ORDER BY attnum;
  attname | attnum 
 ---------+--------
- d       |      4
+ d       |      3
  d       |      7
 (2 rows)
 
@@ -1069,7 +1069,7 @@ WHERE attrelid IN (:'COMPRESS_CHUNK_2'::regclass, :'UNCOMPRESS_CHUNK_2'::regclas
 ORDER BY attnum;
  attname | attnum 
 ---------+--------
- d       |      4
+ d       |      3
  d       |      7
 (2 rows)
 
@@ -1367,7 +1367,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 \gset
 -- delete 10k rows
 DELETE FROM sample_table WHERE c4 = 5;
-INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_sequence_num_idx" is used for scan. 
+INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_min_1__ts_meta_max_1_idx" is used for scan. 
 INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 = 5;
@@ -1420,7 +1420,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 < 5 \gset
 -- delete 50k rows
 DELETE FROM sample_table WHERE c4 < 5;
-INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_sequence_num_idx" is used for scan. 
+INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_min_1__ts_meta_max_1_idx" is used for scan. 
 INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 < 5;
@@ -1473,7 +1473,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 >= 5 \gset
 -- delete 50k rows
 DELETE FROM sample_table WHERE c4 >= 5;
-INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_sequence_num_idx" is used for scan. 
+INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_min_1__ts_meta_max_1_idx" is used for scan. 
 INFO:  Number of compressed rows fetched from index: 50. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 >= 5;
@@ -1687,7 +1687,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 = 5 and c1 = 5 \gset
 -- delete 1k rows
 DELETE FROM sample_table WHERE c4 = 5 and c1 = 5;
-INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_sequence_num_idx" is used for scan. 
+INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_min_1__ts_meta_max_1_idx" is used for scan. 
 INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by heap filters: 9.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 = 5 and c1 = 5;
@@ -1742,7 +1742,7 @@ SELECT COUNT(*) AS "total_rows" FROM sample_table \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM sample_table WHERE c4 > 5 and c2 = 5 \gset
 -- delete 4k rows
 DELETE FROM sample_table WHERE c4 > 5 and c2 = 5;
-INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_sequence_num_idx" is used for scan. 
+INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_min_1__ts_meta_max_1_idx" is used for scan. 
 INFO:  Number of compressed rows fetched from index: 40. Number of compressed rows filtered by heap filters: 0.
 -- report 0 rows
 SELECT count(*) FROM sample_table WHERE c4 > 5 and c2 = 5;
@@ -1805,7 +1805,7 @@ SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7;
 SELECT COUNT(*) AS "total_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 \gset
 SELECT COUNT(*) AS "total_affected_rows" FROM :COMPRESS_CHUNK_1 WHERE c4 = 4 AND _ts_meta_max_1 >= 7 \gset
 UPDATE sample_table SET c3 = c3 + 0 WHERE c4 = 4 AND c1 >= 7;
-INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_sequence_num_idx" is used for scan. 
+INFO:  Index "compress_hyper_20_38_chunk_c4__ts_meta_min_1__ts_meta_max_1_idx" is used for scan. 
 INFO:  Number of compressed rows fetched from index: 10. Number of compressed rows filtered by heap filters: 7.
 -- report 7 rows
 SELECT COUNT(*) FROM :COMPRESS_CHUNK_1 WHERE c4 = 4;
@@ -2424,7 +2424,7 @@ SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_cat
 -- create multiple indexes on compressed hypertable
 DROP INDEX _timescaledb_internal.compress_hyper_2_2_chunk_device_id_filler_1_filler_2_filler_idx;
 CREATE INDEX ON :CHUNK (_ts_meta_min_1);
-CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_sequence_num);
+CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_count);
 CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_max_1, filler_1);
 CREATE INDEX filler_1 ON :CHUNK (filler_1);
 CREATE INDEX filler_2 ON :CHUNK (filler_2);
@@ -2530,8 +2530,8 @@ SELECT compress_chunk(c) FROM show_chunks('t6367') c;
 
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK1" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 \gset
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK2" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 OFFSET 1 \gset
-DROP INDEX _timescaledb_internal.compress_hyper_2_3_chunk_source_id_label__ts_meta_sequence__idx;
-DROP INDEX _timescaledb_internal.compress_hyper_2_4_chunk_source_id_label__ts_meta_sequence__idx;
+DROP INDEX _timescaledb_internal.compress_hyper_2_3_chunk_source_id_label__ts_meta_min_1__ts_idx;
+DROP INDEX _timescaledb_internal.compress_hyper_2_4_chunk_source_id_label__ts_meta_min_1__ts_idx;
 -- testcase with no index, should use seq scan
 set timescaledb.debug_compression_path_info to on;
 BEGIN;
@@ -2779,21 +2779,21 @@ SELECT compress_chunk(show_chunks('test_partials'));
 
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_68_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_71_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_71_chunk._ts_meta_min_1, compress_hyper_36_71_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_71_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_72_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_72_chunk._ts_meta_min_1, compress_hyper_36_72_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_72_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_73_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_73_chunk._ts_meta_min_1, compress_hyper_36_73_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_73_chunk
 (14 rows)
 
@@ -2844,15 +2844,15 @@ EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from
 DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
 -- All 3 chunks will now become partially compressed chunks
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                                     QUERY PLAN                                                     
+--------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Merge Append
          Sort Key: _hyper_35_68_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_68_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_71_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_71_chunk._ts_meta_min_1, compress_hyper_36_71_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_71_chunk
          ->  Sort
                Sort Key: _hyper_35_68_chunk."time"
@@ -2861,7 +2861,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_35_69_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_72_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_72_chunk._ts_meta_min_1, compress_hyper_36_72_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_72_chunk
          ->  Sort
                Sort Key: _hyper_35_69_chunk."time"
@@ -2870,7 +2870,7 @@ EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
          Sort Key: _hyper_35_70_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_73_chunk._ts_meta_sequence_num DESC
+                     Sort Key: compress_hyper_36_73_chunk._ts_meta_min_1, compress_hyper_36_73_chunk._ts_meta_max_1
                      ->  Seq Scan on compress_hyper_36_73_chunk
          ->  Sort
                Sort Key: _hyper_35_70_chunk."time"
@@ -2899,21 +2899,21 @@ SELECT compress_chunk(show_chunks('test_partials'));
 
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
-                                  QUERY PLAN                                   
--------------------------------------------------------------------------------
+                                                  QUERY PLAN                                                  
+--------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_partials
    Order: test_partials."time"
    ->  Custom Scan (DecompressChunk) on _hyper_35_68_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_74_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_74_chunk._ts_meta_min_1, compress_hyper_36_74_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_74_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_75_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_75_chunk._ts_meta_min_1, compress_hyper_36_75_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_75_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
          ->  Sort
-               Sort Key: compress_hyper_36_76_chunk._ts_meta_sequence_num DESC
+               Sort Key: compress_hyper_36_76_chunk._ts_meta_min_1, compress_hyper_36_76_chunk._ts_meta_max_1
                ->  Seq Scan on compress_hyper_36_76_chunk
 (14 rows)
 

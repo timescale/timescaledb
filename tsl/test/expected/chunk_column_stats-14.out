@@ -164,12 +164,12 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 -- A query using a WHERE clause on "sensor_id" column will go back to scanning all the chunks
 -- along with an expensive DECOMPRESS on the first chunk
 :PREFIX SELECT * FROM sample_table WHERE sensor_id > 9;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
          Filter: (sensor_id > 9)
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id > 9)
    ->  Index Scan using _hyper_1_1_chunk_sense_idx on _hyper_1_1_chunk
          Index Cond: (sensor_id > 9)
@@ -220,11 +220,11 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 (2 rows)
 
 :PREFIX SELECT * FROM sample_table WHERE sensor_id < 11;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id < 11)
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id < 11)
@@ -238,11 +238,11 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 (2 rows)
 
 :PREFIX SELECT * FROM sample_table WHERE sensor_id > 1 and sensor_id < 7;
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
                Index Cond: ((sensor_id > 1) AND (sensor_id < 7))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: ((sensor_id > 1) AND (sensor_id < 7))
@@ -299,22 +299,22 @@ SELECT * from _timescaledb_catalog.chunk_column_stats WHERE chunk_id = :'CHUNK_I
 
 -- IN/ANY is not supported for now
 :PREFIX SELECT * FROM sample_table WHERE sensor_id IN (9, 10, 11);
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id = ANY ('{9,10,11}'::integer[]))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))
 (6 rows)
 
 :PREFIX SELECT * FROM sample_table WHERE sensor_id = ANY(ARRAY[9, 10, 11]);
-                                                      QUERY PLAN                                                       
------------------------------------------------------------------------------------------------------------------------
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Index Scan using compress_hyper_2_3_chunk_sensor_id__ts_meta_min_1__ts_meta__idx on compress_hyper_2_3_chunk
                Index Cond: (sensor_id = ANY ('{9,10,11}'::integer[]))
    ->  Seq Scan on _hyper_1_2_chunk
          Filter: (sensor_id = ANY ('{9,10,11}'::integer[]))

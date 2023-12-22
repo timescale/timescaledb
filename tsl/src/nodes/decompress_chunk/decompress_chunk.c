@@ -46,6 +46,7 @@ static CustomPathMethods decompress_chunk_path_methods = {
 typedef struct SortInfo
 {
 	List *required_compressed_pathkeys;
+	List *required_eq_classes;
 	bool needs_sequence_num;
 	bool can_pushdown_sort; /* sort can be pushed below DecompressChunk */
 	bool reverse;
@@ -148,6 +149,42 @@ append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_in
 	return newec;
 }
 
+static EquivalenceClass *
+append_ec_for_metadata_col(PlannerInfo *root, CompressionInfo *info, Var *var, PathKey *pk)
+{
+	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
+	EquivalenceMember *em = makeNode(EquivalenceMember);
+
+	em->em_expr = (Expr *) var;
+	em->em_relids = bms_make_singleton(info->compressed_rte->relid);
+	em->em_is_const = false;
+	em->em_is_child = false;
+	em->em_datatype = var->vartype;
+	EquivalenceClass *ec = makeNode(EquivalenceClass);
+	ec->ec_opfamilies = pk->pk_eclass->ec_opfamilies;
+	ec->ec_collation = pk->pk_eclass->ec_collation;
+	ec->ec_members = list_make1(em);
+	ec->ec_sources = list_copy(pk->pk_eclass->ec_sources);
+	ec->ec_derives = list_copy(pk->pk_eclass->ec_derives);
+	ec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
+	ec->ec_has_const = pk->pk_eclass->ec_has_const;
+	ec->ec_has_volatile = pk->pk_eclass->ec_has_volatile;
+#if PG16_LT
+	ec->ec_below_outer_join = pk->pk_eclass->ec_below_outer_join;
+#endif
+	ec->ec_broken = pk->pk_eclass->ec_broken;
+	ec->ec_sortref = pk->pk_eclass->ec_sortref;
+	ec->ec_min_security = pk->pk_eclass->ec_min_security;
+	ec->ec_max_security = pk->pk_eclass->ec_max_security;
+	ec->ec_merged = pk->pk_eclass->ec_merged;
+	MemoryContextSwitchTo(oldcontext);
+	root->eq_classes = lappend(root->eq_classes, ec);
+	info->compressed_rel->eclass_indexes =
+		bms_add_member(info->compressed_rel->eclass_indexes, root->eq_classes->length - 1);
+
+	return ec;
+}
+
 static void
 build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chunk_pathkeys,
 							   CompressionInfo *info)
@@ -155,6 +192,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	Var *var;
 	int varattno;
 	List *required_compressed_pathkeys = NIL;
+	ListCell *lc = NULL;
 	PathKey *pk;
 
 	/*
@@ -172,7 +210,6 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		 * seen from the start, so that we arrive at the proper counts of seen
 		 * segmentby columns in the end.
 		 */
-		ListCell *lc;
 		for (lc = list_head(chunk_pathkeys); lc; lc = lnext(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
@@ -207,39 +244,111 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 	 */
 	if (sort_info->needs_sequence_num)
 	{
-		bool nulls_first;
-		Oid sortop;
-		varattno =
-			get_attnum(info->compressed_rte->relid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-		var = makeVar(info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
-
-		if (sort_info->reverse)
+		if (info->has_seq_num)
 		{
-			sortop = get_commutator(Int4LessOperator);
-			nulls_first = true;
+			bool nulls_first;
+			Oid sortop;
+			varattno = get_attnum(info->compressed_rte->relid,
+								  COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+			var = makeVar(info->compressed_rel->relid, varattno, INT4OID, -1, InvalidOid, 0);
+
+			if (sort_info->reverse)
+			{
+				sortop = get_commutator(Int4LessOperator);
+				nulls_first = true;
+			}
+			else
+			{
+				sortop = Int4LessOperator;
+				nulls_first = false;
+			}
+
+			/*
+			 * Create the EquivalenceClass for the sequence number column of this
+			 * compressed chunk, so that we can build the PathKey that refers to it.
+			 */
+			EquivalenceClass *ec =
+				append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
+
+			/* Find the operator in pg_amop --- failure shouldn't happen. */
+			Oid opfamily, opcintype;
+			int16 strategy;
+			if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+				elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+
+			pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
+
+			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 		}
 		else
 		{
-			sortop = Int4LessOperator;
-			nulls_first = false;
+			/* If there are no segmentby pathkeys, start from the beginning of the list */
+			if (info->num_segmentby_columns == 0)
+			{
+				lc = list_head(chunk_pathkeys);
+			}
+			Assert(lc != NULL);
+			Expr *expr;
+			char *column_name;
+			for (; lc != NULL; lc = lnext(chunk_pathkeys, lc))
+			{
+				pk = lfirst(lc);
+				expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
+
+				Assert(expr != NULL && IsA(expr, Var));
+				var = castNode(Var, expr);
+				Assert(var->varattno > 0);
+
+				column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
+				int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
+				varattno =
+					get_attnum(info->compressed_rte->relid, column_segment_min_name(orderby_index));
+				Assert(orderby_index != 0);
+				bool orderby_desc =
+					ts_array_get_element_bool(info->settings->fd.orderby_desc, orderby_index);
+				bool orderby_nullsfirst =
+					ts_array_get_element_bool(info->settings->fd.orderby_nullsfirst, orderby_index);
+
+				bool nulls_first;
+				int16 strategy;
+
+				if (sort_info->reverse)
+				{
+					strategy = orderby_desc ? BTLessStrategyNumber : BTGreaterStrategyNumber;
+					nulls_first = !orderby_nullsfirst;
+				}
+				else
+				{
+					strategy = orderby_desc ? BTGreaterStrategyNumber : BTLessStrategyNumber;
+					nulls_first = orderby_nullsfirst;
+				}
+
+				var = makeVar(info->compressed_rel->relid,
+							  varattno,
+							  var->vartype,
+							  var->vartypmod,
+							  var->varcollid,
+							  var->varlevelsup);
+				EquivalenceClass *min_ec = append_ec_for_metadata_col(root, info, var, pk);
+				PathKey *min =
+					make_canonical_pathkey(root, min_ec, pk->pk_opfamily, strategy, nulls_first);
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, min);
+
+				varattno =
+					get_attnum(info->compressed_rte->relid, column_segment_max_name(orderby_index));
+				var = makeVar(info->compressed_rel->relid,
+							  varattno,
+							  var->vartype,
+							  var->vartypmod,
+							  var->varcollid,
+							  var->varlevelsup);
+				EquivalenceClass *max_ec = append_ec_for_metadata_col(root, info, var, pk);
+				PathKey *max =
+					make_canonical_pathkey(root, max_ec, pk->pk_opfamily, strategy, nulls_first);
+
+				required_compressed_pathkeys = lappend(required_compressed_pathkeys, max);
+			}
 		}
-
-		/*
-		 * Create the EquivalenceClass for the sequence number column of this
-		 * compressed chunk, so that we can build the PathKey that refers to it.
-		 */
-		EquivalenceClass *ec =
-			append_ec_for_seqnum(root, info, sort_info, var, sortop, nulls_first);
-
-		/* Find the operator in pg_amop --- failure shouldn't happen. */
-		Oid opfamily, opcintype;
-		int16 strategy;
-		if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
-			elog(ERROR, "operator %u is not a valid ordering operator", sortop);
-
-		pk = make_canonical_pathkey(root, ec, opfamily, strategy, nulls_first);
-
-		required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 	}
 	sort_info->required_compressed_pathkeys = required_compressed_pathkeys;
 }
@@ -299,6 +408,10 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInf
 				bms_add_member(info->chunk_segmentby_attnos, chunk_attno);
 		}
 	}
+
+	info->has_seq_num =
+		get_attnum(info->settings->fd.relid, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) !=
+		InvalidAttrNumber;
 
 	return info;
 }
@@ -1218,13 +1331,30 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 											COMPRESSION_COLUMN_METADATA_COUNT_NAME,
 											&attrs_used);
 
-	/* add the segment order column if we may try to order by it */
+	/* add the sequence number or orderby metadata columns if we try to order by them*/
 	if (needs_sequence_num)
 	{
-		compressed_reltarget_add_var_for_column(compressed_rel,
-												compressed_relid,
-												COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-												&attrs_used);
+		if (info->has_seq_num)
+		{
+			compressed_reltarget_add_var_for_column(compressed_rel,
+													compressed_relid,
+													COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+													&attrs_used);
+		}
+		else
+		{
+			for (int i = 1; i <= ts_array_length(info->settings->fd.orderby); i++)
+			{
+				compressed_reltarget_add_var_for_column(compressed_rel,
+														compressed_relid,
+														column_segment_min_name(i),
+														&attrs_used);
+				compressed_reltarget_add_var_for_column(compressed_rel,
+														compressed_relid,
+														column_segment_max_name(i),
+														&attrs_used);
+			}
+		}
 	}
 
 	/*
