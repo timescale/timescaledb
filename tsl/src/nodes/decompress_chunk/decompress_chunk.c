@@ -564,7 +564,7 @@ can_sorted_merge_append(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
  */
 static void
 add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht, Index ht_relid,
-					   Path *decompress_chunk_path, Path *child_path)
+					   Path *path, Path *child_path)
 {
 	if (root->query_pathkeys == NIL || hypertable_is_distributed(ht))
 		return;
@@ -572,6 +572,14 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 	/* We are only interested in regular (i.e., non index) paths */
 	if (!IsA(child_path, Path))
 		return;
+
+	/* Copy the decompress chunk path because the original can be recycled in add_path, and our
+	 * sorted path must be independent. */
+	if (!ts_is_decompress_chunk_path(path))
+		return;
+
+	DecompressChunkPath *decompress_chunk_path =
+		copy_decompress_chunk_path((DecompressChunkPath *) path);
 
 	/* Iterate over the sort_pathkeys and generate all possible useful sortings */
 	List *useful_pathkeys = NIL;
@@ -597,12 +605,13 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 		useful_pathkeys = lappend(useful_pathkeys, pathkey);
 
 		/* Create the sorted path for these useful_pathkeys */
-		if (!pathkeys_contained_in(useful_pathkeys, decompress_chunk_path->pathkeys))
+		if (!pathkeys_contained_in(useful_pathkeys,
+								   decompress_chunk_path->custom_path.path.pathkeys))
 		{
 			Path *sorted_path =
 				(Path *) create_sort_path(root,
 										  chunk_rel,
-										  decompress_chunk_path,
+										  &decompress_chunk_path->custom_path.path,
 										  list_copy(useful_pathkeys), /* useful_pathkeys is modified
 																		 in each iteration */
 										  root->limit_tuples);
