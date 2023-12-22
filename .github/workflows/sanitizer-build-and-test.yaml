@@ -104,7 +104,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
-        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}\
+        key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\
           -${{ steps.get-date.outputs.date }}-${{ hashFiles('.github/**') }}"
 
     - name: Build PostgreSQL ${{ matrix.pg }} if not in cache
