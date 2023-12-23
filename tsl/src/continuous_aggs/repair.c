@@ -131,10 +131,10 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	fqi.finalized = finalized;
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
 
-	Query *view_query = view_query = finalizequery_get_select_query(&fqi,
-																	mattblinfo.matcollist,
-																	&mataddress,
-																	NameStr(mat_ht->fd.table_name));
+	Query *view_query = finalizequery_get_select_query(&fqi,
+													   mattblinfo.matcollist,
+													   &mataddress,
+													   NameStr(mat_ht->fd.table_name));
 
 	if (!agg->data.materialized_only)
 	{
