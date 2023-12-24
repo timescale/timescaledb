@@ -73,6 +73,12 @@ jobs:
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 
+        # Force use of OpenSSL 3.1.4, since OpenSSL 3.2.0 crashes with recent
+        # PostgreSQL versions on OS X (see https://github.com/Homebrew/homebrew-core/issues/155651)
+        brew unlink openssl@3
+        curl -L https://raw.githubusercontent.com/Homebrew/homebrew-core/e68186ba5a05a6ea9a30d6c7744de9a46bd3aadd/Formula/o/openssl@3.rb > openssl@3.rb
+        brew install openssl@3.rb
+
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
 
@@ -125,6 +131,7 @@ jobs:
       run: |
         make -C ~/$PG_SRC_DIR install
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -160,7 +167,7 @@ jobs:
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
-            PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
+            | tee installcheck.log
 
     - name: pginstallcheck
       if: matrix.pginstallcheck
@@ -282,6 +289,4 @@ jobs:
             GITHUB_PR_NUMBER=0
         fi
         export GITHUB_PR_NUMBER
-        PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql"
-        export PSQL
         scripts/upload_ci_stats.sh
