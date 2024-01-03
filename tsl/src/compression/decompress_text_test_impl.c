@@ -69,10 +69,6 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 			const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(rowbyrow_varlena);
 			const char *rowbyrow_cstring = VARDATA_ANY(rowbyrow_varlena);
 
-			//				fprintf(stderr, "arrow: '%.*s'(%ld), rbr: '%.*s'(%ld)\n",
-			//					(int) arrow_len, arrow_cstring, arrow_len,
-			//					(int) rowbyrow_len, rowbyrow_cstring, rowbyrow_len);
-
 			if (rowbyrow_len != arrow_len)
 			{
 				ereport(errorlevel,
