@@ -288,10 +288,11 @@ jobs:
 
     - name: Save fuzzer-generated crash cases
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Crash cases for ${{ steps.config.outputs.name }}
         path: db/crash-*
+        if-no-files-found: ignore
 
     - name: Save interesting cases
       if: always()
