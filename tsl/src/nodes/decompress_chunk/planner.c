@@ -420,6 +420,42 @@ static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
 	/*
+	 * and/or/not
+	 */
+	if (IsA(qual, BoolExpr))
+	{
+		BoolExpr *boolexpr = castNode(BoolExpr, qual);
+		bool need_copy = false;
+		List *vectorized_args = NIL;
+		ListCell *lc;
+		foreach (lc, boolexpr->args)
+		{
+			Node *arg = lfirst(lc);
+			Node *vectorized_arg = make_vectorized_qual(path, arg);
+			if (vectorized_arg == NULL)
+			{
+				return NULL;
+			}
+
+			if (vectorized_arg != arg)
+			{
+				need_copy = true;
+			}
+
+			vectorized_args = lappend(vectorized_args, vectorized_arg);
+		}
+
+		if (!need_copy)
+		{
+			return (Node *) boolexpr;
+		}
+
+		BoolExpr *boolexpr_copy = (BoolExpr *) copyObject(boolexpr);
+		boolexpr_copy->args = vectorized_args;
+		return (Node *) boolexpr_copy;
+	}
+
+	/*
 	 * Currently we vectorize some "Var op Const" binary predicates,
 	 * scalar array operations with these predicates, and null test.
 	 */

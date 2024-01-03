@@ -60,12 +60,39 @@ select metric4 from vectorqual where ts > '2021-01-01 00:00:00' order by 1;
 select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order by vectorqual;
 
 
--- ORed constrainst on multiple columns (not vectorized for now).
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- ORed constrainst on multiple columns.
+set timescaledb.debug_require_vector_qual to 'only';
+--set timescaledb.debug_require_vector_qual to 'forbid';
+--set timescaledb.enable_bulk_decompression to off;
+
 select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order by vectorqual;
+
+-- Some more tests for boolean operations.
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00';
+
+select count(*) from vectorqual where 40 < metric3;
+
+select count(*) from vectorqual where metric2 < 0;
+
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00' or 40 < metric3;
+
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00' or not 40 >= metric3;
+
+select count(*) from vectorqual where metric2 < 30 and (ts > '2021-01-01 00:00:00' or not 40 >= metric3);
+
+select count(*) from vectorqual where not metric2 < 30 or ((not ts > '2021-01-01 00:00:00') and (not not 40 >= metric3));
+
+-- early exit inside AND BoolExpr
+select count(*) from vectorqual where metric2 < 0 or (metric2 < -1 and 40 >= metric3);
+
+-- early exit after OR BoolExpr
+select count(*) from vectorqual where metric2 < 0 or metric2 < -1;
+
+reset timescaledb.enable_bulk_decompression;
 
 
 -- Test with unary operator.
+set timescaledb.debug_require_vector_qual to 'forbid';
 create operator !! (function = 'bool', rightarg = int4);
 select count(*) from vectorqual where !!metric3;
 

@@ -69,7 +69,7 @@ typedef struct DecompressBatchState
 	 * row. Indexed same as arrow arrays, w/o accounting for the reverse scan
 	 * direction. Initialized to all ones, i.e. all rows pass.
 	 */
-	uint64 *vector_qual_result;
+	uint64 *restrict vector_qual_result;
 
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
