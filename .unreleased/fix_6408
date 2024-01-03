@@ -1,2 +1,0 @@
-Fixes: #6408 Fix groupby pathkeys for gapfill in PG16
-Thanks: @MA-MacDonald for reporting an issue with gapfill in PG16
