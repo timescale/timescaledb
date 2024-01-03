@@ -1,3 +1,0 @@
-Fixes: #6439 Fix compressed chunk permission handling on PG16
-
-Thanks: @adriangb for reporting an issue with security barrier views on pg16

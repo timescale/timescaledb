@@ -73,6 +73,7 @@ jobs:
 
         # Force use of OpenSSL 3.1.4, since OpenSSL 3.2.0 crashes with recent
         # PostgreSQL versions on OS X (see https://github.com/Homebrew/homebrew-core/issues/155651)
+        brew install --overwrite python@3.11
         brew unlink openssl@3
         curl -L https://raw.githubusercontent.com/Homebrew/homebrew-core/e68186ba5a05a6ea9a30d6c7744de9a46bd3aadd/Formula/o/openssl@3.rb > openssl@3.rb
         brew install openssl@3.rb
