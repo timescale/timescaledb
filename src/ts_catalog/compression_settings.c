@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 
+#include "chunk.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "ts_catalog/catalog.h"
@@ -17,6 +18,20 @@
 static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *data);
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
 														  TupleDesc desc);
+
+CompressionSettings *
+ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid)
+{
+	CompressionSettings *src = ts_compression_settings_get(ht_relid);
+	Assert(src);
+	CompressionSettings *dst = ts_compression_settings_create(dst_relid,
+															  src->fd.segmentby,
+															  src->fd.orderby,
+															  src->fd.orderby_desc,
+															  src->fd.orderby_nullsfirst);
+
+	return dst;
+}
 
 CompressionSettings *
 ts_compression_settings_create(Oid relid, ArrayType *segmentby, ArrayType *orderby,
@@ -152,6 +167,22 @@ ts_compression_settings_delete(Oid relid)
 		count++;
 	}
 	return count > 0;
+}
+
+TSDLLEXPORT void
+ts_compression_settings_rename_column_hypertable(Hypertable *ht, char *old, char *new)
+{
+	ts_compression_settings_rename_column(ht->main_table_relid, old, new);
+	if (ht->fd.compressed_hypertable_id)
+	{
+		ListCell *lc;
+		List *chunk_ids = ts_chunk_get_chunk_ids_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		foreach (lc, chunk_ids)
+		{
+			Oid relid = ts_chunk_get_relid(lfirst_int(lc), false);
+			ts_compression_settings_rename_column(relid, old, new);
+		}
+	}
 }
 
 TSDLLEXPORT void

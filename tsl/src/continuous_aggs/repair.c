@@ -22,8 +22,8 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	ListCell *lc1, *lc2;
 	int sec_ctx;
 	Oid uid, saved_uid;
-
 	bool finalized = ContinuousAggIsFinalized(agg);
+
 	if (!finalized)
 	{
 		ereport(WARNING,
@@ -131,24 +131,10 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	fqi.finalized = finalized;
 	finalizequery_init(&fqi, direct_query, &mattblinfo);
 
-	/*
-	 * Add any internal columns needed for materialization based
-	 * on the user query's table.
-	 */
-	if (!finalized)
-		mattablecolumninfo_addinternal(&mattblinfo);
-
-	Query *view_query = NULL;
-	if (rebuild_cagg_with_joins)
-	{
-		view_query = finalizequery_get_select_query(&fqi,
-													mattblinfo.matcollist,
-													&mataddress,
-													NameStr(mat_ht->fd.table_name));
-	}
-	else
-		view_query =
-			finalizequery_get_select_query(&fqi, mattblinfo.matcollist, &mataddress, relname);
+	Query *view_query = finalizequery_get_select_query(&fqi,
+													   mattblinfo.matcollist,
+													   &mataddress,
+													   NameStr(mat_ht->fd.table_name));
 
 	if (!agg->data.materialized_only)
 	{

@@ -1,0 +1,98 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO ALL
+CREATE TABLE metrics(time timestamptz, device text, value float);
+SELECT create_hypertable('metrics','time');
+NOTICE:  adding not-null constraint to column "time"
+  create_hypertable   
+----------------------
+ (1,public,metrics,t)
+(1 row)
+
+ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+-----------+---------+--------------+--------------------
+ metrics | {device}  | {time}  | {t}          | {t}
+(1 row)
+
+-- create 2 chunks
+INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
+-- no change to settings
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+-----------+---------+--------------+--------------------
+ metrics | {device}  | {time}  | {t}          | {t}
+(1 row)
+
+SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                        | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal.compress_hyper_2_3_chunk | {device}  | {time}  | {t}          | {t}
+(2 rows)
+
+SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                        | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal.compress_hyper_2_3_chunk | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
+(3 rows)
+
+-- dropping chunk should remove that chunks compression settings
+DROP TABLE _timescaledb_internal._hyper_1_1_chunk;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                        | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
+(2 rows)
+
+-- decompress_chunk should remove settings for that chunk
+SELECT decompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+-----------+---------+--------------+--------------------
+ metrics | {device}  | {time}  | {t}          | {t}
+(1 row)
+
+-- compress_chunk should add settings back
+SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
+SELECT * FROM _timescaledb_catalog.compression_settings;
+                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+------------------------------------------------+-----------+---------+--------------+--------------------
+ metrics                                        | {device}  | {time}  | {t}          | {t}
+ _timescaledb_internal.compress_hyper_2_5_chunk | {device}  | {time}  | {t}          | {t}
+(2 rows)
+
+-- dropping hypertable should remove all settings
+DROP TABLE metrics;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+-------+-----------+---------+--------------+--------------------
+(0 rows)
+
