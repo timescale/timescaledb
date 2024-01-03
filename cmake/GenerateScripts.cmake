@@ -189,9 +189,9 @@ function(generate_downgrade_script)
   # Save the current PROJECT_VERSION_MOD
   set(SAVED_PROJECT_VERSION_MOD ${PROJECT_VERSION_MOD})
   # To use PROJECT_VERSION_MOD variable as a target version in downgrade scripts
-  # we should set it as the UPDATE_FROM_VERSION because it means the target version
+  # we should set it as the DOWNGRADE_TO_VERSION because it means the target version
   # when executing the downgrade scripts
-  set(PROJECT_VERSION_MOD ${UPDATE_FROM_VERSION})
+  set(PROJECT_VERSION_MOD ${DOWNGRADE_TO_VERSION})
   generate_script(
     VERSION
     ${_downgrade_TARGET_VERSION}
