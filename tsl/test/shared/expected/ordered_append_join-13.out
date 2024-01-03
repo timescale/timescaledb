@@ -2264,17 +2264,17 @@ QUERY PLAN
                                    Sort Key: _hyper_X_X_chunk."time" DESC
                                    Sort Method: top-N heapsort 
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=25190 loops=1)
-                                         Filter: ("time" IS NOT NULL)
+                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=30 loops=1)
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time" DESC
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Filter: ("time" IS NOT NULL)
+                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time" DESC
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Filter: ("time" IS NOT NULL)
+                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
 (37 rows)
 
@@ -3605,53 +3605,53 @@ QUERY PLAN
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          Sort Method: top-N heapsort 
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                                    ->  Sort (actual rows=1 loops=1)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          Sort Method: top-N heapsort 
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=15114 loops=1)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
                                    ->  Sort (actual rows=1 loops=1)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          Sort Method: top-N heapsort 
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=6 loops=1)
                              ->  Merge Append (never executed)
                                    Sort Key: _hyper_X_X_chunk."time" DESC
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                              ->  Merge Append (never executed)
                                    Sort Key: _hyper_X_X_chunk."time" DESC
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                                    ->  Sort (never executed)
                                          Sort Key: _hyper_X_X_chunk."time" DESC
                                          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                               Filter: ("time" IS NOT NULL)
+                                               Vectorized Filter: ("time" IS NOT NULL)
                                                ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
 (75 rows)
 
