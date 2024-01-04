@@ -234,6 +234,12 @@ select count(*) from vectorqual where !!metric3;
      5
 (1 row)
 
+select count(*) from vectorqual where not !!metric3;
+ count 
+-------
+     0
+(1 row)
+
 -- Custom operator on column that supports bulk decompression is not vectorized.
 set timescaledb.debug_require_vector_qual to 'forbid';
 create function int4eqq(int4, int4) returns bool as 'int4eq' language internal;
@@ -245,6 +251,18 @@ select count(*) from vectorqual where metric3 === 777;
 (1 row)
 
 select count(*) from vectorqual where metric3 === any(array[777, 888]);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where not metric3 === 777;
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
  count 
 -------
      2

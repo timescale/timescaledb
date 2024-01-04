@@ -91,6 +91,7 @@ reset timescaledb.enable_bulk_decompression;
 set timescaledb.debug_require_vector_qual to 'forbid';
 create operator !! (function = 'bool', rightarg = int4);
 select count(*) from vectorqual where !!metric3;
+select count(*) from vectorqual where not !!metric3;
 
 
 -- Custom operator on column that supports bulk decompression is not vectorized.
@@ -99,6 +100,8 @@ create function int4eqq(int4, int4) returns bool as 'int4eq' language internal;
 create operator === (function = 'int4eqq', rightarg = int4, leftarg = int4);
 select count(*) from vectorqual where metric3 === 777;
 select count(*) from vectorqual where metric3 === any(array[777, 888]);
+select count(*) from vectorqual where not metric3 === 777;
+select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
 
 -- It also doesn't have a commutator.
 select count(*) from vectorqual where 777 === metric3;

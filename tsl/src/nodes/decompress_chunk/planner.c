@@ -425,6 +425,16 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	if (IsA(qual, BoolExpr))
 	{
 		BoolExpr *boolexpr = castNode(BoolExpr, qual);
+
+		if (boolexpr->boolop == NOT_EXPR)
+		{
+			/*
+			 * NOT should be removed by Postgres for all operators we can
+			 * vectorize (see prepqual.c), so we don't support it.
+			 */
+			return NULL;
+		}
+
 		bool need_copy = false;
 		List *vectorized_args = NIL;
 		ListCell *lc;

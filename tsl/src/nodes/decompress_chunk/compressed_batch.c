@@ -371,6 +371,12 @@ compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_s
 
 	BoolExpr *boolexpr = castNode(BoolExpr, qual);
 
+	/*
+	 * Postgres removes NOT for operators we can vectorize, so we don't support
+	 * NOT and consider it non-vectorizable at planning time.
+	 */
+	Assert(boolexpr->boolop != NOT_EXPR);
+
 	if (boolexpr->boolop == AND_EXPR)
 	{
 		return compute_qual_conjunction(dcontext,
@@ -378,24 +384,6 @@ compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_s
 										boolexpr->args,
 										result,
 										n_result_words);
-	}
-
-	if (boolexpr->boolop == NOT_EXPR)
-	{
-		Assert(list_length(boolexpr->args) == 1);
-		uint64 *tmp_result = palloc(sizeof(uint64) * n_result_words);
-		compute_compound_qual(dcontext,
-							  batch_state,
-							  linitial(boolexpr->args),
-							  tmp_result,
-							  n_result_words);
-		bool have_passing_rows = false;
-		for (int i = 0; i < n_result_words; i++)
-		{
-			result[i] &= ~tmp_result[i];
-			have_passing_rows |= result[i];
-		}
-		return have_passing_rows;
 	}
 
 	Assert(boolexpr->boolop == OR_EXPR);
