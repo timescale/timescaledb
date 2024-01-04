@@ -2,7 +2,7 @@ name: "Build distribution packages"
 
 "on":
   release:
-    types: [released]
+    types: [published]
 
 jobs:
   update:
