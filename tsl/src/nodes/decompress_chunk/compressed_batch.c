@@ -179,8 +179,6 @@ static bool
 compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
 					uint64 *restrict result)
 {
-	const size_t n_result_words = (batch_state->total_batch_rows + 63) / 64;
-
 	/*
 	 * For now we support "Var ? Const" predicates and
 	 * ScalarArrayOperations.
@@ -254,7 +252,7 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 	uint64 default_value_predicate_result;
 	uint64 *predicate_result = result;
 	const ArrowArray *vector = column_values->arrow;
-	if (column_values->arrow == NULL)
+	if (vector == NULL)
 	{
 		/*
 		 * The compressed column had a default value. We can't fall back to
@@ -318,15 +316,21 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 			vector_const_predicate(vector, constnode->constvalue, predicate_result);
 		}
 
-		/* Account for nulls which shouldn't pass the predicate. */
+		/*
+		 * Account for nulls which shouldn't pass the predicate. Note that the
+		 * vector here might have only one row, in contrast with the number of
+		 * rows in the batch, if the column has a default value in this batch.
+		 */
+		const size_t n_vector_result_words = (vector->length + 63) / 64;
 		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
-		for (size_t i = 0; i < n_result_words; i++)
+		for (size_t i = 0; i < n_vector_result_words; i++)
 		{
 			predicate_result[i] &= validity[i];
 		}
 	}
 
 	/* Process the result. */
+	const size_t n_batch_result_words = (batch_state->total_batch_rows + 63) / 64;
 	if (column_values->arrow == NULL)
 	{
 		/* The column had a default value. */
@@ -338,7 +342,7 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 			 * We had a default value for the compressed column, and it
 			 * didn't pass the predicate, so the entire batch didn't pass.
 			 */
-			for (size_t i = 0; i < n_result_words; i++)
+			for (size_t i = 0; i < n_batch_result_words; i++)
 			{
 				result[i] = 0;
 			}
@@ -349,7 +353,7 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 	 * Have to return whether we have any passing rows.
 	 */
 	bool have_passing_rows = false;
-	for (size_t i = 0; i < n_result_words; i++)
+	for (size_t i = 0; i < n_batch_result_words; i++)
 	{
 		have_passing_rows |= result[i] != 0;
 	}
