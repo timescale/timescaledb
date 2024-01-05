@@ -2,10 +2,8 @@ name: Check for changelog entry file
 "on":
   pull_request:
     types: [opened, synchronize, reopened, edited]
-    # It's important to check that the changelog is updated with bug fixes that
-    # we backport to the release branches, so these branches are included as
-    # well.
-    branches: ["main", "[0-9]+.[0-9]+.x"]
+    branches:
+      - main
 jobs:
   # Check if the PR creates a sperate file with changelog entry in the
   # ".unreleased"  folder
