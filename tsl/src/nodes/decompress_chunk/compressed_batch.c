@@ -177,8 +177,10 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 
 static bool
 compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
-					uint64 *restrict result, int n_result_words)
+					uint64 *restrict result)
 {
+	const size_t n_result_words = (batch_state->total_batch_rows + 63) / 64;
+
 	/*
 	 * For now we support "Var ? Const" predicates and
 	 * ScalarArrayOperations.
@@ -317,10 +319,8 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 		}
 
 		/* Account for nulls which shouldn't pass the predicate. */
-		const size_t n = vector->length;
-		const size_t n_words = (n + 63) / 64;
 		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
-		for (size_t i = 0; i < n_words; i++)
+		for (size_t i = 0; i < n_result_words; i++)
 		{
 			predicate_result[i] &= validity[i];
 		}
@@ -338,7 +338,7 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 			 * We had a default value for the compressed column, and it
 			 * didn't pass the predicate, so the entire batch didn't pass.
 			 */
-			for (int i = 0; i < n_result_words; i++)
+			for (size_t i = 0; i < n_result_words; i++)
 			{
 				result[i] = 0;
 			}
@@ -349,24 +349,24 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 	 * Have to return whether we have any passing rows.
 	 */
 	bool have_passing_rows = false;
-	for (int i = 0; i < n_result_words; i++)
+	for (size_t i = 0; i < n_result_words; i++)
 	{
-		have_passing_rows |= result[i];
+		have_passing_rows |= !!result[i] != 0;
 	}
 
 	return have_passing_rows;
 }
 
 static bool compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
-									 List *quals, uint64 *restrict result, int n_result_words);
+									 List *quals, uint64 *restrict result);
 
 static bool
 compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
-					  uint64 *restrict result, int n_result_words)
+					  uint64 *restrict result)
 {
 	if (!IsA(qual, BoolExpr))
 	{
-		return compute_simple_qual(dcontext, batch_state, qual, result, n_result_words);
+		return compute_simple_qual(dcontext, batch_state, qual, result);
 	}
 
 	BoolExpr *boolexpr = castNode(BoolExpr, qual);
@@ -379,53 +379,79 @@ compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_s
 
 	if (boolexpr->boolop == AND_EXPR)
 	{
-		return compute_qual_conjunction(dcontext,
-										batch_state,
-										boolexpr->args,
-										result,
-										n_result_words);
+		return compute_qual_conjunction(dcontext, batch_state, boolexpr->args, result);
 	}
 
 	Assert(boolexpr->boolop == OR_EXPR);
-	uint64 *or_result = palloc0(sizeof(uint64) * n_result_words);
+
+	const size_t n_result_words = (batch_state->total_batch_rows + 63) / 64;
+	uint64 *or_result = palloc(sizeof(uint64) * n_result_words);
+	for (size_t i = 0; i < n_result_words; i++)
+	{
+		or_result[i] = 0;
+	}
+	if (batch_state->total_batch_rows % 64 != 0)
+	{
+		/*
+		 * Set the bits for past-the-end elements to 1. This way it's more
+		 * convenient to check for early exit, and the final result should
+		 * have them already set to 0 so it doesn't matter.
+		 */
+		const uint64 mask = ((uint64) -1) << (batch_state->total_batch_rows % 64);
+		or_result[n_result_words - 1] = mask;
+	}
+
 	uint64 *single_qual_result = palloc(sizeof(uint64) * n_result_words);
 
 	ListCell *lc;
 	foreach (lc, boolexpr->args)
 	{
-		for (int i = 0; i < n_result_words; i++)
+		for (size_t i = 0; i < n_result_words; i++)
 		{
 			single_qual_result[i] = (uint64) -1;
 		}
-		compute_compound_qual(dcontext,
-							  batch_state,
-							  lfirst(lc),
-							  single_qual_result,
-							  n_result_words);
-		for (int i = 0; i < n_result_words; i++)
+		compute_compound_qual(dcontext, batch_state, lfirst(lc), single_qual_result);
+		bool all_rows_pass = true;
+		for (size_t i = 0; i < n_result_words; i++)
 		{
 			or_result[i] |= single_qual_result[i];
+			/*
+			 * Note that we have set the bits for past-the-end rows in
+			 * or_result to 1, so we can use simple comparison to zero here.
+			 */
+			all_rows_pass &= (~or_result[i] == 0);
+		}
+		if (all_rows_pass)
+		{
+			/*
+			 * We can sometimes avoing reading the columns required for the
+			 * rest of conditions if we break out early here.
+			 */
+			return true;
 		}
 	}
 	bool have_passing_rows = false;
-	for (int i = 0; i < n_result_words; i++)
+	for (size_t i = 0; i < n_result_words; i++)
 	{
 		result[i] &= or_result[i];
-		have_passing_rows |= result[i];
+		have_passing_rows |= result[i] != 0;
 	}
 	return have_passing_rows;
 }
 
 static bool
 compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
-						 List *quals, uint64 *restrict result, int n_result_words)
+						 List *quals, uint64 *restrict result)
 {
 	ListCell *lc;
 	foreach (lc, quals)
 	{
-		if (!compute_compound_qual(dcontext, batch_state, lfirst(lc), result, n_result_words))
+		if (!compute_compound_qual(dcontext, batch_state, lfirst(lc), result))
 		{
-			/* Early exit if no rows pass already. */
+			/*
+			 * Exit early if no rows pass already. This might allow us to avoid
+			 * reading the columns required for the subsequent quals.
+			 */
 			return false;
 		}
 	}
@@ -469,8 +495,7 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	return compute_qual_conjunction(dcontext,
 									batch_state,
 									dcontext->vectorized_quals_constified,
-									batch_state->vector_qual_result,
-									bitmap_bytes / 8);
+									batch_state->vector_qual_result);
 }
 
 /*
