@@ -599,20 +599,21 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return (Node *) opexpr;
 	}
 
+	/*
+	 * The only option that is left is a ScalarArrayOpExpr.
+	 */
+	Assert(saop != NULL);
+
 #if PG14_GE
-	if (saop)
+	if (saop->hashfuncid)
 	{
-		if (saop->hashfuncid)
-		{
-			/*
-			 * Don't vectorize if the planner decided to build a hash table.
-			 */
-			return NULL;
-		}
+		/*
+		 * Don't vectorize if the planner decided to build a hash table.
+		 */
+		return NULL;
 	}
 #endif
 
-	Assert(saop);
 	return (Node *) saop;
 }
 
