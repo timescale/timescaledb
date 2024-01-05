@@ -351,39 +351,38 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 	bool have_passing_rows = false;
 	for (size_t i = 0; i < n_result_words; i++)
 	{
-		have_passing_rows |= !!result[i] != 0;
+		have_passing_rows |= result[i] != 0;
 	}
 
 	return have_passing_rows;
 }
 
-static bool compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
-									 List *quals, uint64 *restrict result);
+static bool compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
+								  Node *qual, uint64 *restrict result);
 
 static bool
-compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
-					  uint64 *restrict result)
+compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
+						 List *quals, uint64 *restrict result)
 {
-	if (!IsA(qual, BoolExpr))
+	ListCell *lc;
+	foreach (lc, quals)
 	{
-		return compute_simple_qual(dcontext, batch_state, qual, result);
+		if (!compute_compound_qual(dcontext, batch_state, lfirst(lc), result))
+		{
+			/*
+			 * Exit early if no rows pass already. This might allow us to avoid
+			 * reading the columns required for the subsequent quals.
+			 */
+			return false;
+		}
 	}
+	return true;
+}
 
-	BoolExpr *boolexpr = castNode(BoolExpr, qual);
-
-	/*
-	 * Postgres removes NOT for operators we can vectorize, so we don't support
-	 * NOT and consider it non-vectorizable at planning time.
-	 */
-	Assert(boolexpr->boolop != NOT_EXPR);
-
-	if (boolexpr->boolop == AND_EXPR)
-	{
-		return compute_qual_conjunction(dcontext, batch_state, boolexpr->args, result);
-	}
-
-	Assert(boolexpr->boolop == OR_EXPR);
-
+static bool
+compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
+						 List *quals, uint64 *restrict result)
+{
 	const size_t n_result_words = (batch_state->total_batch_rows + 63) / 64;
 	uint64 *or_result = palloc(sizeof(uint64) * n_result_words);
 	for (size_t i = 0; i < n_result_words; i++)
@@ -404,7 +403,7 @@ compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_s
 	uint64 *single_qual_result = palloc(sizeof(uint64) * n_result_words);
 
 	ListCell *lc;
-	foreach (lc, boolexpr->args)
+	foreach (lc, quals)
 	{
 		for (size_t i = 0; i < n_result_words; i++)
 		{
@@ -440,22 +439,26 @@ compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_s
 }
 
 static bool
-compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
-						 List *quals, uint64 *restrict result)
+compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
+					  uint64 *restrict result)
 {
-	ListCell *lc;
-	foreach (lc, quals)
+	if (!IsA(qual, BoolExpr))
 	{
-		if (!compute_compound_qual(dcontext, batch_state, lfirst(lc), result))
-		{
-			/*
-			 * Exit early if no rows pass already. This might allow us to avoid
-			 * reading the columns required for the subsequent quals.
-			 */
-			return false;
-		}
+		return compute_simple_qual(dcontext, batch_state, qual, result);
 	}
-	return true;
+
+	BoolExpr *boolexpr = castNode(BoolExpr, qual);
+	if (boolexpr->boolop == AND_EXPR)
+	{
+		return compute_qual_conjunction(dcontext, batch_state, boolexpr->args, result);
+	}
+
+	/*
+	 * Postgres removes NOT for operators we can vectorize, so we don't support
+	 * NOT and consider it non-vectorizable at planning time. So only OR is left.
+	 */
+	Assert(boolexpr->boolop == OR_EXPR);
+	return compute_qual_disjunction(dcontext, batch_state, boolexpr->args, result);
 }
 
 /*
