@@ -614,9 +614,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
 
-	/* remove any associated compression definitions */
-	ts_compression_settings_delete(ts_hypertable_id_to_relid(hypertable_id, true));
-
 	if (!compressed_hypertable_id_isnull)
 	{
 		Hypertable *compressed_hypertable = ts_hypertable_get_by_id(compressed_hypertable_id);
@@ -709,6 +706,7 @@ ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior)
 		/* Drop the postgres table */
 		performDeletion(&hypertable_addr, behavior, 0);
 	}
+
 	/* Clean up catalog */
 	ts_hypertable_delete_by_name(NameStr(hypertable->fd.schema_name),
 								 NameStr(hypertable->fd.table_name));

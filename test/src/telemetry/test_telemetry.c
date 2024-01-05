@@ -23,6 +23,12 @@
 #define HTTPS_PORT 443
 #define TEST_ENDPOINT "postman-echo.com"
 
+/* Since we rely on an external service to test request statuses, we should retry
+ * a few times if we are not getting the correct response. This should reduce
+ * test flakiness.
+ */
+#define INVALID_STATUS_RETRIES 5
+
 TS_FUNCTION_INFO_V1(ts_test_status);
 TS_FUNCTION_INFO_V1(ts_test_status_ssl);
 TS_FUNCTION_INFO_V1(ts_test_status_mock);
@@ -76,17 +82,33 @@ test_factory(ConnectionType type, int status, char *host, int port)
 		ts_connection_mock_set_recv_buf(conn, test_string, strlen(test_string));
 #endif
 
-	req = build_request(status);
+	int retries = 0;
+	while (retries < INVALID_STATUS_RETRIES)
+	{
+		req = build_request(status);
 
-	rsp = ts_http_response_state_create();
+		rsp = ts_http_response_state_create();
 
-	err = ts_http_send_and_recv(conn, req, rsp);
+		err = ts_http_send_and_recv(conn, req, rsp);
 
-	ts_http_request_destroy(req);
+		ts_http_request_destroy(req);
+
+		if (err != HTTP_ERROR_NONE)
+			elog(ERROR, "%s", ts_http_strerror(err));
+
+		/* We are mocking the connection, no need to retry */
+		if (type == CONNECTION_MOCK)
+			break;
+
+		/* Got what we want, no need to retry */
+		if (ts_http_response_state_valid_status(rsp) ||
+			ts_http_response_state_status_code(rsp) == status)
+			break;
+
+		retries++;
+	}
+
 	ts_connection_destroy(conn);
-
-	if (err != HTTP_ERROR_NONE)
-		elog(ERROR, "%s", ts_http_strerror(err));
 
 	if (!ts_http_response_state_valid_status(rsp))
 		elog(ERROR,

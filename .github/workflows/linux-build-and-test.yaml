@@ -70,8 +70,20 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install gawk
+
+        # Force use of OpenSSL 3.1.4, since OpenSSL 3.2.0 crashes with recent
+        # PostgreSQL versions on OS X (see https://github.com/Homebrew/homebrew-core/issues/155651)
+        brew unlink openssl@3
+        curl -L https://raw.githubusercontent.com/Homebrew/homebrew-core/e68186ba5a05a6ea9a30d6c7744de9a46bd3aadd/Formula/o/openssl@3.rb > openssl@3.rb
+        brew install openssl@3.rb
+
+        # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
+
+    - name: Setup macOS coredump directory
+      if: runner.os == 'macOS'
+      run: sudo chmod 777 /cores
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
@@ -125,6 +137,7 @@ jobs:
       run: |
         make -C ~/$PG_SRC_DIR install
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
@@ -157,10 +170,11 @@ jobs:
     - name: make installcheck
       id: installcheck
       run: |
+        ulimit -c unlimited
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
-            PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
+            | tee installcheck.log
 
     - name: pginstallcheck
       if: matrix.pginstallcheck
@@ -195,6 +209,8 @@ jobs:
           if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
           # print OOM killer information
           sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+        elif [[ "${{ runner.os }}" == "macOS" ]] ; then
+           if [ $(find /cores -type f | wc -l) -gt 0 ]; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
         fi
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
@@ -216,8 +232,8 @@ jobs:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: postgres.log
 
-    - name: Stack trace
-      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+    - name: Stack trace Linux
+      if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'Linux'
       run: |
         sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
           set verbose on
@@ -240,6 +256,11 @@ jobs:
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
         grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
+
+    - name: Stack trace macOS
+      if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
+      run: |
+        ~/$PG_SRC_DIR/src/tools/ci/cores_backtrace.sh macos /cores
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -282,10 +303,4 @@ jobs:
             GITHUB_PR_NUMBER=0
         fi
         export GITHUB_PR_NUMBER
-        if [[ "${{ runner.os }}" == "macOS" ]] ;
-        then
-          # Add libpq to PATH so psql can be used for uploading
-          # test results
-          export PATH="/usr/local/opt/libpq/bin:$PATH"
-        fi
         scripts/upload_ci_stats.sh
