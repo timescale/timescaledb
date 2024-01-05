@@ -93,3 +93,48 @@ SELECT compress_chunk(show_chunks('pseudo'));
 
 SELECT * FROM pseudo WHERE now() IS NOT NULL;
 
+-- ensure needed decompression paths underneath a sort node
+-- are not recycled by PostgreSQL
+SET random_page_cost = 4.0;
+DROP TABLE IF EXISTS options_data;
+
+CREATE TABLE IF NOT EXISTS options_data (
+    date            date NOT NULL,
+    contract_code   text NOT NULL,
+    expiry_code     text NOT NULL,
+    option_type     character(1) NOT NULL,
+    strike          real NOT NULL,
+    price           double precision,
+    source          text NOT NULL,
+    meta            text
+);
+
+SELECT create_hypertable('options_data', 'date', chunk_time_interval => interval '1 day');
+
+INSERT INTO options_data (date, contract_code, expiry_code, option_type, strike, price, source, meta)
+SELECT
+    date_series,
+    'CONTRACT' || date_series::text,
+    'EXPIRY' || date_series::text,
+    CASE WHEN random() < 0.5 THEN 'C' ELSE 'P' END, -- Randomly choose 'C' or 'P' for option_type
+   random() * 100, -- Random strike value between 0 and 100
+   random() * 100, -- Random price value between 0 and 100
+   'SOURCE' || date_series::text,
+   'META' || date_series::text
+FROM generate_series(
+    '2023-12-01 00:00:00',
+    '2023-12-05 00:00:00',
+    INTERVAL '10 minute'
+) AS date_series;
+
+ALTER TABLE options_data SET (timescaledb.compress,
+    timescaledb.compress_segmentby = 'contract_code, expiry_code, option_type, strike, source',
+    timescaledb.compress_orderby = 'date DESC');
+
+SELECT compress_chunk(ch) FROM show_chunks('options_data', older_than=> '2023-12-05') ch;
+
+ANALYZE options_data;
+
+SELECT max(date) AS date FROM options_data WHERE contract_code='CONTRACT2023-12-03 04:00:00+01';
+
+RESET random_page_cost;

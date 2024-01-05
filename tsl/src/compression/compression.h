@@ -321,8 +321,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
 
-extern CompressionStats compress_chunk(Hypertable *ht, Oid in_table, Oid out_table,
-									   int insert_options);
+extern CompressionStats compress_chunk(Oid in_table, Oid out_table, int insert_options);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(

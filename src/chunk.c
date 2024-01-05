@@ -67,6 +67,7 @@
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
@@ -2927,9 +2928,12 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 
 		/* The chunk may have been delete by a CASCADE */
 		if (compressed_chunk != NULL)
+		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
+			ts_compression_settings_delete(compressed_chunk->table_id);
 			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
+		}
 	}
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);

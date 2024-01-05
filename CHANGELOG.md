@@ -4,6 +4,29 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.13.1 (2024-01-08)
+
+This release contains bug fixes since the 2.13.0 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #6365 Use numrows_pre_compression in approximate row count
+* #6377 Use processed group clauses in PG16
+* #6384 Change bgw_log_level to use PGC_SUSET
+* #6393 Disable vectorized sum for expressions.
+* #6405 Read CAgg watermark from materialized data
+* #6408 Fix groupby pathkeys for gapfill in PG16
+* #6428 Fix index matching during DML decompression
+* #6439 Fix compressed chunk permission handling on PG16
+* #6443 Fix lost concurrent CAgg updates
+* #6454 Fix unique expression indexes on compressed chunks
+* #6465 Fix use of freed path in decompression sort logic
+
+**Thanks**
+* @MA-MacDonald for reporting an issue with gapfill in PG16
+* @aarondglover for reporting an issue with unique expression indexes on compressed chunks
+* @adriangb for reporting an issue with security barrier views on pg16
+
 ## 2.13.0 (2023-11-28)
 
 This release contains performance improvements, an improved hypertable DDL API

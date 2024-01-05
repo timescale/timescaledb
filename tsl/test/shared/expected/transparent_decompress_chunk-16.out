@@ -713,7 +713,7 @@ QUERY PLAN
                      ->  Sort
                            Sort Key: m3."time"
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
-                                 ->  Parallel Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
+                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
                                        Filter: (device_id = 3)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Seq Scan on compress_hyper_X_X_chunk
