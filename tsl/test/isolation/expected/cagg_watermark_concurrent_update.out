@@ -1,0 +1,232 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s1_prepare s2_prepare s3_lock_invalidation s2_select s1_run_update s2_select s3_release_invalidation s2_select s1_select
+step s1_prepare: 
+   PREPARE pstmt AS SELECT * FROM cagg;
+
+step s2_prepare: 
+   PREPARE pstmt AS SELECT * FROM cagg;
+
+step s3_lock_invalidation: 
+   SELECT debug_waitpoint_enable('cagg_watermark_update_internal_before_refresh');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                           
+  Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+        Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                   
+        Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
+        ->  Custom Scan (ChunkAppend) on temperature                                                                   
+              Order: time_bucket('@ 4 hours'::interval, temperature."time")                                            
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+(12 rows)
+
+step s1_run_update: 
+   CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
+ <waiting ...>
+step s2_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                           
+  Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+        Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                   
+        Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
+        ->  Custom Scan (ChunkAppend) on temperature                                                                   
+              Order: time_bucket('@ 4 hours'::interval, temperature."time")                                            
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+(12 rows)
+
+step s3_release_invalidation: 
+   SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_run_update: <... completed>
+step s2_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                                   
+-----------------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                                 
+  Sort Key: _materialized_hypertable_140.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_140                                                              
+        Order: _materialized_hypertable_140.time_bucket                                                                      
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                         
+        Group Key: (time_bucket('@ 4 hours'::interval, "time"))                                                              
+        ->  Sort                                                                                                             
+              Sort Key: (time_bucket('@ 4 hours'::interval, "time"))                                                         
+              ->  Result                                                                                                     
+                    One-Time Filter: false                                                                                   
+(14 rows)
+
+step s1_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                                   
+-----------------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                                 
+  Sort Key: _materialized_hypertable_140.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_140                                                              
+        Order: _materialized_hypertable_140.time_bucket                                                                      
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                         
+        Group Key: (time_bucket('@ 4 hours'::interval, "time"))                                                              
+        ->  Sort                                                                                                             
+              Sort Key: (time_bucket('@ 4 hours'::interval, "time"))                                                         
+              ->  Result                                                                                                     
+                    One-Time Filter: false                                                                                   
+(14 rows)
+
+
+starting permutation: s3_lock_invalidation s2_select s1_run_update s2_select s3_release_invalidation s3_lock_invalidation s1_insert_more_data s1_run_update s2_select s3_release_invalidation s2_select
+step s3_lock_invalidation: 
+   SELECT debug_waitpoint_enable('cagg_watermark_update_internal_before_refresh');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                           
+  Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+        Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                   
+        Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
+        ->  Custom Scan (ChunkAppend) on temperature                                                                   
+              Order: time_bucket('@ 4 hours'::interval, temperature."time")                                            
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+(12 rows)
+
+step s1_run_update: 
+   CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
+ <waiting ...>
+step s2_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                           
+  Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+        Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                   
+        Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
+        ->  Custom Scan (ChunkAppend) on temperature                                                                   
+              Order: time_bucket('@ 4 hours'::interval, temperature."time")                                            
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk          
+                    Index Cond: ("time" >= 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                   
+(12 rows)
+
+step s3_release_invalidation: 
+   SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_run_update: <... completed>
+step s3_lock_invalidation: 
+   SELECT debug_waitpoint_enable('cagg_watermark_update_internal_before_refresh');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_insert_more_data: 
+  INSERT INTO temperature VALUES('2020-01-02 23:59:59+0', 22);
+
+step s1_run_update: 
+   CALL refresh_continuous_aggregate('cagg', '2020-01-01 00:00:00', '2021-01-01 00:00:00');
+ <waiting ...>
+step s2_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                                   
+-----------------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                                 
+  Sort Key: _materialized_hypertable_142.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_142                                                              
+        Order: _materialized_hypertable_142.time_bucket                                                                      
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                         
+        Group Key: (time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time"))                                         
+        ->  Result                                                                                                           
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk                
+                    Index Cond: ("time" >= 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                         
+(13 rows)
+
+step s3_release_invalidation: 
+   SELECT debug_waitpoint_release('cagg_watermark_update_internal_before_refresh');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_run_update: <... completed>
+step s2_select: 
+   EXPLAIN (COSTS OFF) EXECUTE pstmt;
+
+QUERY PLAN                                                                                                                   
+-----------------------------------------------------------------------------------------------------------------------------
+Merge Append                                                                                                                 
+  Sort Key: _materialized_hypertable_142.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_142                                                              
+        Order: _materialized_hypertable_142.time_bucket                                                                      
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                           
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+              Index Cond: (time_bucket < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                           
+  ->  GroupAggregate                                                                                                         
+        Group Key: (time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time"))                                         
+        ->  Result                                                                                                           
+              ->  Index Scan Backward using _hyper_X_X_chunk_temperature_time_idx on _hyper_X_X_chunk                
+                    Index Cond: ("time" >= 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                         
+(13 rows)
+

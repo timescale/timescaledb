@@ -2034,30 +2034,27 @@ SELECT * FROM mat_m1;
 
 -- Merge Append
 EXPLAIN (COSTS OFF) SELECT * FROM mat_m1;
-                                                                                    QUERY PLAN                                                                                    
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _materialized_hypertable_59.sum DESC
-   ->  Custom Scan (ConstraintAwareAppend)
-         Hypertable: _materialized_hypertable_59
-         Chunks excluded during startup: 0
-         ->  Merge Append
-               Sort Key: _hyper_59_123_chunk.sum DESC
-               ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-                     Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
-               ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
-                     Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+   Sort Key: _hyper_59_123_chunk.sum DESC
+   ->  Merge Append
+         Sort Key: _hyper_59_123_chunk.sum DESC
+         ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
+               Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+         ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+               Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
    ->  Sort
-         Sort Key: (sum(conditions.temperature)) DESC
+         Sort Key: (sum(_hyper_52_111_chunk.temperature)) DESC
          ->  HashAggregate
-               Group Key: time_bucket('@ 7 days'::interval, conditions.timec)
-               ->  Custom Scan (ChunkAppend) on conditions
-                     Chunks excluded during startup: 1
-                     ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
-                           Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                           Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
-(21 rows)
+               Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
+               ->  Result
+                     ->  Append
+                           ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                                 Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+                           ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
+                                 Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+(18 rows)
 
 -- Ordering by another column
 SELECT * FROM mat_m1 ORDER BY count;
@@ -2070,32 +2067,29 @@ SELECT * FROM mat_m1 ORDER BY count;
 (4 rows)
 
 EXPLAIN (COSTS OFF) SELECT * FROM mat_m1 ORDER BY count;
-                                                                                       QUERY PLAN                                                                                       
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
  Sort
-   Sort Key: _materialized_hypertable_59.count
+   Sort Key: _hyper_59_123_chunk.count
    ->  Merge Append
-         Sort Key: _materialized_hypertable_59.sum DESC
-         ->  Custom Scan (ConstraintAwareAppend)
-               Hypertable: _materialized_hypertable_59
-               Chunks excluded during startup: 0
-               ->  Merge Append
-                     Sort Key: _hyper_59_123_chunk.sum DESC
-                     ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
-                           Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
-                     ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
-                           Index Cond: (time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
+         Sort Key: _hyper_59_123_chunk.sum DESC
+         ->  Merge Append
+               Sort Key: _hyper_59_123_chunk.sum DESC
+               ->  Index Scan Backward using _hyper_59_123_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_123_chunk
+                     Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_59_124_chunk__materialized_hypertable_59_sum_time_bucket on _hyper_59_124_chunk
+                     Index Cond: (time_bucket < 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
          ->  Sort
-               Sort Key: (sum(conditions.temperature)) DESC
+               Sort Key: (sum(_hyper_52_111_chunk.temperature)) DESC
                ->  HashAggregate
-                     Group Key: time_bucket('@ 7 days'::interval, conditions.timec)
-                     ->  Custom Scan (ChunkAppend) on conditions
-                           Chunks excluded during startup: 1
-                           ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
-                                 Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
-                           ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
-                                 Index Cond: (timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(59)), '-infinity'::timestamp with time zone))
-(23 rows)
+                     Group Key: time_bucket('@ 7 days'::interval, _hyper_52_111_chunk.timec)
+                     ->  Result
+                           ->  Append
+                                 ->  Index Scan Backward using _hyper_52_111_chunk_conditions_timec_idx on _hyper_52_111_chunk
+                                       Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+                                 ->  Index Scan Backward using _hyper_52_125_chunk_conditions_timec_idx on _hyper_52_125_chunk
+                                       Index Cond: (timec >= 'Sun Nov 04 16:00:00 2018 PST'::timestamp with time zone)
+(20 rows)
 
 -- Change the type of cagg
 ALTER MATERIALIZED VIEW mat_m1 SET (timescaledb.materialized_only=true);
@@ -2280,28 +2274,30 @@ SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
 -- Parallel planning
 EXPLAIN (COSTS OFF, TIMING OFF) SELECT * FROM conditions_daily WHERE time_bucket >= '2023-07-01';
-                                                                                                                           QUERY PLAN                                                                                                                            
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                           QUERY PLAN                                                                                           
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Merge Append
-   Sort Key: _materialized_hypertable_63.sum DESC
+   Sort Key: _hyper_63_183_chunk.sum DESC
+   ->  Gather Merge
+         Workers Planned: 2
+         ->  Sort
+               Sort Key: _hyper_63_183_chunk.sum DESC
+               ->  Parallel Append
+                     ->  Parallel Index Scan using _hyper_63_183_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_183_chunk
+                           Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                     ->  Parallel Index Scan using _hyper_63_187_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_187_chunk
+                           Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                     ->  Parallel Index Scan using _hyper_63_188_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_188_chunk
+                           Index Cond: ((time_bucket < 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
    ->  Sort
-         Sort Key: _materialized_hypertable_63.sum DESC
-         ->  Custom Scan (ChunkAppend) on _materialized_hypertable_63
-               Chunks excluded during startup: 0
-               ->  Index Scan using _hyper_63_183_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_183_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-               ->  Index Scan using _hyper_63_187_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_187_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-               ->  Index Scan using _hyper_63_188_chunk__materialized_hypertable_63_time_bucket_idx on _hyper_63_188_chunk
-                     Index Cond: ((time_bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (time_bucket >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-   ->  Sort
-         Sort Key: (sum(conditions.temperature)) DESC
+         Sort Key: (sum(_hyper_62_182_chunk.temperature)) DESC
          ->  HashAggregate
-               Group Key: time_bucket('@ 1 day'::interval, conditions.timec)
-               ->  Custom Scan (ChunkAppend) on conditions
-                     Chunks excluded during startup: 26
-                     ->  Index Scan Backward using _hyper_62_182_chunk_conditions_timec_idx on _hyper_62_182_chunk
-                           Index Cond: ((timec >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(63)), '-infinity'::timestamp with time zone)) AND (timec >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
-                           Filter: (time_bucket('@ 1 day'::interval, timec) >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone)
-(21 rows)
+               Group Key: (time_bucket('@ 1 day'::interval, _hyper_62_182_chunk.timec))
+               ->  Gather
+                     Workers Planned: 1
+                     ->  Result
+                           ->  Parallel Index Scan Backward using _hyper_62_182_chunk_conditions_timec_idx on _hyper_62_182_chunk
+                                 Index Cond: ((timec >= 'Mon Jan 01 16:00:00 2024 PST'::timestamp with time zone) AND (timec >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone))
+                                 Filter: (time_bucket('@ 1 day'::interval, timec) >= 'Sat Jul 01 00:00:00 2023 PDT'::timestamp with time zone)
+(23 rows)
 
