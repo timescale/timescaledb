@@ -264,6 +264,12 @@ ts_tsl_loaded(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(ts_cm_functions != &ts_cm_functions_default);
 }
 
+static void
+preprocess_query_tsl_default_fn_community(Query *parse)
+{
+	/* No op in community licensed code */
+}
+
 /*
  * Define cross-module functions' default values:
  * If the submodule isn't activated, using one of the cm functions will throw an
@@ -369,6 +375,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
+	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

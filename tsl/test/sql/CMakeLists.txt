@@ -10,9 +10,9 @@ set(TEST_FILES
     cagg_invalidation.sql
     cagg_permissions.sql
     cagg_policy.sql
+    cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
-    cagg_watermark.sql
     compress_default.sql
     compressed_detoaster.sql
     compressed_collation.sql
@@ -125,6 +125,7 @@ set(SOLO_TESTS
 
 set(TEST_TEMPLATES
     bgw_custom.sql.in
+    cagg_watermark.sql.in
     compression_bgw.sql.in
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
@@ -144,7 +145,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_TEMPLATES
     cagg_bgw.sql.in
     cagg_ddl.sql.in
-    cagg_query.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_errors.sql.in

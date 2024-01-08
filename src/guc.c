@@ -61,6 +61,7 @@ bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
+TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
@@ -401,6 +402,17 @@ _guc_init(void)
 							 "Enable now() constify",
 							 "Enable constifying now() in query constraints",
 							 &ts_guc_enable_now_constify,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_cagg_watermark_constify",
+							 "Enable cagg watermark constify",
+							 "Enable constifying cagg watermark for real-time caggs",
+							 &ts_guc_enable_cagg_watermark_constify,
 							 true,
 							 PGC_USERSET,
 							 0,
