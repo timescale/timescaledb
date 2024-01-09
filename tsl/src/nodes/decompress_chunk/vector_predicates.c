@@ -30,7 +30,7 @@
 #include "compression/compression.h"
 
 static void
-vector_const_texteq_nodict(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
+vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
 {
 	Assert(!arrow->dictionary);
 
@@ -75,13 +75,6 @@ vector_const_texteq_nodict(const ArrowArray *arrow, const Datum constdatum, uint
 	}
 
 #undef INNER_LOOP
-}
-
-static void
-vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
-{
-	Assert(!arrow->dictionary);
-	vector_const_texteq_nodict(arrow, constdatum, result);
 }
 
 /*

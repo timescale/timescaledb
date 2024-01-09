@@ -77,6 +77,49 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	return arrow;
 }
 
+static void
+translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
+						  uint64 *restrict final_result)
+{
+	Assert(arrow->dictionary != NULL);
+
+	/* Translate dictionary results to per-value results. */
+	const size_t n = arrow->length;
+	int16 *restrict indices = (int16 *) arrow->buffers[1];
+	for (size_t outer = 0; outer < n / 64; outer++)
+	{
+		uint64 word = 0;
+		for (size_t inner = 0; inner < 64; inner++)
+		{
+			const size_t row = outer * 64 + inner;
+			const size_t bit_index = inner;
+#define INNER_LOOP                                                                                 \
+	const int16 index = indices[row];                                                              \
+	const bool valid = arrow_row_is_valid(dict_result, index);                                     \
+	word |= ((uint64) valid) << bit_index;
+
+			INNER_LOOP
+
+			//			fprintf(stderr, "dict-coded row %ld: index %d, valid %d\n", row, index,
+			// valid);
+		}
+		final_result[outer] &= word;
+	}
+
+	if (n % 64)
+	{
+		uint64 word = 0;
+		for (size_t row = (n / 64) * 64; row < n; row++)
+		{
+			const size_t bit_index = row % 64;
+
+			INNER_LOOP
+		}
+		final_result[n / 64] &= word;
+	}
+#undef INNER_LOOP
+}
+
 static int
 get_max_text_datum_size(ArrowArray *text_array)
 {
@@ -365,19 +408,49 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
 
 		/*
+		 * If the data is dictionary-encoded, we are going to compute the
+		 * predicate on dictionary and then translate the results.
+		 */
+		const ArrowArray *vector_nodict = NULL;
+		uint64 *restrict predicate_result_nodict = NULL;
+		uint64 dict_result[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
+		if (vector->dictionary)
+		{
+			const size_t dict_rows = vector->dictionary->length;
+			const size_t dict_result_words = (dict_rows + 63) / 64;
+			memset(dict_result, 0xFF, dict_result_words * 8);
+			predicate_result_nodict = dict_result;
+			vector_nodict = vector->dictionary;
+		}
+		else
+		{
+			predicate_result_nodict = predicate_result;
+			vector_nodict = vector;
+		}
+
+		/*
 		 * At last, compute the predicate.
 		 */
 		if (saop)
 		{
 			vector_array_predicate(vector_const_predicate,
 								   saop->useOr,
-								   vector,
+								   vector_nodict,
 								   constnode->constvalue,
-								   predicate_result);
+								   predicate_result_nodict);
 		}
 		else
 		{
-			vector_const_predicate(vector, constnode->constvalue, predicate_result);
+			vector_const_predicate(vector_nodict, constnode->constvalue, predicate_result_nodict);
+		}
+
+		/*
+		 * If the vector is dictionary-encoded, we have just computed the
+		 * predicate for dictionary and now have to translate it.
+		 */
+		if (vector->dictionary)
+		{
+			translate_from_dictionary(vector, predicate_result_nodict, predicate_result);
 		}
 
 		/* Account for nulls which shouldn't pass the predicate. */
