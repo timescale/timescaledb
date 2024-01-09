@@ -1,1 +1,0 @@
-Fixes: #6384 Change bgw_log_level to use PGC_SUSET

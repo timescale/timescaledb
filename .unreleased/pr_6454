@@ -1,2 +1,0 @@
-Fixes: #6454 Fix unique expression indexes on compressed chunks
-Thanks: @aarondglover for reporting an issue with unique expression indexes on compressed chunks

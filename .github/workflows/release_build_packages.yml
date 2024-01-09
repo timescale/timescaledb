@@ -1,0 +1,22 @@
+name: "Build distribution packages"
+
+"on":
+  release:
+    types: [published]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+        - name: Build distribution packages
+          env:
+            GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+          run: |
+            gh workflow run docker-image.yml -R timescale/timescaledb-docker -f version=${{ github.event.release.tag_name }}
+            gh workflow run timescaledb-debian.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true
+            gh workflow run timescaledb-ubuntu.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true
+            gh workflow run timescaledb-apt-arm64.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true
+            gh workflow run timescaledb-rpm.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true
+            gh workflow run timescaledb-homebrew.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true
+            gh workflow run timescaledb-windows.yml -R timescale/release-build-scripts -f version=${{ github.event.release.tag_name }} -f upload-artifacts=true

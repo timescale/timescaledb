@@ -208,8 +208,8 @@ select count(*) from vectorqual where 777 === metric3;
      2
 (1 row)
 
--- NullTest is not vectorized.
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- NullTest is vectorized.
+set timescaledb.debug_require_vector_qual to 'only';
 select count(*) from vectorqual where metric4 is null;
  count 
 -------
@@ -220,6 +220,28 @@ select count(*) from vectorqual where metric4 is not null;
  count 
 -------
      2
+(1 row)
+
+-- Can't vectorize conditions on system columns. Have to check this on a single
+-- chunk, otherwise the whole-row var will be masked by ConvertRowType.
+select show_chunks('vectorqual') chunk1 limit 1 \gset
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from :chunk1 t where t is null;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from :chunk1 t where t.* is null;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from :chunk1 t where tableoid is null;
+ count 
+-------
+     0
 (1 row)
 
 -- Scalar array operators are vectorized if the operator is vectorizable.
@@ -616,7 +638,7 @@ set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric4 > 4;
 ERROR:  debug: encountered vector quals when they are disabled
 set timescaledb.debug_require_vector_qual to 'only';
-select count(*) from vectorqual where metric4 is null;
+select count(*) from vectorqual where metric3 === 4;
 ERROR:  debug: encountered non-vector quals when they are disabled
 \set ON_ERROR_STOP 1
 -- Date columns

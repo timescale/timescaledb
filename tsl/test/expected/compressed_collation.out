@@ -30,19 +30,19 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('compressed_collation_ht') ch;
      1
 (1 row)
 
-select ht.schema_name || '.' || ht.table_name as "CHUNK"
-from _timescaledb_catalog.hypertable ht
-    inner join _timescaledb_catalog.hypertable ht2
-    on ht.id = ht2.compressed_hypertable_id
-        and ht2.table_name = 'compressed_collation_ht' \gset
+SELECT format('%I.%I',ch.schema_name, ch.table_name) AS "CHUNK"
+FROM _timescaledb_catalog.hypertable ht
+    INNER JOIN _timescaledb_catalog.chunk ch
+    ON ch.hypertable_id = ht.compressed_hypertable_id
+        AND ht.table_name = 'compressed_collation_ht' \gset
 create index on :CHUNK (name);
 set enable_seqscan to off;
 explain (costs off)
 select * from compressed_collation_ht order by name;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-   ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_name_idx on compress_hyper_2_2_chunk
+   ->  Index Scan using compress_hyper_2_2_chunk_name_idx on compress_hyper_2_2_chunk
 (2 rows)
 
 select * from compressed_collation_ht order by name;

@@ -259,14 +259,20 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	foreach (lc, dcontext->vectorized_quals_constified)
 	{
 		/*
-		 * For now we support "Var ? Const" predicates and
+		 * For now, we support NullTest, "Var ? Const" predicates and
 		 * ScalarArrayOperations.
 		 */
 		List *args = NULL;
 		RegProcedure vector_const_opcode = InvalidOid;
 		ScalarArrayOpExpr *saop = NULL;
 		OpExpr *opexpr = NULL;
-		if (IsA(lfirst(lc), ScalarArrayOpExpr))
+		NullTest *nulltest = NULL;
+		if (IsA(lfirst(lc), NullTest))
+		{
+			nulltest = castNode(NullTest, lfirst(lc));
+			args = list_make1(nulltest->arg);
+		}
+		else if (IsA(lfirst(lc), ScalarArrayOpExpr))
 		{
 			saop = castNode(ScalarArrayOpExpr, lfirst(lc));
 			args = saop->args;
@@ -278,12 +284,6 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 			args = opexpr->args;
 			vector_const_opcode = get_opcode(opexpr->opno);
 		}
-
-		/*
-		 * Find the vector_const predicate.
-		 */
-		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
-		Assert(vector_const_predicate != NULL);
 
 		/*
 		 * Find the compressed column referred to by the Var.
@@ -357,36 +357,53 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 			predicate_result = &default_value_predicate_result;
 		}
 
-		/*
-		 * The vectorizable predicates should be STRICT, so we shouldn't see null
-		 * constants here.
-		 */
-		Const *constnode = castNode(Const, lsecond(args));
-		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
-
-		/*
-		 * At last, compute the predicate.
-		 */
-		if (saop)
+		if (nulltest)
 		{
-			vector_array_predicate(vector_const_predicate,
-								   saop->useOr,
-								   vector,
-								   constnode->constvalue,
-								   predicate_result);
+			vector_nulltest(vector, nulltest->nulltesttype, predicate_result);
 		}
 		else
 		{
-			vector_const_predicate(vector, constnode->constvalue, predicate_result);
-		}
+			/*
+			 * Find the vector_const predicate.
+			 */
+			VectorPredicate *vector_const_predicate =
+				get_vector_const_predicate(vector_const_opcode);
+			Assert(vector_const_predicate != NULL);
 
-		/* Account for nulls which shouldn't pass the predicate. */
-		const size_t n = vector->length;
-		const size_t n_words = (n + 63) / 64;
-		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
-		for (size_t i = 0; i < n_words; i++)
-		{
-			predicate_result[i] &= validity[i];
+			Ensure(IsA(lsecond(args), Const),
+				   "failed to evaluate runtime constant in vectorized filter");
+
+			/*
+			 * The vectorizable predicates should be STRICT, so we shouldn't see null
+			 * constants here.
+			 */
+			Const *constnode = castNode(Const, lsecond(args));
+			Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
+
+			/*
+			 * At last, compute the predicate.
+			 */
+			if (saop)
+			{
+				vector_array_predicate(vector_const_predicate,
+									   saop->useOr,
+									   vector,
+									   constnode->constvalue,
+									   predicate_result);
+			}
+			else
+			{
+				vector_const_predicate(vector, constnode->constvalue, predicate_result);
+			}
+
+			/* Account for nulls which shouldn't pass the predicate. */
+			const size_t n = vector->length;
+			const size_t n_words = (n + 63) / 64;
+			const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
+			for (size_t i = 0; i < n_words; i++)
+			{
+				predicate_result[i] &= validity[i];
+			}
 		}
 
 		/* Process the result. */

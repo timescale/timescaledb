@@ -259,7 +259,6 @@ FROM
       AND uncompress.table_name = 'comp_ht_test') \gset
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE INDEX internal_idx ON :INTERNALTABLE(_ts_meta_min_1);
 \set ON_ERROR_STOP 0
 SELECT add_reorder_policy(:'INTERNALTABLE','internal_idx');
 \set ON_ERROR_STOP 1
