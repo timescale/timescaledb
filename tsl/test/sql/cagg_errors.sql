@@ -517,7 +517,7 @@ FROM
   INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
       AND uncompress.table_name = 'comp_ht_test') \gset
 
-CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
+CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',now()) FROM :INTERNALTABLE GROUP BY 1;
 
 --TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
 --Check error handling for this case
