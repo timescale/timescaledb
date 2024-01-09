@@ -302,14 +302,20 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	foreach (lc, dcontext->vectorized_quals_constified)
 	{
 		/*
-		 * For now we support "Var ? Const" predicates and
+		 * For now, we support NullTest, "Var ? Const" predicates and
 		 * ScalarArrayOperations.
 		 */
 		List *args = NULL;
 		RegProcedure vector_const_opcode = InvalidOid;
 		ScalarArrayOpExpr *saop = NULL;
 		OpExpr *opexpr = NULL;
-		if (IsA(lfirst(lc), ScalarArrayOpExpr))
+		NullTest *nulltest = NULL;
+		if (IsA(lfirst(lc), NullTest))
+		{
+			nulltest = castNode(NullTest, lfirst(lc));
+			args = list_make1(nulltest->arg);
+		}
+		else if (IsA(lfirst(lc), ScalarArrayOpExpr))
 		{
 			saop = castNode(ScalarArrayOpExpr, lfirst(lc));
 			args = saop->args;
@@ -321,12 +327,6 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 			args = opexpr->args;
 			vector_const_opcode = get_opcode(opexpr->opno);
 		}
-
-		/*
-		 * Find the vector_const predicate.
-		 */
-		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
-		Assert(vector_const_predicate != NULL);
 
 		/*
 		 * Find the compressed column referred to by the Var.
@@ -400,66 +400,85 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 			predicate_result = &default_value_predicate_result;
 		}
 
-		/*
-		 * The vectorizable predicates should be STRICT, so we shouldn't see null
-		 * constants here.
-		 */
-		Const *constnode = castNode(Const, lsecond(args));
-		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
-
-		/*
-		 * If the data is dictionary-encoded, we are going to compute the
-		 * predicate on dictionary and then translate the results.
-		 */
-		const ArrowArray *vector_nodict = NULL;
-		uint64 *restrict predicate_result_nodict = NULL;
-		uint64 dict_result[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
-		if (vector->dictionary)
+		if (nulltest)
 		{
-			const size_t dict_rows = vector->dictionary->length;
-			const size_t dict_result_words = (dict_rows + 63) / 64;
-			memset(dict_result, 0xFF, dict_result_words * 8);
-			predicate_result_nodict = dict_result;
-			vector_nodict = vector->dictionary;
+			vector_nulltest(vector, nulltest->nulltesttype, predicate_result);
 		}
 		else
 		{
-			predicate_result_nodict = predicate_result;
-			vector_nodict = vector;
-		}
+			/*
+			 * Find the vector_const predicate.
+			 */
+			VectorPredicate *vector_const_predicate =
+				get_vector_const_predicate(vector_const_opcode);
+			Assert(vector_const_predicate != NULL);
 
-		/*
-		 * At last, compute the predicate.
-		 */
-		if (saop)
-		{
-			vector_array_predicate(vector_const_predicate,
-								   saop->useOr,
-								   vector_nodict,
-								   constnode->constvalue,
-								   predicate_result_nodict);
-		}
-		else
-		{
-			vector_const_predicate(vector_nodict, constnode->constvalue, predicate_result_nodict);
-		}
+			Ensure(IsA(lsecond(args), Const),
+				   "failed to evaluate runtime constant in vectorized filter");
 
-		/*
-		 * If the vector is dictionary-encoded, we have just computed the
-		 * predicate for dictionary and now have to translate it.
-		 */
-		if (vector->dictionary)
-		{
-			translate_from_dictionary(vector, predicate_result_nodict, predicate_result);
-		}
+			/*
+			 * The vectorizable predicates should be STRICT, so we shouldn't see null
+			 * constants here.
+			 */
+			Const *constnode = castNode(Const, lsecond(args));
+			Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
 
-		/* Account for nulls which shouldn't pass the predicate. */
-		const size_t n = vector->length;
-		const size_t n_words = (n + 63) / 64;
-		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
-		for (size_t i = 0; i < n_words; i++)
-		{
-			predicate_result[i] &= validity[i];
+			/*
+			 * If the data is dictionary-encoded, we are going to compute the
+			 * predicate on dictionary and then translate the results.
+			 */
+			const ArrowArray *vector_nodict = NULL;
+			uint64 *restrict predicate_result_nodict = NULL;
+			uint64 dict_result[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
+			if (vector->dictionary)
+			{
+				const size_t dict_rows = vector->dictionary->length;
+				const size_t dict_result_words = (dict_rows + 63) / 64;
+				memset(dict_result, 0xFF, dict_result_words * 8);
+				predicate_result_nodict = dict_result;
+				vector_nodict = vector->dictionary;
+			}
+			else
+			{
+				predicate_result_nodict = predicate_result;
+				vector_nodict = vector;
+			}
+
+			/*
+			 * At last, compute the predicate.
+			 */
+			if (saop)
+			{
+				vector_array_predicate(vector_const_predicate,
+									   saop->useOr,
+									   vector_nodict,
+									   constnode->constvalue,
+									   predicate_result_nodict);
+			}
+			else
+			{
+				vector_const_predicate(vector_nodict,
+									   constnode->constvalue,
+									   predicate_result_nodict);
+			}
+
+			/*
+			 * If the vector is dictionary-encoded, we have just computed the
+			 * predicate for dictionary and now have to translate it.
+			 */
+			if (vector->dictionary)
+			{
+				translate_from_dictionary(vector, predicate_result_nodict, predicate_result);
+			}
+
+			/* Account for nulls which shouldn't pass the predicate. */
+			const size_t n = vector->length;
+			const size_t n_words = (n + 63) / 64;
+			const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
+			for (size_t i = 0; i < n_words; i++)
+			{
+				predicate_result[i] &= validity[i];
+			}
 		}
 
 		/* Process the result. */

@@ -1,2 +1,0 @@
-Fixes: #6393 Disable vectorized sum for expressions.
-

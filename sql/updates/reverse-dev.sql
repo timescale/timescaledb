@@ -1,7 +1,3 @@
--- Manually drop the following functions / procedures since 'OR REPLACE' is missing in 2.13.0
-DROP PROCEDURE IF EXISTS _timescaledb_functions.repair_relation_acls();
-DROP FUNCTION IF EXISTS _timescaledb_functions.makeaclitem(regrole, regrole, text, bool);
-
 CREATE FUNCTION _timescaledb_functions.ping_data_node(node_name NAME, timeout INTERVAL = NULL) RETURNS BOOLEAN
 AS '@MODULE_PATHNAME@', 'ts_data_node_ping' LANGUAGE C VOLATILE;
 

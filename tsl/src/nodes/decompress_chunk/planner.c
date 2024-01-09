@@ -12,6 +12,7 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/nodes.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/paths.h>
 #include <optimizer/plancat.h>
@@ -420,36 +421,44 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
 	/*
 	 * Currently we vectorize some "Var op Const" binary predicates,
-	 * and scalar array operations with these predicates.
+	 * scalar array operations with these predicates, and null test.
 	 */
-	if (!IsA(qual, OpExpr) && !IsA(qual, ScalarArrayOpExpr))
-	{
-		return NULL;
-	}
-
-	List *args = NIL;
+	NullTest *nulltest = NULL;
 	OpExpr *opexpr = NULL;
-	Oid opno = InvalidOid;
 	ScalarArrayOpExpr *saop = NULL;
+	Node *arg1 = NULL;
+	Node *arg2 = NULL;
+	Oid opno = InvalidOid;
 	if (IsA(qual, OpExpr))
 	{
 		opexpr = castNode(OpExpr, qual);
-		args = opexpr->args;
 		opno = opexpr->opno;
+		if (list_length(opexpr->args) != 2)
+		{
+			return NULL;
+		}
+		arg1 = (Node *) linitial(opexpr->args);
+		arg2 = (Node *) lsecond(opexpr->args);
 	}
-	else
+	else if (IsA(qual, ScalarArrayOpExpr))
 	{
 		saop = castNode(ScalarArrayOpExpr, qual);
-		args = saop->args;
 		opno = saop->opno;
+		Assert(list_length(saop->args) == 2);
+		arg1 = (Node *) linitial(saop->args);
+		arg2 = (Node *) lsecond(saop->args);
 	}
-
-	if (list_length(args) != 2)
+	else if (IsA(qual, NullTest))
+	{
+		nulltest = castNode(NullTest, qual);
+		arg1 = (Node *) nulltest->arg;
+	}
+	else
 	{
 		return NULL;
 	}
 
-	if (opexpr && IsA(lsecond(args), Var))
+	if (opexpr && IsA(arg2, Var))
 	{
 		/*
 		 * Try to commute the operator if we have Var on the right.
@@ -467,22 +476,37 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		 * CommuteOpExpr() does.
 		 */
 		opexpr->opfuncid = InvalidOid;
-		args = list_make2(lsecond(args), linitial(args));
-		opexpr->args = args;
+		opexpr->args = list_make2(arg2, arg1);
+		Node *tmp = arg1;
+		arg1 = arg2;
+		arg2 = tmp;
 	}
 
 	/*
-	 * We can vectorize the operation where the left side is a Var and the right
-	 * side is a constant or can be evaluated to a constant at run time (e.g.
-	 * contains stable functions).
+	 * We can vectorize the operation where the left side is a Var.
 	 */
-	if (!IsA(linitial(args), Var) || is_not_runtime_constant(lsecond(args)))
+	if (!IsA(arg1, Var))
 	{
 		return NULL;
 	}
 
-	Var *var = castNode(Var, linitial(args));
-	Assert((Index) var->varno == path->info->chunk_rel->relid);
+	Var *var = castNode(Var, arg1);
+	if ((Index) var->varno != path->info->chunk_rel->relid)
+	{
+		/*
+		 * We have a Var from other relation (join clause), can't vectorize it
+		 * at the moment.
+		 */
+		return NULL;
+	}
+
+	if (var->varattno <= 0)
+	{
+		/*
+		 * Can't vectorize operators with special variables such as whole-row var.
+		 */
+		return NULL;
+	}
 
 	/*
 	 * ExecQual is performed before ExecProject and operates on the decompressed
@@ -495,26 +519,56 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return NULL;
 	}
 
+	if (nulltest)
+	{
+		/*
+		 * The checks we've done to this point is all that is required for null
+		 * test.
+		 */
+		return (Node *) nulltest;
+	}
+
+	/*
+	 * We can vectorize the operation where the right side is a constant or can
+	 * be evaluated to a constant at run time (e.g. contains stable functions).
+	 */
+	Assert(arg2);
+	if (is_not_runtime_constant(arg2))
+	{
+		return NULL;
+	}
+
 	Oid opcode = get_opcode(opno);
 	if (!get_vector_const_predicate(opcode))
 	{
 		return NULL;
 	}
 
-#if PG14_GE
-	if (saop)
+	if (opexpr)
 	{
-		if (saop->hashfuncid)
-		{
-			/*
-			 * Don't vectorize if the planner decided to build a hash table.
-			 */
-			return NULL;
-		}
+		/*
+		 * The checks we've done to this point is all that is required for
+		 * OpExpr.
+		 */
+		return (Node *) opexpr;
+	}
+
+	/*
+	 * The only option that is left is a ScalarArrayOpExpr.
+	 */
+	Assert(saop != NULL);
+
+#if PG14_GE
+	if (saop->hashfuncid)
+	{
+		/*
+		 * Don't vectorize if the planner decided to build a hash table.
+		 */
+		return NULL;
 	}
 #endif
 
-	return opexpr ? (Node *) opexpr : (Node *) saop;
+	return (Node *) saop;
 }
 
 /*
