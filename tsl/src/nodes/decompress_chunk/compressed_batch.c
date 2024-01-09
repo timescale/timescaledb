@@ -176,8 +176,8 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 }
 
 static bool
-compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
-					uint64 *restrict result)
+compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
+				   uint64 *restrict result)
 {
 	/*
 	 * For now, we support NullTest, "Var ? Const" predicates and
@@ -361,8 +361,8 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 	return have_passing_rows;
 }
 
-static bool compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
-								  Node *qual, uint64 *restrict result);
+static bool compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
+							 Node *qual, uint64 *restrict result);
 
 static bool
 compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
@@ -371,7 +371,7 @@ compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batc
 	ListCell *lc;
 	foreach (lc, quals)
 	{
-		if (!compute_compound_qual(dcontext, batch_state, lfirst(lc), result))
+		if (!compute_one_qual(dcontext, batch_state, lfirst(lc), result))
 		{
 			/*
 			 * Exit early if no rows pass already. This might allow us to avoid
@@ -404,20 +404,20 @@ compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batc
 		or_result[n_result_words - 1] = mask;
 	}
 
-	uint64 *single_qual_result = palloc(sizeof(uint64) * n_result_words);
+	uint64 *one_qual_result = palloc(sizeof(uint64) * n_result_words);
 
 	ListCell *lc;
 	foreach (lc, quals)
 	{
 		for (size_t i = 0; i < n_result_words; i++)
 		{
-			single_qual_result[i] = (uint64) -1;
+			one_qual_result[i] = (uint64) -1;
 		}
-		compute_compound_qual(dcontext, batch_state, lfirst(lc), single_qual_result);
+		compute_one_qual(dcontext, batch_state, lfirst(lc), one_qual_result);
 		bool all_rows_pass = true;
 		for (size_t i = 0; i < n_result_words; i++)
 		{
-			or_result[i] |= single_qual_result[i];
+			or_result[i] |= one_qual_result[i];
 			/*
 			 * Note that we have set the bits for past-the-end rows in
 			 * or_result to 1, so we can use simple comparison to zero here.
@@ -443,12 +443,12 @@ compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batc
 }
 
 static bool
-compute_compound_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
-					  uint64 *restrict result)
+compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
+				 uint64 *restrict result)
 {
 	if (!IsA(qual, BoolExpr))
 	{
-		return compute_simple_qual(dcontext, batch_state, qual, result);
+		return compute_plain_qual(dcontext, batch_state, qual, result);
 	}
 
 	BoolExpr *boolexpr = castNode(BoolExpr, qual);
