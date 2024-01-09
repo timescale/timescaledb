@@ -575,7 +575,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	}
 
 	/*
-	 * We can vectorize the opreration where the right side is a constant or can
+	 * We can vectorize the operation where the right side is a constant or can
 	 * be evaluated to a constant at run time (e.g. contains stable functions).
 	 */
 	Assert(arg2);

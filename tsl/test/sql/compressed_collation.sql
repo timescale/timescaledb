@@ -26,11 +26,11 @@ insert into compressed_collation_ht values ('2021-01-01 01:01:01', 'á', '1'),
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('compressed_collation_ht') ch;
 
-select ht.schema_name || '.' || ht.table_name as "CHUNK"
-from _timescaledb_catalog.hypertable ht
-    inner join _timescaledb_catalog.hypertable ht2
-    on ht.id = ht2.compressed_hypertable_id
-        and ht2.table_name = 'compressed_collation_ht' \gset
+SELECT format('%I.%I',ch.schema_name, ch.table_name) AS "CHUNK"
+FROM _timescaledb_catalog.hypertable ht
+    INNER JOIN _timescaledb_catalog.chunk ch
+    ON ch.hypertable_id = ht.compressed_hypertable_id
+        AND ht.table_name = 'compressed_collation_ht' \gset
 
 create index on :CHUNK (name);
 

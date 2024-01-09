@@ -180,7 +180,7 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 					uint64 *restrict result)
 {
 	/*
-	 * For now we support "Var ? Const" predicates and
+	 * For now, we support NullTest, "Var ? Const" predicates and
 	 * ScalarArrayOperations.
 	 */
 	List *args = NULL;
