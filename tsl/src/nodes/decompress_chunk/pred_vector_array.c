@@ -138,28 +138,29 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 		{
 			if (is_or)
 			{
-				/*
-				 * Note that we have set the bits for past-the-end rows in
-				 * array_result to 1, so we can use simple AND here.
-				 */
-				uint64 all_rows_match = -1;
+				bool all_rows_match = true;
 				for (size_t word = 0; word < result_words; word++)
 				{
-					all_rows_match &= array_result[word];
+					/*
+					 * Note that we have set the bits for past-the-end rows in
+					 * array_result to 1, so we can use simple comparison to
+					 * zero here.
+					 */
+					all_rows_match &= (~array_result[word] == 0);
 				}
-				if (all_rows_match == -1ULL)
+				if (all_rows_match)
 				{
 					return;
 				}
 			}
 			else
 			{
-				uint64 any_rows_match = 0;
+				bool any_rows_match = false;
 				for (size_t word = 0; word < result_words; word++)
 				{
-					any_rows_match |= final_result[word];
+					any_rows_match |= (final_result[word] != 0);
 				}
-				if (any_rows_match == 0)
+				if (!any_rows_match)
 				{
 					return;
 				}

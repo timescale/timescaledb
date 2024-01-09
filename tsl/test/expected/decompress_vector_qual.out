@@ -165,8 +165,10 @@ select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order
  Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
 (2 rows)
 
--- ORed constrainst on multiple columns (not vectorized for now).
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- ORed constrainst on multiple columns.
+set timescaledb.debug_require_vector_qual to 'only';
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+-- set timescaledb.enable_bulk_decompression to off;
 select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 | tag  
 --------------------------+---------+--------+---------+---------+------
@@ -177,12 +179,65 @@ select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order 
  Wed Jan 01 00:00:00 2025 |      52 |      5 |      53 |      54 | tag5
 (5 rows)
 
+-- Some more tests for boolean operations.
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00';
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from vectorqual where 40 < metric3;
+ count 
+-------
+     4
+(1 row)
+
+select count(*) from vectorqual where metric2 < 0;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00' or 40 < metric3;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where not (ts <= '2021-01-01 00:00:00' and 40 >= metric3);
+ count 
+-------
+     5
+(1 row)
+
+-- early exit inside AND BoolExpr
+select count(*) from vectorqual where metric2 < 0 or (metric4 < -1 and 40 >= metric3);
+ count 
+-------
+     0
+(1 row)
+
+-- early exit after OR BoolExpr
+select count(*) from vectorqual where metric2 < 0 or metric3  < -1;
+ count 
+-------
+     0
+(1 row)
+
+reset timescaledb.enable_bulk_decompression;
 -- Test with unary operator.
+set timescaledb.debug_require_vector_qual to 'forbid';
 create operator !! (function = 'bool', rightarg = int4);
 select count(*) from vectorqual where !!metric3;
  count 
 -------
      5
+(1 row)
+
+select count(*) from vectorqual where not !!metric3;
+ count 
+-------
+     0
 (1 row)
 
 -- Custom operator on column that supports bulk decompression is not vectorized.
@@ -196,6 +251,18 @@ select count(*) from vectorqual where metric3 === 777;
 (1 row)
 
 select count(*) from vectorqual where metric3 === any(array[777, 888]);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where not metric3 === 777;
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
  count 
 -------
      2
@@ -551,6 +618,212 @@ select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12])
  count 
 -------
      0
+(1 row)
+
+-- Also check early exit for AND/OR. Top-level clause must be OR, because top-level
+-- AND is flattened into a list.
+select count(*) from singlebatch where (metric2 < 20 and metric2 < 30) or metric3 = 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from singlebatch where (metric2 < 30 and metric2 < 20) or metric3 = 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 or (metric2 < 20 and metric2 < 30);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from singlebatch where metric3 = 777 or (metric2 < 30 and metric2 < 20);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where (metric2 < 20 and metric2 < 30) or metric3 = 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where (metric2 < 30 and metric2 < 20) or metric3 = 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric3 = 777 or (metric2 < 20 and metric2 < 30);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric3 = 777 or (metric2 < 30 and metric2 < 20);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from singlebatch where metric2 < 20 or metric3 < 50 or metric3 > 50;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from singlebatch where metric2 < 20 or metric3 > 50 or metric3 < 50;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from singlebatch where metric3 < 50 or metric2 < 20 or metric3 > 50;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from singlebatch where metric3 > 50 or metric3 < 50 or metric2 < 20;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric2 < 20 or metric3 < 50 or metric3 > 50;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric2 < 20 or metric3 > 50 or metric3 < 50;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric3 < 50 or metric2 < 20 or metric3 > 50;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric3 > 50 or metric3 < 50 or metric2 < 20;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from singlebatch where metric2 = 12 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = 22 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = 32 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = 42 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where metric2 = 52 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = 12 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = 22 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = 32 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = 42 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where metric2 = 52 or metric3 = 888;
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
+ count 
+-------
+     1
+(1 row)
+
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
+ count 
+-------
+     1
 (1 row)
 
 reset timescaledb.enable_bulk_decompression;

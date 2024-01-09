@@ -60,14 +60,38 @@ select metric4 from vectorqual where ts > '2021-01-01 00:00:00' order by 1;
 select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order by vectorqual;
 
 
--- ORed constrainst on multiple columns (not vectorized for now).
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- ORed constrainst on multiple columns.
+set timescaledb.debug_require_vector_qual to 'only';
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+-- set timescaledb.enable_bulk_decompression to off;
+
 select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order by vectorqual;
+
+-- Some more tests for boolean operations.
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00';
+
+select count(*) from vectorqual where 40 < metric3;
+
+select count(*) from vectorqual where metric2 < 0;
+
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00' or 40 < metric3;
+
+select count(*) from vectorqual where not (ts <= '2021-01-01 00:00:00' and 40 >= metric3);
+
+-- early exit inside AND BoolExpr
+select count(*) from vectorqual where metric2 < 0 or (metric4 < -1 and 40 >= metric3);
+
+-- early exit after OR BoolExpr
+select count(*) from vectorqual where metric2 < 0 or metric3  < -1;
+
+reset timescaledb.enable_bulk_decompression;
 
 
 -- Test with unary operator.
+set timescaledb.debug_require_vector_qual to 'forbid';
 create operator !! (function = 'bool', rightarg = int4);
 select count(*) from vectorqual where !!metric3;
+select count(*) from vectorqual where not !!metric3;
 
 
 -- Custom operator on column that supports bulk decompression is not vectorized.
@@ -76,6 +100,8 @@ create function int4eqq(int4, int4) returns bool as 'int4eq' language internal;
 create operator === (function = 'int4eqq', rightarg = int4, leftarg = int4);
 select count(*) from vectorqual where metric3 === 777;
 select count(*) from vectorqual where metric3 === any(array[777, 888]);
+select count(*) from vectorqual where not metric3 === 777;
+select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
 
 -- It also doesn't have a commutator.
 select count(*) from vectorqual where 777 === metric3;
@@ -167,6 +193,51 @@ select count(*) from singlebatch where metric2 != any(array[0, 0, 0, 0, 0]) and 
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) and metric3 != 777;
 select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 != 777;
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 != 777;
+
+
+-- Also check early exit for AND/OR. Top-level clause must be OR, because top-level
+-- AND is flattened into a list.
+select count(*) from singlebatch where (metric2 < 20 and metric2 < 30) or metric3 = 777;
+select count(*) from singlebatch where (metric2 < 30 and metric2 < 20) or metric3 = 777;
+select count(*) from singlebatch where metric3 = 777 or (metric2 < 20 and metric2 < 30);
+select count(*) from singlebatch where metric3 = 777 or (metric2 < 30 and metric2 < 20);
+
+select count(*) from vectorqual where (metric2 < 20 and metric2 < 30) or metric3 = 777;
+select count(*) from vectorqual where (metric2 < 30 and metric2 < 20) or metric3 = 777;
+select count(*) from vectorqual where metric3 = 777 or (metric2 < 20 and metric2 < 30);
+select count(*) from vectorqual where metric3 = 777 or (metric2 < 30 and metric2 < 20);
+
+select count(*) from singlebatch where metric2 < 20 or metric3 < 50 or metric3 > 50;
+select count(*) from singlebatch where metric2 < 20 or metric3 > 50 or metric3 < 50;
+select count(*) from singlebatch where metric3 < 50 or metric2 < 20 or metric3 > 50;
+select count(*) from singlebatch where metric3 > 50 or metric3 < 50 or metric2 < 20;
+
+select count(*) from vectorqual where metric2 < 20 or metric3 < 50 or metric3 > 50;
+select count(*) from vectorqual where metric2 < 20 or metric3 > 50 or metric3 < 50;
+select count(*) from vectorqual where metric3 < 50 or metric2 < 20 or metric3 > 50;
+select count(*) from vectorqual where metric3 > 50 or metric3 < 50 or metric2 < 20;
+
+select count(*) from singlebatch where metric2 = 12 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 22 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 32 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 42 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 52 or metric3 = 888;
+
+select count(*) from vectorqual where metric2 = 12 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 22 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 32 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 42 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 52 or metric3 = 888;
+
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
+
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
 
 reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;
