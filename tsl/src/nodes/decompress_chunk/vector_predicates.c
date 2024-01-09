@@ -51,12 +51,12 @@ vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 #define INNER_LOOP                                                                                 \
 	const uint32 start = offsets[row];                                                             \
 	const uint32 end = offsets[row + 1];                                                           \
+	Assert(end >= start);                                                                          \
 	const uint32 veclen = end - start;                                                             \
 	bool valid = veclen != textlen ?                                                               \
 					 false :                                                                       \
 					 (strncmp((char *) &values[start], (char *) cstring, textlen) == 0);           \
-	word |= ((uint64) valid) << bit_index;                                                         \
-	//	fprintf(stderr, "plain row %ld: valid %d\n", row, valid);
+	word |= ((uint64) valid) << bit_index;
 
 			INNER_LOOP
 		}

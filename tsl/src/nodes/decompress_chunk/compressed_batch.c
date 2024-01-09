@@ -28,19 +28,29 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	struct ArrowWithBuffers
 	{
 		ArrowArray arrow;
-		uint64 buffers[2];
-		uint64 nulls_buffer;
-		uint64 values_buffer;
+		uint64 arrow_buffers_array_storage[3];
+		uint64 nulls_buffer[1];
+		uint32 offsets_buffer[2];
+		uint64 values_buffer[8 /* 64-byte padding as required by Arrow. */];
 	};
 
 	struct ArrowWithBuffers *with_buffers = palloc0(sizeof(struct ArrowWithBuffers));
 	ArrowArray *arrow = &with_buffers->arrow;
 	arrow->length = 1;
-	arrow->null_count = -1;
-	arrow->n_buffers = 2;
-	arrow->buffers = (const void **) &with_buffers->buffers;
+	arrow->buffers = (const void **) with_buffers->arrow_buffers_array_storage;
 	arrow->buffers[0] = &with_buffers->nulls_buffer;
-	arrow->buffers[1] = &with_buffers->values_buffer;
+
+	if (pgtype == TEXTOID)
+	{
+		arrow->n_buffers = 3;
+		arrow->buffers[1] = with_buffers->offsets_buffer;
+		arrow->buffers[2] = with_buffers->values_buffer;
+	}
+	else
+	{
+		arrow->n_buffers = 2;
+		arrow->buffers[1] = with_buffers->values_buffer;
+	}
 
 	if (isnull)
 	{
@@ -49,12 +59,27 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 		 * the Datum might be invalid if the value is null (important on i386
 		 * where it might be pass-by-reference), so don't read it.
 		 */
+		arrow->null_count = 1;
 		return arrow;
 	}
 
+	arrow_set_row_validity((uint64 *) arrow->buffers[0], 0, true);
+
+	if (pgtype == TEXTOID)
+	{
+		text *detoasted = PG_DETOAST_DATUM(datum);
+		((uint32 *) arrow->buffers[1])[1] = VARSIZE_ANY_EXHDR(detoasted);
+		arrow->buffers[2] = VARDATA(detoasted);
+		return arrow;
+	}
+
+	/*
+	 * Fixed-width by-value types.
+	 */
+	arrow->buffers[1] = with_buffers->values_buffer;
 #define FOR_TYPE(PGTYPE, CTYPE, FROMDATUM)                                                         \
 	case PGTYPE:                                                                                   \
-		*((CTYPE *) &with_buffers->values_buffer) = FROMDATUM(datum);                              \
+		*((CTYPE *) arrow->buffers[1]) = FROMDATUM(datum);                                         \
 		break
 
 	switch (pgtype)
@@ -71,8 +96,6 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 			elog(ERROR, "unexpected column type '%s'", format_type_be(pgtype));
 			pg_unreachable();
 	}
-
-	arrow_set_row_validity(&with_buffers->nulls_buffer, 0, true);
 
 	return arrow;
 }

@@ -974,7 +974,7 @@ select * from date_table where ts <  CURRENT_DATE;
 (3 rows)
 
 -- Vectorized comparison for text
-create table t(ts int, d int, a text);
+create table t(ts int, d int);
 select create_hypertable('t', 'ts');
 NOTICE:  adding not-null constraint to column "ts"
  create_hypertable 
@@ -983,12 +983,21 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
+insert into t select x, 0 /*, default */ from generate_series(1, 1000) x;
+select count(compress_chunk(x, true)) from show_chunks('t') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table t add column a text default 'default';
 insert into t select x, 1, '' from generate_series(1, 1000) x;
 insert into t select x, 2, 'same' from generate_series(1, 1000) x;
 insert into t select x, 3, 'different' || x from generate_series(1, 1000) x;
 insert into t select x, 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
 insert into t select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
 select count(compress_chunk(x, true)) from show_chunks('t') x;
+NOTICE:  chunk "_hyper_7_15_chunk" is already compressed
  count 
 -------
      1
@@ -998,6 +1007,12 @@ set timescaledb.debug_require_vector_qual to 'only';
 -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'default';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1000 |   1 | 1000 |   0 |   0
+(1 row)
+
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = '';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
@@ -1052,6 +1067,25 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same-with-
    501 |   1 | 999 |   4 |   5
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('different500', 'default');
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1001 |   1 | 1000 |   0 |   3
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different500' or a = 'default';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1001 |   1 | 1000 |   0 |   3
+(1 row)
+
+reset timescaledb.debug_require_vector_qual;
+select count(distinct a) from t;
+ count 
+-------
+  1504
+(1 row)
+
 -- Null tests are not vectorized yet.
 reset timescaledb.debug_require_vector_qual;
 select count(*), min(ts), max(ts), min(d), max(d) from t where a is null;
@@ -1063,7 +1097,7 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a is null;
 select count(*), min(ts), max(ts), min(d), max(d) from t where a is not null;
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  4000 |   1 | 1000 |   1 |   5
+  5000 |   1 | 1000 |   0 |   5
 (1 row)
 
 reset timescaledb.debug_require_vector_qual;

@@ -305,9 +305,13 @@ select * from date_table where ts <  CURRENT_DATE;
 
 
 -- Vectorized comparison for text
-create table t(ts int, d int, a text);
+create table t(ts int, d int);
 select create_hypertable('t', 'ts');
 alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
+
+insert into t select x, 0 /*, default */ from generate_series(1, 1000) x;
+select count(compress_chunk(x, true)) from show_chunks('t') x;
+alter table t add column a text default 'default';
 
 insert into t select x, 1, '' from generate_series(1, 1000) x;
 insert into t select x, 2, 'same' from generate_series(1, 1000) x;
@@ -322,6 +326,7 @@ set timescaledb.debug_require_vector_qual to 'only';
 -- set timescaledb.enable_bulk_decompression to off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'default';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = '';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same-with-nulls';
@@ -331,6 +336,11 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different100
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different-with-nulls999';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same', 'different500');
 select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same-with-nulls', 'different-with-nulls499');
+select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('different500', 'default');
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different500' or a = 'default';
+
+reset timescaledb.debug_require_vector_qual;
+select count(distinct a) from t;
 
 -- Null tests are not vectorized yet.
 reset timescaledb.debug_require_vector_qual;
