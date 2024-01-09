@@ -3160,6 +3160,41 @@ ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
 	return chunkids;
 }
 
+/* Return list of chunks that belong to the given hypertable.
+ *
+ * The returned chunk objects will not have any constraints or dimension
+ * information filled in.
+ */
+List *
+ts_chunk_get_by_hypertable_id(int32 hypertable_id)
+{
+	List *chunks = NIL;
+	Oid hypertable_relid = ts_hypertable_id_to_relid(hypertable_id, false);
+
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+
+	init_scan_by_hypertable_id(&iterator, hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		Chunk *chunk = palloc0(sizeof(Chunk));
+		ts_chunk_formdata_fill(&chunk->fd, ti);
+
+		chunk->hypertable_relid = hypertable_relid;
+
+		if (!chunk->fd.dropped)
+		{
+			chunk->table_id = ts_get_relation_relid(NameStr(chunk->fd.schema_name),
+													NameStr(chunk->fd.table_name),
+													false);
+		}
+
+		chunks = lappend(chunks, chunk);
+	}
+
+	return chunks;
+}
+
 static ChunkResult
 chunk_recreate_constraint(ChunkScanCtx *ctx, ChunkStub *stub)
 {
