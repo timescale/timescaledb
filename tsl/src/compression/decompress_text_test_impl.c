@@ -13,8 +13,8 @@
 
 #include "arrow_c_data_interface.h"
 
-static void
-arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str, size_t *len)
+static uint32
+arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str)
 {
 	if (!arrow->dictionary)
 	{
@@ -25,13 +25,12 @@ arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str, size_t *len)
 		const uint32 end = offsets[arrow_row + 1];
 		const uint32 arrow_len = end - start;
 
-		*len = arrow_len;
 		*str = &values[start];
-		return;
+		return arrow_len;
 	}
 
 	const int16 dict_row = ((int16 *) arrow->buffers[1])[arrow_row];
-	arrow_get_str(arrow->dictionary, dict_row, str, len);
+	return arrow_get_str(arrow->dictionary, dict_row, str);
 }
 
 static void
@@ -64,16 +63,11 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 		if (!results[i].is_null)
 		{
 			const char *arrow_cstring;
-			size_t arrow_len;
-			arrow_get_str(arrow, i, &arrow_cstring, &arrow_len);
+			size_t arrow_len = arrow_get_str(arrow, i, &arrow_cstring);
 
 			const Datum rowbyrow_varlena = results[i].val;
 			const size_t rowbyrow_len = VARSIZE_ANY_EXHDR(rowbyrow_varlena);
 			const char *rowbyrow_cstring = VARDATA_ANY(rowbyrow_varlena);
-
-			//				fprintf(stderr, "arrow: '%.*s'(%ld), rbr: '%.*s'(%ld)\n",
-			//					(int) arrow_len, arrow_cstring, arrow_len,
-			//					(int) rowbyrow_len, rowbyrow_cstring, rowbyrow_len);
 
 			if (rowbyrow_len != arrow_len)
 			{
@@ -95,10 +89,7 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 }
 
 /*
- * Try to decompress the given compressed data. Used for fuzzing and for checking
- * the examples found by fuzzing. For fuzzing we do less checks to keep it
- * faster and the coverage space smaller. This is a generic implementation
- * for arithmetic types.
+ * Try to decompress the given compressed data.
  */
 static int
 decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested_algo)

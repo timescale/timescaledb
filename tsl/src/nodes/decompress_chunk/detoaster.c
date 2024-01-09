@@ -21,6 +21,7 @@
 #include <utils/relcache.h>
 
 #include <compat/compat.h>
+#include <compression/compression.h>
 #include "debug_assert.h"
 
 #if PG14_LT
@@ -393,6 +394,14 @@ detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 	 */
 	Ensure(VARATT_IS_SHORT(attr), "got unexpected TOAST type for compressed data");
 
+	/*
+	 * Check that the size of datum is not less than the size of header, which
+	 * could lead to data_size of UINT64_MAX. This is possible in case of
+	 * TOAST data corruption. Postgres doesn't specifically check for this,
+	 * because in any case it will be detected by the subsequent palloc call,
+	 * but we do it to silence the Coverity warning.
+	 */
+	CheckCompressedData(VARSIZE_SHORT(attr) >= VARHDRSZ_SHORT);
 	Size data_size = VARSIZE_SHORT(attr) - VARHDRSZ_SHORT;
 	Size new_size = data_size + VARHDRSZ;
 	struct varlena *new_attr;

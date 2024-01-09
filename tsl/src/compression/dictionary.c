@@ -336,13 +336,6 @@ dictionary_compressor_finish(DictionaryCompressor *compressor)
 	average_element_size = sizes.dictionary_size / sizes.num_distinct;
 	expected_array_size = average_element_size * sizes.dictionary_compressed_indexes->num_elements;
 	compressed = dictionary_compressed_from_serialization_info(sizes, compressor->type);
-	//	fprintf(stderr,
-	//			"dict size %ld, distinct %ld, avg element size %ld, easize %ld, totalsize %ld\n",
-	//			sizes.dictionary_size,
-	//			(uint64) sizes.num_distinct,
-	//			average_element_size,
-	//			expected_array_size,
-	//			sizes.total_size);
 	if (expected_array_size < sizes.total_size)
 		return dictionary_compressed_to_array_compressed(compressed);
 
@@ -405,12 +398,6 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 	Assert(array_decompression_iterator_try_next_forward(dictionary_iterator).is_done);
 }
 
-static uint64
-pad64(uint64 value)
-{
-	return ((value + 63) / 64) * 64;
-}
-
 #define ELEMENT_TYPE int16
 #include "simple8b_rle_decompress_all.h"
 #undef ELEMENT_TYPE
@@ -439,8 +426,9 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 
 	const uint16 n_notnull = indices_serialized->num_elements;
 	const uint16 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
-	const uint16 n_padded = n_total + 63;
-	int16 *indices = MemoryContextAlloc(dest_mctx, sizeof(int16) * n_padded);
+	const uint16 n_padded =
+		n_total + 63; /* This is the padding requirement of simple8brle_decompress_all. */
+	int16 *restrict indices = MemoryContextAlloc(dest_mctx, sizeof(int16) * n_padded);
 
 	const uint16 n_decompressed =
 		simple8brle_decompress_all_buf_int16(indices_serialized, indices, n_padded);
@@ -462,7 +450,7 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	CheckCompressedData(header->num_distinct == dict->length);
 
 	/* Fill validity and indices of the array elements, reshuffling for nulls if needed. */
-	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n_total);
+	const int validity_bitmap_bytes = sizeof(uint64) * pad_to_multiple(64, n_total) / 64;
 	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
 

@@ -463,12 +463,6 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	return &iterator->base;
 }
 
-static uint64
-pad64(uint64 value)
-{
-	return ((value + 63) / 64) * 64;
-}
-
 #define ELEMENT_TYPE uint32
 #include "simple8b_rle_decompress_all.h"
 #undef ELEMENT_TYPE
@@ -507,8 +501,10 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	const int n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
 
 	uint32 *offsets =
-		(uint32 *) MemoryContextAllocZero(dest_mctx, pad64(sizeof(*offsets) * (n_total + 1)));
-	uint8 *arrow_bodies = (uint8 *) MemoryContextAllocZero(dest_mctx, pad64(si->len - si->cursor));
+		(uint32 *) MemoryContextAllocZero(dest_mctx,
+										  pad_to_multiple(64, sizeof(*offsets) * (n_total + 1)));
+	uint8 *arrow_bodies =
+		(uint8 *) MemoryContextAllocZero(dest_mctx, pad_to_multiple(64, si->len - si->cursor));
 
 	uint32 offset = 0;
 	for (int i = 0; i < n_notnull; i++)
@@ -526,21 +522,12 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		 * calculation of size without header doesn't overflow.
 		 */
 		CheckCompressedData((VARATT_IS_1B(vardata) && VARSIZE_1B(vardata) >= VARHDRSZ_SHORT) ||
-							(VARSIZE_4B(vardata) > VARHDRSZ));
+							(VARSIZE_4B(vardata) >= VARHDRSZ));
 		/* Varsize must match the size stored in the sizes array for this element. */
 		CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
 
 		const uint32 textlen = VARSIZE_ANY_EXHDR(vardata);
 		memcpy(&arrow_bodies[offset], VARDATA_ANY(vardata), textlen);
-
-		//		fprintf(stderr,
-		//				"%d: copied: '%s' len %d varsize %d result %.*s\n",
-		//				i,
-		//				text_to_cstring(vardata),
-		//				textlen,
-		//				(int) VARSIZE_ANY(vardata),
-		//				textlen,
-		//				&arrow_bodies[offset]);
 
 		offsets[i] = offset;
 
@@ -549,7 +536,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	}
 	offsets[n_notnull] = offset;
 
-	const int validity_bitmap_bytes = sizeof(uint64) * pad64(n_total);
+	const int validity_bitmap_bytes = sizeof(uint64) * (pad_to_multiple(64, n_total) / 64);
 	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
 
