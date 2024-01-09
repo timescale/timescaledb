@@ -31,7 +31,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * test_delta4().
 	 */
 	uint16 num_deltas;
-	uint64 *restrict deltas_zigzag =
+	const uint64 *restrict deltas_zigzag =
 		simple8brle_decompress_all_uint64(deltas_compressed, &num_deltas);
 
 	Simple8bRleBitmap nulls = { 0 };
