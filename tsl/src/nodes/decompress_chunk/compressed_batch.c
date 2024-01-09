@@ -213,7 +213,7 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	foreach (lc, dcontext->vectorized_quals_constified)
 	{
 		/*
-		 * For now we support "Var ? Const" predicates and
+		 * For now, we support NullTest, "Var ? Const" predicates and
 		 * ScalarArrayOperations.
 		 */
 		List *args = NULL;
