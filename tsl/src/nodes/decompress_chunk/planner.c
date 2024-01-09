@@ -420,7 +420,7 @@ static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
 	/*
-	 * and/or/not
+	 * We can vectorize BoolExpr (AND/OR/NOT).
 	 */
 	if (IsA(qual, BoolExpr))
 	{
@@ -466,8 +466,8 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 	}
 
 	/*
-	 * Currently we vectorize some "Var op Const" binary predicates,
-	 * scalar array operations with these predicates, and null test.
+	 * Among the simple predicates, we vectorize some "Var op Const" binary
+	 * predicates, scalar array operations with these predicates, and null test.
 	 */
 	NullTest *nulltest = NULL;
 	OpExpr *opexpr = NULL;

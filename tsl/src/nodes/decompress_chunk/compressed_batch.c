@@ -252,7 +252,7 @@ compute_simple_qual(DecompressContext *dcontext, DecompressBatchState *batch_sta
 	uint64 default_value_predicate_result;
 	uint64 *predicate_result = result;
 	const ArrowArray *vector = column_values->arrow;
-	if (vector == NULL)
+	if (column_values->arrow == NULL)
 	{
 		/*
 		 * The compressed column had a default value. We can't fall back to
