@@ -656,10 +656,32 @@ gapfill_advance_timestamp(GapFillState *state)
 			 * To be consistent with time_bucket we do UTC bucketing unless
 			 * a different timezone got explicity passed to the function.
 			 */
-			next = DirectFunctionCall2(state->have_timezone ? timestamptz_pl_interval :
-															  timestamp_pl_interval,
-									   TimestampTzGetDatum(state->gapfill_start),
-									   IntervalPGetDatum(state->next_offset));
+			if (state->have_timezone)
+			{
+				bool isnull;
+				/* TODO: optimize by constifying and caching the datum if possible */
+				Datum tzname = gapfill_exec_expr(state, get_timezone_arg(state), &isnull);
+				Assert(!isnull);
+
+				/* Convert to local timestamp */
+				next = DirectFunctionCall2(timestamptz_zone,
+										   tzname,
+										   TimestampTzGetDatum(state->gapfill_start));
+
+				/* Add interval */
+				next = DirectFunctionCall2(timestamp_pl_interval,
+										   next,
+										   IntervalPGetDatum(state->next_offset));
+
+				/* Convert back to specified timezone */
+				next = DirectFunctionCall2(timestamp_zone, tzname, next);
+			}
+			else
+			{
+				next = DirectFunctionCall2(timestamp_pl_interval,
+										   TimestampTzGetDatum(state->gapfill_start),
+										   IntervalPGetDatum(state->next_offset));
+			}
 			state->next_timestamp = DatumGetTimestampTz(next);
 			break;
 		default:

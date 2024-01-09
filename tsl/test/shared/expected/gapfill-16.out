@@ -3317,9 +3317,9 @@ SELECT time_bucket_gapfill('2 month'::interval, ts, 'UTC', '2000-01-01','2001-01
      time_bucket_gapfill      
  Fri Dec 31 16:00:00 1999 PST
  Tue Feb 29 16:00:00 2000 PST
- Sun Apr 30 16:00:00 2000 PDT
- Fri Jun 30 16:00:00 2000 PDT
- Thu Aug 31 16:00:00 2000 PDT
+ Sun Apr 30 17:00:00 2000 PDT
+ Fri Jun 30 17:00:00 2000 PDT
+ Thu Aug 31 17:00:00 2000 PDT
  Tue Oct 31 16:00:00 2000 PST
  Sun Dec 31 16:00:00 2000 PST
 (7 rows)
@@ -3391,6 +3391,21 @@ GROUP BY 1;
  Sun Apr 30 15:00:00 2023 PDT | 5.123
  Wed May 31 15:00:00 2023 PDT |      
  Fri Jun 30 15:00:00 2023 PDT |      
+(7 rows)
+
+-- Test gapfill respects DST changes when generating timestamps (#6344)
+SELECT time_bucket_gapfill('1 month', time, 'awst','2023-01-01', '2023-07-01' ) AS month, sum(value) AS sum
+FROM month_timezone
+GROUP BY 1;
+            month             |  sum  
+------------------------------+-------
+ Sat Dec 31 08:00:00 2022 PST |      
+ Tue Jan 31 08:00:00 2023 PST |      
+ Tue Feb 28 08:00:00 2023 PST | 3.123
+ Fri Mar 31 09:00:00 2023 PDT | 4.123
+ Sun Apr 30 09:00:00 2023 PDT | 5.123
+ Wed May 31 09:00:00 2023 PDT |      
+ Fri Jun 30 09:00:00 2023 PDT |      
 (7 rows)
 
 DROP TABLE month_timezone;
