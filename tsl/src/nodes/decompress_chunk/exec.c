@@ -453,17 +453,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			}
 		}
 
-		List *args;
-		if (IsA(constified, OpExpr))
-		{
-			args = castNode(OpExpr, constified)->args;
-		}
-		else
-		{
-			args = castNode(ScalarArrayOpExpr, constified)->args;
-		}
-		Ensure(IsA(lsecond(args), Const),
-			   "failed to evaluate runtime constant in vectorized filter");
 		dcontext->vectorized_quals_constified =
 			lappend(dcontext->vectorized_quals_constified, constified);
 	}
