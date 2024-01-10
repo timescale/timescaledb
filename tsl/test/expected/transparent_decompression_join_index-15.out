@@ -67,7 +67,7 @@ order by test.time;
                            Filter: (((a)::text = ANY ('{lat,lon}'::text[])) AND (b = 1))
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
                Vectorized Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
-               ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_a_b__ts_meta_ on compress_hyper_2_2_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_sequence_num_idx on compress_hyper_2_2_chunk
                      Index Cond: ((a = (test_copy.a)::text) AND (b = test_copy.b))
                      Filter: ((_ts_meta_max_1 >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND (_ts_meta_min_1 <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
 (13 rows)

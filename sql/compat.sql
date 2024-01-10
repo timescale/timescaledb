@@ -348,16 +348,6 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_constraint_add_table_fk_constraint(user_ht_constraint_name name,user_ht_schema_name name,user_ht_table_name name,compress_ht_id integer) RETURNS void LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.hypertable_constraint_add_table_fk_constraint(name,name,name,integer) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
-  END IF;
-  PERFORM _timescaledb_functions.hypertable_constraint_add_table_fk_constraint($1,$2,$3,$4);
-END$$
-SET search_path TO pg_catalog,pg_temp;
-
-
 CREATE OR REPLACE FUNCTION _timescaledb_internal.hypertable_invalidation_log_delete(raw_hypertable_id integer) RETURNS void LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
