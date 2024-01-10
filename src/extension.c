@@ -66,6 +66,13 @@ static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
  */
 static Oid ts_extension_oid = InvalidOid;
 
+static const char *extstate_str[] = {
+	[EXTENSION_STATE_UNKNOWN] = "unknown",
+	[EXTENSION_STATE_TRANSITIONING] = "transitioning",
+	[EXTENSION_STATE_CREATED] = "created",
+	[EXTENSION_STATE_NOT_INSTALLED] = "not installed",
+};
+
 static bool
 extension_loader_present()
 {
@@ -150,6 +157,10 @@ extension_set_state(enum ExtensionState newstate)
 			ts_catalog_reset();
 			break;
 	}
+	elog(DEBUG1,
+		 "extension state changed: %s to %s",
+		 extstate_str[extstate],
+		 extstate_str[newstate]);
 	extstate = newstate;
 	return true;
 }
@@ -261,6 +272,10 @@ ts_experimental_schema_name(void)
 void
 ts_extension_invalidate(void)
 {
+	elog(DEBUG1,
+		 "extension state invalidated: %s to %s",
+		 extstate_str[extstate],
+		 extstate_str[EXTENSION_STATE_UNKNOWN]);
 	extstate = EXTENSION_STATE_UNKNOWN;
 	extension_proxy_oid = InvalidOid;
 }
@@ -335,13 +350,6 @@ ts_extension_is_proxy_table_relid(Oid relid)
 }
 
 #ifdef TS_DEBUG
-static const char *extstate_str[] = {
-	[EXTENSION_STATE_UNKNOWN] = "unknown",
-	[EXTENSION_STATE_TRANSITIONING] = "transitioning",
-	[EXTENSION_STATE_CREATED] = "created",
-	[EXTENSION_STATE_NOT_INSTALLED] = "not installed",
-};
-
 TS_FUNCTION_INFO_V1(ts_extension_get_state);
 
 Datum

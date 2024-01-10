@@ -92,14 +92,15 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
 SELECT * FROM cleaned_bgw_log;
  msg_no | application_name |                                   msg                                   
 --------+------------------+-------------------------------------------------------------------------
-      0 | DB Scheduler     | database scheduler for database (RANDOM) starting
-      1 | DB Scheduler     | launching job 1000 "test_job_1b"
-      2 | DB Scheduler     | [TESTING] Registered new background worker
-      3 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | DB Scheduler     | extension state changed: unknown to created
+      1 | DB Scheduler     | database scheduler for database (RANDOM) starting
+      2 | DB Scheduler     | launching job 1000 "test_job_1b"
+      3 | DB Scheduler     | [TESTING] Registered new background worker
+      4 | DB Scheduler     | [TESTING] Wait until (RANDOM), started at (RANDOM)
       0 | test_job_1b      | Execute job 1
       1 | test_job_1b      | job 1000 (test_job_1b) exiting with success: execution time (RANDOM) ms
-      4 | DB Scheduler     | database scheduler for database (RANDOM) exiting
-(7 rows)
+      5 | DB Scheduler     | database scheduler for database (RANDOM) exiting
+(8 rows)
 
 ALTER DATABASE :TEST_DBNAME RESET timescaledb.bgw_log_level;
 SELECT pg_reload_conf();
