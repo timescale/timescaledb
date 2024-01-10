@@ -629,17 +629,23 @@ build_first_last_path(PlannerInfo *root, FirstLastAggInfo *fl_info, Oid eqop, Oi
 	parse->hasDistinctOn = false;
 	parse->hasAggs = false;
 
-	/* Build "sort IS NOT NULL" expression. Not that target can still be NULL */
-	ntest = makeNode(NullTest);
-	ntest->nulltesttype = IS_NOT_NULL;
-	ntest->arg = copyObject(fl_info->sort);
-	/* we checked it wasn't a rowtype in find_minmax_aggs_walker */
-	ntest->argisrow = false;
-	ntest->location = -1;
+	/*
+	 * Build "sort IS NOT NULL" expression. Note that target can still be NULL.
+	 * We don't need it if the order is NULLS LAST.
+	 */
+	if (nulls_first)
+	{
+		ntest = makeNode(NullTest);
+		ntest->nulltesttype = IS_NOT_NULL;
+		ntest->arg = copyObject(fl_info->sort);
+		/* we checked it wasn't a rowtype in find_minmax_aggs_walker */
+		ntest->argisrow = false;
+		ntest->location = -1;
 
-	/* User might have had that in WHERE already */
-	if (!list_member((List *) parse->jointree->quals, ntest))
-		parse->jointree->quals = (Node *) lcons(ntest, (List *) parse->jointree->quals);
+		/* User might have had that in WHERE already */
+		if (!list_member((List *) parse->jointree->quals, ntest))
+			parse->jointree->quals = (Node *) lcons(ntest, (List *) parse->jointree->quals);
+	}
 
 	/* Build suitable ORDER BY clause */
 	sortcl = makeNode(SortGroupClause);
