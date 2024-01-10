@@ -1,0 +1,15 @@
+-- This file and its contents are licensed under the Apache License 2.0.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-APACHE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_debug.extension_state();
+ extension_state 
+-----------------
+ created
+(1 row)
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+\set ON_ERROR_STOP 0
+SELECT _timescaledb_debug.extension_state();
+ERROR:  permission denied for schema _timescaledb_debug at character 8
+\set ON_ERROR_STOP 1

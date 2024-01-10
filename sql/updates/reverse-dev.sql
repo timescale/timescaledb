@@ -623,3 +623,5 @@ ALTER TABLE _timescaledb_catalog.hypertable_data_node
 ALTER TABLE _timescaledb_catalog.tablespace
     ADD CONSTRAINT tablespace_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
 
+DROP FUNCTION IF EXISTS _timescaledb_debug.extension_state;
+DROP SCHEMA IF EXISTS _timescaledb_debug;
