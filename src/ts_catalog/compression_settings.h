@@ -9,6 +9,7 @@
 #include <catalog/pg_type.h>
 
 #include "ts_catalog/catalog.h"
+#include "hypertable.h"
 
 typedef struct CompressionSettings
 {

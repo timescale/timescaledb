@@ -461,7 +461,6 @@ ORDER BY month, city;
 
 -- Clean up
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 66 other objects
 NOTICE:  drop cascades to 7 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
@@ -717,7 +716,6 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamp',
 
 -- Clean up
 DROP TABLE conditions_timestamp CASCADE;
-NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_175_chunk
 -- Make sure CAGGs with custom origin work for timestamptz type
@@ -932,6 +930,5 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamptz',
 
 -- Clean up
 DROP TABLE conditions_timestamptz CASCADE;
-NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_181_chunk

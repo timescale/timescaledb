@@ -1266,20 +1266,24 @@ CREATE TABLE tab1(filler_1 int, filler_2 int, filler_3 int, time timestamptz NOT
 SELECT create_hypertable('tab1','time',create_default_indexes:=false);
 INSERT INTO tab1(filler_1, filler_2, filler_3,time,device_id,v0,v1,v2,v3) SELECT device_id, device_id+1,  device_id + 2, time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-05 23:55:00+0','2m') gtime(time), generate_series(1,5,1) gdevice(device_id);
 ALTER TABLE tab1 SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id, filler_1, filler_2, filler_3');
--- create multiple indexes on compressed hypertable
-DROP INDEX _timescaledb_internal._compressed_hypertable_2_device_id_filler_1_filler_2_filler_idx;
-CREATE INDEX ON _timescaledb_internal._compressed_hypertable_2 (_ts_meta_min_1);
-CREATE INDEX ON _timescaledb_internal._compressed_hypertable_2 (_ts_meta_min_1, _ts_meta_sequence_num);
-CREATE INDEX ON _timescaledb_internal._compressed_hypertable_2 (_ts_meta_min_1, _ts_meta_max_1, filler_1);
-
-CREATE INDEX filler_1 ON _timescaledb_internal._compressed_hypertable_2 (filler_1);
-CREATE INDEX filler_2 ON _timescaledb_internal._compressed_hypertable_2 (filler_2);
-CREATE INDEX filler_3 ON _timescaledb_internal._compressed_hypertable_2 (filler_3);
--- below indexes should be selected
-CREATE INDEX filler_1_filler_2 ON _timescaledb_internal._compressed_hypertable_2 (filler_1, filler_2);
-CREATE INDEX filler_2_filler_3 ON _timescaledb_internal._compressed_hypertable_2 (filler_2, filler_3);
 
 SELECT compress_chunk(show_chunks('tab1'));
+
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 \gset
+
+-- create multiple indexes on compressed hypertable
+DROP INDEX _timescaledb_internal.compress_hyper_2_2_chunk_device_id_filler_1_filler_2_filler_idx;
+CREATE INDEX ON :CHUNK (_ts_meta_min_1);
+CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_sequence_num);
+CREATE INDEX ON :CHUNK (_ts_meta_min_1, _ts_meta_max_1, filler_1);
+
+CREATE INDEX filler_1 ON :CHUNK (filler_1);
+CREATE INDEX filler_2 ON :CHUNK (filler_2);
+CREATE INDEX filler_3 ON :CHUNK (filler_3);
+-- below indexes should be selected
+CREATE INDEX filler_1_filler_2 ON :CHUNK (filler_1, filler_2);
+CREATE INDEX filler_2_filler_3 ON :CHUNK (filler_2, filler_3);
+
 set timescaledb.debug_compression_path_info to on;
 BEGIN;
 SELECT COUNT(*) FROM tab1 WHERE filler_3 = 5 AND filler_2 = 4;
@@ -1340,7 +1344,12 @@ generate_series(1, 3, 1 ) AS g2(source_id),
 generate_series(1, 3, 1 ) AS g3(label);
 
 SELECT compress_chunk(c) FROM show_chunks('t6367') c;
-DROP INDEX _timescaledb_internal._compressed_hypertable_2_source_id_label__ts_meta_sequence__idx;
+
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK1" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 \gset
+SELECT format('%I.%I', schema_name, table_name) AS "CHUNK2" FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2 ORDER BY id LIMIT 1 OFFSET 1 \gset
+
+DROP INDEX _timescaledb_internal.compress_hyper_2_3_chunk_source_id_label__ts_meta_sequence__idx;
+DROP INDEX _timescaledb_internal.compress_hyper_2_4_chunk_source_id_label__ts_meta_sequence__idx;
 -- testcase with no index, should use seq scan
 set timescaledb.debug_compression_path_info to on;
 BEGIN;
@@ -1350,7 +1359,8 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
 ROLLBACK;
 -- test case with an index which has only one
 -- of the segmentby filters
-CREATE INDEX source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id);
+CREATE INDEX source_id_idx1 ON :CHUNK1 (source_id);
+CREATE INDEX source_id_idx2 ON :CHUNK2 (source_id);
 BEGIN;
 SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
@@ -1367,9 +1377,10 @@ SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label IS NOT NULL;
 SELECT count(*) FROM t6367 WHERE source_id = '2' AND label IS NOT NULL;
 ROLLBACK;
-DROP INDEX _timescaledb_internal.source_id_idx;
+DROP INDEX _timescaledb_internal.source_id_idx1;
+DROP INDEX _timescaledb_internal.source_id_idx2;
 -- test case with an index which has multiple same column
-CREATE INDEX source_id_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id, source_id);
+CREATE INDEX source_id_source_id_idx ON :CHUNK1 (source_id, source_id);
 BEGIN;
 SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
@@ -1378,7 +1389,7 @@ ROLLBACK;
 DROP INDEX _timescaledb_internal.source_id_source_id_idx;
 -- test using a non-btree index
 -- fallback to heap scan
-CREATE INDEX brin_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 USING brin (source_id);
+CREATE INDEX brin_source_id_idx ON :CHUNK1 USING brin (source_id);
 BEGIN;
 SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
@@ -1387,7 +1398,7 @@ ROLLBACK;
 DROP INDEX _timescaledb_internal.brin_source_id_idx;
 -- test using an expression index
 -- should fallback to heap scans
-CREATE INDEX expr_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (upper(source_id));
+CREATE INDEX expr_source_id_idx ON :CHUNK1 (upper(source_id));
 BEGIN;
 SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';
 UPDATE t6367 SET source_id = '0' WHERE source_id = '2' AND label = '1';
@@ -1396,7 +1407,7 @@ ROLLBACK;
 DROP INDEX _timescaledb_internal.expr_source_id_idx;
 -- test using a partial index
 -- should fallback to heap scans
-CREATE INDEX partial_source_id_idx ON _timescaledb_internal._compressed_hypertable_2 (source_id)
+CREATE INDEX partial_source_id_idx ON :CHUNK1 (source_id)
 WHERE _ts_meta_min_1 > '1990-01-01'::timestamptz;
 BEGIN;
 SELECT count(*) FROM t6367 WHERE source_id = '2' AND label = '1';

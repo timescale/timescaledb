@@ -153,7 +153,6 @@ select count(*) from v2;
 ERROR:  permission denied for table conditions
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to view v2
 -- Testing that permissions propagate to compressed hypertables and to
 -- compressed chunks.

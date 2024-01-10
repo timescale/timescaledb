@@ -52,5 +52,4 @@ SELECT * FROM test_security_barrier_view;
 
 RESET ROLE;
 DROP TABLE test_security_barrier CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_X_X_chunk
 NOTICE:  drop cascades to view test_security_barrier_view

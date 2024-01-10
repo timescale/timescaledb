@@ -23,7 +23,7 @@ SELECT count(*) FROM _timescaledb_internal._hyper_1_1_chunk;
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
 
 -- create custom compressed chunk table
-CREATE TABLE "_timescaledb_internal"."custom_compressed_chunk"() INHERITS ("_timescaledb_internal"."_compressed_hypertable_2");
+CREATE TABLE _timescaledb_internal.custom_compressed_chunk( LIKE _timescaledb_internal.compress_hyper_2_2_chunk);
 
 -- copy compressed row from compressed table into custom compressed chunk table
 INSERT INTO "_timescaledb_internal"."custom_compressed_chunk" SELECT * FROM "_timescaledb_internal"."compress_hyper_2_2_chunk";

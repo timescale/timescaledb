@@ -10,11 +10,11 @@ SELECT 'NULL::'||:'TYPE' as "NULLTYPE" \gset
 SELECT count(compress_chunk(ch, true)) FROM show_chunks(:'HYPERTABLE_NAME') ch;
 
 SELECT
-    comp_hypertable.schema_name AS "COMP_SCHEMA_NAME",
-    comp_hypertable.table_name AS "COMP_TABLE_NAME"
-FROM _timescaledb_catalog.hypertable uc_hypertable
-INNER JOIN _timescaledb_catalog.hypertable comp_hypertable ON (comp_hypertable.id = uc_hypertable.compressed_hypertable_id)
-WHERE uc_hypertable.table_name like :'HYPERTABLE_NAME' \gset
+    ch.schema_name AS "COMP_SCHEMA_NAME",
+    ch.table_name AS "COMP_TABLE_NAME"
+FROM _timescaledb_catalog.hypertable ht
+INNER JOIN _timescaledb_catalog.chunk ch ON (ch.hypertable_id = ht.compressed_hypertable_id)
+WHERE ht.table_name like :'HYPERTABLE_NAME' ORDER BY ch.id LIMIT 1\gset
 
 SELECT
      bool_and(:SEGMENT_META_COL_MIN = true_min) as min_correct,

@@ -18,6 +18,7 @@ DECLARE
     chunk_count    INTEGER;
     chunk_constraint_count INTEGER;
     chunk_index_count      INTEGER;
+    chunk_index_count2     INTEGER;
 BEGIN
     -- Check integrity of chunk indexes on non-distributed hypertables
     -- (distributed ones do not have chunk indexes on the access node)
@@ -42,8 +43,13 @@ BEGIN
         AND c.hypertable_index_name = index_row.index_name
         INTO STRICT chunk_index_count;
 
+        SELECT count(c.*) FROM _timescaledb_catalog.chunk_index c
+        WHERE c.hypertable_id = index_row.hypertable_id
+--        AND c.hypertable_index_name = index_row.index_name
+        INTO STRICT chunk_index_count2;
+
         IF chunk_index_count != chunk_count THEN
-           RAISE EXCEPTION 'Missing chunk indexes. Expected %, but found %', chunk_count, chunk_index_count;
+           RAISE EXCEPTION 'Missing chunk index %. Expected %, but found %,%', index_row.index_name, chunk_count, chunk_index_count, chunk_index_count2;
         END IF;
     END LOOP;
 
