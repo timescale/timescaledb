@@ -316,3 +316,5 @@ ALTER TABLE _timescaledb_catalog.dimension
     ADD CONSTRAINT dimension_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.tablespace
     ADD CONSTRAINT tablespace_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+
+CREATE SCHEMA _timescaledb_debug;

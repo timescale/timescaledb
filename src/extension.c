@@ -349,7 +349,6 @@ ts_extension_is_proxy_table_relid(Oid relid)
 	return relid == extension_proxy_oid;
 }
 
-#ifdef TS_DEBUG
 TS_FUNCTION_INFO_V1(ts_extension_get_state);
 
 Datum
@@ -357,4 +356,3 @@ ts_extension_get_state(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_TEXT_P(cstring_to_text(extstate_str[extstate]));
 }
-#endif
