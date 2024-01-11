@@ -2447,7 +2447,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	 * We grab a ShareLock on the chunk, because that's what CREATE INDEX
 	 * does. For the hypertable's index, we are ok using the weaker
 	 * AccessShareLock, since we only need to prevent the index itself from
-	 * being ALTERed or DROPed during this part of index creation.
+	 * being ALTERed or DROPped during this part of index creation.
 	 */
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
@@ -2573,7 +2573,7 @@ process_index_start(ProcessUtilityArgs *args)
 				ts_cache_release(hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on continuous aggreates that are not "
+						 errmsg("operation not supported on continuous aggregates that are not "
 								"finalized"),
 						 errhint("Recreate the continuous aggregate to allow index creation.")));
 			}
@@ -2722,7 +2722,7 @@ process_index_start(ProcessUtilityArgs *args)
 	 * Lock the index for the remainder of the command. Since we're using
 	 * multiple transactions for index creation, a regular
 	 * transaction-level lock won't prevent the index from being
-	 * concurrently ALTERed or DELETEed. Instead, we grab a session level
+	 * concurrently ALTERed or DELETEd. Instead, we grab a session level
 	 * lock on the index, which we'll release when the command is
 	 * finished. (This is the same strategy postgres uses in CREATE INDEX
 	 * CONCURRENTLY)
@@ -4423,7 +4423,7 @@ process_ddl_event_sql_drop(EventTriggerData *trigdata)
 TS_FUNCTION_INFO_V1(ts_timescaledb_process_ddl_event);
 
 /*
- * Event trigger hook for DDL commands that have alread been handled by
+ * Event trigger hook for DDL commands that have already been handled by
  * PostgreSQL (i.e., "ddl_command_end" and "sql_drop" events).
  */
 Datum

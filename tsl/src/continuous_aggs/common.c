@@ -113,7 +113,7 @@ RemoveRangeTableEntries(Query *query)
  * Extract the final view from the UNION ALL query.
  *
  * q1 is the query on the materialization hypertable with the finalize call
- * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
+ * q2 is the query on the raw hypertable which was supplied in the initial CREATE VIEW statement
  * returns q1 from:
  * SELECT * from (  SELECT * from q1 where <coale_qual>
  *                  UNION ALL
@@ -1173,7 +1173,7 @@ makeRangeTblEntry(Query *query, const char *aliasname)
  * Build union query combining the materialized data with data from the raw data hypertable.
  *
  * q1 is the query on the materialization hypertable with the finalize call
- * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
+ * q2 is the query on the raw hypertable which was supplied in the initial CREATE VIEW statement
  * returns a query as
  * SELECT * from (  SELECT * from q1 where <coale_qual>
  *                  UNION ALL

@@ -303,7 +303,7 @@ invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
  * Add an invalidation in the given range. The invalidation is added either to
  * the hypertable invalidation log or the continuous aggregate invalidation
  * log depending on the type of the given hypertable. If the hypertable is a
- * "raw" hypertable (i.e., one that has one or more continous aggregates), the
+ * "raw" hypertable (i.e., one that has one or more continuous aggregates), the
  * entry is added to the hypertable invalidation log and will invalidate all
  * the associated continuous aggregates. If the hypertable is instead an
  * materialized hypertable, the entry is added to the cagg invalidation log

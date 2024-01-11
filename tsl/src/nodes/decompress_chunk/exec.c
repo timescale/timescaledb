@@ -506,7 +506,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	Assert(decompressed_scan_slot->tts_tupleDescriptor->natts == 1);
 
 	/* Set all attributes of the result tuple to NULL. So, we return NULL if no data is processed
-	 * by our implementation. In addition, the call marks the slot as beeing used (i.e., no
+	 * by our implementation. In addition, the call marks the slot as being used (i.e., no
 	 * ExecStoreVirtualTuple call is required). */
 	ExecStoreAllNullTuple(decompressed_scan_slot);
 	Assert(!TupIsNull(decompressed_scan_slot));

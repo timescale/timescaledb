@@ -11,7 +11,7 @@
 #include "export.h"
 
 /*
- * Return status for constraint processsing function.
+ * Return status for constraint processing function.
  *
  * PROCESSED - count the constraint as processed
  * IGNORED - the constraint wasn't processed

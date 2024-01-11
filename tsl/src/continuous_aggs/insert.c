@@ -327,7 +327,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 		return;
 
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
-	 * use a stronger isolation level, the isolation thereshold could update without us seeing the
+	 * use a stronger isolation level, the isolation threshold could update without us seeing the
 	 * new value. In order to prevent serialization errors, we always append invalidation entries in
 	 * the case when we're using a strong enough isolation level that we won't see the new
 	 * threshold. The same applies for distributed member invalidation triggers of hypertables.

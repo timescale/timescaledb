@@ -160,7 +160,7 @@ expr_has_metadata(QualPushdownContext *context, Expr *expr, int16 *index)
 	if ((Index) var->varno != context->chunk_rel->relid)
 		return false;
 
-	/* ignore system attibutes or whole row references */
+	/* ignore system attributes or whole row references */
 	if (var->varattno <= 0)
 		return false;
 

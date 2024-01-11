@@ -58,7 +58,7 @@ check_file() {
             return 0;
             ;;
         (*)
-            echo "Unkown flag" ${1}
+            echo "Unknown flag" ${1}
             return 1;
     esac
 

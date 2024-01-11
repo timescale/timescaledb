@@ -654,7 +654,7 @@ gapfill_advance_timestamp(GapFillState *state)
 		case TIMESTAMPTZOID:
 			/*
 			 * To be consistent with time_bucket we do UTC bucketing unless
-			 * a different timezone got explicity passed to the function.
+			 * a different timezone got explicitly passed to the function.
 			 */
 			if (state->have_timezone)
 			{

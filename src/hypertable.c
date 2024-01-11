@@ -1497,7 +1497,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 		ts_cache_release(hcache);
 
 		/*
-		 * Validate create_hypertable arguments and use defaults accoring to the
+		 * Validate create_hypertable arguments and use defaults according to the
 		 * hypertable_distributed_default guc.
 		 *
 		 * Validate data nodes and check permissions on them if this is a
