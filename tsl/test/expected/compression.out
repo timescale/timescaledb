@@ -1282,12 +1282,6 @@ SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples 
         0 |         0
 (1 row)
 
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
-                                                       histogram_bounds                                                        
--------------------------------------------------------------------------------------------------------------------------------
- {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
-(1 row)
-
 SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
 FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
        , _timescaledb_catalog.chunk compch
@@ -1300,15 +1294,8 @@ SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples 
         0 |         0
 (1 row)
 
--- Now verify stats are updated on compressed chunk table when we analyze the hypertable.
-ANALYZE stattest;
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
-                                                       histogram_bounds                                                        
--------------------------------------------------------------------------------------------------------------------------------
- {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
-(1 row)
-
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
+ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
  histogram_bounds 
 ------------------

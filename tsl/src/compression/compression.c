@@ -150,7 +150,6 @@ static int create_segment_filter_scankey(RowDecompressor *decompressor,
 										 char *segment_filter_col_name, StrategyNumber strategy,
 										 ScanKeyData *scankeys, int num_scankeys,
 										 Bitmapset **null_columns, Datum value, bool isnull);
-static void run_analyze_on_chunk(Oid chunk_relid);
 static void create_per_compressed_column(RowDecompressor *decompressor);
 
 /********************
@@ -425,7 +424,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 		}
 
-		run_analyze_on_chunk(in_rel->rd_id);
 		if (row_compressor.rows_compressed_into_current_value > 0)
 			row_compressor_flush(&row_compressor, mycid, true);
 
@@ -530,12 +528,6 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 
 	table_endscan(scan);
 
-	/* Perform an analyze on the chunk to get up-to-date stats before compressing.
-	 * We do it at this point because we've just read out the entire chunk into
-	 * tuplesort, so its pages are likely to be cached and we can save on I/O.
-	 */
-	run_analyze_on_chunk(in_rel->rd_id);
-
 	ExecDropSingleTupleTableSlot(slot);
 
 	tuplesort_performsort(tuplesortstate);
@@ -591,26 +583,8 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
 	ReleaseSysCache(tp);
 }
 
-static void
-run_analyze_on_chunk(Oid chunk_relid)
-{
-	VacuumRelation vr = {
-		.type = T_VacuumRelation,
-		.relation = NULL,
-		.oid = chunk_relid,
-		.va_cols = NIL,
-	};
-	VacuumStmt vs = {
-		.type = T_VacuumStmt,
-		.rels = list_make1(&vr),
-		.is_vacuumcmd = false,
-		.options = NIL,
-	};
-
-	ExecVacuum(NULL, &vs, true);
-}
-
-/* Find segment by index for setting the correct sequence number if
+/*
+ * Find segment by index for setting the correct sequence number if
  * we are trying to roll up chunks while compressing
  */
 static Oid
