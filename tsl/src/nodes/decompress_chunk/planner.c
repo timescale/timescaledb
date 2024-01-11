@@ -373,15 +373,24 @@ is_not_runtime_constant_walker(Node *node, void *context)
 	{
 		case T_Var:
 		case T_PlaceHolderVar:
-		case T_Param:
 			/*
-			 * We might want to support these nodes to have vectorizable
-			 * join clauses (T_Var), join clauses referencing a variable that is
-			 * above outer join (T_PlaceHolderVar) or initplan parameters and
-			 * prepared statement parameters (T_Param). We don't support them at
-			 * the moment.
+			 * We might want to support these nodes to have vectorizable join
+			 * clauses (T_Var) or join clauses referencing a variable that is
+			 * above outer join (T_PlaceHolderVar). We don't suppor them at the
+			 * moment.
 			 */
 			return true;
+		case T_Param:
+			/*
+			 * We support external query parameters (e.g. from parameterized
+			 * prepared statements), because they are constant for the duration
+			 * of the query.
+			 *
+			 * Join and initplan parameters are passed as PARAM_EXEC and require
+			 * support in the Rescan functions of the custom scan node. We don't
+			 * support them at the moment.
+			 */
+			return castNode(Param, node)->paramkind != PARAM_EXTERN;
 		default:
 			if (check_functions_in_node(node,
 										contains_volatile_functions_checker,
