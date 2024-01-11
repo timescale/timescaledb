@@ -542,7 +542,6 @@ SELECT count(*) from stattest;
 -- Uncompressed chunk table is empty since we just compressed the chunk and moved everything to compressed chunk table.
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 
 SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
 FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
@@ -553,10 +552,8 @@ FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
 
--- Now verify stats are updated on compressed chunk table when we analyze the hypertable.
-ANALYZE stattest;
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
+ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 

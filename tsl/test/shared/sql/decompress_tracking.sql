@@ -15,6 +15,8 @@ INSERT INTO decompress_tracking SELECT '2020-01-01'::timestamptz + format('%s ho
 
 SELECT count(compress_chunk(ch)) FROM show_chunks('decompress_tracking') ch;
 
+ANALYZE decompress_tracking;
+
 -- no tracking without analyze
 :EXPLAIN UPDATE decompress_tracking SET value = value + 3;
 
@@ -30,6 +32,10 @@ BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:3
 -- test prepared statements EXPLAIN still works after execution
 SET plan_cache_mode TO force_generic_plan;
 PREPARE p1 AS UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd1';
-BEGIN; EXPLAIN EXECUTE p1; EXECUTE p1; EXPLAIN EXECUTE p1; ROLLBACK;
+BEGIN;
+    EXPLAIN (COSTS OFF) EXECUTE p1;
+    EXECUTE p1;
+    EXPLAIN (COSTS OFF) EXECUTE p1;
+ROLLBACK;
 
 DROP TABLE decompress_tracking;

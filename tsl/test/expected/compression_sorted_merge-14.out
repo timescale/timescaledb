@@ -1481,6 +1481,7 @@ SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
  _timescaledb_internal._hyper_11_23_chunk
 (1 row)
 
+ANALYZE bugtab;
 :PREFIX
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
                                                                                                                                                                                                                                                             QUERY PLAN                                                                                                                                                                                                                                                            
