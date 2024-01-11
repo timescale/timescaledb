@@ -653,7 +653,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  *               so don't recreate invalidation trigger.
 
  * Since 1.7, we support real time aggregation.
- * If real time aggregation is off i.e. materialized only, the mcagg vew is as described in Step 2.
+ * If real time aggregation is off i.e. materialized only, the mcagg view is as described in Step 2.
  * If it is turned on
  * we build a union query that selects from the internal mat view and the raw hypertable
  *     (see build_union_query for details)

@@ -144,7 +144,7 @@ wait_for_pg() {
         if docker_exec $1 "pg_isready -U postgres"
         then
             # this makes the test less flaky, although not
-            # ideal. Apperently, pg_isready is not always a good
+            # ideal. Apparently, pg_isready is not always a good
             # indication of whether the DB is actually ready to accept
             # queries
             sleep 1

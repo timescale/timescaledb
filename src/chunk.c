@@ -509,7 +509,7 @@ chunk_collides(const Hypertable *ht, const Hypercube *hc)
 }
 
 /*-
- * Resolve collisions and perform alignmment.
+ * Resolve collisions and perform alignment.
  *
  * Chunks collide only if their hypercubes overlap in all dimensions. For
  * instance, the 2D chunks below collide because they overlap in both the X and
@@ -2122,7 +2122,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		funcctx = SRF_FIRSTCALL_INIT();
 		/*
 		 * For INTEGER type dimensions, we support querying using intervals or any
-		 * timetamp or date input. For such INTEGER dimensions, we get the chunks
+		 * timestamp or date input. For such INTEGER dimensions, we get the chunks
 		 * using their creation time values.
 		 */
 		if (IS_INTEGER_TYPE(time_type) && (arg_type == INTERVALOID || IS_TIMESTAMP_TYPE(arg_type)))
@@ -3497,7 +3497,7 @@ ts_chunk_is_frozen(Chunk *chunk)
 }
 
 /* only caller used to be ts_chunk_unset_frozen. This code was in PG14 block as we run into
- * defined but unsed error in CI/CD builds for PG < 14. But now called from recompress as well
+ * a "defined but unset" error in CI/CD builds for PG < 14. But now called from recompress as well
  */
 bool
 ts_chunk_clear_status(Chunk *chunk, int32 status)
@@ -3857,7 +3857,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 	{
 		/*
 		 * For INTEGER type dimensions, we support querying using intervals or any
-		 * timetamp or date input. For such INTEGER dimensions, we get the chunks
+		 * timestamp or date input. For such INTEGER dimensions, we get the chunks
 		 * using their creation time values.
 		 */
 		if (IS_INTEGER_TYPE(time_type) && (arg_type == INTERVALOID || IS_TIMESTAMP_TYPE(arg_type)))
@@ -4206,7 +4206,7 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	/*
 	 * For INTEGER type dimensions, we support querying using intervals or any
-	 * timetamp or date input. For such INTEGER dimensions, we get the chunks
+	 * timestamp or date input. For such INTEGER dimensions, we get the chunks
 	 * using their creation time values.
 	 */
 	if (IS_INTEGER_TYPE(time_type) && (arg_type == INTERVALOID || IS_TIMESTAMP_TYPE(arg_type)))
@@ -4645,7 +4645,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 														   chunk->relkind,
 														   chunk->hypertable_relid);
 	chunk_create_table_constraints(parent_ht, chunk);
-	/* Add dimension constriants for the chunk */
+	/* Add dimension constraints for the chunk */
 	ts_chunk_constraints_add_dimension_constraints(chunk->constraints, chunk->fd.id, chunk->cube);
 	ts_chunk_constraints_insert_metadata(chunk->constraints);
 	chunk_add_inheritance(chunk, parent_ht);
@@ -4657,7 +4657,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	 * Noncontiguous flag should not be set since the chunk should be empty upon
 	 * creation, with an invalid range assigned, so ordered append should be allowed.
 	 * Once the data is moved into the OSM chunk, then our catalog should be
-	 * udpated with proper API calls from the OSM extension.
+	 * updated with proper API calls from the OSM extension.
 	 */
 	parent_ht->fd.status =
 		ts_set_flags_32(parent_ht->fd.status,

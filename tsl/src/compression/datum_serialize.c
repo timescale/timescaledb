@@ -72,17 +72,17 @@ datum_serializer_value_may_be_toasted(DatumSerializer *serializer)
 }
 
 static inline void
-load_send_fn(DatumSerializer *ser)
+load_send_fn(DatumSerializer *serializer)
 {
-	if (ser->send_info_set)
+	if (serializer->send_info_set)
 		return;
 
-	ser->send_info_set = true;
+	serializer->send_info_set = true;
 
-	if (ser->use_binary_send)
-		fmgr_info(ser->type_send, &ser->send_flinfo);
+	if (serializer->use_binary_send)
+		fmgr_info(serializer->type_send, &serializer->send_flinfo);
 	else
-		fmgr_info(ser->type_out, &ser->send_flinfo);
+		fmgr_info(serializer->type_out, &serializer->send_flinfo);
 }
 
 #define TYPE_IS_PACKABLE(typlen, typstorage) ((typlen) == -1 && (typstorage) != 'p')

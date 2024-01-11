@@ -78,7 +78,7 @@ jobs:
         UPDATE_FROM_TAG=${DOWNGRADE_TO}-pg${PG_MAJOR}
         export UPDATE_FROM_TAG
         # We need to use same libssl version used in the latest official TimescaleDB container images.
-        # So we will use the fixed alpine version, this will guarantee that libssl version wont change.
+        # So we will use the fixed alpine version, this will guarantee that libssl version won't change.
         PG_IMAGE_TAG="${PG_VERSION}-alpine3.17" scripts/test_downgrade_from_tag.sh
 
     - name: Downgrade diff

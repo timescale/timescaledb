@@ -846,7 +846,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 * Even though ordered is true on the RelOptInfo we have to
 				 * double check that current Path fulfills requirements for
 				 * Ordered Append transformation because the RelOptInfo may
-				 * be used for multiple Pathes.
+				 * be used for multiple Paths.
 				 */
 				Expr *em_expr = find_em_expr_for_rel(pk->pk_eclass, rel);
 

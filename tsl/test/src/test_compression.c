@@ -247,21 +247,21 @@ test_gorilla_int()
 	{
 		StringInfoData buf;
 		bytea *sent;
-		StringInfoData transmition;
+		StringInfoData transmission;
 		GorillaCompressed *compressed_recv;
 
 		pq_begintypsend(&buf);
 		gorilla_compressed_send((CompressedDataHeader *) compressed, &buf);
 		sent = pq_endtypsend(&buf);
 
-		transmition = (StringInfoData){
+		transmission = (StringInfoData){
 			.data = VARDATA(sent),
 			.len = VARSIZE(sent),
 			.maxlen = VARSIZE(sent),
 		};
 
 		compressed_recv =
-			(GorillaCompressed *) DatumGetPointer(gorilla_compressed_recv(&transmition));
+			(GorillaCompressed *) DatumGetPointer(gorilla_compressed_recv(&transmission));
 		iter = gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed_recv),
 																 INT8OID);
 		for (DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter); !r.is_done;

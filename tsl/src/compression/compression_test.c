@@ -38,7 +38,7 @@ get_compression_algorithm(char *name)
 		return COMPRESSION_ALGORITHM_DICTIONARY;
 	}
 
-	ereport(ERROR, (errmsg("unknown comrpession algorithm %s", name)));
+	ereport(ERROR, (errmsg("unknown compression algorithm %s", name)));
 	return _INVALID_COMPRESSION_ALGORITHM;
 }
 

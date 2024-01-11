@@ -913,7 +913,7 @@ chunk_constraint_delete_metadata(TupleInfo *ti)
 
 		/*
 		 * If this is an index constraint, we need to cleanup the index
-		 * metadata. Don't drop the index though, since that will happend when
+		 * metadata. Don't drop the index though, since that will happen when
 		 * the constraint is dropped.
 		 */
 		if (OidIsValid(index_relid))

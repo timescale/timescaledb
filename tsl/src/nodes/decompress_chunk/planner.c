@@ -733,7 +733,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				   &chunk_attrs_needed);
 
 	/*
-	 * Determine which compressed colum goes to which output column.
+	 * Determine which compressed column goes to which output column.
 	 */
 	build_decompression_map(root, dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
 
@@ -792,7 +792,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				}
 
 				Ensure(IsA(em->em_expr, Var),
-					   "non-Var pathkey not expected for compressed batch sorted mege");
+					   "non-Var pathkey not expected for compressed batch sorted merge");
 
 				/*
 				 * We found a Var equivalence member that belongs to the

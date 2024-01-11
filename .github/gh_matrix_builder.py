@@ -337,9 +337,9 @@ elif len(sys.argv) > 2:
             tests = set()
             break
         basename = os.path.basename(f)
-        splitted = basename.split(".")
-        name = splitted[0]
-        ext = splitted[-1]
+        split = basename.split(".")
+        name = split[0]
+        ext = split[-1]
         if ext == "out":
             # Account for the version number.
             tests.add(name)

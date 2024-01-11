@@ -549,7 +549,7 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
 		elog(ERROR, "table \"%s\" does not have column \"%s\"", get_rel_name(table), attname);
 
 	att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	/* Other valdation checks beyond just existence of a valid comparison operator could be useful
+	/* Other validation checks beyond just existence of a valid comparison operator could be useful
 	 */
 
 	*att_nums = att_tup->attnum;
@@ -1362,7 +1362,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 	/*
 	 * We need to make sure decompressed_is_nulls is in a defined state. While this
 	 * will get written for normal columns it will not get written for dropped columns
-	 * since dropped columns don't exist in the compressed chunk so we initiallize
+	 * since dropped columns don't exist in the compressed chunk so we initialize
 	 * with true here.
 	 */
 	memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
