@@ -135,7 +135,9 @@ jobs:
 
     steps:
     - name: Install Linux dependencies
-      run: sudo apt install 7zip systemd-coredump gdb
+      run: |
+        sudo apt update
+        sudo apt install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v3
