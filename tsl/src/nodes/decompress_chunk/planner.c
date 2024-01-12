@@ -376,7 +376,7 @@ is_not_runtime_constant_walker(Node *node, void *context)
 			/*
 			 * We might want to support these nodes to have vectorizable join
 			 * clauses (T_Var) or join clauses referencing a variable that is
-			 * above outer join (T_PlaceHolderVar). We don't suppor them at the
+			 * above outer join (T_PlaceHolderVar). We don't support them at the
 			 * moment.
 			 */
 			return true;
