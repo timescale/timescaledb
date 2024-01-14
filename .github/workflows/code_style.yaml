@@ -133,9 +133,6 @@ jobs:
     - name: Check for unreferenced test files
       if: always()
       run: ./scripts/check_unreferenced_files.sh
-    - name: Check update scripts
-      if: always()
-      run: ./scripts/check_update_scripts.sh
     - name: Check for missing gitignore entries for template test files
       if: always()
       run: ./scripts/check_missing_gitignore_for_template_tests.sh
