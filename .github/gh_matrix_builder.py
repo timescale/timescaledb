@@ -167,14 +167,7 @@ if pull_request:
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(
-    build_debug_config(
-        {
-            "pg": PG13_LATEST,
-            "cc": "clang-14",
-            "cxx": "clang++-14",
-            "ignored_tests": ignored_tests,
-        }
-    )
+    build_debug_config({"pg": PG13_LATEST, "ignored_tests": ignored_tests})
 )
 
 m["include"].append(
@@ -196,12 +189,16 @@ m["include"].append(
     )
 )
 
-# test latest postgres release without telemetry
+# Test latest postgres release without telemetry. Also run clang-tidy on it
+# because it's the fastest one.
 m["include"].append(
     build_without_telemetry(
         {
             "pg": PG16_LATEST,
+            "cc": "clang-14",
+            "cxx": "clang++-14",
             "ignored_tests": ignored_tests,
+            "tsdb_build_args": "-DLINTER=ON -DWARNINGS_AS_ERRORS=ON",
         }
     )
 )
@@ -364,5 +361,5 @@ elif len(sys.argv) > 2:
         )
 
 # generate command to set github action variable
-with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
     print(str.format("matrix={0}", json.dumps(m, default=list)), file=output)

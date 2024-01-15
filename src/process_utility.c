@@ -50,7 +50,6 @@
 #include "ts_catalog/catalog.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "compat/compat.h"
 #include "copy.h"
 #include "errors.h"
 #include "event_trigger.h"
@@ -77,8 +76,6 @@
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
 #endif
-
-#include "cross_module_fn.h"
 
 void _process_utility_init(void);
 void _process_utility_fini(void);
@@ -957,9 +954,10 @@ process_truncate(ProcessUtilityArgs *args)
 				/* TRUNCATE for foreign tables not implemented yet. This will raise an error. */
 				case RELKIND_FOREIGN_TABLE:
 				{
+					list_append = true;
+
 					Hypertable *ht =
 						ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
-					Chunk *chunk;
 
 					if (ht)
 					{
@@ -990,10 +988,11 @@ process_truncate(ProcessUtilityArgs *args)
 											 " only on the chunks directly.")));
 
 						hypertables = lappend(hypertables, ht);
-
-						list_append = true;
+						break;
 					}
-					else if ((chunk = ts_chunk_get_by_relid(relid, false)) != NULL)
+
+					Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+					if (chunk != NULL)
 					{ /* this is a chunk */
 						ht = ts_hypertable_cache_get_entry(hcache,
 														   chunk->hypertable_relid,
@@ -1029,10 +1028,7 @@ process_truncate(ProcessUtilityArgs *args)
 								list_changed = true;
 							}
 						}
-						list_append = true;
 					}
-					else
-						list_append = true;
 					break;
 				}
 			}

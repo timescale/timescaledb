@@ -68,7 +68,7 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 		Oid atttypid;
 		int32 atttypmod;
 		Oid attcollation;
-		int new_attno;
+		int new_attno = InvalidAttrNumber;
 
 		att = TupleDescAttr(old_tupdesc, old_attno);
 		if (att->attisdropped)
@@ -104,14 +104,17 @@ ts_make_inh_translation_list(Relation oldrelation, Relation newrelation, Index n
 		 * of cases like ALTER TABLE ADD COLUMN and multiple inheritance.
 		 * However, in simple cases it will be the same column number, so try
 		 * that before we go groveling through all the columns.
-		 *
-		 * Note: the test for (att = ...) != NULL cannot fail, it's just a
-		 * notational device to include the assignment into the if-clause.
 		 */
-		if (old_attno < newnatts && (att = TupleDescAttr(new_tupdesc, old_attno)) != NULL &&
-			!att->attisdropped && strcmp(attname, NameStr(att->attname)) == 0)
-			new_attno = old_attno;
-		else
+		if (old_attno < newnatts)
+		{
+			att = TupleDescAttr(new_tupdesc, old_attno);
+			if (!att->attisdropped && strcmp(attname, NameStr(att->attname)) == 0)
+			{
+				new_attno = old_attno;
+			}
+		}
+
+		if (new_attno == InvalidAttrNumber)
 		{
 			for (new_attno = 0; new_attno < newnatts; new_attno++)
 			{
@@ -284,7 +287,8 @@ ts_get_variable_range(PlannerInfo *root, VariableStatData *vardata, Oid sortop, 
 	 * probably not worth trying, because whatever the caller wants to do with
 	 * the endpoints would likely fail the security check too.
 	 */
-	if (!statistic_proc_security_check(vardata, (opfuncoid = get_opcode(sortop))))
+	opfuncoid = get_opcode(sortop);
+	if (!statistic_proc_security_check(vardata, opfuncoid))
 		return false;
 
 	get_typlenbyval(vardata->atttype, &typLen, &typByVal);

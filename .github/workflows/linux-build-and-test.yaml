@@ -161,7 +161,7 @@ jobs:
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DLINTER_STRICT=ON
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }}
         make -j $MAKE_JOBS -C build
         make -C build install
 

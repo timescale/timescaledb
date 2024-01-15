@@ -605,8 +605,8 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 	LOCKTAG tag;
 
 	/* take advisory lock before relation lock */
-	if (!(*got_lock =
-			  ts_lock_job_id(bgw_job_id, tuple_lock_mode, lock_type == SESSION_LOCK, &tag, block)))
+	*got_lock = ts_lock_job_id(bgw_job_id, tuple_lock_mode, lock_type == SESSION_LOCK, &tag, block);
+	if (!*got_lock)
 	{
 		/* return NULL if lock could not be acquired */
 		Assert(!block);

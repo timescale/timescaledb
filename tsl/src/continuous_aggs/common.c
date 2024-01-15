@@ -15,7 +15,7 @@ static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
 									bool is_cagg_create);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
-								 const bool finalized);
+								 bool finalized);
 static Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
 static FuncExpr *build_boundary_call(int32 ht_id, Oid type);

@@ -68,7 +68,6 @@
 #include "hypertable_cache.h"
 #include "hypertable.h"
 #include "invalidation.h"
-#include "dimension.h"
 #include "options.h"
 #include "time_utils.h"
 #include "utils.h"
@@ -93,18 +92,10 @@ static bool check_trigger_exists_hypertable(Oid relid, char *trigname);
 #endif
 static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
 static void mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht);
-static int32 mattablecolumninfo_create_materialization_table(
-	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *const tablespacename,
-	char *const table_access_method, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
-														  Query *userview_query, bool finalized);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
 static void fixup_userview_query_tlist(Query *userquery, List *tlist_aliases);
 static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
 						CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options);
-void cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht);
-void cagg_rename_view_columns(ContinuousAgg *agg);
 
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"

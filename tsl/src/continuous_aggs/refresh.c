@@ -739,10 +739,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
-	int rc;
 
 	/* Connect to SPI manager due to the underlying SPI calls */
-	if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
+	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
+	if (rc != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* Lock down search_path */
@@ -833,7 +833,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	{
 		emit_up_to_date_notice(cagg, callctx);
 
-		if ((rc = SPI_finish()) != SPI_OK_FINISH)
+		rc = SPI_finish();
+		if (rc != SPI_OK_FINISH)
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 
 		return;
@@ -855,6 +856,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);
 
-	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+	rc = SPI_finish();
+	if (rc != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }

@@ -2716,11 +2716,11 @@ ts_chunk_exists_relid(Oid relid)
  * Returns 0 if there is no chunk with such reloid.
  */
 int32
-ts_chunk_get_hypertable_id_by_reloid(Oid reliod)
+ts_chunk_get_hypertable_id_by_reloid(Oid reloid)
 {
 	FormData_chunk form;
 
-	if (chunk_simple_scan_by_reloid(reliod, &form, /* missing_ok = */ true))
+	if (chunk_simple_scan_by_reloid(reloid, &form, /* missing_ok = */ true))
 	{
 		return form.hypertable_id;
 	}
@@ -4553,7 +4553,6 @@ ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id)
 								   Int32GetDatum(chunk_id));
 }
 
-#include "hypercube.h"
 /*
  * Create a hypercube for the OSM chunk
  * The initial range for the OSM chunk will be from INT64_MAX - 1 to INT64_MAX.

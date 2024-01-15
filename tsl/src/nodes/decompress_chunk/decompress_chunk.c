@@ -338,7 +338,7 @@ smoothstep(double x, double start, double end)
 {
 	x = (x - start) / (end - start);
 	x = x < 0 ? 0 : x > 1 ? 1 : x;
-	return x * x * (3.0f - 2.0f * x);
+	return x * x * (3.0F - 2.0F * x);
 }
 
 /*
@@ -1169,8 +1169,8 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 													&attrs_used);
 
 			/* if the column is an orderby, add it's metadata columns too */
-			int16 index;
-			if ((index = ts_array_position(info->settings->fd.orderby, column_name)))
+			int16 index = ts_array_position(info->settings->fd.orderby, column_name);
+			if (index != 0)
 			{
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,

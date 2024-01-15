@@ -399,8 +399,6 @@ ts_cagg_watermark_update(Hypertable *mat_ht, int64 watermark, bool watermark_isn
 
 	watermark = cagg_compute_watermark(cagg, watermark, watermark_isnull);
 	cagg_watermark_update_internal(mat_ht->fd.id, watermark, force_update);
-
-	return;
 }
 
 TSDLLEXPORT void

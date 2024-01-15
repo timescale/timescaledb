@@ -126,6 +126,7 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, 
 		 * Skip empty data, because we'll just get "no data left in message"
 		 * right away.
 		 */
+		fclose(f);
 		return;
 	}
 
@@ -134,6 +135,7 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, 
 
 	if (elements_read != 1)
 	{
+		fclose(f);
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_FILE), errmsg("failed to read file '%s'", path)));
 	}
 

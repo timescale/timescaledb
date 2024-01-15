@@ -229,8 +229,6 @@ worker_state_cleanup(ScheduledBgwJob *sjob)
 			 */
 			elog(LOG, "job %d failed", sjob->job.fd.id);
 			mark_job_as_ended(sjob, JOB_FAILURE);
-			/* reload updated value */
-			job_stat = ts_bgw_job_stat_find(sjob->job.fd.id);
 		}
 		else
 		{

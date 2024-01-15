@@ -57,7 +57,6 @@
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 #include <executor/spi.h>
-#include <utils/snapmgr.h>
 
 #include "compat/compat.h"
 #include <access/toast_internals.h>

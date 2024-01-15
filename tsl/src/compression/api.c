@@ -44,7 +44,6 @@
 #include "create.h"
 #include "api.h"
 #include "compression.h"
-#include "compat/compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "utils.h"
