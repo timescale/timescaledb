@@ -18,7 +18,6 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-#include <fmgr.h>
 
 #include "ts_catalog/catalog.h"
 #include <export.h>
@@ -281,15 +280,14 @@ test_gorilla_float()
 	GorillaCompressor *compressor = gorilla_compressor_alloc();
 	GorillaCompressed *compressed;
 	DecompressionIterator *iter;
-	float i;
-	for (i = 0.0; i < TEST_ELEMENTS; i++)
-		gorilla_compressor_append_value(compressor, float_get_bits(i));
+	for (int i = 0.0; i < TEST_ELEMENTS; i++)
+		gorilla_compressor_append_value(compressor, float_get_bits((float) i));
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
 	TestAssertInt64Eq(VARSIZE(compressed), 1200);
 
-	i = 0;
+	float i = 0;
 	iter =
 		gorilla_decompression_iterator_from_datum_forward(PointerGetDatum(compressed), FLOAT4OID);
 	for (DecompressResult r = gorilla_decompression_iterator_try_next_forward(iter); !r.is_done;

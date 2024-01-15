@@ -488,7 +488,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 					return op;
 
 				/* bail out if interval->time can't be exactly represented as a double */
-				if (interval->time >= 0x3FFFFFFFFFFFFFll)
+				if (interval->time >= 0x3FFFFFFFFFFFFFLL)
 					return op;
 
 				integralValue = const_datum_get_int(castNode(Const, value));

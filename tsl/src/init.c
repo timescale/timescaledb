@@ -53,7 +53,9 @@ PG_MODULE_MAGIC;
 #error "cannot compile the TSL for ApacheOnly mode"
 #endif
 
+#if PG16_LT
 extern void PGDLLEXPORT _PG_init(void);
+#endif
 
 /*
  * Cross module function initialization.

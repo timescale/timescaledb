@@ -25,12 +25,10 @@
 #include <utils/snapmgr.h>
 #include <executor/executor.h>
 #include <parser/parse_func.h>
-#include <storage/lmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <fmgr.h>
 #ifdef USE_ASSERT_CHECKING
-#include <funcapi.h>
 #endif
 
 #include <compat/compat.h>

@@ -50,10 +50,8 @@
 #include "hypertable_cache.h"
 #include "trigger.h"
 #include "scanner.h"
-#include "ts_catalog/catalog.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "hypercube.h"
 #include "indexing.h"
 #include "guc.h"
 #include "errors.h"
@@ -2396,7 +2394,8 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	int64 max_value =
 		max_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(maxdat, timetype);
 
-	if ((res = SPI_finish()) != SPI_OK_FINISH)
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 
 	return max_value;

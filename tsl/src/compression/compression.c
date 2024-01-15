@@ -149,7 +149,7 @@ static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 static int create_segment_filter_scankey(RowDecompressor *decompressor,
 										 char *segment_filter_col_name, StrategyNumber strategy,
 										 ScanKeyData *scankeys, int num_scankeys,
-										 Bitmapset **null_columns, Datum value, bool isnull);
+										 Bitmapset **null_columns, Datum value, bool is_null_check);
 static void create_per_compressed_column(RowDecompressor *decompressor);
 
 /********************
@@ -1097,10 +1097,9 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 static void
 row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
 {
-	int16 col;
 	HeapTuple compressed_tuple;
 
-	for (col = 0; col < row_compressor->n_input_columns; col++)
+	for (int col = 0; col < row_compressor->n_input_columns; col++)
 	{
 		PerColumn *column = &row_compressor->per_column[col];
 		Compressor *compressor;
@@ -1189,7 +1188,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 
 	/* free the compressed values now that we're done with them (the old compressor is freed in
 	 * finish()) */
-	for (col = 0; col < row_compressor->n_input_columns; col++)
+	for (int col = 0; col < row_compressor->n_input_columns; col++)
 	{
 		PerColumn *column = &row_compressor->per_column[col];
 		int16 compressed_col;
@@ -1439,7 +1438,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 
 	Assert(OidIsValid(compressed_data_type_oid));
 
-	for (int16 col = 0; col < decompressor->in_desc->natts; col++)
+	for (int col = 0; col < decompressor->in_desc->natts; col++)
 	{
 		Oid decompressed_type;
 		bool is_compressed;

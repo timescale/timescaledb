@@ -10,7 +10,6 @@
 #include <access/xact.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
-#include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_constraint.h>
@@ -42,7 +41,6 @@
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/array_utils.h"
 #include "custom_type_cache.h"
 #include "trigger.h"
 #include "utils.h"
@@ -1198,6 +1196,7 @@ compression_settings_update(CompressionSettings *settings, WithClauseResult *wit
 	}
 	else if (orderby_cols && !settings->fd.orderby)
 	{
+		Assert(list_length(orderby_cols) > 0);
 		List *cols = NIL;
 		List *desc = NIL;
 		List *nullsfirst = NIL;
