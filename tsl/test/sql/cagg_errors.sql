@@ -290,6 +290,15 @@ WHERE user_view_name = 'mat_with_test'
 \gset
 
 \set ON_ERROR_STOP 0
+-- triggers not allowed on  continuous aggregate
+CREATE OR REPLACE FUNCTION not_allowed() RETURNS trigger AS $$
+BEGIN
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER not_allowed_trigger INSTEAD OF INSERT ON mat_with_test
+FOR EACH ROW EXECUTE FUNCTION not_allowed();
+
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'false');
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
 ALTER MATERIALIZED VIEW mat_with_test ALTER timec DROP default;

@@ -3855,12 +3855,19 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	Cache *hcache;
 	Hypertable *ht;
 	ObjectAddress PG_USED_FOR_ASSERTS_ONLY address;
+	Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
+	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	if (ht == NULL)
 	{
 		ts_cache_release(hcache);
+		/* check if it's a cagg. We don't support triggers on them yet */
+		if (ts_continuous_agg_find_by_relid(relid) != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("triggers are not supported on continuous aggregate")));
+
 		return DDL_CONTINUE;
 	}
 
