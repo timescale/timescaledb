@@ -26,12 +26,16 @@ SELECT * FROM _timescaledb_catalog.compression_settings;
  metrics | {device}  | {time}  | {t}          | {t}
 (1 row)
 
+--Enable compression path info
+SET timescaledb.debug_compression_path_info= 'on';
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+INFO:  compress_chunk_tuplesort_start
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
+RESET timescaledb.debug_compression_path_info;
 SELECT * FROM _timescaledb_catalog.compression_settings;
                      relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
 ------------------------------------------------+-----------+---------+--------------+--------------------

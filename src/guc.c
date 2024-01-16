@@ -579,6 +579,19 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	/* this information is useful in general on customer deployments */
+	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_compression_path_info",
+							 /* short_desc= */ "show various compression-related debug info",
+							 /* long_desc= */ "this is for debugging/information purposes",
+							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
+							 /* bootValue= */ false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
 #ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
 							   /* short_desc= */ "cloud provider",
@@ -627,17 +640,6 @@ _guc_init(void)
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
 							 /* bootValue= */ RVQ_Allow,
 							 /* options = */ require_vector_qual_options,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
-	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_compression_path_info",
-							 /* short_desc= */ "show various compression-related debug info",
-							 /* long_desc= */ "this is for debugging purposes",
-							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
-							 /* bootValue= */ false,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,
