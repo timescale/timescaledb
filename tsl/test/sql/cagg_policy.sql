@@ -141,6 +141,16 @@ SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_
 
 SELECT remove_continuous_aggregate_policy('int_tab');
 SELECT remove_continuous_aggregate_policy('mat_m1');
+-- add with NULL offset, readd with NULL offset
+SELECT add_continuous_aggregate_policy('mat_m1', 20, NULL, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('mat_m1', 20, NULL, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
+SELECT remove_continuous_aggregate_policy('mat_m1');
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 20, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 20, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '1h'::interval, if_not_exists=>true);
+SELECT remove_continuous_aggregate_policy('mat_m1');
+
 --this one will fail
 SELECT remove_continuous_aggregate_policy('mat_m1');
 SELECT remove_continuous_aggregate_policy('mat_m1', if_not_exists=>true);
@@ -533,6 +543,14 @@ FROM metrics
 GROUP BY 1, 2
 WITH NO DATA;
 
+-- this was previously crashing
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, NULL, '1 h'::interval, if_not_exists => true);
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval, if_not_exists => true);
+SELECT remove_continuous_aggregate_policy('metrics_cagg');
+SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true);
+SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
+SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
+SELECT remove_continuous_aggregate_policy('metrics_cagg');
 --can set compression policy only after setting up refresh policy --
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);

@@ -258,7 +258,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 															POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 															partitioning_type,
 															compress_after_type,
-															compress_after_datum);
+															compress_after_datum,
+															false /* isnull */);
 		else
 		{
 			Assert(created_before != NULL);
@@ -267,7 +268,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 				POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE,
 				partitioning_type,
 				INTERVALOID,
-				IntervalPGetDatum(created_before));
+				IntervalPGetDatum(created_before),
+				false /* isnull */);
 		}
 
 		if (is_equal)
