@@ -280,8 +280,8 @@ test_gorilla_float()
 	GorillaCompressor *compressor = gorilla_compressor_alloc();
 	GorillaCompressed *compressed;
 	DecompressionIterator *iter;
-	for (int i = 0.0; i < TEST_ELEMENTS; i++)
-		gorilla_compressor_append_value(compressor, float_get_bits((float) i));
+	for (int x = 0; x < TEST_ELEMENTS; x++)
+		gorilla_compressor_append_value(compressor, float_get_bits((float) x));
 
 	compressed = gorilla_compressor_finish(compressor);
 	TestAssertTrue(compressed != NULL);
