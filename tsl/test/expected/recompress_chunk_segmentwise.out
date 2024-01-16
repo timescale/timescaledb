@@ -394,6 +394,30 @@ select :'compressed_chunk_name_before_recompression' as before_segmentwise_recom
  compress_hyper_12_13_chunk       | compress_hyper_12_13_chunk
 (1 row)
 
+INSERT INTO mytab
+SELECT t, a, 3, 2
+FROM generate_series('2023-01-01'::timestamptz, '2023-01-02'::timestamptz, '1 hour'::interval) t
+CROSS JOIN generate_series(1, 10, 1) a;
+-- recompress will insert newly inserted tuples into compressed chunk along with inserting into the compressed chunk index
+CALL recompress_chunk(:'chunk_to_compress_mytab');
+-- make sure we are hitting the index and that the index contains the tuples
+SET enable_seqscan TO off;
+EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Aggregate
+   ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
+         ->  Index Scan using compress_hyper_12_13_chunk__compressed_hypertable_12_a_c__ts_me on compress_hyper_12_13_chunk
+               Index Cond: (a = 2)
+(4 rows)
+
+SELECT count(*) FROM mytab where a = 2;
+ count 
+-------
+    28
+(1 row)
+
+RESET enable_seqscan;
 SELECT decompress_chunk(show_chunks('mytab'));
              decompress_chunk             
 ------------------------------------------
@@ -449,7 +473,7 @@ select * from :compressed_chunk_name;
  BAAAAneAR/JEAAACd4BH8kQAAAAAAQAAAAEAAAAAAAAADgAE7wCP5IgA             |   | BAAAAAAAAAAABAAAAAAAAAAEAAAAAQAAAAEAAAAAAAAABAAAAAAAAAAI |              1 |                    10 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST
 (3 rows)
 
--- insert again, check both reindex works and NULL values properly handled
+-- insert again, check both index insertion works and NULL values properly handled
 insert into nullseg_one values (:'start_time', NULL, 4);
 call recompress_chunk(:'chunk_to_compress');
 select * from :compressed_chunk_name;
@@ -492,7 +516,7 @@ select * from :compressed_chunk_name;
  BAAAAneAR/JEAAACd4BH8kQAAAAAAQAAAAEAAAAAAAAADgAE7wCP5IgA             | 1 | BAAAAAAAAAAABAAAAAAAAAAEAAAAAQAAAAEAAAAAAAAABAAAAAAAAAAI                                 |   |              1 |                    10 | Sat Jan 01 01:00:00 2022 PST | Sat Jan 01 01:00:00 2022 PST
 (5 rows)
 
--- insert again, check both reindex works and NULL values properly handled
+-- insert again, check both index insertion works and NULL values properly handled
 -- should match existing segment (1, NULL)
 insert into nullseg_many values (:'start_time', 1, NULL, NULL);
 call recompress_chunk(:'chunk_to_compress');
