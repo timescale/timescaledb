@@ -211,6 +211,18 @@ call recompress_chunk(:'chunk_to_compress_mytab');
 select compressed_chunk_name as compressed_chunk_name_after_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 select :'compressed_chunk_name_before_recompression' as before_segmentwise_recompression, :'compressed_chunk_name_after_recompression' as after_segmentwise_recompression;
 
+INSERT INTO mytab
+SELECT t, a, 3, 2
+FROM generate_series('2023-01-01'::timestamptz, '2023-01-02'::timestamptz, '1 hour'::interval) t
+CROSS JOIN generate_series(1, 10, 1) a;
+-- recompress will insert newly inserted tuples into compressed chunk along with inserting into the compressed chunk index
+CALL recompress_chunk(:'chunk_to_compress_mytab');
+-- make sure we are hitting the index and that the index contains the tuples
+SET enable_seqscan TO off;
+EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;
+SELECT count(*) FROM mytab where a = 2;
+RESET enable_seqscan;
+
 SELECT decompress_chunk(show_chunks('mytab'));
 alter table mytab set (timescaledb.compress = false);
 alter table mytab set (timescaledb.compress);
@@ -241,7 +253,7 @@ select compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chu
 call recompress_chunk(:'chunk_to_compress');
 
 select * from :compressed_chunk_name;
--- insert again, check both reindex works and NULL values properly handled
+-- insert again, check both index insertion works and NULL values properly handled
 insert into nullseg_one values (:'start_time', NULL, 4);
 call recompress_chunk(:'chunk_to_compress');
 select * from :compressed_chunk_name;
@@ -264,7 +276,7 @@ select compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chu
 call recompress_chunk(:'chunk_to_compress');
 
 select * from :compressed_chunk_name;
--- insert again, check both reindex works and NULL values properly handled
+-- insert again, check both index insertion works and NULL values properly handled
 -- should match existing segment (1, NULL)
 insert into nullseg_many values (:'start_time', 1, NULL, NULL);
 call recompress_chunk(:'chunk_to_compress');

@@ -1588,14 +1588,6 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	UnregisterSnapshot(snapshot);
 	index_close(index_rel, AccessExclusiveLock);
 
-#if PG14_LT
-	int options = 0;
-#else
-	ReindexParams params = { 0 };
-	ReindexParams *options = &params;
-#endif
-	reindex_relation(compressed_chunk->table_id, 0, options);
-
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
 	table_close(uncompressed_chunk_rel, ExclusiveLock);
