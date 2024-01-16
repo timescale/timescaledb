@@ -176,11 +176,11 @@ ts_compression_settings_rename_column_hypertable(Hypertable *ht, char *old, char
 	if (ht->fd.compressed_hypertable_id)
 	{
 		ListCell *lc;
-		List *chunk_ids = ts_chunk_get_chunk_ids_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		foreach (lc, chunk_ids)
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		foreach (lc, chunks)
 		{
-			Oid relid = ts_chunk_get_relid(lfirst_int(lc), false);
-			ts_compression_settings_rename_column(relid, old, new);
+			Chunk *chunk = lfirst(lc);
+			ts_compression_settings_rename_column(chunk->table_id, old, new);
 		}
 	}
 }

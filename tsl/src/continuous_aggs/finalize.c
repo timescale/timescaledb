@@ -249,7 +249,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
 		/*
-		 * In case when this is a cagg wth joins, the Var from the normal table
+		 * In case when this is a cagg with joins, the Var from the normal table
 		 * already has resorigtbl populated and we need to use that to resolve
 		 * the Var. Hence only modify the tle when resorigtbl is unset
 		 * which means it is Var of the Hypertable

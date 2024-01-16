@@ -18,6 +18,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('decompress_tracking') ch;
      2
 (1 row)
 
+ANALYZE decompress_tracking;
 -- no tracking without analyze
 :EXPLAIN UPDATE decompress_tracking SET value = value + 3;
 QUERY PLAN
@@ -131,31 +132,35 @@ QUERY PLAN
 -- test prepared statements EXPLAIN still works after execution
 SET plan_cache_mode TO force_generic_plan;
 PREPARE p1 AS UPDATE decompress_tracking SET value = value + 3 WHERE device = 'd1';
-BEGIN; EXPLAIN EXECUTE p1; EXECUTE p1; EXPLAIN EXECUTE p1; ROLLBACK;
+BEGIN;
+    EXPLAIN (COSTS OFF) EXECUTE p1;
 QUERY PLAN
- Custom Scan (HypertableModify)  (cost=0.00..70.83 rows=433 width=18)
-   ->  Update on decompress_tracking  (cost=0.00..70.83 rows=433 width=18)
+ Custom Scan (HypertableModify)
+   ->  Update on decompress_tracking
          Update on _hyper_X_X_chunk decompress_tracking_1
          Update on _hyper_X_X_chunk decompress_tracking_2
-         ->  Result  (cost=0.00..70.83 rows=433 width=18)
-               ->  Append  (cost=0.00..65.42 rows=433 width=18)
-                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1  (cost=0.00..31.62 rows=432 width=18)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1
                            Filter: (device = 'd1'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2  (cost=0.00..31.62 rows=1 width=18)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2
                            Filter: (device = 'd1'::text)
 (10 rows)
 
+    EXECUTE p1;
+    EXPLAIN (COSTS OFF) EXECUTE p1;
 QUERY PLAN
- Custom Scan (HypertableModify)  (cost=0.00..70.83 rows=433 width=18)
-   ->  Update on decompress_tracking  (cost=0.00..70.83 rows=433 width=18)
+ Custom Scan (HypertableModify)
+   ->  Update on decompress_tracking
          Update on _hyper_X_X_chunk decompress_tracking_1
          Update on _hyper_X_X_chunk decompress_tracking_2
-         ->  Result  (cost=0.00..70.83 rows=433 width=18)
-               ->  Append  (cost=0.00..65.42 rows=433 width=18)
-                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1  (cost=0.00..31.62 rows=432 width=18)
+         ->  Result
+               ->  Append
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_1
                            Filter: (device = 'd1'::text)
-                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2  (cost=0.00..31.62 rows=1 width=18)
+                     ->  Seq Scan on _hyper_X_X_chunk decompress_tracking_2
                            Filter: (device = 'd1'::text)
 (10 rows)
 
+ROLLBACK;
 DROP TABLE decompress_tracking;

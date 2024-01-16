@@ -524,6 +524,8 @@ SELECT chunk_schema || '.' || chunk_name AS "chunk_table_bugtab"
 
 SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
 
+ANALYZE bugtab;
+
 :PREFIX
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
 

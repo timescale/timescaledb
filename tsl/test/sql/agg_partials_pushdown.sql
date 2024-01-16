@@ -18,6 +18,8 @@ FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-10 23:55:00+0'
 
 SELECT compress_chunk(c) FROM show_chunks('testtable') c;
 
+ANALYZE testtable;
+
 -- Pushdown aggregation to the chunk level
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';
 
@@ -28,6 +30,8 @@ SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >=
 INSERT INTO testtable(time,device_id,v0,v1,v2,v3)
 SELECT time, device_id, device_id+1,  device_id + 2, device_id + 0.5, NULL
 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,'2000-01-10 23:55:00+0','1day') gtime(time), generate_series(1,5,1) gdevice(device_id);
+
+ANALYZE testtable;
 
 -- Pushdown aggregation to the chunk level
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3) FROM testtable WHERE time >= '2000-01-01 00:00:00+0' AND time <= '2000-02-01 00:00:00+0';

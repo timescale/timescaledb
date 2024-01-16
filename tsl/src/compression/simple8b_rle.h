@@ -260,15 +260,15 @@ bytes_serialize_simple8b_and_advance(char *dest, size_t expected_size,
 static Simple8bRleSerialized *
 bytes_deserialize_simple8b_and_advance(StringInfo si)
 {
-	Simple8bRleSerialized *ser = consumeCompressedData(si, sizeof(Simple8bRleSerialized));
-	consumeCompressedData(si, simple8brle_serialized_slot_size(ser));
+	Simple8bRleSerialized *serialized = consumeCompressedData(si, sizeof(Simple8bRleSerialized));
+	consumeCompressedData(si, simple8brle_serialized_slot_size(serialized));
 
-	CheckCompressedData(ser->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
-	CheckCompressedData(ser->num_elements > 0);
-	CheckCompressedData(ser->num_blocks > 0);
-	CheckCompressedData(ser->num_elements >= ser->num_blocks);
+	CheckCompressedData(serialized->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(serialized->num_elements > 0);
+	CheckCompressedData(serialized->num_blocks > 0);
+	CheckCompressedData(serialized->num_elements >= serialized->num_blocks);
 
-	return ser;
+	return serialized;
 }
 
 static size_t
@@ -390,7 +390,7 @@ simple8brle_compressor_finish(Simple8bRleCompressor *compressor)
 
 	compressed_size = simple8brle_compressor_compressed_size(compressor);
 	/* we use palloc0 despite initializing the entire structure,
-	 * to ensure padding bits are zeroed, and that there's a 0 seletor at the end.
+	 * to ensure padding bits are zeroed, and that there's a 0 selector at the end.
 	 * It would be more efficient to ensure there are no padding bits in the struct,
 	 * and initialize everything ourselves
 	 */
@@ -634,7 +634,7 @@ simple8brle_decompression_iterator_init_reverse(Simple8bRleDecompressionIterator
 
 /* returning a struct produces noticeably better assembly on x86_64 than returning
  * is_done and is_null via pointers; it uses two registers instead of any memory reads.
- * Since it is also easier to read, we perfer it here.
+ * Since it is also easier to read, we prefer it here.
  */
 static Simple8bRleDecompressResult
 simple8brle_decompression_iterator_try_next_forward(Simple8bRleDecompressionIterator *iter)

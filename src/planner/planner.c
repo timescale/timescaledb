@@ -846,7 +846,7 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 				 * Even though ordered is true on the RelOptInfo we have to
 				 * double check that current Path fulfills requirements for
 				 * Ordered Append transformation because the RelOptInfo may
-				 * be used for multiple Pathes.
+				 * be used for multiple Paths.
 				 */
 				Expr *em_expr = find_em_expr_for_rel(pk->pk_eclass, rel);
 
@@ -860,7 +860,8 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 
 				if (IsA(em_expr, Var) && castNode(Var, em_expr)->varattno == order_attno)
 					return true;
-				else if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
+
+				if (IsA(em_expr, FuncExpr) && list_length(path->pathkeys) == 1)
 				{
 					FuncExpr *func = castNode(FuncExpr, em_expr);
 					FuncInfo *info = ts_func_cache_get_bucketing_func(func->funcid);
@@ -1531,7 +1532,8 @@ check_cagg_view_rte(RangeTblEntry *rte)
 		if (!OidIsValid(rte->relid))
 			break;
 
-		if ((cagg = ts_continuous_agg_find_by_relid(rte->relid)) != NULL)
+		cagg = ts_continuous_agg_find_by_relid(rte->relid);
+		if (cagg != NULL)
 			found = true;
 	}
 	return found;

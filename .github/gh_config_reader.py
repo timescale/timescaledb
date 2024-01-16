@@ -19,5 +19,5 @@ import os
 for key in dir(ci_settings):
     if not key.startswith("__"):
         value = getattr(ci_settings, key)
-        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
             print(str.format("{0}={1}", key, json.dumps(value)), file=output)

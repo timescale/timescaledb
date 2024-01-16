@@ -55,7 +55,8 @@ ts_telemetry_replication_info_gather(void)
 		info.got_is_wal_receiver = true;
 	}
 
-	if ((res = SPI_finish()) != SPI_OK_FINISH)
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 
 	return info;

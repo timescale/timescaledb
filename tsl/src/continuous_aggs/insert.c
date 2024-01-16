@@ -81,14 +81,11 @@ static int64 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid);
 static HTAB *continuous_aggs_cache_inval_htab = NULL;
 static MemoryContext continuous_aggs_trigger_mctx = NULL;
 
-void _continuous_aggs_cache_inval_init(void);
-void _continuous_aggs_cache_inval_fini(void);
-
 static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
 										  int32 hypertable_id, int32 entry_id);
 static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
-											   Oid chunk_id, Relation chunk_relation);
+											   Oid chunk_reloid, Relation chunk_relation);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
@@ -327,7 +324,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 		return;
 
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
-	 * use a stronger isolation level, the isolation thereshold could update without us seeing the
+	 * use a stronger isolation level, the isolation threshold could update without us seeing the
 	 * new value. In order to prevent serialization errors, we always append invalidation entries in
 	 * the case when we're using a strong enough isolation level that we won't see the new
 	 * threshold. The same applies for distributed member invalidation triggers of hypertables.

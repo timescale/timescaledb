@@ -28,6 +28,13 @@ BEGIN
       MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
       DETAIL = 'The following data nodes should be removed: '||data_nodes;
   END IF;
+
+  IF EXISTS(SELECT FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid') THEN
+    RAISE USING
+      ERRCODE = 'feature_not_supported',
+      MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
+      DETAIL = 'This node appears to be part of a multi-node installation';
+  END IF;
 END $$;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.ping_data_node;
@@ -316,3 +323,5 @@ ALTER TABLE _timescaledb_catalog.dimension
     ADD CONSTRAINT dimension_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.tablespace
     ADD CONSTRAINT tablespace_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+
+CREATE SCHEMA _timescaledb_debug;

@@ -488,7 +488,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 					return op;
 
 				/* bail out if interval->time can't be exactly represented as a double */
-				if (interval->time >= 0x3FFFFFFFFFFFFFll)
+				if (interval->time >= 0x3FFFFFFFFFFFFFLL)
 					return op;
 
 				integralValue = const_datum_get_int(castNode(Const, value));
@@ -1319,7 +1319,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 #if PG16_LT
 		childrte->requiredPerms = 0;
 #else
-		/* Since PG16, the permission info is maintained separetely. Unlink
+		/* Since PG16, the permission info is maintained separately. Unlink
 		 * the old perminfo from the RTE to disable permission checking.
 		 */
 		childrte->perminfoindex = 0;

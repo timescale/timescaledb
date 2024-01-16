@@ -338,7 +338,7 @@ smoothstep(double x, double start, double end)
 {
 	x = (x - start) / (end - start);
 	x = x < 0 ? 0 : x > 1 ? 1 : x;
-	return x * x * (3.0f - 2.0f * x);
+	return x * x * (3.0F - 2.0F * x);
 }
 
 /*
@@ -622,7 +622,7 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
  * The logic is inspired by PostgreSQL's add_paths_with_pathkeys_for_rel() function.
  *
  * Note: This function adds only non-partial paths. In parallel plans PostgreSQL prefers sorting
- * directly under the gather (merge) node and the per-chunk sortings are not used in parallel plans.
+ * directly under the gather (merge) node and the per-chunk sorting are not used in parallel plans.
  * To save planning time, we therefore refrain from adding them.
  */
 static void
@@ -644,7 +644,7 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 	DecompressChunkPath *decompress_chunk_path =
 		copy_decompress_chunk_path((DecompressChunkPath *) path);
 
-	/* Iterate over the sort_pathkeys and generate all possible useful sortings */
+	/* Iterate over the sort_pathkeys and generate all possible useful sorting */
 	List *useful_pathkeys = NIL;
 	ListCell *lc;
 	foreach (lc, root->query_pathkeys)
@@ -1169,8 +1169,8 @@ compressed_rel_setup_reltarget(RelOptInfo *compressed_rel, CompressionInfo *info
 													&attrs_used);
 
 			/* if the column is an orderby, add it's metadata columns too */
-			int16 index;
-			if ((index = ts_array_position(info->settings->fd.orderby, column_name)))
+			int16 index = ts_array_position(info->settings->fd.orderby, column_name);
+			if (index != 0)
 			{
 				compressed_reltarget_add_var_for_column(compressed_rel,
 														compressed_relid,
@@ -1794,12 +1794,12 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 	}
 
 	/*
-	 * We set enable_bitmapscan to false here to ensure any pathes with bitmapscan do not
-	 * displace other pathes. Note that setting the postgres GUC will not actually disable
+	 * We set enable_bitmapscan to false here to ensure any paths with bitmapscan do not
+	 * displace other paths. Note that setting the postgres GUC will not actually disable
 	 * the bitmapscan path creation but will instead create them with very high cost.
 	 * If bitmapscan were the dominant path after postgres planning we could end up
 	 * in a situation where we have no valid plan for this relation because we remove
-	 * bitmapscan pathes from the pathlist.
+	 * bitmapscan paths from the pathlist.
 	 */
 
 	bool old_bitmapscan = enable_bitmapscan;
@@ -2010,7 +2010,7 @@ build_sortinfo(Chunk *chunk, RelOptInfo *chunk_rel, CompressionInfo *info, List 
 		}
 
 		/*
-		 * if pathkeys still has items but we didnt find all segmentby columns
+		 * if pathkeys still has items but we didn't find all segmentby columns
 		 * we cannot push down sort
 		 */
 		if (lc != NULL && bms_num_members(segmentby_columns) != info->num_segmentby_columns)

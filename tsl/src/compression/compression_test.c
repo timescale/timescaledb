@@ -38,7 +38,7 @@ get_compression_algorithm(char *name)
 		return COMPRESSION_ALGORITHM_DICTIONARY;
 	}
 
-	ereport(ERROR, (errmsg("unknown comrpession algorithm %s", name)));
+	ereport(ERROR, (errmsg("unknown compression algorithm %s", name)));
 	return _INVALID_COMPRESSION_ALGORITHM;
 }
 
@@ -128,6 +128,7 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, 
 		 * Skip empty data, because we'll just get "no data left in message"
 		 * right away.
 		 */
+		fclose(f);
 		return;
 	}
 
@@ -136,6 +137,7 @@ read_compressed_data_file_impl(int algo, Oid type, const char *path, bool bulk, 
 
 	if (elements_read != 1)
 	{
+		fclose(f);
 		ereport(ERROR, (errcode(ERRCODE_UNDEFINED_FILE), errmsg("failed to read file '%s'", path)));
 	}
 

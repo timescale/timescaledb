@@ -59,7 +59,7 @@ EOF
 trap cleanup EXIT
 
 # setup clusterwide settings on first run
-# we use mkdir here because it is an atomic operation unlike existance of a lockfile
+# we use mkdir here because it is an atomic operation unlike existence of a lockfile
 # where creating and checking are 2 separate operations
 if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
   ${PSQL} "$@" -U ${USER} -d template1 -v ECHO=none >/dev/null 2>&1 <<EOF

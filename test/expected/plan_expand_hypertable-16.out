@@ -2826,8 +2826,7 @@ SET enable_seqscan=false;
    InitPlan 1 (returns $0)
      ->  Limit
            ->  Index Scan Backward using _hyper_1_1_chunk_hyper_time_idx on _hyper_1_1_chunk h
-                 Index Cond: ("time" IS NOT NULL)
-(5 rows)
+(4 rows)
 
 \set ON_ERROR_STOP 0
 SELECT * FROM hyper WHERE _timescaledb_functions.chunks_in(hyper, ARRAY[1,2]) AND _timescaledb_functions.chunks_in(hyper, ARRAY[2,3]);

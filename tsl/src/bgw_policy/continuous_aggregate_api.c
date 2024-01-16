@@ -23,7 +23,6 @@
 #include "hypertable_cache.h"
 #include "time_utils.h"
 #include "policy_utils.h"
-#include "time_utils.h"
 #include "guc.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw/job_stat.h"

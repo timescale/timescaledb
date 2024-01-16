@@ -95,7 +95,10 @@ PG_MODULE_MAGIC;
 
 #define CalledInParallelWorker()                                                                   \
 	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
+
+#if PG16_LT
 extern void TSDLLEXPORT _PG_init(void);
+#endif
 
 /* was the versioned-extension loaded*/
 static bool loader_present = true;
@@ -162,13 +165,14 @@ TsExtension extensions[] = {
 	},
 };
 
-inline static void extension_check(TsExtension *);
+inline static void extension_check(TsExtension * /*ext*/);
 #if PG14_LT
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 												   TsExtension const *);
 #else
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-												   TsExtension const *, JumbleState *jstate);
+												   TsExtension const * /*ext*/,
+												   JumbleState *jstate);
 #endif
 
 static bool
