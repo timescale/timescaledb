@@ -218,7 +218,8 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 															POL_RETENTION_CONF_KEY_DROP_AFTER,
 															partitioning_type,
 															window_type,
-															window_datum);
+															window_datum,
+															false /* isnull */);
 		else
 		{
 			Assert(created_before != NULL);
@@ -227,7 +228,8 @@ policy_retention_add_internal(Oid ht_oid, Oid window_type, Datum window_datum,
 				POL_RETENTION_CONF_KEY_DROP_CREATED_BEFORE,
 				partitioning_type,
 				INTERVALOID,
-				IntervalPGetDatum(created_before));
+				IntervalPGetDatum(created_before),
+				false /* isnull */);
 		}
 
 		if (is_equal)

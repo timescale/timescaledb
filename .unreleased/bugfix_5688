@@ -1,0 +1,3 @@
+Implements: #6531 Fix if_not_exists behavior for CAgg policy with NULL offsets
+
+Fixes: #5688

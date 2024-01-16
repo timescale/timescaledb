@@ -571,12 +571,14 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 														POL_REFRESH_CONF_KEY_START_OFFSET,
 														cagg->partition_type,
 														policyconf.offset_start.type,
-														policyconf.offset_start.value) &&
+														policyconf.offset_start.value,
+														policyconf.offset_start.isnull) &&
 			policy_config_check_hypertable_lag_equality(existing->fd.config,
 														POL_REFRESH_CONF_KEY_END_OFFSET,
 														cagg->partition_type,
 														policyconf.offset_end.type,
-														policyconf.offset_end.value))
+														policyconf.offset_end.value,
+														policyconf.offset_end.isnull))
 		{
 			/* If all arguments are the same, do nothing */
 			ereport(NOTICE,
