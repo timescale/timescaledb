@@ -15,6 +15,7 @@ list(
   cagg_multi_iso.spec
   cagg_concurrent_refresh.spec
   deadlock_drop_chunks_compress.spec
+  parallel_compression.spec
   osm_range_updates_iso.spec)
 
 if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
