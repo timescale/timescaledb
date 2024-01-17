@@ -9,6 +9,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/tupdesc.h>
+#include <catalog/index.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
@@ -160,17 +161,8 @@ extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_in
 
 #define BLOCKID_BITS (CHAR_BIT * sizeof(BlockIdData))
 #define COMPRESSED_FLAG (1UL << (BLOCKID_BITS - 1))
-#define OFFSET_BITS (CHAR_BIT * sizeof(OffsetNumber))
-#define OFFSET_MASK (((uint64) 1UL << OFFSET_BITS) - 1)
 #define TUPINDEX_BITS (10U)
 #define TUPINDEX_MASK (((uint64) 1UL << TUPINDEX_BITS) - 1)
-
-/* Compute a 64-bits value from the item pointer data */
-static uint64
-bits_from_tid(const ItemPointerData *tid)
-{
-	return (ItemPointerGetBlockNumber(tid) << OFFSET_BITS) | ItemPointerGetOffsetNumber(tid);
-}
 
 /*
  * The "compressed TID" consists of the bits of the TID for the compressed row
@@ -179,31 +171,48 @@ bits_from_tid(const ItemPointerData *tid)
 static inline void
 tid_to_compressed_tid(ItemPointerData *out_tid, const ItemPointerData *in_tid, uint16 tuple_index)
 {
-	const uint64 bits = (bits_from_tid(in_tid) << TUPINDEX_BITS) | tuple_index;
+	const uint64 encoded_tid = itemptr_encode((ItemPointer) in_tid);
+	const uint64 encoded_ctid = (encoded_tid << TUPINDEX_BITS) | tuple_index;
 
 	Assert(tuple_index != InvalidTupleIndex);
 
-	/* Insert the tuple index as the least significant bits and set the most
-	 * significant bit of the block id to mark it as a compressed tuple. */
-	const BlockNumber blockno = COMPRESSED_FLAG | (bits >> OFFSET_BITS);
-	const OffsetNumber offsetno = bits & OFFSET_MASK;
+	/*
+	 * There is a check in tidbitmap that offset is never larger than
+	 * MaxHeapTuplesPerPage and we will get an error if we do not handle that,
+	 * so we store the remainder of that division in the offset and the rest
+	 * in the block number.
+	 *
+	 * Also, the offset number may not be zero, so we add 1 here to make it
+	 * satisfy the conditions. Since the check in tidbitmap.c is an error if
+	 * offset is strictly larger than MaxHeapTuplesPerPage this will work
+	 * correctly.
+	 *
+	 * Note that the check in ItemPointerIsValid() is weaker, so we can relax
+	 * this condition later if necessary.
+	 */
+	const BlockNumber blockno = COMPRESSED_FLAG | (encoded_ctid / MaxHeapTuplesPerPage);
+	const OffsetNumber offsetno = encoded_ctid % MaxHeapTuplesPerPage + 1;
+
 	ItemPointerSet(out_tid, blockno, offsetno);
+
+	Assert(ItemPointerGetOffsetNumber(out_tid) >= 1 &&
+		   ItemPointerGetOffsetNumber(out_tid) <= MaxHeapTuplesPerPage);
 }
 
 static inline uint16
 compressed_tid_to_tid(ItemPointerData *out_tid, const ItemPointerData *in_tid)
 {
-	const uint64 orig_bits = bits_from_tid(in_tid);
-	const uint16 tuple_index = orig_bits & TUPINDEX_MASK;
+	const uint64 encoded_ctid =
+		MaxHeapTuplesPerPage * (~COMPRESSED_FLAG & ItemPointerGetBlockNumber(in_tid)) +
+		(ItemPointerGetOffsetNumber(in_tid) - 1);
+	const int64 encoded_tid = encoded_ctid >> TUPINDEX_BITS;
+	const uint16 tuple_index = encoded_ctid & TUPINDEX_MASK;
 
-	/* Remove the tuple index bits and clear the compressed flag from the block id. */
-	const uint64 bits = orig_bits >> TUPINDEX_BITS;
-	BlockNumber blockno = ~COMPRESSED_FLAG & (bits >> OFFSET_BITS);
-	OffsetNumber offsetno = bits & OFFSET_MASK;
+	itemptr_decode(out_tid, encoded_tid);
 
 	Assert(tuple_index != InvalidTupleIndex);
-
-	ItemPointerSet(out_tid, blockno, offsetno);
+	Assert(ItemPointerGetOffsetNumber(out_tid) >= 1 &&
+		   ItemPointerGetOffsetNumber(out_tid) <= MaxHeapTuplesPerPage);
 
 	return tuple_index;
 }
