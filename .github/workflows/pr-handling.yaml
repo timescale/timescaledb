@@ -19,14 +19,14 @@ jobs:
     name: Assign PR to author
     runs-on: ubuntu-latest
     steps:
-      - uses: toshimaru/auto-author-assign@v1.6.1
+      - uses: toshimaru/auto-author-assign@c619c1aabed85ca18696baed036e82f910cbcb6f # v1.6.1
 
   ask-review:
     name: Run pull-review
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
       - name: Run pull-review with docker
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -17,6 +17,9 @@ name: Regression
       - '**.md'
       - 'LICENSE*'
       - NOTICE
+permissions:
+  contents: read
+
 jobs:
   matrixbuilder:
     runs-on: ubuntu-latest
@@ -24,7 +27,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
     - name: Build matrix
       id: set-matrix

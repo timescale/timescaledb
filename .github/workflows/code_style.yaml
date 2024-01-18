@@ -6,6 +6,9 @@ name: Code style
       - prerelease_test
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   cmake_checks:
     name: Check CMake files
@@ -14,7 +17,7 @@ jobs:
       - name: Install prerequisites
         run: pip install cmakelang
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
       - name: Run format on CMake files
         run: |
           find  -name CMakeLists.txt  -exec cmake-format -i {} +
@@ -29,7 +32,7 @@ jobs:
       - name: Install prerequisites
         run: sudo apt install perltidy
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
       - name: Check trailing whitespace
         if: always()
         run: |
@@ -49,7 +52,7 @@ jobs:
         run: |
           pip install yamllint
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
       - name: Run yamllint
         run: |
           find . -type f \( -name "*.yaml" -or -name "*.yml" \) -print -exec yamllint {} \+
@@ -62,7 +65,7 @@ jobs:
         run: |
           pip install codespell
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
       - name: Run codespell
         run: |
           find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.sh" \) \
@@ -75,7 +78,7 @@ jobs:
       fail-fast: false
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
     - name: Check trailing whitespace
       if: always()
       run: |
@@ -108,7 +111,7 @@ jobs:
           pip list
           pip list --user
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
       - name: Run prospector
         run: |
           find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +
@@ -122,7 +125,7 @@ jobs:
     steps:
     - name: Checkout source
       if: always()
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
     - name: Check license
       if: always()
       run: ./scripts/check_license_all.sh

@@ -6,6 +6,9 @@ name: Coccinelle
     branches:
       - main
       - prerelease_test
+permissions:
+  contents: read
+
 jobs:
   coccinelle:
     name: Coccinelle
@@ -20,7 +23,7 @@ jobs:
         sudo apt-get -y install coccinelle
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
     - name: Run coccinelle
       run: |
@@ -28,7 +31,7 @@ jobs:
 
     - name: Save coccinelle.diff
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
       with:
         name: coccinelle.diff
         path: coccinelle.diff

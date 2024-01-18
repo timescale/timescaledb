@@ -11,6 +11,9 @@ name: RPM packages
     - release_test
     - trigger/package_test
 
+permissions:
+  contents: read
+
 jobs:
   rpm_tests:
     name: RPM ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
@@ -72,7 +75,7 @@ jobs:
       run: |
         rpm -ql timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
     - name: Read versions
       id: versions

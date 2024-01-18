@@ -6,6 +6,9 @@ name: Coverity
   push:
     branches:
       - coverity_scan
+permissions:
+  contents: read
+
 jobs:
 
   coverity:
@@ -27,7 +30,7 @@ jobs:
         sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
     - name: Coverity tools
       run: |

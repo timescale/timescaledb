@@ -13,6 +13,9 @@ name: Regression Linux i386
       - '**.md'
       - 'LICENSE*'
       - NOTICE
+permissions:
+  contents: read
+
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -21,7 +24,7 @@ jobs:
       pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -54,7 +57,7 @@ jobs:
 
     steps:
 
-    # /__e/node16/bin/node (used by actions/checkout@v3) needs 64-bit libraries
+    # /__e/node16/bin/node (used by actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
       run: |
         apt-get update
@@ -70,7 +73,7 @@ jobs:
           icu-devtools
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -84,7 +87,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
-      uses: actions/cache@v3
+      uses: actions/cache@e12d46a63a90f2fae62d114769bbf2a179198b5c # v3.3.3
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
@@ -186,7 +189,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
       with:
         name: Regression diff linux-i386 PG${{ matrix.pg }}
         path: |
@@ -195,21 +198,21 @@ jobs:
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
         path: stacktrace.log
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
       with:
         name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
         path: postgres.log
 
     - name: Save TAP test logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@a8a3f3ad30e3422c9c7b888a15615d19a852ae32 # v3.1.3
       with:
         name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |

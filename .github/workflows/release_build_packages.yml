@@ -4,6 +4,9 @@ name: "Build distribution packages"
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   update:
     runs-on: ubuntu-latest

@@ -11,6 +11,9 @@ name: Homebrew
     - release_test
     - trigger/package_test
 
+permissions:
+  contents: read
+
 jobs:
   homebrew:
     name: Homebrew
@@ -40,7 +43,7 @@ jobs:
         brew services start postgresql@16
 
     # checkout code to get version information
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
     - name: Test Installation
       run: |

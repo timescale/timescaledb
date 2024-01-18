@@ -17,6 +17,9 @@ on:
       # branches that are not main, so it's inconvenient.
       - backport/trigger
 
+permissions:
+  contents: read
+
 jobs:
   backport:
     name: Backport Bug Fixes
@@ -33,7 +36,7 @@ jobs:
           pip install PyGithub requests
 
       - name: Checkout TimescaleDB
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
       - name: Run the Backport Script
         env:
