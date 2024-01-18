@@ -286,7 +286,6 @@ WHERE EXISTS (
 );
 
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
 
 GRANT SELECT ON _timescaledb_catalog.hypertable TO PUBLIC;
@@ -412,3 +411,19 @@ CREATE TRIGGER metadata_insert_trigger BEFORE INSERT ON _timescaledb_catalog.met
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$ WHERE key <> 'uuid' $$);
 
+-- Remove unwanted entries from extconfig and extcondition in pg_extension
+-- We use ALTER EXTENSION DROP TABLE to remove these entries.
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_cache.cache_inval_hypertable;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_cache.cache_inval_extension;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_cache.cache_inval_bgw_job;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_internal.job_errors;
+
+-- Associate the above tables back to keep the dependencies safe
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_cache.cache_inval_hypertable;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_cache.cache_inval_extension;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_cache.cache_inval_bgw_job;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_internal.job_errors;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_catalog.hypertable;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');

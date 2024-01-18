@@ -18,10 +18,5 @@ CREATE TABLE _timescaledb_cache.cache_inval_bgw_job();
 -- etc.
 CREATE TABLE _timescaledb_cache.cache_inval_extension();
 
--- not actually strictly needed but good for sanity as all tables should be dumped.
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_hypertable', '');
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_extension', '');
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_bgw_job', '');
-
 GRANT SELECT ON ALL TABLES IN SCHEMA _timescaledb_cache TO PUBLIC;
 
