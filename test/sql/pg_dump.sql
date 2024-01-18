@@ -164,7 +164,8 @@ INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, se
 
 SELECT * FROM ONLY "test_schema"."two_Partitions";
 
---query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
+--query for the extension tables/sequences that will not be dumped by pg_dump (should
+--be empty except for views and explicitly excluded tables)
 SELECT objid::regclass
 FROM pg_catalog.pg_depend
 WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
