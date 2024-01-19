@@ -180,6 +180,70 @@ SELECT * FROM cte ORDER BY value;
 \qecho transformation would be out of range
 :PREFIX SELECT time FROM metrics_timestamptz WHERE time_bucket('1000d',time) < '294276-01-01'::timestamptz ORDER BY time;
 
+
+\qecho time_bucket exclusion with run-time constants
+-- These queries have a stable time_bucket expression, because the text::interval conversion is stable.
+PREPARE P1(text    , text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P2(text    , text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P3(text    , text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+PREPARE P4(text    , text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+-- These queries have an immutable time_bucket expression, because the parameter is passed as interval, and no conversion is involved.
+PREPARE P5(interval, text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P6(interval, text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P7(interval, text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+PREPARE P8(interval, text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+
+SET plan_cache_mode TO 'force_custom_plan';
+
+:PREFIX EXECUTE P1('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P2('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P3('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P4('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P5('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P6('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P7('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P8('60 mins', '2024-01-01 UTC');
+
+:PREFIX EXECUTE P1('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P2('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P3('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P4('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P5('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P6('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P7('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P8('60 mins', '2000-01-01 UTC');
+
+SET plan_cache_mode TO 'force_generic_plan';
+
+:PREFIX EXECUTE P1('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P2('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P3('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P4('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P5('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P6('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P7('60 mins', '2024-01-01 UTC');
+:PREFIX EXECUTE P8('60 mins', '2024-01-01 UTC');
+
+:PREFIX EXECUTE P1('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P2('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P3('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P4('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P5('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P6('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P7('60 mins', '2000-01-01 UTC');
+:PREFIX EXECUTE P8('60 mins', '2000-01-01 UTC');
+
+RESET plan_cache_mode;
+DEALLOCATE P1;
+DEALLOCATE P2;
+DEALLOCATE P3;
+DEALLOCATE P4;
+DEALLOCATE P5;
+DEALLOCATE P6;
+DEALLOCATE P7;
+DEALLOCATE P8;
+
+
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 100 ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 20 ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(1, time) > 11 AND time_bucket(1, time) < 19 ORDER BY time;

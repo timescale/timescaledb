@@ -1217,6 +1217,445 @@ transformation would be out of range
          Filter: (time_bucket('@ 1000 days'::interval, "time") < 'Sat Jan 01 00:00:00 294276 PST'::timestamp with time zone)
 (12 rows)
 
+\qecho time_bucket exclusion with run-time constants
+time_bucket exclusion with run-time constants
+-- These queries have a stable time_bucket expression, because the text::interval conversion is stable.
+PREPARE P1(text    , text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P2(text    , text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P3(text    , text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+PREPARE P4(text    , text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+-- These queries have an immutable time_bucket expression, because the parameter is passed as interval, and no conversion is involved.
+PREPARE P5(interval, text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P6(interval, text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamptz ORDER BY time;
+PREPARE P7(interval, text) AS SELECT * FROM metrics_timestamptz WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+PREPARE P8(interval, text) AS SELECT * FROM metrics_timestamp   WHERE time_bucket($1::interval, time) > $2::timestamp   ORDER BY time;
+SET plan_cache_mode TO 'force_custom_plan';
+:PREFIX EXECUTE P1('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P2('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P3('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P4('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P5('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P6('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P7('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P8('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P1('60 mins', '2000-01-01 UTC');
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P2('60 mins', '2000-01-01 UTC');
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P3('60 mins', '2000-01-01 UTC');
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+(13 rows)
+
+:PREFIX EXECUTE P4('60 mins', '2000-01-01 UTC');
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket(('60 mins'::cstring)::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+(13 rows)
+
+:PREFIX EXECUTE P5('60 mins', '2000-01-01 UTC');
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P6('60 mins', '2000-01-01 UTC');
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P7('60 mins', '2000-01-01 UTC');
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+(13 rows)
+
+:PREFIX EXECUTE P8('60 mins', '2000-01-01 UTC');
+                                                       QUERY PLAN                                                       
+------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket('@ 1 hour'::interval, "time") > ('2000-01-01 UTC'::cstring)::timestamp without time zone)
+(13 rows)
+
+SET plan_cache_mode TO 'force_generic_plan';
+:PREFIX EXECUTE P1('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P2('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P3('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P4('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P5('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P6('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P7('60 mins', '2024-01-01 UTC');
+                    QUERY PLAN                    
+--------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P8('60 mins', '2024-01-01 UTC');
+                   QUERY PLAN                   
+------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 5
+(3 rows)
+
+:PREFIX EXECUTE P1('60 mins', '2000-01-01 UTC');
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P2('60 mins', '2000-01-01 UTC');
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P3('60 mins', '2000-01-01 UTC');
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+(13 rows)
+
+:PREFIX EXECUTE P4('60 mins', '2000-01-01 UTC');
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket(($1)::interval, "time") > ($2)::timestamp without time zone)
+(13 rows)
+
+:PREFIX EXECUTE P5('60 mins', '2000-01-01 UTC');
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P6('60 mins', '2000-01-01 UTC');
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp with time zone)
+(13 rows)
+
+:PREFIX EXECUTE P7('60 mins', '2000-01-01 UTC');
+                                              QUERY PLAN                                               
+-------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamptz
+   Order: metrics_timestamptz."time"
+   Chunks excluded during startup: 0
+   ->  Index Scan Backward using _hyper_6_160_chunk_metrics_timestamptz_time_idx on _hyper_6_160_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_161_chunk_metrics_timestamptz_time_idx on _hyper_6_161_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_162_chunk_metrics_timestamptz_time_idx on _hyper_6_162_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_163_chunk_metrics_timestamptz_time_idx on _hyper_6_163_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Scan Backward using _hyper_6_164_chunk_metrics_timestamptz_time_idx on _hyper_6_164_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+(13 rows)
+
+:PREFIX EXECUTE P8('60 mins', '2000-01-01 UTC');
+                                                QUERY PLAN                                                
+----------------------------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on metrics_timestamp
+   Order: metrics_timestamp."time"
+   Chunks excluded during startup: 0
+   ->  Index Only Scan Backward using _hyper_5_155_chunk_metrics_timestamp_time_idx on _hyper_5_155_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_156_chunk_metrics_timestamp_time_idx on _hyper_5_156_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_157_chunk_metrics_timestamp_time_idx on _hyper_5_157_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_158_chunk_metrics_timestamp_time_idx on _hyper_5_158_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+   ->  Index Only Scan Backward using _hyper_5_159_chunk_metrics_timestamp_time_idx on _hyper_5_159_chunk
+         Filter: (time_bucket($1, "time") > ($2)::timestamp without time zone)
+(13 rows)
+
+RESET plan_cache_mode;
+DEALLOCATE P1;
+DEALLOCATE P2;
+DEALLOCATE P3;
+DEALLOCATE P4;
+DEALLOCATE P5;
+DEALLOCATE P6;
+DEALLOCATE P7;
+DEALLOCATE P8;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 100 ORDER BY time;
                                                                           QUERY PLAN                                                                           
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------

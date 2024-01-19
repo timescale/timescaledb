@@ -791,7 +791,8 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
 					if (contain_mutable_functions((Node *) rinfo->clause) ||
-						ts_contain_param((Node *) rinfo->clause))
+						ts_contains_external_param((Node *) rinfo->clause) ||
+						ts_contains_join_param((Node *) rinfo->clause))
 						return true;
 				}
 				return false;
@@ -832,7 +833,8 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 						RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
 						if (contain_mutable_functions((Node *) rinfo->clause) ||
-							ts_contain_param((Node *) rinfo->clause))
+							ts_contains_external_param((Node *) rinfo->clause) ||
+							ts_contains_join_param((Node *) rinfo->clause))
 							return true;
 					}
 					return false;
@@ -1475,21 +1477,43 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 }
 
 static bool
-contain_param_exec_walker(Node *node, void *context)
+contains_join_param_walker(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
-	if (IsA(node, Param))
+	if (IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXEC)
 		return true;
 
-	return expression_tree_walker(node, contain_param_exec_walker, context);
+	return expression_tree_walker(node, contains_join_param_walker, context);
 }
 
 bool
-ts_contain_param(Node *node)
+ts_contains_join_param(Node *node)
 {
-	return contain_param_exec_walker(node, NULL);
+	return contains_join_param_walker(node, NULL);
+}
+
+static bool
+contains_external_param_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXTERN)
+		return true;
+
+	return expression_tree_walker(node, contains_external_param_walker, context);
+}
+
+bool
+ts_contains_external_param(Node *node)
+{
+	return contains_external_param_walker(node, NULL);
 }
 
 static List *
