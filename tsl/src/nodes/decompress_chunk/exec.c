@@ -365,9 +365,9 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 				/* Values array, with 64 element padding (actually we have less). */
 				batch_memory_context_bytes +=
 					(GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) * column->value_bytes;
-				/* Also nulls bitmap. */
+				/* Nulls bitmap, one uint64 per 64 rows. */
 				batch_memory_context_bytes +=
-					GLOBAL_MAX_ROWS_PER_COMPRESSION / (64 * sizeof(uint64));
+					((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * sizeof(uint64);
 				/* Arrow data structure. */
 				batch_memory_context_bytes += sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
 				/* Memory context header overhead for the above parts. */
