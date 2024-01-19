@@ -9,12 +9,14 @@
 #include <utils/pg_locale.h>
 #include <miscadmin.h>
 
-#ifdef PG16_GE
-include<varatt.h>
+#include "compat/compat.h"
+
+#if PG16_GE
+#include <varatt.h>
 #endif
 
-	void
-	vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
+void
+vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
 {
 	Assert(!arrow->dictionary);
 
