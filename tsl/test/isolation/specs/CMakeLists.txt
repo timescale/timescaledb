@@ -36,11 +36,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES freeze_chunk.spec compression_dml_iso.spec)
   endif()
   # These tests are using markers for the isolation tests (to avoid race
-  # conditions causing differing output), which were added after 12.7, 13.3, and
-  # 14.0.
-  if(PG_VERSION VERSION_GREATER "12.7"
-     OR PG_VERSION VERSION_GREATER "13.3"
-     OR PG_VERSION VERSION_GREATER_EQUAL "14.0")
+  # conditions causing differing output), which were added after 13.3 and in all
+  # later major versions.
+  if(PG_VERSION VERSION_GREATER "13.3")
     list(APPEND TEST_FILES deadlock_recompress_chunk.spec)
   endif()
 
