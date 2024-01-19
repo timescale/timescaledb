@@ -1,0 +1,2 @@
+Fixes: #6498 Suboptimal query plans when using time_bucket with query parameters
+Thanks: @jbx1 for reporting suboptimal query plans when using time_bucket with query parameters

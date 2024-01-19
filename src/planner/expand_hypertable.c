@@ -385,17 +385,51 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
  * Expressions with value on the left side will be switched around
  * when building the expression for RestrictInfo.
  *
- * Caller must ensure that only 2 argument time_bucket versions
- * are used.
+ * If the transformation cannot be applied, returns NULL.
  */
-static OpExpr *
-transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
+Expr *
+ts_transform_time_bucket_comparison(Expr *node)
 {
+	if (!IsA(node, OpExpr))
+	{
+		return NULL;
+	}
+
+	OpExpr *op = castNode(OpExpr, node);
+	if (list_length(op->args) != 2)
+	{
+		return NULL;
+	}
+
 	Expr *left = linitial(op->args);
 	Expr *right = lsecond(op->args);
 
-	FuncExpr *time_bucket = castNode(FuncExpr, (IsA(left, FuncExpr) ? left : right));
-	Expr *value = IsA(right, Const) ? right : left;
+	FuncExpr *time_bucket = NULL;
+	Expr *value = NULL;
+	if (IsA(left, FuncExpr) && IsA(right, Const))
+	{
+		time_bucket = castNode(FuncExpr, left);
+		value = right;
+	}
+	else if (IsA(right, FuncExpr))
+	{
+		time_bucket = castNode(FuncExpr, right);
+		value = left;
+	}
+	else
+	{
+		return NULL;
+	}
+
+	if (list_length(time_bucket->args) != 2)
+	{
+		return NULL;
+	}
+
+	if (!is_time_bucket_function((Expr *) time_bucket))
+	{
+		return NULL;
+	}
 
 	Const *width = linitial(time_bucket->args);
 	Oid opno = op->opno;
@@ -403,7 +437,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 	int strategy;
 
 	if (list_length(time_bucket->args) != 2 || !IsA(value, Const) || !IsA(width, Const))
-		return op;
+		return NULL;
 
 	/*
 	 * if time_bucket call is on wrong side we switch operator
@@ -413,7 +447,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		opno = get_commutator(op->opno);
 
 		if (!OidIsValid(opno))
-			return op;
+			return NULL;
 	}
 
 	tce = lookup_type_cache(exprType((Node *) time_bucket), TYPECACHE_BTREE_OPFAMILY);
@@ -434,7 +468,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			op->opfuncid = InvalidOid;
 		}
 
-		return op;
+		return &op->xpr;
 	}
 	else if (strategy == BTLessStrategyNumber || strategy == BTLessEqualStrategyNumber)
 	{
@@ -444,7 +478,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		int64 integralValue, integralWidth;
 
 		if (castNode(Const, value)->constisnull || width->constisnull)
-			return op;
+			return NULL;
 
 		switch (tce->type_id)
 		{
@@ -455,7 +489,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				integralWidth = const_datum_get_int(width);
 
 				if (integralValue >= ts_time_get_max(tce->type_id) - integralWidth)
-					return op;
+					return NULL;
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
@@ -485,18 +519,18 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
-					return op;
+					return NULL;
 
 				/* bail out if interval->time can't be exactly represented as a double */
 				if (interval->time >= 0x3FFFFFFFFFFFFFLL)
-					return op;
+					return NULL;
 
 				integralValue = const_datum_get_int(castNode(Const, value));
 				integralWidth =
 					interval->day + ceil((double) interval->time / (double) USECS_PER_DAY);
 
 				if (integralValue >= (TS_DATE_END - integralWidth))
-					return op;
+					return NULL;
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
@@ -528,7 +562,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
-					return op;
+					return NULL;
 
 				/*
 				 * If width interval has day component we merge it with time component
@@ -541,7 +575,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 					 * if our transformed restriction would overflow we skip adding it
 					 */
 					if (interval->time >= TS_TIMESTAMP_END - interval->day * USECS_PER_DAY)
-						return op;
+						return NULL;
 
 					integralWidth += interval->day * USECS_PER_DAY;
 				}
@@ -549,7 +583,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				integralValue = const_datum_get_int(castNode(Const, value));
 
 				if (integralValue >= (TS_TIMESTAMP_END - integralWidth))
-					return op;
+					return NULL;
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
@@ -573,8 +607,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			}
 
 			default:
-				return op;
-				break;
+				return NULL;
 		}
 
 		/*
@@ -587,7 +620,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				ts_get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, tce->type_id);
 
 			if (!OidIsValid(opno))
-				return op;
+				return NULL;
 		}
 
 		op = copyObject(op);
@@ -604,7 +637,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		op->args = list_make2(lsecond(time_bucket->args), subst);
 	}
 
-	return op;
+	return &op->xpr;
 }
 
 /* Since baserestrictinfo is not yet set by the planner, we have to derive
@@ -660,31 +693,34 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 			Expr *left = linitial(op->args);
 			Expr *right = lsecond(op->args);
 
-			/*
-			 * check for constraints with TIMESTAMPTZ OP INTERVAL calculations
-			 */
 			if ((IsA(left, Var) && is_timestamptz_op_interval(right)) ||
 				(IsA(right, Var) && is_timestamptz_op_interval(left)))
-				qual = (Expr *) constify_timestamptz_op_interval(ctx->root, op);
-
-			/*
-			 * check for time_bucket comparisons
-			 * time_bucket(Const, time_colum) > Const
-			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
 			{
-				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
 				/*
-				 * if we could transform the expression we add it to the list of
-				 * quals so it can be used as an index condition
+				 * check for constraints with TIMESTAMPTZ OP INTERVAL calculations
 				 */
-				if (qual != (Expr *) op)
-					additional_quals = lappend(additional_quals, qual);
+				qual = (Expr *) constify_timestamptz_op_interval(ctx->root, op);
+			}
+			else
+			{
+				/*
+				 * check for time_bucket comparisons
+				 * time_bucket(Const, time_colum) > Const
+				 */
+				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				if (transformed != NULL)
+				{
+					/*
+					 * if we could transform the expression we add it to the list of
+					 * quals so it can be used as an index condition
+					 */
+					additional_quals = lappend(additional_quals, transformed);
+
+					/*
+					 * Also use the transformed qual for chunk exclusion.
+					 */
+					qual = transformed;
+				}
 			}
 		}
 
@@ -743,31 +779,23 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
 			continue;
 
-		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		/*
+		 * check for time_bucket comparisons
+		 * time_bucket(Const, time_colum) > Const
+		 */
+		Expr *transformed = ts_transform_time_bucket_comparison(qual);
+		if (transformed != NULL)
 		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Expr *left = linitial(op->args);
-			Expr *right = lsecond(op->args);
+			/*
+			 * if we could transform the expression we add it to the list of
+			 * quals so it can be used as an index condition
+			 */
+			additional_quals = lappend(additional_quals, transformed);
 
 			/*
-			 * check for time_bucket comparisons
-			 * time_bucket(Const, time_colum) > Const
+			 * Also use the transformed qual for chunk exclusion.
 			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
-			{
-				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
-				/*
-				 * if we could transform the expression we add it to the list of
-				 * quals so it can be used as an index condition
-				 */
-				if (qual != (Expr *) op)
-					additional_quals = lappend(additional_quals, qual);
-			}
+			qual = transformed;
 		}
 
 		ctx->restrictions =

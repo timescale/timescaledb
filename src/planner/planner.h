@@ -42,7 +42,8 @@ typedef struct TimescaleDBPrivate
 
 extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte);
-extern TSDLLEXPORT bool ts_contain_param(Node *node);
+extern TSDLLEXPORT bool ts_contains_external_param(Node *node);
+extern TSDLLEXPORT bool ts_contains_join_param(Node *node);
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)
@@ -98,6 +99,7 @@ extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOpt
 extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
 extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
+extern Expr *ts_transform_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);
