@@ -9,8 +9,12 @@
 #include <utils/pg_locale.h>
 #include <miscadmin.h>
 
-void
-vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
+#ifdef PG16_GE
+include<varatt.h>
+#endif
+
+	void
+	vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
 {
 	Assert(!arrow->dictionary);
 

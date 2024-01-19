@@ -33,7 +33,7 @@
 #define GETCHAR(t) (t)
 #endif
 
-static pg_attribute_always_inline int
+static int
 MatchText(const char *t, int tlen, const char *p, int plen)
 {
 	/* Fast path for match-everything pattern */

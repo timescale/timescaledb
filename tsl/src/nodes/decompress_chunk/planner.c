@@ -599,7 +599,7 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return NULL;
 	}
 
-	if (var->varcollid != InvalidOid && !get_collation_isdeterministic(var->varcollid))
+	if (OidIsValid(var->varcollid) && !get_collation_isdeterministic(var->varcollid))
 	{
 		/*
 		 * Can't vectorize string equality with a nondeterministic collation.
