@@ -15,7 +15,11 @@ INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
 -- no change to settings
 SELECT * FROM _timescaledb_catalog.compression_settings;
 
+--Enable compression path info
+SET timescaledb.debug_compression_path_info= 'on';
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+RESET timescaledb.debug_compression_path_info;
+
 SELECT * FROM _timescaledb_catalog.compression_settings;
 
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');

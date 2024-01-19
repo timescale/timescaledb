@@ -143,6 +143,7 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 
 			switch (cmd->subtype)
 			{
+				case AT_AddConstraint:
 				case AT_SetOptions:
 				case AT_ResetOptions:
 				case AT_SetRelOptions:
@@ -1210,6 +1211,22 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				{
 					Hypertable *compressed_hypertable =
 						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+					List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+					foreach (lc, chunks)
+					{
+						Chunk *chunk = lfirst(lc);
+
+						if (OidIsValid(chunk->table_id))
+						{
+							ObjectAddress chunk_addr = (ObjectAddress){
+								.classId = RelationRelationId,
+								.objectId = chunk->table_id,
+							};
+
+							/* Drop the postgres table */
+							performDeletion(&chunk_addr, stmt->behavior, 0);
+						}
+					}
 					ts_hypertable_drop(compressed_hypertable, DROP_CASCADE);
 				}
 			}
@@ -1480,6 +1497,17 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 												  was_schema_op,
 												  &compressed_hypertable->fd.schema_name,
 												  &compressed_hypertable->fd.table_name);
+						List *chunks =
+							ts_chunk_get_by_hypertable_id(hypertable->fd.compressed_hypertable_id);
+						ListCell *cell;
+						foreach (cell, chunks)
+						{
+							Chunk *chunk = lfirst(cell);
+							process_grant_add_by_name(stmt,
+													  was_schema_op,
+													  &chunk->fd.schema_name,
+													  &chunk->fd.table_name);
+						}
 					}
 				}
 
@@ -2119,6 +2147,13 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
+		ListCell *lc;
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
+		}
 		process_altertable_change_owner(compressed_hypertable, cmd);
 	}
 }
@@ -3174,6 +3209,14 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
+
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		ListCell *lc;
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
+		}
 		process_altertable_set_tablespace_end(compressed_hypertable, cmd);
 	}
 }

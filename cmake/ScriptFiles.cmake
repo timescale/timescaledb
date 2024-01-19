@@ -31,7 +31,6 @@ set(SOURCE_FILES
     util_time.sql
     util_internal_table_ddl.sql
     chunk_constraint.sql
-    hypertable_constraint.sql
     partitioning.sql
     ddl_api.sql
     ddl_triggers.sql

@@ -44,7 +44,7 @@ explain (costs off) select * from t where low_card = 1 order by ts;
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_sequen_idx on compress_hyper_2_2_chunk
                Index Cond: (low_card = 1)
 (5 rows)
 
@@ -54,7 +54,7 @@ explain (costs off) select * from t where high_card = 1 order by ts;
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
-         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_sequen_idx on compress_hyper_2_2_chunk
                Index Cond: (high_card = 1)
 (5 rows)
 
@@ -64,7 +64,7 @@ explain (costs off) select * from t where low_card = 1 and high_card = 1 order b
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_sequence_num DESC
-         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_sequen_idx on compress_hyper_2_2_chunk
                Index Cond: ((low_card = 1) AND (high_card = 1))
 (5 rows)
 
@@ -77,7 +77,7 @@ explain (costs off) select * from t where high_card = 1 order by ts;
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
-         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_sequen_idx on compress_hyper_2_2_chunk
                Index Cond: (high_card = 1)
 (5 rows)
 
@@ -89,7 +89,7 @@ explain (costs off) select * from t where high_card < 10 order by ts;
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
-         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_sequen_idx on compress_hyper_2_2_chunk
                Index Cond: (high_card < 10)
 (5 rows)
 
@@ -111,7 +111,7 @@ explain (costs off) select * from t where high_card < 10 order by ts;
  Sort
    Sort Key: _hyper_1_1_chunk.ts
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_sequen_idx on compress_hyper_2_2_chunk
                Index Cond: (high_card < 10)
 (5 rows)
 
@@ -128,7 +128,7 @@ explain (costs off) select * from t where high_card < 10 order by ts;
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
    ->  Sort
          Sort Key: compress_hyper_2_2_chunk._ts_meta_min_1
-         ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_low_card_high on compress_hyper_2_2_chunk
+         ->  Index Scan using compress_hyper_2_2_chunk_low_card_high_card__ts_meta_sequen_idx on compress_hyper_2_2_chunk
                Index Cond: (high_card < 10)
 (5 rows)
 

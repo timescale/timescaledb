@@ -136,9 +136,10 @@ WHERE time < '2000-01-01'::timestamptz - '6h'::interval
 QUERY PLAN
  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
    Vectorized Filter: ("time" < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
-   ->  Seq Scan on compress_hyper_X_X_chunk
-         Filter: ((device_id = 1) AND (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval)))
-(4 rows)
+   ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk
+         Index Cond: (device_id = 1)
+         Filter: (_ts_meta_min_1 < ('Sat Jan 01 00:00:00 2000 PST'::timestamp with time zone - '@ 6 hours'::interval))
+(5 rows)
 
 -- month/year intervals are not constified
 :PREFIX

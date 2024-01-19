@@ -70,7 +70,7 @@ SELECT DISTINCT attname, attstattarget
 
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_2'))
+  WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 2)
     AND attnum > 0
   ORDER BY attname;
 
@@ -92,8 +92,8 @@ TRUNCATE test1;
 SELECT * FROM test1;
 /* nor compressed table */
 SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
-/* the compressed table should have not chunks */
-EXPLAIN (costs off) SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
+/* the compressed table should not have chunks */
+SELECT count(*) FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2;
 
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
@@ -174,7 +174,7 @@ SELECT DISTINCT attname, attstattarget
 
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_6'))
+  WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 6)
     AND attnum > 0
   ORDER BY attname;
 
