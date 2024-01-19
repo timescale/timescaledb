@@ -23,6 +23,7 @@ set(TEST_FILES
     compression_qualpushdown.sql
     compression_settings.sql
     compression_sorted_merge_distinct.sql
+    compression_sorted_merge_columns.sql
     decompress_index.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
@@ -60,7 +61,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_merge.sql
     compression_indexscan.sql
     compression_segment_meta.sql
-    compress_sorted_merge_filter.sql
+    compression_sorted_merge_filter.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
