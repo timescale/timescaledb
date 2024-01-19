@@ -34,7 +34,6 @@ SELECT pg_typeof(_timescaledb_internal.get_git_commit());
 SELECT pg_typeof(_timescaledb_internal.get_os_info());
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
-SELECT _timescaledb_internal.hypertable_constraint_add_table_fk_constraint(NULL,NULL,NULL,0);
 SELECT _timescaledb_internal.hypertable_invalidation_log_delete(0);
 SELECT _timescaledb_internal.hypertable_local_size(NULL,NULL);
 SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);

@@ -107,10 +107,10 @@ get_show_upper_mask(const char *paths, size_t paths_len)
 static bool
 set_debug_flag(const char *flag_string, size_t length, DebugOptimizerFlags *flags)
 {
-	char *end;
 	size_t flag_length;
 
-	if ((end = strchr(flag_string, '=')) != NULL)
+	char *end = strchr(flag_string, '=');
+	if (end != NULL)
 	{
 		Ensure(end - flag_string >= 0, "bad flag string format \"%s\"", flag_string);
 		flag_length = end - flag_string;

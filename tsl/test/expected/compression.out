@@ -633,15 +633,15 @@ END $$ LANGUAGE plpgsql;
 CALL reindex_compressed_hypertable('test_collation');
 --segment bys are pushed down correctly
 EXPLAIN (costs off) SELECT * FROM test_collation WHERE device_id < 'a';
-                        QUERY PLAN                        
-----------------------------------------------------------
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
  Append
    ->  Custom Scan (DecompressChunk) on _hyper_9_19_chunk
-         ->  Seq Scan on compress_hyper_10_29_chunk
-               Filter: (device_id < 'a'::text)
+         ->  Index Scan using compress_hyper_10_29_chunk_device_id_device_id_2__ts_meta_s_idx on compress_hyper_10_29_chunk
+               Index Cond: (device_id < 'a'::text)
    ->  Custom Scan (DecompressChunk) on _hyper_9_20_chunk
-         ->  Seq Scan on compress_hyper_10_30_chunk
-               Filter: (device_id < 'a'::text)
+         ->  Index Scan using compress_hyper_10_30_chunk_device_id_device_id_2__ts_meta_s_idx on compress_hyper_10_30_chunk
+               Index Cond: (device_id < 'a'::text)
    ->  Seq Scan on _hyper_9_21_chunk
          Filter: (device_id < 'a'::text)
    ->  Seq Scan on _hyper_9_22_chunk
@@ -1085,7 +1085,7 @@ WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
    constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
 -----------------------+---------------------------+-----------------------+--------------------+-----------------
- _timescaledb_internal | 42_9_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+ _timescaledb_internal | 42_8_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
 (1 row)
 
 -- create hypertable with 2 chunks
@@ -1282,12 +1282,6 @@ SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples 
         0 |         0
 (1 row)
 
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
-                                                       histogram_bounds                                                        
--------------------------------------------------------------------------------------------------------------------------------
- {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
-(1 row)
-
 SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
 FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
        , _timescaledb_catalog.chunk compch
@@ -1300,15 +1294,8 @@ SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples 
         0 |         0
 (1 row)
 
--- Now verify stats are updated on compressed chunk table when we analyze the hypertable.
-ANALYZE stattest;
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
-                                                       histogram_bounds                                                        
--------------------------------------------------------------------------------------------------------------------------------
- {0,250,500,750,1000,1250,1500,1750,2000,2250,2500,2750,3000,3250,3500,3750,4000,4250,4500,4750,5000,5250,5500,5750,6000,6250}
-(1 row)
-
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
+ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
  histogram_bounds 
 ------------------
@@ -1525,7 +1512,7 @@ SELECT relname, reltuples, relpages, relallvisible FROM pg_class
 ORDER BY relname;
           relname           | reltuples | relpages | relallvisible 
 ----------------------------+-----------+----------+---------------
- compress_hyper_30_60_chunk |         1 |        1 |             0
+ compress_hyper_30_60_chunk |        -1 |        0 |             0
 (1 row)
 
 --analyze on stattest2 should not overwrite
@@ -1845,7 +1832,7 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
    Workers Planned: 2
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
          Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
-         ->  Parallel Index Scan using compress_hyper_38_72_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_72_chunk
+         ->  Parallel Index Scan using compress_hyper_38_72_chunk_sensor_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_38_72_chunk
                Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
                Index Cond: (compress_hyper_38_72_chunk.sensor_id > 100)
 (8 rows)
@@ -1893,15 +1880,15 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
    Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
    Workers Planned: 3
    ->  Parallel Append
-         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
-               Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
-               Filter: (_hyper_37_71_chunk.sensor_id > 100)
-               ->  Parallel Index Scan using compress_hyper_38_72_chunk__compressed_hypertable_38_sensor_id_ on _timescaledb_internal.compress_hyper_38_72_chunk
-                     Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
-                     Index Cond: (compress_hyper_38_72_chunk.sensor_id > 100)
          ->  Parallel Index Scan using _hyper_37_71_chunk_f_sensor_data_time_sensor_id_idx on _timescaledb_internal._hyper_37_71_chunk
                Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
                Index Cond: (_hyper_37_71_chunk.sensor_id > 100)
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_71_chunk
+               Output: _hyper_37_71_chunk."time", _hyper_37_71_chunk.sensor_id, _hyper_37_71_chunk.cpu, _hyper_37_71_chunk.temperature
+               Filter: (_hyper_37_71_chunk.sensor_id > 100)
+               ->  Parallel Index Scan using compress_hyper_38_72_chunk_sensor_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_38_72_chunk
+                     Output: compress_hyper_38_72_chunk."time", compress_hyper_38_72_chunk.sensor_id, compress_hyper_38_72_chunk.cpu, compress_hyper_38_72_chunk.temperature, compress_hyper_38_72_chunk._ts_meta_count, compress_hyper_38_72_chunk._ts_meta_sequence_num, compress_hyper_38_72_chunk._ts_meta_min_1, compress_hyper_38_72_chunk._ts_meta_max_1
+                     Index Cond: (compress_hyper_38_72_chunk.sensor_id > 100)
 (13 rows)
 
 -- Test non-partial paths below append are not executed multiple times
@@ -2111,7 +2098,7 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                      ->  Sort
                            Output: compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk.number_val, compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1
                            Sort Key: compress_hyper_44_84_chunk._ts_meta_max_1 DESC
-                           ->  Index Scan using compress_hyper_44_84_chunk__compressed_hypertable_44_attr_id__t on _timescaledb_internal.compress_hyper_44_84_chunk
+                           ->  Index Scan using compress_hyper_44_84_chunk_attr_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_44_84_chunk
                                  Output: compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk.number_val, compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1
                                  Index Cond: (compress_hyper_44_84_chunk.attr_id = "*VALUES*".column1)
                                  Filter: ((compress_hyper_44_84_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_84_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
@@ -2122,7 +2109,7 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                      ->  Sort
                            Output: compress_hyper_44_83_chunk."timestamp", compress_hyper_44_83_chunk.attr_id, compress_hyper_44_83_chunk.number_val, compress_hyper_44_83_chunk._ts_meta_count, compress_hyper_44_83_chunk._ts_meta_sequence_num, compress_hyper_44_83_chunk._ts_meta_min_1, compress_hyper_44_83_chunk._ts_meta_max_1
                            Sort Key: compress_hyper_44_83_chunk._ts_meta_max_1 DESC
-                           ->  Index Scan using compress_hyper_44_83_chunk__compressed_hypertable_44_attr_id__t on _timescaledb_internal.compress_hyper_44_83_chunk
+                           ->  Index Scan using compress_hyper_44_83_chunk_attr_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_44_83_chunk
                                  Output: compress_hyper_44_83_chunk."timestamp", compress_hyper_44_83_chunk.attr_id, compress_hyper_44_83_chunk.number_val, compress_hyper_44_83_chunk._ts_meta_count, compress_hyper_44_83_chunk._ts_meta_sequence_num, compress_hyper_44_83_chunk._ts_meta_min_1, compress_hyper_44_83_chunk._ts_meta_max_1
                                  Index Cond: (compress_hyper_44_83_chunk.attr_id = "*VALUES*".column1)
                                  Filter: ((compress_hyper_44_83_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_83_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
@@ -2133,7 +2120,7 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                      ->  Sort
                            Output: compress_hyper_44_82_chunk."timestamp", compress_hyper_44_82_chunk.attr_id, compress_hyper_44_82_chunk.number_val, compress_hyper_44_82_chunk._ts_meta_count, compress_hyper_44_82_chunk._ts_meta_sequence_num, compress_hyper_44_82_chunk._ts_meta_min_1, compress_hyper_44_82_chunk._ts_meta_max_1
                            Sort Key: compress_hyper_44_82_chunk._ts_meta_max_1 DESC
-                           ->  Index Scan using compress_hyper_44_82_chunk__compressed_hypertable_44_attr_id__t on _timescaledb_internal.compress_hyper_44_82_chunk
+                           ->  Index Scan using compress_hyper_44_82_chunk_attr_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_44_82_chunk
                                  Output: compress_hyper_44_82_chunk."timestamp", compress_hyper_44_82_chunk.attr_id, compress_hyper_44_82_chunk.number_val, compress_hyper_44_82_chunk._ts_meta_count, compress_hyper_44_82_chunk._ts_meta_sequence_num, compress_hyper_44_82_chunk._ts_meta_min_1, compress_hyper_44_82_chunk._ts_meta_max_1
                                  Index Cond: (compress_hyper_44_82_chunk.attr_id = "*VALUES*".column1)
                                  Filter: ((compress_hyper_44_82_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_82_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))

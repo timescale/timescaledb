@@ -198,7 +198,7 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 
 	/*
 	 * clauses should always have the same length as appendplans because
-	 * thats the base for building the lists
+	 * that's the base for building the lists
 	 */
 	Assert(list_length(old_appendplans) == list_length(chunk_ri_clauses));
 	Assert(list_length(chunk_relids) == list_length(chunk_ri_clauses));

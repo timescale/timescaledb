@@ -396,7 +396,7 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 		Assert(flat == NULL);
 
 		/*
-		 * if we do not have scans as direct childs of this
+		 * if we do not have scans as direct children of this
 		 * node we disable startup and runtime exclusion
 		 * in this node
 		 */

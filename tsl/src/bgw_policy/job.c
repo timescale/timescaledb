@@ -51,8 +51,6 @@
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "errors.h"
-#include "job.h"
 #include "reorder.h"
 #include "utils.h"
 

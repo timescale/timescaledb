@@ -1,7 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_SUPERUSER
 -- github issue 5585
 create table test (
     time timestamptz not null,
@@ -33,8 +32,11 @@ select compress_chunk(show_chunks('test'));
 
 -- force an index scan
 set enable_seqscan = 'off';
--- disable jit to avoid test flakiness
+-- make some tweaks to avoid flakiness
+analyze test;
+analyze test_copy;
 set jit = off;
+set max_parallel_workers_per_gather = 0;
 explain (costs off) with query_params as (
 	select distinct a, b
 	from test_copy

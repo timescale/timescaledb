@@ -300,7 +300,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 {
 	/* make sure not too many compression algorithms   */
 	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS <= _MAX_NUM_COMPRESSION_ALGORITHMS,
-					 "Too many compression algorthims, make sure a decision on variable-length "
+					 "Too many compression algorithms, make sure a decision on variable-length "
 					 "version field has been made.");
 
 	/* existing indexes that MUST NEVER CHANGE */

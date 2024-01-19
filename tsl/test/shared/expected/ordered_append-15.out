@@ -416,15 +416,12 @@ QUERY PLAN
                  ->  Custom Scan (ChunkAppend) on metrics (actual rows=1 loops=1)
                        Order: metrics."time"
                        ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
-                             Index Cond: ("time" IS NOT NULL)
                              Heap Fetches: 1
                        ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
-                             Index Cond: ("time" IS NOT NULL)
                              Heap Fetches: 0
                        ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk (never executed)
-                             Index Cond: ("time" IS NOT NULL)
                              Heap Fetches: 0
-(15 rows)
+(12 rows)
 
 :PREFIX
 SELECT last(time, time)
@@ -1452,37 +1449,28 @@ QUERY PLAN
                        ->  Merge Append (actual rows=1 loops=1)
                              Sort Key: _hyper_X_X_chunk."time"
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 1
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 1
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (actual rows=1 loops=1)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 1
                        ->  Merge Append (never executed)
                              Sort Key: _hyper_X_X_chunk."time"
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 0
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 0
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 0
                        ->  Merge Append (never executed)
                              Sort Key: _hyper_X_X_chunk."time"
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 0
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 0
                              ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk (never executed)
-                                   Index Cond: ("time" IS NOT NULL)
                                    Heap Fetches: 0
-(39 rows)
+(30 rows)
 
 :PREFIX
 SELECT last(time, time)
@@ -2220,13 +2208,13 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
          Order: metrics_compressed."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (never executed)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-               ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (never executed)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                      Index Cond: (device_id = 1)
 (12 rows)
 
@@ -2246,13 +2234,13 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed (actual rows=1 loops=1)
                Order: metrics_compressed."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-                     ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                     ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (never executed)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                     ->  Index Scan using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (never executed)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
 (13 rows)
 
@@ -2293,21 +2281,12 @@ QUERY PLAN
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-(18 rows)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+(9 rows)
 
 -- time column must be primary sort order
 :PREFIX
@@ -2326,24 +2305,21 @@ QUERY PLAN
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 12
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=8 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 18
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 18
-(24 rows)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(21 rows)
 
 -- test equality constraint on ORDER BY prefix
 -- currently not optimized
@@ -2361,13 +2337,13 @@ QUERY PLAN
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
 (12 rows)
 
@@ -2379,30 +2355,20 @@ FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
 QUERY PLAN
- Custom Scan (ChunkAppend) on metrics_compressed (actual rows=27348 loops=1)
-   Order: metrics_compressed."time"
-   ->  Sort (actual rows=7196 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: quicksort 
+ Sort (actual rows=27348 loops=1)
+   Sort Key: _hyper_X_X_chunk."time"
+   Sort Method: quicksort 
+   ->  Append (actual rows=27348 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-                     Rows Removed by Filter: 12
-   ->  Sort (actual rows=10076 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: quicksort 
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=8 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-                     Rows Removed by Filter: 18
-   ->  Sort (actual rows=10076 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         Sort Method: quicksort 
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                     Filter: (device_id = ANY ('{1,2}'::integer[]))
-                     Rows Removed by Filter: 18
-(23 rows)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(13 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 :PREFIX
@@ -2648,19 +2614,16 @@ QUERY PLAN
                              Sort Key: _hyper_X_X_chunk."time"
                              Sort Method: top-N heapsort 
                              ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=17990 loops=1)
-                                   Vectorized Filter: ("time" IS NOT NULL)
                                    ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
                        ->  Sort (never executed)
                              Sort Key: _hyper_X_X_chunk."time"
                              ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                   Vectorized Filter: ("time" IS NOT NULL)
                                    ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                        ->  Sort (never executed)
                              Sort Key: _hyper_X_X_chunk."time"
                              ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                   Vectorized Filter: ("time" IS NOT NULL)
                                    ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-(22 rows)
+(19 rows)
 
 :PREFIX
 SELECT last(time, time)
@@ -2756,18 +2719,15 @@ QUERY PLAN
          ->  Result (actual rows=27348 loops=1)
                ->  Append (actual rows=27348 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 12
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=8 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 18
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 18
-(18 rows)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(15 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -2830,18 +2790,15 @@ QUERY PLAN
          ->  Result (actual rows=27348 loops=1)
                ->  Append (actual rows=27348 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=7196 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 12
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=8 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 18
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10076 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 18
-(18 rows)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(15 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -2922,17 +2879,17 @@ QUERY PLAN
    Order: metrics_compressed."time"
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                Index Cond: (device_id = 1)
                Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                Index Cond: (device_id = 1)
                Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_4_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                Index Cond: (device_id = 1)
                Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
 (17 rows)
@@ -3321,22 +3278,15 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
          Order: metrics_space_compressed."time" DESC
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = 1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+                     Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num
-                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-                           Filter: (device_id = 1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
+                     Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num
-                     ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-                           Filter: (device_id = 1)
-(19 rows)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
+                     Index Cond: (device_id = 1)
+(12 rows)
 
 -- test RECORD in targetlist
 :PREFIX
@@ -3354,22 +3304,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=1 loops=1)
                Order: metrics_space_compressed."time" DESC
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-                     ->  Sort (actual rows=1 loops=1)
-                           Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num
-                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-                                 Filter: (device_id = 1)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
+                           Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                     ->  Sort (never executed)
-                           Sort Key: compress_hyper_X_X_chunk._ts_meta_sequence_num
-                           ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-                                 Filter: (device_id = 1)
-(20 rows)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
+                           Index Cond: (device_id = 1)
+(13 rows)
 
 -- test sort column not in targetlist
 :PREFIX
@@ -3440,51 +3383,24 @@ QUERY PLAN
    ->  Merge Append (actual rows=1 loops=1)
          Sort Key: _hyper_X_X_chunk.device_id
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=18 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: compress_hyper_X_X_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-(48 rows)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+(21 rows)
 
 -- time column must be primary sort order
 :PREFIX
@@ -3503,42 +3419,39 @@ QUERY PLAN
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 8
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 12
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                      Sort Method: quicksort 
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 12
-(42 rows)
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(39 rows)
 
 -- test equality constraint on ORDER BY prefix
 -- currently not optimized
@@ -3556,13 +3469,13 @@ QUERY PLAN
    ->  Merge Append (actual rows=10 loops=1)
          Sort Key: _hyper_X_X_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=1 loops=1)
-               ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+               ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                      Index Cond: (device_id = 1)
 (12 rows)
 
@@ -3574,54 +3487,29 @@ FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time ASC;
 QUERY PLAN
- Custom Scan (ChunkAppend) on metrics_space_compressed (actual rows=27348 loops=1)
-   Order: metrics_space_compressed."time"
-   ->  Merge Append (actual rows=7196 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         ->  Sort (actual rows=3598 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-         ->  Sort (actual rows=3598 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 8
-   ->  Merge Append (actual rows=10076 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         ->  Sort (actual rows=5038 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-         ->  Sort (actual rows=5038 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 12
-   ->  Merge Append (actual rows=10076 loops=1)
-         Sort Key: _hyper_X_X_chunk."time"
-         ->  Sort (actual rows=5038 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-         ->  Sort (actual rows=5038 loops=1)
-               Sort Key: _hyper_X_X_chunk."time"
-               Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                           Filter: (device_id = ANY ('{1,2}'::integer[]))
-                           Rows Removed by Filter: 12
-(47 rows)
+ Sort (actual rows=27348 loops=1)
+   Sort Key: _hyper_X_X_chunk."time"
+   Sort Method: quicksort 
+   ->  Append (actual rows=27348 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                     Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(22 rows)
 
 -- queries without ORDER BY shouldnt use ordered append
 :PREFIX
@@ -4213,55 +4101,46 @@ QUERY PLAN
                                    Sort Key: _hyper_X_X_chunk."time"
                                    Sort Method: top-N heapsort 
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                              ->  Sort (actual rows=1 loops=1)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    Sort Method: top-N heapsort 
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=10794 loops=1)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=12 loops=1)
                              ->  Sort (actual rows=1 loops=1)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    Sort Method: top-N heapsort 
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                        ->  Merge Append (never executed)
                              Sort Key: _hyper_X_X_chunk."time"
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                        ->  Merge Append (never executed)
                              Sort Key: _hyper_X_X_chunk."time"
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
                              ->  Sort (never executed)
                                    Sort Key: _hyper_X_X_chunk."time"
                                    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (never executed)
-                                         Vectorized Filter: ("time" IS NOT NULL)
                                          ->  Seq Scan on compress_hyper_X_X_chunk (never executed)
-(60 rows)
+(51 rows)
 
 :PREFIX
 SELECT last(time, time)
@@ -4439,27 +4318,24 @@ QUERY PLAN
          ->  Result (actual rows=27348 loops=1)
                ->  Append (actual rows=27348 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 8
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 12
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 12
-(27 rows)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(24 rows)
 
 -- test query with ORDER BY date_trunc
 :PREFIX
@@ -4546,27 +4422,24 @@ QUERY PLAN
          ->  Result (actual rows=27348 loops=1)
                ->  Append (actual rows=27348 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=4 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 8
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 12
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=6 loops=1)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
-                                 Rows Removed by Filter: 12
-(27 rows)
+                           ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+(24 rows)
 
 -- test query with now() should result in ordered ChunkAppend
 :PREFIX
@@ -4721,17 +4594,17 @@ QUERY PLAN
    Order: metrics_space_compressed."time"
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=3598 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=4 loops=1)
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=4 loops=1)
                Index Cond: (device_id = 1)
                Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                Index Cond: (device_id = 1)
                Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=5038 loops=1)
          Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Index Scan Backward using compress_hyper_X_X_chunk__compressed_hypertable_6_device_id__t on compress_hyper_X_X_chunk (actual rows=6 loops=1)
+         ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=6 loops=1)
                Index Cond: (device_id = 1)
                Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
 (17 rows)

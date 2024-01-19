@@ -91,7 +91,7 @@ typedef enum HypertableCreateFlags
 
 extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id,
 													   uint32 flags, DimensionInfo *time_dim_info,
-													   DimensionInfo *space_dim_info,
+													   DimensionInfo *closed_dim_info,
 													   Name associated_schema_name,
 													   Name associated_table_prefix,
 													   ChunkSizingInfo *chunk_sizing_info);
@@ -145,8 +145,6 @@ extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
-extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(const Hypertable *ht,
-																	  List *constraint_list);
 extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 

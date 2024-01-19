@@ -323,7 +323,7 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
  * Create a Gapfill Path node.
  *
  * The gap fill node needs rows to be sorted by time ASC
- * so we insert sort pathes if the query order does not match
+ * so we insert sort paths if the query order does not match
  * that
  */
 static Path *

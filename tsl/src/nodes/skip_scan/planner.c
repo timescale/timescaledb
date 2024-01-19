@@ -181,7 +181,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 	/*
 	 * look for Unique Path so we dont have repeat some of
 	 * the calculations done by postgres and can also assume
-	 * that the DISTINCT clause is elegible for sort based
+	 * that the DISTINCT clause is eligible for sort based
 	 * DISTINCT
 	 */
 	foreach (lc, output_rel->pathlist)
@@ -205,8 +205,8 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 	}
 
 	/* no UniquePath found so this query might not be
-	 * elegible for sort-based DISTINCT and therefore
-	 * not elegible for SkipScan either */
+	 * eligible for sort-based DISTINCT and therefore
+	 * not eligible for SkipScan either */
 	if (!unique)
 		return;
 

@@ -736,7 +736,7 @@ zig_zag_encode(uint64 value)
 	/* since shift is underspecified, we use (value < 0 ? 0xFFFFFFFFFFFFFFFFull : 0)
 	 * which compiles to the correct asm, and is well defined
 	 */
-	return (value << 1) ^ (((int64) value) < 0 ? 0xFFFFFFFFFFFFFFFFull : 0);
+	return (value << 1) ^ (((int64) value) < 0 ? 0xFFFFFFFFFFFFFFFFULL : 0);
 }
 
 static pg_attribute_always_inline uint64

@@ -1,3 +1,136 @@
+-- check whether we can safely downgrade compression setup
+DO $$
+DECLARE
+  hypertable regclass;
+  ht_uncomp regclass;
+  chunk_relids oid[];
+  ht_id integer;
+BEGIN
+
+  FOR hypertable, ht_uncomp, ht_id IN
+    SELECT
+      format('%I.%I',ht.schema_name,ht.table_name)::regclass,
+      format('%I.%I',ht_uncomp.schema_name,ht_uncomp.table_name)::regclass,
+      ht.id
+    FROM _timescaledb_catalog.hypertable ht_uncomp
+    INNER JOIN _timescaledb_catalog.hypertable ht
+      ON ht.id = ht_uncomp.compressed_hypertable_id
+  LOOP
+
+    -- hypertables need to at least have 1 compressed chunk so we can restore the columns
+    IF NOT EXISTS(SELECT FROM _timescaledb_catalog.chunk WHERE hypertable_id = ht_id) THEN
+      RAISE USING
+        ERRCODE = 'feature_not_supported',
+        MESSAGE = 'Cannot downgrade compressed hypertables with no compressed chunks. Disable compression on the affected hypertable before downgrading.',
+        DETAIL = 'The following hypertable is affected: '|| ht_uncomp::text;
+    END IF;
+
+    chunk_relids := array(SELECT format('%I.%I',schema_name,table_name)::regclass FROM _timescaledb_catalog.chunk WHERE hypertable_id = ht_id);
+
+    -- any hypertable with distinct compression settings cannot be downgraded
+    IF EXISTS (
+			SELECT FROM (
+        SELECT DISTINCT segmentby, orderby, orderby_desc, orderby_nullsfirst
+        FROM _timescaledb_catalog.compression_settings
+        WHERE relid = hypertable OR relid = ANY(chunk_relids)
+      ) dist_settings HAVING count(*) > 1
+		) THEN
+      RAISE USING
+        ERRCODE = 'feature_not_supported',
+        MESSAGE = 'Cannot downgrade hypertables with distinct compression settings. Decompress the affected hypertable before downgrading.',
+        DETAIL = 'The following hypertable is affected: '|| ht_uncomp::text;
+    END IF;
+
+  END LOOP;
+END
+$$;
+
+CREATE FUNCTION _timescaledb_functions.tmp_resolve_indkeys(oid,int2[]) RETURNS text[] LANGUAGE SQL AS $$
+	SELECT array_agg(attname)
+	FROM (
+		SELECT attname
+		FROM (SELECT unnest($2) attnum) indkeys
+		JOIN LATERAL (
+			SELECT attname FROM pg_attribute att WHERE att.attnum=indkeys.attnum AND att.attrelid=$1
+		) r ON true
+  ) resolve;
+$$ SET search_path TO pg_catalog, pg_temp;
+
+DO $$
+DECLARE
+  chunk regclass;
+  hypertable regclass;
+  ht_id integer;
+  chunk_id integer;
+  _index regclass;
+  ht_index regclass;
+  chunk_index regclass;
+  index_name name;
+  chunk_index_name name;
+  _indkey text[];
+  column_name name;
+  column_type regtype;
+  cmd text;
+BEGIN
+  SET timescaledb.restoring TO ON;
+
+  FOR hypertable, ht_id IN
+    SELECT
+      format('%I.%I',ht.schema_name,ht.table_name)::regclass,
+      ht.id
+    FROM _timescaledb_catalog.hypertable ht_uncomp
+    INNER JOIN _timescaledb_catalog.hypertable ht
+      ON ht.id = ht_uncomp.compressed_hypertable_id
+  LOOP
+
+    -- get first chunk which we use as template for restoring columns and indexes
+    SELECT format('%I.%I',schema_name,table_name)::regclass INTO STRICT chunk FROM _timescaledb_catalog.chunk WHERE hypertable_id = ht_id ORDER by id LIMIT 1;
+
+    -- restore columns from the compressed hypertable
+    FOR column_name, column_type IN
+      SELECT attname, atttypid::regtype FROM pg_attribute WHERE attrelid = chunk AND attnum > 0
+    LOOP
+      cmd := format('ALTER TABLE %s ADD COLUMN %I %s', hypertable, column_name, column_type);
+      EXECUTE cmd;
+    END LOOP;
+
+    -- restore indexes on the compressed hypertable
+    FOR _index, _indkey IN
+      SELECT indexrelid::regclass, _timescaledb_functions.tmp_resolve_indkeys(indrelid, indkey) FROM pg_index WHERE indrelid = chunk
+    LOOP
+      SELECT relname INTO STRICT index_name FROM pg_class WHERE oid = _index;
+      cmd := pg_get_indexdef(_index);
+      cmd := replace(cmd, format(' INDEX %s ON ', index_name), ' INDEX ON ');
+      cmd := replace(cmd, chunk::text, hypertable::text);
+      EXECUTE cmd;
+
+      -- get indexrelid of index we just created on hypertable
+      SELECT indexrelid INTO STRICT ht_index FROM pg_index WHERE indrelid = hypertable AND _timescaledb_functions.tmp_resolve_indkeys(hypertable, indkey) = _indkey;
+      SELECT relname INTO STRICT index_name FROM pg_class WHERE oid = ht_index;
+
+      -- restore indexes in our catalog
+      FOR chunk, chunk_id IN
+        SELECT format('%I.%I',schema_name,table_name)::regclass, id FROM _timescaledb_catalog.chunk WHERE hypertable_id = ht_id
+      LOOP
+        SELECT indexrelid INTO STRICT chunk_index FROM pg_index WHERE indrelid = chunk AND _timescaledb_functions.tmp_resolve_indkeys(chunk, indkey) = _indkey;
+        SELECT relname INTO STRICT chunk_index_name FROM pg_class WHERE oid = chunk_index;
+        INSERT INTO _timescaledb_catalog.chunk_index (chunk_id, index_name, hypertable_id, hypertable_index_name)
+          VALUES (chunk_id, chunk_index_name, ht_id, index_name);
+      END LOOP;
+
+    END LOOP;
+
+    -- restore inheritance
+    cmd := format('ALTER TABLE %s INHERIT %s', chunk, hypertable);
+    EXECUTE cmd;
+
+  END LOOP;
+
+  SET timescaledb.restoring TO OFF;
+END $$;
+
+DROP FUNCTION _timescaledb_functions.tmp_resolve_indkeys;
+
 CREATE FUNCTION _timescaledb_functions.ping_data_node(node_name NAME, timeout INTERVAL = NULL) RETURNS BOOLEAN
 AS '@MODULE_PATHNAME@', 'ts_data_node_ping' LANGUAGE C VOLATILE;
 
@@ -622,4 +755,14 @@ ALTER TABLE _timescaledb_catalog.hypertable_data_node
     ADD CONSTRAINT hypertable_data_node_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id);
 ALTER TABLE _timescaledb_catalog.tablespace
     ADD CONSTRAINT tablespace_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+
+DROP FUNCTION IF EXISTS _timescaledb_debug.extension_state;
+DROP SCHEMA IF EXISTS _timescaledb_debug;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_constraint_add_table_fk_constraint;
+
+DROP FUNCTION _timescaledb_functions.constraint_clone;
+
+CREATE FUNCTION _timescaledb_functions.hypertable_constraint_add_table_fk_constraint(user_ht_constraint_name name,user_ht_schema_name name,user_ht_table_name name,compress_ht_id   integer) RETURNS void LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog,pg_temp;
+
 

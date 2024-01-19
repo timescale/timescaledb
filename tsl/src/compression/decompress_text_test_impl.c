@@ -183,6 +183,11 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 	int nn = 0;
 	for (DecompressResult r = iter->try_next(iter); !r.is_done; r = iter->try_next(iter))
 	{
+		if (nn >= n)
+		{
+			elog(ERROR, "the repeated recompression result doesn't match");
+		}
+
 		if (r.is_null != results[nn].is_null)
 		{
 			elog(ERROR, "the repeated decompression result doesn't match");
@@ -204,18 +209,13 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 
 			if (strncmp(VARDATA_ANY(old_value),
 						VARDATA_ANY(new_value),
-						VARSIZE_ANY_EXHDR(new_value)))
+						VARSIZE_ANY_EXHDR(new_value)) != 0)
 			{
 				elog(ERROR, "the repeated decompression result doesn't match");
 			}
 		}
 
 		nn++;
-
-		if (nn > n)
-		{
-			elog(ERROR, "the repeated recompression result doesn't match");
-		}
 	}
 
 	/*

@@ -47,7 +47,38 @@ set timescaledb.debug_require_vector_qual to 'only';
 select tag from vectorqual where metric2 > 0;
 
 
+-- Can't vectorize parameterized join clauses for now.
+set timescaledb.debug_require_vector_qual to 'forbid';
+set enable_hashjoin to off;
+set enable_mergejoin to off;
+with values(x) as materialized(select distinct metric2 from vectorqual)
+    select x, (select metric2 from vectorqual where metric2 = x) from values order by 1;
+reset enable_hashjoin;
+reset enable_mergejoin;
+
+-- Can't vectorize initplan parameters either.
+select count(*) from vectorqual where metric2
+    = (select metric2 from vectorqual order by 1 limit 1);
+
+-- Can vectorize clauses with query parameters.
+set timescaledb.debug_require_vector_qual to 'only';
+set plan_cache_mode to 'force_generic_plan';
+
+prepare p as select count(*) from vectorqual where metric3 = $1;
+execute p(33);
+deallocate p;
+
+-- Also try query parameter in combination with a stable function.
+create function stable_identity(x anyelement) returns anyelement as $$ select x $$ language sql stable;
+prepare p(int4) as select count(*) from vectorqual where metric3 = stable_identity($1);
+execute p(33);
+deallocate p;
+
+reset plan_cache_mode;
+
+
 -- Queries without aggregation.
+set timescaledb.debug_require_vector_qual to 'only';
 select * from vectorqual where ts > '2021-01-01 00:00:00' order by vectorqual;
 select * from vectorqual where metric4 >= 0 order by vectorqual;
 

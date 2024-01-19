@@ -52,6 +52,7 @@ class SQLVisitor(Visitor):
             )
 
     # CREATE TEMP | TEMPORARY TABLE ..
+    # CREATE TABLE IF NOT EXISTS ..
     def visit_CreateStmt(self, ancestors, node):  # pylint: disable=unused-argument
         if node.relation.relpersistence == "t":
             self.errors += 1
@@ -63,6 +64,45 @@ class SQLVisitor(Visitor):
             print(
                 f"ERROR: Attempting to CREATE TEMPORARY TABLE {schema}{node.relation.relname}"
             )
+        if node.if_not_exists:
+            self.errors += 1
+            print(
+                f"ERROR: Attempting to CREATE TABLE IF NOT EXISTS {node.relation.relname}"
+            )
+
+    # CREATE SCHEMA IF NOT EXISTS ..
+    def visit_CreateSchemaStmt(
+        self, ancestors, node
+    ):  # pylint: disable=unused-argument
+        if node.if_not_exists:
+            self.errors += 1
+            print(f"ERROR: Attempting to CREATE SCHEMA IF NOT EXISTS {node.schemaname}")
+
+    # CREATE MATERIALIZED VIEW IF NOT EXISTS ..
+    def visit_CreateTableAsStmt(
+        self, ancestors, node
+    ):  # pylint: disable=unused-argument
+        if node.if_not_exists:
+            self.errors += 1
+            print(
+                f"ERROR: Attempting to CREATE MATERIALIZED VIEW IF NOT EXISTS {node.into.rel.relname}"
+            )
+
+    # CREATE FOREIGN TABLE IF NOT EXISTS ..
+    def visit_CreateForeignTableStmt(
+        self, ancestors, node
+    ):  # pylint: disable=unused-argument
+        if node.base.if_not_exists:
+            self.errors += 1
+            print(
+                f"ERROR: Attempting to CREATE FOREIGN TABLE IF NOT EXISTS {node.base.relation.relname}"
+            )
+
+    # CREATE INDEX IF NOT EXISTS ..
+    def visit_IndexStmt(self, ancestors, node):  # pylint: disable=unused-argument
+        if node.if_not_exists:
+            self.errors += 1
+            print(f"ERROR: Attempting to CREATE INDEX IF NOT EXISTS {node.idxname}")
 
     # CREATE FUNCTION / PROCEDURE _timescaledb_internal...
     def visit_CreateFunctionStmt(

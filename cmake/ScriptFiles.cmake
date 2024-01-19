@@ -31,7 +31,6 @@ set(SOURCE_FILES
     util_time.sql
     util_internal_table_ddl.sql
     chunk_constraint.sql
-    hypertable_constraint.sql
     partitioning.sql
     ddl_api.sql
     ddl_triggers.sql
@@ -58,6 +57,10 @@ set(SOURCE_FILES
     osm_api.sql)
 
 if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND SOURCE_FILES debug_build_utils.sql)
+endif()
+
+if(ENABLE_DEBUG_UTILS)
   list(APPEND SOURCE_FILES debug_utils.sql)
 endif()
 

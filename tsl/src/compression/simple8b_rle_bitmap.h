@@ -161,7 +161,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			current_prefix_sum += __builtin_popcountll(block_data);
 #else
 			/*
-			 * Unfortunatly, we have to have this fallback for Windows.
+			 * Unfortunately, we have to have this fallback for Windows.
 			 */
 			for (uint16 i = 0; i < 64; i++)
 			{

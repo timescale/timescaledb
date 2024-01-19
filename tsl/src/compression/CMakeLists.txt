@@ -2,6 +2,7 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/api.c
     ${CMAKE_CURRENT_SOURCE_DIR}/array.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compression.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/compression_storage.c
     ${CMAKE_CURRENT_SOURCE_DIR}/compression_test.c
     ${CMAKE_CURRENT_SOURCE_DIR}/decompress_text_test_impl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/create.c

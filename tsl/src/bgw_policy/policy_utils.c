@@ -14,6 +14,7 @@
 #include "jsonb_utils.h"
 #include "policy_utils.h"
 #include "time_utils.h"
+#include "policies_v2.h"
 
 /* Helper function to compare jsonb label value in the config
  * with passed in value.
@@ -30,17 +31,32 @@
  */
 bool
 policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_label,
-											Oid partitioning_type, Oid lag_type, Datum lag_datum)
+											Oid partitioning_type, Oid lag_type, Datum lag_datum,
+											bool isnull)
 {
+	/*
+	 * start_offset and end_offset for CAgg policies are allowed to have NULL values
+	 * In that case, config_value will be NULL but this is not an error
+	 */
+
+	bool null_ok = (strcmp(json_label, POL_REFRESH_CONF_KEY_END_OFFSET) == 0 ||
+					strcmp(json_label, POL_REFRESH_CONF_KEY_START_OFFSET) == 0);
+
 	if (IS_INTEGER_TYPE(partitioning_type) && lag_type != INTERVALOID)
 	{
 		bool found;
 		int64 config_value = ts_jsonb_get_int64_field(config, json_label, &found);
 
-		if (!found)
+		if (!found && !null_ok)
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("could not find %s in config for existing job", json_label)));
+
+		if (!found && isnull)
+			return true;
+
+		if ((!found && !isnull) || (found && isnull))
+			return false;
 
 		switch (lag_type)
 		{
@@ -59,10 +75,16 @@ policy_config_check_hypertable_lag_equality(Jsonb *config, const char *json_labe
 		if (lag_type != INTERVALOID)
 			return false;
 		Interval *config_value = ts_jsonb_get_interval_field(config, json_label);
-		if (config_value == NULL)
+		if (config_value == NULL && !null_ok)
 			ereport(ERROR,
 					(errcode(ERRCODE_INTERNAL_ERROR),
 					 errmsg("could not find %s in config for job", json_label)));
+
+		if (config_value == NULL && isnull)
+			return true;
+
+		if ((config_value == NULL && !isnull) || (config_value != NULL && isnull))
+			return false;
 
 		return DatumGetBool(
 			DirectFunctionCall2(interval_eq, IntervalPGetDatum(config_value), lag_datum));

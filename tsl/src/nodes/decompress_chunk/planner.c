@@ -373,15 +373,24 @@ is_not_runtime_constant_walker(Node *node, void *context)
 	{
 		case T_Var:
 		case T_PlaceHolderVar:
-		case T_Param:
 			/*
-			 * We might want to support these nodes to have vectorizable
-			 * join clauses (T_Var), join clauses referencing a variable that is
-			 * above outer join (T_PlaceHolderVar) or initplan parameters and
-			 * prepared statement parameters (T_Param). We don't support them at
-			 * the moment.
+			 * We might want to support these nodes to have vectorizable join
+			 * clauses (T_Var) or join clauses referencing a variable that is
+			 * above outer join (T_PlaceHolderVar). We don't support them at the
+			 * moment.
 			 */
 			return true;
+		case T_Param:
+			/*
+			 * We support external query parameters (e.g. from parameterized
+			 * prepared statements), because they are constant for the duration
+			 * of the query.
+			 *
+			 * Join and initplan parameters are passed as PARAM_EXEC and require
+			 * support in the Rescan functions of the custom scan node. We don't
+			 * support them at the moment.
+			 */
+			return castNode(Param, node)->paramkind != PARAM_EXTERN;
 		default:
 			if (check_functions_in_node(node,
 										contains_volatile_functions_checker,
@@ -770,7 +779,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				   &chunk_attrs_needed);
 
 	/*
-	 * Determine which compressed colum goes to which output column.
+	 * Determine which compressed column goes to which output column.
 	 */
 	build_decompression_map(root, dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
 
@@ -829,7 +838,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				}
 
 				Ensure(IsA(em->em_expr, Var),
-					   "non-Var pathkey not expected for compressed batch sorted mege");
+					   "non-Var pathkey not expected for compressed batch sorted merge");
 
 				/*
 				 * We found a Var equivalence member that belongs to the

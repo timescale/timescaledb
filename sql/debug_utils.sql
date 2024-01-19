@@ -2,14 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
--- This file contains utility functions that are only used in debug
--- builds for debugging and testing.
+-- This file contains utility functions and views that are used for
+-- debugging in release builds. These are all placed in the schema
+-- _timescaledb_debug.
 
-CREATE OR REPLACE FUNCTION debug_waitpoint_enable(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-AS '@MODULE_PATHNAME@', 'ts_debug_point_enable';
-
-CREATE OR REPLACE FUNCTION debug_waitpoint_release(TEXT) RETURNS VOID LANGUAGE C VOLATILE STRICT
-AS '@MODULE_PATHNAME@', 'ts_debug_point_release';
-
-CREATE OR REPLACE FUNCTION debug_waitpoint_id(TEXT) RETURNS BIGINT LANGUAGE C VOLATILE STRICT
-AS '@MODULE_PATHNAME@', 'ts_debug_point_id';
+CREATE OR REPLACE FUNCTION _timescaledb_debug.extension_state() RETURNS TEXT
+AS '@MODULE_PATHNAME@', 'ts_extension_get_state' LANGUAGE C;

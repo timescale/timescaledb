@@ -10,7 +10,6 @@
 #include <access/xact.h>
 #include <catalog/index.h>
 #include <catalog/indexing.h>
-#include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_constraint.h>
@@ -41,27 +40,16 @@
 #include "ts_catalog/continuous_agg.h"
 #include "compression_with_clause.h"
 #include "compression.h"
+#include "compression/compression_storage.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/array_utils.h"
 #include "custom_type_cache.h"
 #include "trigger.h"
 #include "utils.h"
 #include "guc.h"
 
+static void validate_hypertable_for_compression(Hypertable *ht);
 static List *build_columndefs(CompressionSettings *settings, Oid src_relid);
 static ColumnDef *build_columndef_singlecolumn(const char *colname, Oid typid);
-
-#define PRINT_COMPRESSION_TABLE_NAME(buf, prefix, hypertable_id)                                   \
-	do                                                                                             \
-	{                                                                                              \
-		int ret = snprintf(buf, NAMEDATALEN, prefix, hypertable_id);                               \
-		if (ret < 0 || ret > NAMEDATALEN)                                                          \
-		{                                                                                          \
-			ereport(ERROR,                                                                         \
-					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
-					 errmsg("bad compression hypertable internal name")));                         \
-		}                                                                                          \
-	} while (0);
 
 static char *
 compression_column_segment_metadata_name(int16 column_index, const char *type)
@@ -143,6 +131,15 @@ check_orderby(Oid relid, List *orderby_cols, ArrayType *segmentby)
 					 errmsg("column \"%s\" does not exist", NameStr(col->colname)),
 					 errhint("The timescaledb.compress_orderby option must reference a valid "
 							 "column.")));
+
+		Oid col_type = get_atttype(relid, col_attno);
+		TypeCacheEntry *type = lookup_type_cache(col_type, TYPECACHE_LT_OPR);
+
+		if (!OidIsValid(type->lt_opr))
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_FUNCTION),
+					 errmsg("invalid ordering column type %s", format_type_be(col_type)),
+					 errdetail("Could not identify a less-than operator for the type.")));
 
 		const char *col_attname = get_attname(relid, col_attno, false);
 
@@ -279,253 +276,14 @@ build_columndef_singlecolumn(const char *colname, Oid typid)
 {
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 
+	if (strncmp(colname,
+				COMPRESSION_COLUMN_METADATA_PREFIX,
+				strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+		elog(ERROR,
+			 "cannot compress tables with reserved column prefix '%s'",
+			 COMPRESSION_COLUMN_METADATA_PREFIX);
+
 	return makeColumnDef(colname, compresseddata_oid, -1 /*typmod*/, 0 /*collation*/);
-}
-
-/* modify storage attributes for toast table columns attached to the
- * compression table
- */
-static void
-modify_compressed_toast_table_storage(CompressionSettings *settings, List *coldefs,
-									  Oid compress_relid)
-{
-	ListCell *lc;
-	List *cmds = NIL;
-	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
-
-	foreach (lc, coldefs)
-	{
-		ColumnDef *cd = lfirst_node(ColumnDef, lc);
-		AttrNumber attno = get_attnum(compress_relid, cd->colname);
-		if (attno != InvalidAttrNumber && get_atttype(compress_relid, attno) == compresseddata_oid)
-		{
-			/*
-			 * All columns that pass the datatype check are columns
-			 * that are also present in the uncompressed hypertable.
-			 * Metadata columns are missing from the uncompressed
-			 * hypertable but they do not have compresseddata datatype
-			 * and therefore would be skipped.
-			 */
-			attno = get_attnum(settings->fd.relid, cd->colname);
-			Assert(attno != InvalidAttrNumber);
-			Oid typid = get_atttype(settings->fd.relid, attno);
-			CompressionStorage stor =
-				compression_get_toast_storage(compression_get_default_algorithm(typid));
-			if (stor != TOAST_STORAGE_EXTERNAL)
-			/* external is default storage for toast columns */
-			{
-				AlterTableCmd *cmd = makeNode(AlterTableCmd);
-				cmd->subtype = AT_SetStorage;
-				cmd->name = pstrdup(cd->colname);
-				Assert(stor == TOAST_STORAGE_EXTENDED);
-				cmd->def = (Node *) makeString("extended");
-				cmds = lappend(cmds, cmd);
-			}
-		}
-	}
-
-	if (cmds != NIL)
-	{
-		ts_alter_table_with_event_trigger(compress_relid, NULL, cmds, false);
-	}
-}
-
-static void
-create_compressed_table_indexes(Oid compresstable_relid, CompressionSettings *settings)
-{
-	Cache *hcache;
-	Hypertable *ht =
-		ts_hypertable_cache_get_cache_and_entry(compresstable_relid, CACHE_FLAG_NONE, &hcache);
-	IndexStmt stmt = {
-		.type = T_IndexStmt,
-		.accessMethod = DEFAULT_INDEX_TYPE,
-		.idxname = NULL,
-		.relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), 0),
-		.tableSpace = get_tablespace_name(get_rel_tablespace(ht->main_table_relid)),
-	};
-	IndexElem sequence_num_elem = {
-		.type = T_IndexElem,
-		.name = COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-	};
-	NameData index_name;
-	ObjectAddress index_addr;
-	HeapTuple index_tuple;
-	List *indexcols = NIL;
-
-	StringInfo buf = makeStringInfo();
-
-	if (settings->fd.segmentby)
-	{
-		Datum datum;
-		bool isnull;
-		ArrayIterator it = array_create_iterator(settings->fd.segmentby, 0, NULL);
-		while (array_iterate(it, &datum, &isnull))
-		{
-			IndexElem *segment_elem = makeNode(IndexElem);
-			segment_elem->name = TextDatumGetCString(datum);
-			appendStringInfoString(buf, segment_elem->name);
-			appendStringInfoString(buf, ", ");
-			indexcols = lappend(indexcols, segment_elem);
-		}
-	}
-
-	if (list_length(indexcols) == 0)
-	{
-		ts_cache_release(hcache);
-		return;
-	}
-
-	appendStringInfoString(buf, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-	indexcols = lappend(indexcols, &sequence_num_elem);
-
-	stmt.indexParams = indexcols;
-	index_addr = DefineIndexCompat(ht->main_table_relid,
-								   &stmt,
-								   InvalidOid, /* IndexRelationId */
-								   InvalidOid, /* parentIndexId */
-								   InvalidOid, /* parentConstraintId */
-								   -1,		   /* total_parts */
-								   false,	   /* is_alter_table */
-								   false,	   /* check_rights */
-								   false,	   /* check_not_in_use */
-								   false,	   /* skip_build */
-								   false);	   /* quiet */
-	index_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(index_addr.objectId));
-
-	if (!HeapTupleIsValid(index_tuple))
-		elog(ERROR, "cache lookup failed for index relid %u", index_addr.objectId);
-	index_name = ((Form_pg_class) GETSTRUCT(index_tuple))->relname;
-
-	elog(DEBUG1,
-		 "adding index %s ON %s.%s USING BTREE(%s)",
-		 NameStr(index_name),
-		 NameStr(ht->fd.schema_name),
-		 NameStr(ht->fd.table_name),
-		 buf->data);
-
-	ReleaseSysCache(index_tuple);
-
-	ts_cache_release(hcache);
-}
-
-static void
-set_statistics_on_compressed_table(Oid compressed_table_id)
-{
-	Relation table_rel = table_open(compressed_table_id, ShareUpdateExclusiveLock);
-	Relation attrelation = table_open(AttributeRelationId, RowExclusiveLock);
-	TupleDesc table_desc = RelationGetDescr(table_rel);
-	Oid compressed_data_type = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
-	for (int i = 0; i < table_desc->natts; i++)
-	{
-		Form_pg_attribute attrtuple;
-		HeapTuple tuple;
-		Form_pg_attribute col_attr = TupleDescAttr(table_desc, i);
-
-		/* skip system columns */
-		if (col_attr->attnum <= 0)
-			continue;
-
-		tuple = SearchSysCacheCopyAttName(compressed_table_id, NameStr(col_attr->attname));
-
-		if (!HeapTupleIsValid(tuple))
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_COLUMN),
-					 errmsg("column \"%s\" of compressed table \"%s\" does not exist",
-							NameStr(col_attr->attname),
-							RelationGetRelationName(table_rel))));
-
-		attrtuple = (Form_pg_attribute) GETSTRUCT(tuple);
-
-		/* the planner should never look at compressed column statistics because
-		 * it will not understand them. Statistics on the other columns,
-		 * segmentbys and metadata, are very important, so we increase their
-		 * target.
-		 */
-		if (col_attr->atttypid == compressed_data_type)
-			attrtuple->attstattarget = 0;
-		else
-			attrtuple->attstattarget = 1000;
-
-		CatalogTupleUpdate(attrelation, &tuple->t_self, tuple);
-
-		InvokeObjectPostAlterHook(RelationRelationId, compressed_table_id, attrtuple->attnum);
-		heap_freetuple(tuple);
-	}
-
-	table_close(attrelation, NoLock);
-	table_close(table_rel, NoLock);
-}
-
-static void
-set_toast_tuple_target_on_compressed(Oid compressed_table_id)
-{
-	DefElem def_elem = {
-		.type = T_DefElem,
-		.defname = "toast_tuple_target",
-		.arg = (Node *) makeInteger(128),
-		.defaction = DEFELEM_SET,
-		.location = -1,
-	};
-	AlterTableCmd cmd = {
-		.type = T_AlterTableCmd,
-		.subtype = AT_SetRelOptions,
-		.def = (Node *) list_make1(&def_elem),
-	};
-	ts_alter_table_with_event_trigger(compressed_table_id, NULL, list_make1(&cmd), true);
-}
-
-static int32
-create_compression_table(Oid owner, CompressionSettings *settings, List *coldefs,
-						 Oid tablespace_oid)
-{
-	ObjectAddress tbladdress;
-	char relnamebuf[NAMEDATALEN];
-	CatalogSecurityContext sec_ctx;
-	Datum toast_options;
-	static char *validnsps[] = HEAP_RELOPT_NAMESPACES;
-	Oid compress_relid;
-
-	CreateStmt *create;
-	RangeVar *compress_rel;
-	int32 compress_hypertable_id;
-
-	create = makeNode(CreateStmt);
-	create->tableElts = coldefs;
-	create->inhRelations = NIL;
-	create->ofTypename = NULL;
-	create->constraints = NIL;
-	create->options = NULL;
-	create->oncommit = ONCOMMIT_NOOP;
-	create->tablespacename = get_tablespace_name(tablespace_oid);
-	create->if_not_exists = false;
-
-	/* Invalid tablespace_oid <=> NULL tablespace name */
-	Assert(!OidIsValid(tablespace_oid) == (create->tablespacename == NULL));
-
-	/* create the compression table */
-	/* NewRelationCreateToastTable calls CommandCounterIncrement */
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	compress_hypertable_id = ts_catalog_table_next_seq_id(ts_catalog_get(), HYPERTABLE);
-	PRINT_COMPRESSION_TABLE_NAME(relnamebuf, "_compressed_hypertable_%d", compress_hypertable_id);
-	compress_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
-
-	create->relation = compress_rel;
-	tbladdress = DefineRelation(create, RELKIND_RELATION, owner, NULL, NULL);
-	CommandCounterIncrement();
-	compress_relid = tbladdress.objectId;
-	toast_options =
-		transformRelOptions((Datum) 0, create->options, "toast", validnsps, true, false);
-	(void) heap_reloptions(RELKIND_TOASTVALUE, toast_options, true);
-	NewRelationCreateToastTable(compress_relid, toast_options);
-	ts_catalog_restore_user(&sec_ctx);
-	modify_compressed_toast_table_storage(settings, coldefs, compress_relid);
-	ts_hypertable_create_compressed(compress_relid, compress_hypertable_id);
-
-	set_statistics_on_compressed_table(compress_relid);
-	set_toast_tuple_target_on_compressed(compress_relid);
-
-	create_compressed_table_indexes(compress_relid, settings);
-	return compress_hypertable_id;
 }
 
 /*
@@ -544,7 +302,6 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	Chunk *compress_chunk;
 	int namelen;
 	Oid tablespace_oid;
-	const char *tablespace;
 
 	Assert(compress_ht->space->num_dimensions == 0);
 
@@ -602,12 +359,16 @@ create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid table_id)
 	 * for now.
 	 */
 	tablespace_oid = get_rel_tablespace(src_chunk->table_id);
-	tablespace = get_tablespace_name(tablespace_oid);
 
 	if (OidIsValid(table_id))
 		compress_chunk->table_id = table_id;
 	else
-		compress_chunk->table_id = ts_chunk_create_table(compress_chunk, compress_ht, tablespace);
+	{
+		CompressionSettings *settings = ts_compression_settings_get(src_chunk->hypertable_relid);
+		List *column_defs = build_columndefs(settings, src_chunk->table_id);
+		compress_chunk->table_id =
+			compression_chunk_create(src_chunk, compress_chunk, column_defs, tablespace_oid);
+	}
 
 	if (!OidIsValid(compress_chunk->table_id))
 		elog(ERROR, "could not create compressed chunk table");
@@ -675,13 +436,14 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
  * This is limited to foreign key constraints now
  */
 static List *
-validate_existing_constraints(Hypertable *ht, CompressionSettings *settings, List **indexes)
+validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 {
 	Relation pg_constr;
 	SysScanDesc scan;
 	ScanKeyData scankey;
 	HeapTuple tuple;
 	List *conlist = NIL;
+
 	ArrayType *arr;
 
 	pg_constr = table_open(ConstraintRelationId, AccessShareLock);
@@ -696,15 +458,6 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings, Lis
 	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
-
-		/* Save away the supporting index, if any, that we check so that we
-		 * can ignore it in the index checking and not get duplicate messages.
-		 *
-		 * We are saving all checked indexes here even though only the unique
-		 * index is a problem at this point. It potentially avoids a second
-		 * check of an index that we have already checked. */
-		if (OidIsValid(form->conindid))
-			*indexes = lappend_oid(*indexes, form->conindid);
 
 		/*
 		 * We check primary, unique, and exclusion constraints.  Move foreign
@@ -763,7 +516,7 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings, Lis
 										   NameStr(form->conname))));
 				}
 				/* is colno a segment-by or order_by column */
-				else if (!ts_array_is_member(settings->fd.segmentby, attname) &&
+				else if (!form->conindid && !ts_array_is_member(settings->fd.segmentby, attname) &&
 						 !ts_array_is_member(settings->fd.orderby, attname))
 					ereport(WARNING,
 							(errmsg("column \"%s\" should be used for segmenting or ordering",
@@ -781,6 +534,7 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings, Lis
 
 	systable_endscan(scan);
 	table_close(pg_constr, AccessShareLock);
+
 	return conlist;
 }
 
@@ -792,7 +546,7 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings, Lis
  * by the constraint checking above.
  */
 static void
-validate_existing_indexes(Hypertable *ht, CompressionSettings *settings, List *ignore)
+validate_existing_indexes(Hypertable *ht, CompressionSettings *settings)
 {
 	Relation pg_index;
 	HeapTuple htup;
@@ -816,9 +570,7 @@ validate_existing_indexes(Hypertable *ht, CompressionSettings *settings, List *i
 		 * exclusion indexes, and any indexes checked by the constraint
 		 * checking. We can also skip checks below if the index is not a
 		 * unique index. */
-		if (!index->indislive || !index->indisvalid || index->indisexclusion ||
-			index->indisprimary || !index->indisunique ||
-			list_member_oid(ignore, index->indexrelid))
+		if (!index->indislive || !index->indisvalid || index->indisexclusion || !index->indisunique)
 			continue;
 
 		/* Now we check that all columns of the unique index are part of the
@@ -955,40 +707,36 @@ disable_compression(Hypertable *ht, WithClauseResult *with_clause_options)
 
 /* Add column to internal compression table */
 static void
-add_column_to_compression_table(Hypertable *compress_ht, CompressionSettings *settings,
-								ColumnDef *coldef)
+add_column_to_compression_table(Oid relid, CompressionSettings *settings, ColumnDef *coldef)
 {
-	Oid compress_relid = compress_ht->main_table_relid;
 	AlterTableCmd *addcol_cmd;
 
 	/* create altertable stmt to add column to the compressed hypertable */
-	Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(compress_ht));
+	// Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(compress_ht));
 	addcol_cmd = makeNode(AlterTableCmd);
 	addcol_cmd->subtype = AT_AddColumn;
 	addcol_cmd->def = (Node *) coldef;
 	addcol_cmd->missing_ok = false;
 
 	/* alter the table and add column */
-	ts_alter_table_with_event_trigger(compress_relid, NULL, list_make1(addcol_cmd), true);
-	modify_compressed_toast_table_storage(settings, list_make1(coldef), compress_relid);
+	ts_alter_table_with_event_trigger(relid, NULL, list_make1(addcol_cmd), true);
+	modify_compressed_toast_table_storage(settings, list_make1(coldef), relid);
 }
 
 /* Drop column from internal compression table */
 static void
-drop_column_from_compression_table(Hypertable *compress_ht, char *name)
+drop_column_from_compression_table(Oid relid, char *name)
 {
-	Oid compress_relid = compress_ht->main_table_relid;
 	AlterTableCmd *cmd;
 
 	/* create altertable stmt to drop column from the compressed hypertable */
-	Assert(TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(compress_ht));
 	cmd = makeNode(AlterTableCmd);
 	cmd->subtype = AT_DropColumn;
 	cmd->name = name;
 	cmd->missing_ok = true;
 
 	/* alter the table and drop column */
-	ts_alter_table_with_event_trigger(compress_relid, NULL, list_make1(cmd), true);
+	ts_alter_table_with_event_trigger(relid, NULL, list_make1(cmd), true);
 }
 
 static bool
@@ -1036,22 +784,11 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	Oid ownerid;
 	List *segmentby_cols;
 	List *orderby_cols;
-	List *constraint_list = NIL;
 	CompressionSettings *settings;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot compress internal compression hypertable")));
-	}
-	/*check row security settings for the table */
-	if (ts_has_row_security(ht->main_table_relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("compression cannot be used on table with row security")));
+	validate_hypertable_for_compression(ht);
 
 	/* Lock the uncompressed ht in exclusive mode and keep till end of txn */
 	LockRelationOid(ht->main_table_relid, AccessExclusiveLock);
@@ -1087,8 +824,6 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 	check_segmentby(ht->main_table_relid, segmentby_cols);
 	check_orderby(ht->main_table_relid, orderby_cols, settings->fd.segmentby);
 
-	List *column_defs = build_columndefs(settings, ht->main_table_relid);
-
 	/* take explicit locks on catalog tables and keep them till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), HYPERTABLE), RowExclusiveLock);
 
@@ -1100,13 +835,11 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 
 	/* Check if we can create a compressed hypertable with existing
 	 * constraints and indexes. */
-	List *indexes = NIL;
-	constraint_list = validate_existing_constraints(ht, settings, &indexes);
-	validate_existing_indexes(ht, settings, indexes);
-	list_free(indexes);
+	validate_existing_constraints(ht, settings);
+	validate_existing_indexes(ht, settings);
 
 	Oid tablespace_oid = get_rel_tablespace(ht->main_table_relid);
-	compress_htid = create_compression_table(ownerid, settings, column_defs, tablespace_oid);
+	compress_htid = compression_hypertable_create(ht, ownerid, tablespace_oid);
 	ts_hypertable_set_compressed(ht, compress_htid);
 
 	if (!with_clause_options[CompressChunkTimeInterval].is_default)
@@ -1114,12 +847,68 @@ tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 		update_compress_chunk_time_interval(ht, with_clause_options);
 	}
 
-	/*add the constraints to the new compressed hypertable */
-	ht = ts_hypertable_get_by_id(ht->fd.id); /*reload updated info*/
-	ts_hypertable_clone_constraints_to_compressed(ht, constraint_list);
-
 	/* do not release any locks, will get released by xact end */
 	return true;
+}
+
+/*
+ * Verify uncompressed hypertable is compatible with conpression
+ */
+static void
+validate_hypertable_for_compression(Hypertable *ht)
+{
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot compress internal compression hypertable")));
+	}
+
+	/*check row security settings for the table */
+	if (ts_has_row_security(ht->main_table_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("compression cannot be used on table with row security")));
+
+	Relation rel = table_open(ht->main_table_relid, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(rel);
+
+	/*
+	 * This is only a rough estimate and the actual row size might be different.
+	 * We use this only to show a warning when the row size is close to the
+	 * maximum row size.
+	 */
+	Size row_size = MAXALIGN(SizeofHeapTupleHeader);
+	row_size += 8;	/* sequence_num */
+	row_size += 4;	/* count */
+	row_size += 16; /* min/max */
+	for (int attno = 0; attno < tupdesc->natts; attno++)
+	{
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, attno);
+
+		if (attr->attisdropped)
+			continue;
+
+		row_size += 18; /* assume 18 bytes for each compressed column (varlena) */
+
+		if (strncmp(NameStr(attr->attname),
+					COMPRESSION_COLUMN_METADATA_PREFIX,
+					strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+			elog(ERROR,
+				 "cannot compress tables with reserved column prefix '%s'",
+				 COMPRESSION_COLUMN_METADATA_PREFIX);
+	}
+	table_close(rel, AccessShareLock);
+
+	if (row_size > MaxHeapTupleSize)
+	{
+		ereport(WARNING,
+				(errmsg("compressed row size might exceed maximum row size"),
+				 errdetail("Estimated row size of compressed hypertable is %zu. This exceeds the "
+						   "maximum size of %zu and can cause compression of chunks to fail.",
+						   row_size,
+						   MaxHeapTupleSize)));
+	}
 }
 
 static void
@@ -1198,6 +987,7 @@ compression_settings_update(CompressionSettings *settings, WithClauseResult *wit
 	}
 	else if (orderby_cols && !settings->fd.orderby)
 	{
+		Assert(list_length(orderby_cols) > 0);
 		List *cols = NIL;
 		List *desc = NIL;
 		List *nullsfirst = NIL;
@@ -1245,18 +1035,22 @@ tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def)
 		return;
 	}
 
-	Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-	/* don't add column if it already exists */
-	if (get_attnum(compress_ht->main_table_relid, orig_def->colname) != InvalidAttrNumber)
-	{
-		return;
-	}
-
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+	ListCell *lc;
 	Oid coloid = LookupTypeNameOid(NULL, orig_def->typeName, false);
-	ColumnDef *coldef = build_columndef_singlecolumn(orig_def->colname, coloid);
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 
-	add_column_to_compression_table(compress_ht, settings, coldef);
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		/* don't add column if it already exists */
+		if (get_attnum(chunk->table_id, orig_def->colname) != InvalidAttrNumber)
+		{
+			return;
+		}
+		ColumnDef *coldef = build_columndef_singlecolumn(orig_def->colname, coloid);
+		CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
+		add_column_to_compression_table(chunk->table_id, settings, coldef);
+	}
 }
 
 /* Drop a column from a table that has compression enabled
@@ -1282,8 +1076,13 @@ tsl_process_compress_table_drop_column(Hypertable *ht, char *name)
 
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		Hypertable *compress_ht = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
-		drop_column_from_compression_table(compress_ht, name);
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		ListCell *lc;
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			drop_column_from_compression_table(chunk->table_id, name);
+		}
 	}
 }
 
@@ -1299,14 +1098,25 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 {
 	Assert(stmt->relationType == OBJECT_TABLE && stmt->renameType == OBJECT_COLUMN);
 	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
+
+	if (strncmp(stmt->newname,
+				COMPRESSION_COLUMN_METADATA_PREFIX,
+				strlen(COMPRESSION_COLUMN_METADATA_PREFIX)) == 0)
+		elog(ERROR,
+			 "cannot compress tables with reserved column prefix '%s'",
+			 COMPRESSION_COLUMN_METADATA_PREFIX);
+
 	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		int32 compress_htid = ht->fd.compressed_hypertable_id;
-		Hypertable *compress_ht = ts_hypertable_get_by_id(compress_htid);
-		RenameStmt *compress_col_stmt = (RenameStmt *) copyObject(stmt);
-		compress_col_stmt->relation = makeRangeVar(NameStr(compress_ht->fd.schema_name),
-												   NameStr(compress_ht->fd.table_name),
-												   -1);
-		ExecRenameStmt(compress_col_stmt);
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		ListCell *lc;
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			RenameStmt *compress_col_stmt = (RenameStmt *) copyObject(stmt);
+			compress_col_stmt->relation =
+				makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+			ExecRenameStmt(compress_col_stmt);
+		}
 	}
 }

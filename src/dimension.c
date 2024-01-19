@@ -32,7 +32,6 @@
 #include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
-#include "error_utils.h"
 #include "debug_point.h"
 
 /* add_dimension record attribute numbers */

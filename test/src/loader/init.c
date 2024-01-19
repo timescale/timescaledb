@@ -26,7 +26,9 @@
 PG_MODULE_MAGIC;
 #endif
 
+#if PG16_LT
 extern void PGDLLEXPORT _PG_init(void);
+#endif
 
 static post_parse_analyze_hook_type prev_post_parse_analyze_hook;
 

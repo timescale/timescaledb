@@ -51,7 +51,7 @@ typedef struct DictionaryCompressed
 static void
 pg_attribute_unused() assertions(void)
 {
-	DictionaryCompressed test_val = { .vl_len_ = { 0 } };
+	DictionaryCompressed test_val;
 	/* make sure no padding bytes make it to disk */
 	StaticAssertStmt(sizeof(DictionaryCompressed) ==
 						 sizeof(test_val.vl_len_) + sizeof(test_val.compression_algorithm) +

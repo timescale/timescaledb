@@ -50,7 +50,6 @@
 #include "ts_catalog/catalog.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "compat/compat.h"
 #include "copy.h"
 #include "errors.h"
 #include "event_trigger.h"
@@ -77,8 +76,6 @@
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
 #endif
-
-#include "cross_module_fn.h"
 
 void _process_utility_init(void);
 void _process_utility_fini(void);
@@ -146,6 +143,7 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 
 			switch (cmd->subtype)
 			{
+				case AT_AddConstraint:
 				case AT_SetOptions:
 				case AT_ResetOptions:
 				case AT_SetRelOptions:
@@ -957,9 +955,10 @@ process_truncate(ProcessUtilityArgs *args)
 				/* TRUNCATE for foreign tables not implemented yet. This will raise an error. */
 				case RELKIND_FOREIGN_TABLE:
 				{
+					list_append = true;
+
 					Hypertable *ht =
 						ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
-					Chunk *chunk;
 
 					if (ht)
 					{
@@ -990,10 +989,11 @@ process_truncate(ProcessUtilityArgs *args)
 											 " only on the chunks directly.")));
 
 						hypertables = lappend(hypertables, ht);
-
-						list_append = true;
+						break;
 					}
-					else if ((chunk = ts_chunk_get_by_relid(relid, false)) != NULL)
+
+					Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+					if (chunk != NULL)
 					{ /* this is a chunk */
 						ht = ts_hypertable_cache_get_entry(hcache,
 														   chunk->hypertable_relid,
@@ -1029,10 +1029,7 @@ process_truncate(ProcessUtilityArgs *args)
 								list_changed = true;
 							}
 						}
-						list_append = true;
 					}
-					else
-						list_append = true;
 					break;
 				}
 			}
@@ -1214,6 +1211,22 @@ process_drop_hypertable(ProcessUtilityArgs *args, DropStmt *stmt)
 				{
 					Hypertable *compressed_hypertable =
 						ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+					List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+					foreach (lc, chunks)
+					{
+						Chunk *chunk = lfirst(lc);
+
+						if (OidIsValid(chunk->table_id))
+						{
+							ObjectAddress chunk_addr = (ObjectAddress){
+								.classId = RelationRelationId,
+								.objectId = chunk->table_id,
+							};
+
+							/* Drop the postgres table */
+							performDeletion(&chunk_addr, stmt->behavior, 0);
+						}
+					}
 					ts_hypertable_drop(compressed_hypertable, DROP_CASCADE);
 				}
 			}
@@ -1484,6 +1497,17 @@ process_grant_and_revoke(ProcessUtilityArgs *args)
 												  was_schema_op,
 												  &compressed_hypertable->fd.schema_name,
 												  &compressed_hypertable->fd.table_name);
+						List *chunks =
+							ts_chunk_get_by_hypertable_id(hypertable->fd.compressed_hypertable_id);
+						ListCell *cell;
+						foreach (cell, chunks)
+						{
+							Chunk *chunk = lfirst(cell);
+							process_grant_add_by_name(stmt,
+													  was_schema_op,
+													  &chunk->fd.schema_name,
+													  &chunk->fd.table_name);
+						}
 					}
 				}
 
@@ -2123,6 +2147,13 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
+		ListCell *lc;
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
+		}
 		process_altertable_change_owner(compressed_hypertable, cmd);
 	}
 }
@@ -2447,7 +2478,7 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	 * We grab a ShareLock on the chunk, because that's what CREATE INDEX
 	 * does. For the hypertable's index, we are ok using the weaker
 	 * AccessShareLock, since we only need to prevent the index itself from
-	 * being ALTERed or DROPed during this part of index creation.
+	 * being ALTERed or DROPped during this part of index creation.
 	 */
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	chunk = ts_chunk_get_by_relid(chunk_relid, true);
@@ -2573,7 +2604,7 @@ process_index_start(ProcessUtilityArgs *args)
 				ts_cache_release(hcache);
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("operation not supported on continuous aggreates that are not "
+						 errmsg("operation not supported on continuous aggregates that are not "
 								"finalized"),
 						 errhint("Recreate the continuous aggregate to allow index creation.")));
 			}
@@ -2722,7 +2753,7 @@ process_index_start(ProcessUtilityArgs *args)
 	 * Lock the index for the remainder of the command. Since we're using
 	 * multiple transactions for index creation, a regular
 	 * transaction-level lock won't prevent the index from being
-	 * concurrently ALTERed or DELETEed. Instead, we grab a session level
+	 * concurrently ALTERed or DELETEd. Instead, we grab a session level
 	 * lock on the index, which we'll release when the command is
 	 * finished. (This is the same strategy postgres uses in CREATE INDEX
 	 * CONCURRENTLY)
@@ -3178,6 +3209,14 @@ process_altertable_set_tablespace_end(Hypertable *ht, AlterTableCmd *cmd)
 		Hypertable *compressed_hypertable =
 			ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		AlterTableInternal(compressed_hypertable->main_table_relid, list_make1(cmd), false);
+
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		ListCell *lc;
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			AlterTableInternal(chunk->table_id, list_make1(cmd), false);
+		}
 		process_altertable_set_tablespace_end(compressed_hypertable, cmd);
 	}
 }
@@ -3855,12 +3894,19 @@ process_create_trigger_start(ProcessUtilityArgs *args)
 	Cache *hcache;
 	Hypertable *ht;
 	ObjectAddress PG_USED_FOR_ASSERTS_ONLY address;
+	Oid relid = RangeVarGetRelid(stmt->relation, NoLock, true);
 
 	hcache = ts_hypertable_cache_pin();
-	ht = ts_hypertable_cache_get_entry_rv(hcache, stmt->relation);
+	ht = ts_hypertable_cache_get_entry(hcache, relid, CACHE_FLAG_MISSING_OK);
 	if (ht == NULL)
 	{
 		ts_cache_release(hcache);
+		/* check if it's a cagg. We don't support triggers on them yet */
+		if (ts_continuous_agg_find_by_relid(relid) != NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("triggers are not supported on continuous aggregate")));
+
 		return DDL_CONTINUE;
 	}
 
@@ -4423,7 +4469,7 @@ process_ddl_event_sql_drop(EventTriggerData *trigdata)
 TS_FUNCTION_INFO_V1(ts_timescaledb_process_ddl_event);
 
 /*
- * Event trigger hook for DDL commands that have alread been handled by
+ * Event trigger hook for DDL commands that have already been handled by
  * PostgreSQL (i.e., "ddl_command_end" and "sql_drop" events).
  */
 Datum

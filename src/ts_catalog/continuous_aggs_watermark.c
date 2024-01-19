@@ -250,7 +250,7 @@ TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark_materialized);
  *
  * The difference between this function and `ts_continuous_agg_watermark` is
  * that this one get the max open dimension of the materialization hypertable
- * insted of get the stored value in the catalog table.
+ * instead of get the stored value in the catalog table.
  */
 Datum
 ts_continuous_agg_watermark_materialized(PG_FUNCTION_ARGS)
@@ -399,8 +399,6 @@ ts_cagg_watermark_update(Hypertable *mat_ht, int64 watermark, bool watermark_isn
 
 	watermark = cagg_compute_watermark(cagg, watermark, watermark_isnull);
 	cagg_watermark_update_internal(mat_ht->fd.id, watermark, force_update);
-
-	return;
 }
 
 TSDLLEXPORT void

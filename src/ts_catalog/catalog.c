@@ -275,9 +275,9 @@ static const InternalFunctionDef internal_function_definitions[_MAX_INTERNAL_FUN
 		.name = "chunk_constraint_add_table_constraint",
 		.args = 1,
 	},
-	[DDL_ADD_HYPERTABLE_FK_CONSTRAINT] = {
-		.name = "hypertable_constraint_add_table_fk_constraint",
-		.args = 4,
+	[DDL_CONSTRAINT_CLONE] = {
+		.name = "constraint_clone",
+		.args = 2,
 	},
 };
 

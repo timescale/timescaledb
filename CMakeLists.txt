@@ -498,11 +498,7 @@ else()
 endif()
 
 # Linter support via clang-tidy. Enabled when using clang as compiler
-option(LINTER "Enable linter support using clang-tidy (ON when using clang)"
-       OFF)
-
-set(LINTER_STRICT_DEFAULT OFF)
-option(LINTER_STRICT "Treat linter warnings as errors" ${LINTER_STRICT_DEFAULT})
+option(LINTER "Enable linter support using clang-tidy" OFF)
 
 if(LINTER)
   find_program(
@@ -512,14 +508,39 @@ if(LINTER)
     DOC "The path to the clang-tidy linter")
 
   if(CLANG_TIDY)
-    message(STATUS "Linter support (clang-tidy) enabled")
-    if(LINTER_STRICT)
-      set(CMAKE_C_CLANG_TIDY
-          "${CLANG_TIDY};--checks=clang-diagnostic-*,clang-analyzer-*,-*,clang-analyzer-core.*,clang-diagnostic-*,readability-redundant-control-flow,bugprone-argument-comment,bugprone-macro-parentheses,readability-suspicious-call-argument,readability-misleading-indentation,readability-inconsistent-declaration-parameter-name;--warnings-as-errors=*"
-      )
+    message(STATUS "Using clang-tidy ${CLANG_TIDY}")
+    execute_process(COMMAND ${CLANG_TIDY} --version)
+    string(
+      CONCAT
+        CMAKE_C_CLANG_TIDY
+        "${CLANG_TIDY}"
+        ";--checks=clang-diagnostic-*,clang-analyzer-*"
+        ",-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling"
+        ",-clang-analyzer-deadcode.DeadStores"
+        ",bugprone-*"
+        ",-bugprone-branch-clone"
+        ",-bugprone-easily-swappable-parameters"
+        ",-bugprone-implicit-widening-of-multiplication-result"
+        ",-bugprone-narrowing-conversions"
+        ",-bugprone-reserved-identifier"
+        ",-bugprone-suspicious-include"
+        ",readability-*"
+        ",-readability-avoid-const-params-in-decls"
+        ",-readability-braces-around-statements"
+        ",-readability-else-after-return"
+        ",-readability-function-cognitive-complexity"
+        ",-readability-function-size"
+        ",-readability-identifier-length"
+        ",-readability-isolate-declaration"
+        ",-readability-magic-numbers"
+        ",-readability-non-const-parameter"
+        # ";--fix-errors"
+    )
+    if(WARNINGS_AS_ERRORS)
+      set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--warnings-as-errors=*")
     else()
-      set(CMAKE_C_CLANG_TIDY "${CLANG_TIDY};--quiet")
-    endif(LINTER_STRICT)
+      set(CMAKE_C_CLANG_TIDY "${CMAKE_C_CLANG_TIDY};--quiet")
+    endif(WARNINGS_AS_ERRORS)
   else()
     message(STATUS "Install clang-tidy to enable code linting")
   endif(CLANG_TIDY)
