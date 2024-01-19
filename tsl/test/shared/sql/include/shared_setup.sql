@@ -58,6 +58,7 @@ ANALYZE metrics_compressed;
 -- compress chunks
 ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(show_chunks('metrics_compressed'));
+ANALYZE metrics_compressed;
 
 -- Reindexing compressed hypertable to update statistics
 -- this is for planner tests which depend on them
