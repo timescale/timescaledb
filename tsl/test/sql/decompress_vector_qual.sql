@@ -349,19 +349,23 @@ insert into t select x, 2, 'same' from generate_series(1, 1000) x;
 insert into t select x, 3, 'different' || x from generate_series(1, 1000) x;
 insert into t select x, 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
 insert into t select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+insert into t select x, 6, 'одинаковый' from generate_series(1, 1000) x;
+insert into t select x, 7, '異なる' || x from generate_series(1, 1000) x;
 
 select count(compress_chunk(x, true)) from show_chunks('t') x;
 
 set timescaledb.debug_require_vector_qual to 'only';
--- Uncomment to generate the test reference w/o the vector optimizations.
+-- -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'default';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = '';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'одинаковый';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same-with-nulls';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a = '異なる1';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different-with-nulls1';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different1000';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different-with-nulls999';
@@ -370,18 +374,19 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same-with-
 select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('different500', 'default');
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different500' or a = 'default';
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a is null;
+select count(*), min(ts), max(ts), min(d), max(d) from t where a is not null;
+
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одинаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異なる%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%same%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same%';
 
 reset timescaledb.debug_require_vector_qual;
 select count(distinct a) from t;
-
--- Null tests are not vectorized yet.
-reset timescaledb.debug_require_vector_qual;
-select count(*), min(ts), max(ts), min(d), max(d) from t where a is null;
-select count(*), min(ts), max(ts), min(d), max(d) from t where a is not null;
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
