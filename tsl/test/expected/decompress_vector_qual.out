@@ -1127,6 +1127,30 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different500
   1001 |   1 | 1000 |   0 |   3
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same%';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1500 |   1 | 1000 |   2 |   4
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same%';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1500 |   1 | 1000 |   2 |   4
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1000 |   1 | 1000 |   2 |   2
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%same%';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  3500 |   1 | 1000 |   0 |   5
+(1 row)
+
 reset timescaledb.debug_require_vector_qual;
 select count(distinct a) from t;
  count 

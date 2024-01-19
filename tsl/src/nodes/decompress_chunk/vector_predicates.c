@@ -12,6 +12,7 @@
 
 #include <utils/date.h>
 #include <utils/fmgroids.h>
+#include <mb/pg_wchar.h>
 
 #include "compression/arrow_c_data_interface.h"
 
@@ -27,55 +28,7 @@
  */
 #include "pred_vector_const_arithmetic_all.c"
 
-#include "compression/compression.h"
-
-static void
-vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
-{
-	Assert(!arrow->dictionary);
-
-	text *consttext = (text *) DatumGetPointer(constdatum);
-	const size_t textlen = VARSIZE_ANY_EXHDR(consttext);
-	const uint8 *cstring = (uint8 *) VARDATA_ANY(consttext);
-	const uint32 *offsets = (uint32 *) arrow->buffers[1];
-	const uint8 *values = (uint8 *) arrow->buffers[2];
-
-	const size_t n = arrow->length;
-	for (size_t outer = 0; outer < n / 64; outer++)
-	{
-		uint64 word = 0;
-		for (size_t inner = 0; inner < 64; inner++)
-		{
-			const size_t row = outer * 64 + inner;
-			const size_t bit_index = inner;
-#define INNER_LOOP                                                                                 \
-	const uint32 start = offsets[row];                                                             \
-	const uint32 end = offsets[row + 1];                                                           \
-	Assert(end >= start);                                                                          \
-	const uint32 veclen = end - start;                                                             \
-	bool valid = veclen != textlen ?                                                               \
-					 false :                                                                       \
-					 (strncmp((char *) &values[start], (char *) cstring, textlen) == 0);           \
-	word |= ((uint64) valid) << bit_index;
-
-			INNER_LOOP
-		}
-		result[outer] &= word;
-	}
-
-	if (n % 64)
-	{
-		uint64 word = 0;
-		for (size_t row = (n / 64) * 64; row < n; row++)
-		{
-			const size_t bit_index = row % 64;
-			INNER_LOOP
-		}
-		result[n / 64] &= word;
-	}
-
-#undef INNER_LOOP
-}
+#include "pred_text.h"
 
 /*
  * Look up the vectorized implementation for a Postgres predicate, specified by
@@ -92,6 +45,18 @@ get_vector_const_predicate(Oid pg_predicate)
 
 		case F_TEXTEQ:
 			return vector_const_texteq;
+	}
+
+	if (GetDatabaseEncoding() == PG_UTF8)
+	{
+		/* We have some simple LIKE vectorization for case-sensitive UTF8. */
+		switch (pg_predicate)
+		{
+			case F_TEXTLIKE:
+				return vector_const_textlike_utf8;
+			case F_TEXTNLIKE:
+				return vector_const_textnlike_utf8;
+		}
 	}
 
 	return NULL;
