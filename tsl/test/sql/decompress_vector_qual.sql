@@ -354,8 +354,8 @@ select count(compress_chunk(x, true)) from show_chunks('t') x;
 
 set timescaledb.debug_require_vector_qual to 'only';
 -- Uncomment to generate the test reference w/o the vector optimizations.
- set timescaledb.enable_bulk_decompression to off;
- set timescaledb.debug_require_vector_qual to 'forbid';
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'default';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = '';
