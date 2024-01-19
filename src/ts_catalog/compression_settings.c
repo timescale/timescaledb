@@ -207,6 +207,24 @@ ts_compression_settings_update(CompressionSettings *settings)
 	FormData_compression_settings *fd = &settings->fd;
 	ScanKeyData scankey[1];
 
+	if (settings->fd.orderby && settings->fd.segmentby)
+	{
+		Datum datum;
+		bool isnull;
+
+		ArrayIterator it = array_create_iterator(settings->fd.orderby, 0, NULL);
+		while (array_iterate(it, &datum, &isnull))
+		{
+			if (ts_array_is_member(settings->fd.segmentby, TextDatumGetCString(datum)))
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("cannot use column \"%s\" for both ordering and segmenting",
+								TextDatumGetCString(datum)),
+						 errhint("Use separate columns for the timescaledb.compress_orderby and"
+								 " timescaledb.compress_segmentby options.")));
+		}
+	}
+
 	/*
 	 * The default compression settings will always have orderby settings but the user may have
 	 * chosen to overwrite it. For both cases all 3 orderby arrays must either have the same number

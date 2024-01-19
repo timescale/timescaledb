@@ -572,13 +572,12 @@ SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
 (1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
-ERROR:  cannot change configuration on already compressed chunks
+ERROR:  cannot disable compression on hypertable with compressed chunks
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'true');
 NOTICE:  defaulting compress_orderby to bucket
-ERROR:  cannot change configuration on already compressed chunks
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, timescaledb.compress_segmentby = 'bucket');
 NOTICE:  defaulting compress_orderby to bucket
-ERROR:  cannot change configuration on already compressed chunks
+ERROR:  cannot use column "bucket" for both ordering and segmenting
 --Errors with compression policy on caggs--
 select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interval '2 day' ,'4h') AS job_id ;
  job_id 
