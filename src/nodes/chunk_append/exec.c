@@ -28,6 +28,8 @@
 
 #include "nodes/chunk_append/chunk_append.h"
 #include "loader/lwlocks.h"
+#include "planner/planner.h"
+#include "transform.h"
 
 #define INVALID_SUBPLAN_INDEX (-1)
 #define NO_MATCHING_SUBPLANS (-2)
@@ -925,16 +927,47 @@ chunk_append_get_lock_pointer()
 static List *
 constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 {
+	List *additional_list = NIL;
+
 	ListCell *lc;
 
 	foreach (lc, restrictinfos)
 	{
 		RestrictInfo *rinfo = lfirst(lc);
+		Expr *constified = (Expr *) estimate_expression_value(root, (Node *) rinfo->clause);
 
-		rinfo->clause = (Expr *) estimate_expression_value(root, (Node *) rinfo->clause);
+		/*
+		 * Note that we have to use equal() here, because the expression mutators
+		 * always return a deep copy of the expression tree, even if nothing was
+		 * modified.
+		 */
+		if (!equal(rinfo->clause, constified))
+		{
+			/*
+			 * We have constified something, so try applying the time_bucket
+			 * transformations again. This might allow us to exclude chunks
+			 * based on a parameterized time_bucket expression.
+			 */
+			Expr *additional_clause = ts_transform_time_bucket_comparison(constified);
+			if (additional_clause != NULL)
+			{
+				/*
+				 * We successfully added a filter clause based on a
+				 * parameterized time_bucket comparison, but it might contain
+				 * stable operators like comparison of timestamp to timestamptz,
+				 * so we have to evaluate them as well.
+				 */
+				additional_clause = ts_transform_cross_datatype_comparison(additional_clause);
+				additional_clause =
+					(Expr *) estimate_expression_value(root, (Node *) additional_clause);
+				additional_list = lappend(additional_list,
+										  make_simple_restrictinfo_compat(root, additional_clause));
+			}
+		}
+		rinfo->clause = constified;
 	}
 
-	return restrictinfos;
+	return list_concat(restrictinfos, additional_list);
 }
 
 static List *
