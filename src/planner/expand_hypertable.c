@@ -353,6 +353,52 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 									constraint->inputcollid);
 }
 
+static bool
+extract_opexpr_parts(Expr *node, OpExpr **op, FuncExpr **time_bucket, Expr **value, Oid *opno)
+{
+	if (!IsA(node, OpExpr))
+	{
+		return false;
+	}
+
+	*op = castNode(OpExpr, node);
+	if (list_length((*op)->args) != 2)
+	{
+		return false;
+	}
+
+	Expr *left = linitial((*op)->args);
+	Expr *right = lsecond((*op)->args);
+
+	if (IsA(left, FuncExpr) && IsA(right, Const))
+	{
+		*time_bucket = castNode(FuncExpr, left);
+		*value = right;
+		*opno = (*op)->opno;
+	}
+	else if (IsA(right, FuncExpr))
+	{
+		*time_bucket = castNode(FuncExpr, right);
+		*value = left;
+		*opno = get_commutator((*op)->opno);
+
+		if (!OidIsValid(opno))
+			return false;
+	}
+	else
+	{
+		return false;
+	}
+
+	if (!is_time_bucket_function((Expr *) *time_bucket) || !IsA(*value, Const) ||
+		castNode(Const, *value)->constisnull)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 /*
  * Transform time_bucket calls of the following form in WHERE clause:
  *
@@ -390,79 +436,53 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 Expr *
 ts_transform_time_bucket_comparison(Expr *node)
 {
-	if (!IsA(node, OpExpr))
-	{
-		return NULL;
-	}
+	FuncExpr *time_bucket;
+	Expr *value;
+	OpExpr *op;
+	Oid opno;
 
-	OpExpr *op = castNode(OpExpr, node);
-	if (list_length(op->args) != 2)
-	{
-		return NULL;
-	}
-
-	Expr *left = linitial(op->args);
-	Expr *right = lsecond(op->args);
-
-	FuncExpr *time_bucket = NULL;
-	Expr *value = NULL;
-	if (IsA(left, FuncExpr) && IsA(right, Const))
-	{
-		time_bucket = castNode(FuncExpr, left);
-		value = right;
-	}
-	else if (IsA(right, FuncExpr))
-	{
-		time_bucket = castNode(FuncExpr, right);
-		value = left;
-	}
-	else
-	{
-		return NULL;
-	}
-
-	if (list_length(time_bucket->args) != 2)
-	{
-		return NULL;
-	}
-
-	if (!is_time_bucket_function((Expr *) time_bucket))
+	if (!extract_opexpr_parts(node, &op, &time_bucket, &value, &opno))
 	{
 		return NULL;
 	}
 
 	Const *width = linitial(time_bucket->args);
-	Oid opno = op->opno;
-	TypeCacheEntry *tce;
-	int strategy;
 
-	if (list_length(time_bucket->args) != 2 || !IsA(value, Const) || !IsA(width, Const))
+	if (!IsA(width, Const) || width->constisnull)
 		return NULL;
 
-	/*
-	 * if time_bucket call is on wrong side we switch operator
-	 */
-	if (IsA(right, FuncExpr))
-	{
-		opno = get_commutator(op->opno);
+	/* 3 or more args should have Const 3rd arg */
+	if (list_length(time_bucket->args) > 2 && !IsA(lthird(time_bucket->args), Const))
+		return NULL;
 
-		if (!OidIsValid(opno))
-			return NULL;
-	}
+	/* 5 args variants should have Const 4rd and 5th arg */
+	if (list_length(time_bucket->args) == 5 &&
+		(!IsA(lfourth(time_bucket->args), Const) || !IsA(lfifth(time_bucket->args), Const)))
+		return NULL;
+
+	Assert(list_length(time_bucket->args) == 2 || list_length(time_bucket->args) == 3 ||
+		   list_length(time_bucket->args) == 5);
+
+	TypeCacheEntry *tce;
+	int strategy;
 
 	tce = lookup_type_cache(exprType((Node *) time_bucket), TYPECACHE_BTREE_OPFAMILY);
 	strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
 
 	if (strategy == BTGreaterStrategyNumber || strategy == BTGreaterEqualStrategyNumber)
 	{
-		/* column > value */
+		/* Since time_bucket will always shift the input to the left this
+		 * transformation is always safe even in the presence of offset variants.
+		 *
+		 * column > value
+		 */
 		op = copyObject(op);
 		op->args = list_make2(lsecond(time_bucket->args), value);
 
 		/*
 		 * if we switched operator we need to adjust OpExpr as well
 		 */
-		if (IsA(right, FuncExpr))
+		if (op->opno != opno)
 		{
 			op->opno = opno;
 			op->opfuncid = InvalidOid;
@@ -477,14 +497,15 @@ ts_transform_time_bucket_comparison(Expr *node)
 		Datum datum;
 		int64 integralValue, integralWidth;
 
-		if (castNode(Const, value)->constisnull || width->constisnull)
-			return NULL;
-
 		switch (tce->type_id)
 		{
 			case INT2OID:
 			case INT4OID:
 			case INT8OID:
+				/* We can support the offset variants of time_bucket as the
+				 * amount of shifting they do is never bigger than the bucketing
+				 * width.
+				 */
 				integralValue = const_datum_get_int(castNode(Const, value));
 				integralWidth = const_datum_get_int(width);
 
@@ -493,10 +514,11 @@ ts_transform_time_bucket_comparison(Expr *node)
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
-				 * and we have a less than constraint we can skip adding the
-				 * full bucket.
+				 * and we have a less than constraint and no offset  we can skip
+				 * adding the full bucket.
 				 */
-				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+				if (strategy == BTLessStrategyNumber && list_length(time_bucket->args) == 2 &&
+					integralValue % integralWidth == 0)
 					datum = int_get_datum(integralValue, tce->type_id);
 				else
 					datum = int_get_datum(integralValue + integralWidth, tce->type_id);
@@ -512,6 +534,10 @@ ts_transform_time_bucket_comparison(Expr *node)
 
 			case DATEOID:
 			{
+				/* We can support the offset/origin variants of time_bucket
+				 * as the amount of shifting they do is never bigger than the
+				 * bucketing width.
+				 */
 				Assert(width->consttype == INTERVALOID);
 				Interval *interval = DatumGetIntervalP(width->constvalue);
 
@@ -534,10 +560,11 @@ ts_transform_time_bucket_comparison(Expr *node)
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
-				 * and we have a less than constraint we can skip adding the
-				 * full bucket.
+				 * and we have a less than constraint and no offset or origin we can
+				 * skip adding the full bucket.
 				 */
-				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+				if (strategy == BTLessStrategyNumber && list_length(time_bucket->args) == 2 &&
+					integralValue % integralWidth == 0)
 					datum = DateADTGetDatum(integralValue);
 				else
 					datum = DateADTGetDatum(integralValue + integralWidth);
@@ -555,6 +582,10 @@ ts_transform_time_bucket_comparison(Expr *node)
 			case TIMESTAMPOID:
 			case TIMESTAMPTZOID:
 			{
+				/* We can support the offset/origin/timezone variants of time_bucket
+				 * as the amount of shifting they do is never bigger than the
+				 * bucketing width.
+				 */
 				Assert(width->consttype == INTERVALOID);
 				Interval *interval = DatumGetIntervalP(width->constvalue);
 
@@ -587,10 +618,11 @@ ts_transform_time_bucket_comparison(Expr *node)
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
-				 * and we have a less than constraint we can skip adding the
-				 * full bucket.
+				 * and we have a less than constraint and no other modifying arguments
+				 * we can skip adding the full bucket.
 				 */
-				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+				if (strategy == BTLessStrategyNumber && list_length(time_bucket->args) == 2 &&
+					integralValue % integralWidth == 0)
 					datum = int_get_datum(integralValue, tce->type_id);
 				else
 					datum = int_get_datum(integralValue + integralWidth, tce->type_id);
