@@ -394,3 +394,6 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_constraint_add_table_f
 -- only define stub here, actual code will be filled in at end of update script
 CREATE FUNCTION _timescaledb_functions.constraint_clone(constraint_oid OID,target_oid REGCLASS) RETURNS VOID LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog, pg_temp;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunks_in;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunks_in;
+

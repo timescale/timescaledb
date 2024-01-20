@@ -14,7 +14,6 @@
 #include "hypertable.h"
 #include "guc.h"
 
-#define CHUNK_EXCL_FUNC_NAME "chunks_in"
 /*
  * Constraints created during planning to improve chunk exclusion
  * will be marked with this value as location so they can be easily

@@ -765,4 +765,6 @@ DROP FUNCTION _timescaledb_functions.constraint_clone;
 
 CREATE FUNCTION _timescaledb_functions.hypertable_constraint_add_table_fk_constraint(user_ht_constraint_name name,user_ht_schema_name name,user_ht_table_name name,compress_ht_id   integer) RETURNS void LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog,pg_temp;
 
+CREATE FUNCTION _timescaledb_functions.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
+AS 'BEGIN END' LANGUAGE PLPGSQL SET search_path TO pg_catalog,pg_temp;
 
