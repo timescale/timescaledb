@@ -1229,7 +1229,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
 
 	/* Index scan */
-	Relation index_rel = index_open(row_compressor.index_oid, AccessExclusiveLock);
+	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
 
 	index_scan = index_beginscan(compressed_chunk_rel, index_rel, snapshot, 0, 0);
 	TupleTableSlot *slot = table_slot_create(compressed_chunk_rel, NULL);
@@ -1385,7 +1385,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
-	index_close(index_rel, AccessExclusiveLock);
+	index_close(index_rel, ExclusiveLock);
 	row_decompressor_close(&decompressor);
 
 	/* changed chunk status, so invalidate any plans involving this chunk */
