@@ -77,7 +77,13 @@ def is_valid_line(line):
 
 
 def main():
-    github_obj = github.Github(os.environ.get("GITHUB_TOKEN"))
+    github_token = os.environ.get("GITHUB_TOKEN")
+
+    if not github_token:
+        print("Please populate the GITHUB_TOKEN environment variable.")
+        sys.exit(1)
+
+    github_obj = github.Github(github_token)
     repo = github_obj.get_repo("timescale/timescaledb")
     # Get the file name from the command line argument
     if len(sys.argv) != 2:
