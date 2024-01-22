@@ -221,8 +221,7 @@ invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 /**
  * Adds a materialization invalidation log entry to the local data node.
  *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
- *                          Node.
+ * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable
  * @param start_time The starting time of the materialization invalidation log entry.
  * @param end_time The ending time of the materialization invalidation log entry.
  */
@@ -244,8 +243,7 @@ tsl_invalidation_cagg_log_add_entry(PG_FUNCTION_ARGS)
 /**
  * Adds a hypertable invalidation log entry to the local data node.
  *
- * @param raw_hypertable_id The hypertable ID of the original distributed hypertable in the Access
- *                          Node.
+ * @param raw_hypertable_id The hypertable ID of the original hypertable
  * @param start_time The starting time of the materialization invalidation log entry.
  * @param end_time The ending time of the materialization invalidation log entry.
  */
@@ -1087,17 +1085,15 @@ bucket_functions_default_argument(int ndim)
 }
 
 /**
- * Processes the hypertable invalidation log in a data node for all the CAGGs that belong to the
- * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node. The
- * invalidations are cut, merged and moved to the materialization invalidation log.
+ * Processes the hypertable invalidation log for all the CAGGs that belong to the hypertable.
+ * The invalidations are cut, merged and moved to the materialization invalidation log.
  *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
- *                          Node that is currently being refreshed.
- * @param raw_hypertable_id The hypertable ID of the original distributed hypertable in the Access
- *                          Node.
+ * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable that is currently
+ *                          being refreshed.
+ * @param raw_hypertable_id The hypertable ID of the original hypertable
  * @param dimtype The OID of the type of the time dimension for this CAGG.
- * @param mat_hypertable_ids The array of hypertable IDs for all CAGG materialized hypertables in
- *                           the Access Node that belong to 'raw_hypertable_id'.
+ * @param mat_hypertable_ids The array of hypertable IDs for all CAGG materialized hypertables that
+ *                           belong to 'raw_hypertable_id'.
  * @param bucket_widths The array of time bucket widths for all the CAGGs that belong to
  *                      'raw_hypertable_id'.
  * @param max_bucket_widths (Deprecated) This argument is ignored and is present only for backward
@@ -1189,19 +1185,18 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 }
 
 /**
- * Processes the materialization invalidation log in a data node for the CAGG being refreshed that
- * belongs to the distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
- * The invalidations are cut, merged and returned as a single refresh window.
+ * Processes the materialization invalidation log for the CAGG being refreshed that belongs to the
+ * hypertable with hypertable ID 'raw_hypertable_id'. The invalidations are cut, merged and returned
+ * as a single refresh window.
  *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
- *                          Node that is currently being refreshed.
- * @param raw_hypertable_id The hypertable ID of the original distributed hypertable in the Access
- *                          Node.
+ * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable that is currently
+ *                          being refreshed.
+ * @param raw_hypertable_id The hypertable ID of the original hypertable
  * @param dimtype The OID of the type of the time dimension for this CAGG.
  * @param window_start The starting time of the CAGG refresh window.
  * @param window_end The ending time of the CAGG refresh window.
- * @param mat_hypertable_ids The array of hypertable IDs for all CAGG materialized hypertables in
- *                           the Access Node that belong to 'raw_hypertable_id'.
+ * @param mat_hypertable_ids The array of hypertable IDs for all CAGG materialized hypertables that
+ *                           belong to 'raw_hypertable_id'.
  * @param bucket_widths The array of time bucket widths for all the CAGGs that belong to
  *                      'raw_hypertable_id'.
  * @param max_bucket_widths (Deprecated) This argument is ignored and is present only for backward
