@@ -429,7 +429,7 @@ ts_transform_time_bucket_comparison(Expr *node)
 	if (list_length(time_bucket->args) > 2 && !IsA(lthird(time_bucket->args), Const))
 		return NULL;
 
-	/* 5 args variants should have Const 4rd and 5th arg */
+	/* 5 args variants should have Const 4th and 5th arg */
 	if (list_length(time_bucket->args) == 5 &&
 		(!IsA(lfourth(time_bucket->args), Const) || !IsA(lfifth(time_bucket->args), Const)))
 		return NULL;
