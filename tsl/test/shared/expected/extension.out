@@ -99,6 +99,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.last_sfunc(internal,anyelement,"any")
  _timescaledb_functions.makeaclitem(regrole,regrole,text,boolean)
  _timescaledb_functions.materialization_invalidation_log_delete(integer)
+ _timescaledb_functions.metadata_insert_trigger()
  _timescaledb_functions.partialize_agg(anyelement)
  _timescaledb_functions.policy_compression(integer,jsonb)
  _timescaledb_functions.policy_compression_check(jsonb)
