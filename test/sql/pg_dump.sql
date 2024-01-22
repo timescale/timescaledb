@@ -81,8 +81,8 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
---force a value to exist for exported_uuid
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
+INSERT INTO _timescaledb_catalog.metadata VALUES ('metadata_test', 'FOO', false);
 
 \c postgres :ROLE_SUPERUSER
 -- We shell out to a script in order to grab the correct hostname from the
@@ -105,7 +105,6 @@ SHOW timescaledb.restoring;
 SHOW timescaledb.restoring;
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-
 
 -- Inserting with restoring ON in current session causes tuples to be
 -- inserted on main table, but this should be protected by the insert
@@ -131,6 +130,9 @@ SELECT count(*) = :num_dependent_objects as dependent_objects_match
 --we should have the original uuid from the backed up db set as the exported_uuid
 SELECT value = 'original_uuid' FROM _timescaledb_catalog.metadata  WHERE key='exported_uuid';
 SELECT count(*) = 1 FROM _timescaledb_catalog.metadata WHERE key LIKE 'exported%';
+
+--we should have the original value of metadata_test
+SELECT * FROM _timescaledb_catalog.metadata  WHERE key='metadata_test';
 
 --main table and chunk schemas should be the same
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
