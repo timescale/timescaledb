@@ -214,7 +214,7 @@ jobs:
            if [ $(find /cores -type f | wc -l) -gt 0 ]; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
         fi
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
-        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
