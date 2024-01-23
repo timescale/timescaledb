@@ -63,12 +63,6 @@ tts_arrow_init(TupleTableSlot *slot)
 													  /* minContextSize = */ 0,
 													  /* initBlockSize = */ 64 * 1024,
 													  /* maxBlockSize = */ 64 * 1024);
-	aslot->arrowdata_mcxt = AllocSetContextCreate(slot->tts_mcxt,
-												  "Arrow data",
-
-												  /* minContextSize = */ 0,
-												  /* initBlockSize = */ 64 * 1024,
-												  /* maxBlockSize = */ 64 * 1024);
 
 	/*
 	 * Set up child slots, one for the non-compressed relation and one for the
@@ -88,7 +82,7 @@ tts_arrow_init(TupleTableSlot *slot)
 	MemoryContextSwitchTo(oldmctx);
 	ItemPointerSetInvalid(&slot->tts_tid);
 
-	arrow_column_cache_init(aslot);
+	arrow_column_cache_init(&aslot->arrow_cache, slot->tts_mcxt);
 }
 
 /*
@@ -104,7 +98,7 @@ tts_arrow_release(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
-	arrow_column_cache_release(aslot);
+	arrow_column_cache_release(&aslot->arrow_cache);
 
 	MemoryContextDelete(aslot->decompression_mcxt);
 	ExecDropSingleTupleTableSlot(aslot->noncompressed_slot);
@@ -508,7 +502,10 @@ tts_arrow_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 	}
 	else
 	{
-		/* The source slot is also an arrow slot */
+		/* The source slot is also an arrow slot. */
+
+		/* NOTE: in practice, there might not be a case for copying one arrow
+		 * slot to another, so should consider just throwing en error. */
 		ArrowTupleTableSlot *asrcslot = (ArrowTupleTableSlot *) srcslot;
 
 		if (!TTS_EMPTY(asrcslot->noncompressed_slot))
@@ -524,15 +521,12 @@ tts_arrow_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 		}
 
 		/*
-		 * If the lifetime of the new slot is different from the lifetime of
-		 * the old slot, problems ensue.
-		 *
-		 * To deal with this, we need a pin count or something similar so that
-		 * we do not delete the cache prematurely (that is, before both slots
-		 * are deleted).
+		 * Since the lifetime of the new slot might be different from the
+		 * lifetime of the old slot, the new slot will have its own empty
+		 * arrow cache. This might be less efficient than sharing the cache
+		 * since the new slot copy might have to decompress again, but this
+		 * can be optimized further when necessary.
 		 */
-		adstslot->arrow_column_cache = asrcslot->arrow_column_cache;
-		adstslot->arrowdata_mcxt = asrcslot->arrowdata_mcxt;
 
 		adstslot->tuple_index = asrcslot->tuple_index;
 		ItemPointerCopy(&srcslot->tts_tid, &dstslot->tts_tid);
