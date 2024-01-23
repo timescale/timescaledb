@@ -619,13 +619,28 @@ static HeapTuple
 tts_arrow_copy_heap_tuple(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	HeapTuple tuple;
 
 	Assert(!TTS_EMPTY(slot));
-	/* Make sure the child slot has the parent's datums or otherwise it won't
-	 * have any data to produce the tuple from */
-	slot_getallattrs(slot);
-	copy_slot_values(slot, aslot->noncompressed_slot, slot->tts_tupleDescriptor->natts);
-	return ExecCopySlotHeapTuple(aslot->noncompressed_slot);
+
+	if (aslot->child_slot == aslot->compressed_slot)
+	{
+		/* Make sure the child slot has the parent's datums or otherwise it won't
+		 * have any data to produce the tuple from */
+		ExecClearTuple(aslot->noncompressed_slot);
+		slot_getallattrs(slot);
+		copy_slot_values(slot, aslot->noncompressed_slot, slot->tts_tupleDescriptor->natts);
+	}
+
+	/* Since this tuple is generated from a baserel, there are cases when PG
+	 * code expects the TID (t_self) to be set (e.g., during ANALYZE). But
+	 * this doesn't happen if the tuple is formed from values similar to a
+	 * virtual tuple. Therefore, explicitly set t_self here to mimic a buffer
+	 * heap tuple. */
+	tuple = ExecCopySlotHeapTuple(aslot->noncompressed_slot);
+	ItemPointerCopy(&slot->tts_tid, &tuple->t_self);
+
+	return tuple;
 }
 
 /*
