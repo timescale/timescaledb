@@ -40,10 +40,12 @@
 
 #include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
+#include <lib/ilist.h>
 #include <nodes/bitmapset.h>
 #include <storage/itemptr.h>
+#include <utils/hsearch.h>
 
-#include "arrow_tts.h"
+#include "arrow_c_data_interface.h"
 
 /* Number of arrow decompression cache LRU entries  */
 #define ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES 100
@@ -52,6 +54,17 @@ typedef struct ArrowColumnKey
 {
 	ItemPointerData ctid; /* Compressed TID for the compressed tuple. */
 } ArrowColumnKey;
+
+typedef struct ArrowColumnCache
+{
+	MemoryContext mcxt;
+	size_t arrow_column_cache_lru_count; /* Arrow column cache LRU list count */
+	dlist_head arrow_column_cache_lru;	 /* Arrow column cache LRU list */
+	HTAB *htab;							 /* Arrow column cache */
+	uint16 maxsize;
+	size_t cache_total;
+	size_t cache_misses;
+} ArrowColumnCache;
 
 /*
  * Cache entry for an arrow tuple.
@@ -71,8 +84,10 @@ typedef struct ArrowColumnCacheEntry
 	ArrowArray **arrow_columns;
 } ArrowColumnCacheEntry;
 
-extern void arrow_column_cache_init(ArrowTupleTableSlot *aslot);
-extern void arrow_column_cache_release(ArrowTupleTableSlot *aslot);
+typedef struct ArrowTupleTableSlot ArrowTupleTableSlot;
+
+extern void arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt);
+extern void arrow_column_cache_release(ArrowColumnCache *acache);
 extern ArrowColumnCacheEntry *arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum);
 extern ArrowArray *arrow_column_cache_decompress(ArrowTupleTableSlot *aslot, Datum datum,
 												 AttrNumber attnum);
