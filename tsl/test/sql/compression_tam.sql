@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+SET timescaledb.arrow_cache_maxsize = 4;
+
 CREATE TABLE readings(time timestamptz UNIQUE, location int, device int, temp float, humidity float);
 
 SELECT create_hypertable('readings', 'time');
