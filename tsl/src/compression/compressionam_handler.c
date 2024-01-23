@@ -59,8 +59,18 @@ static void convert_to_compressionam_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transcation */
+
+/* Relids of TAM relations to be analyzed */
+static List *analyze_relids = NIL;
+
 #define COMPRESSION_AM_INFO_SIZE(natts)                                                            \
 	(sizeof(CompressionAmInfo) + sizeof(ColumnCompressionSettings) * (natts))
+
+void
+compressionam_set_analyze_relid(Oid relid)
+{
+	analyze_relids = list_append_unique_oid(analyze_relids, relid);
+}
 
 static int32
 get_chunk_id_from_relid(Oid relid)
@@ -293,11 +303,11 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 {
 	CompressionScanDesc scan;
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
 
 	RelationIncrementReferenceCount(relation);
 
-	elog(DEBUG3,
+	elog(DEBUG2,
 		 "starting %s scan of relation %s",
 		 get_scan_type(flags),
 		 RelationGetRelationName(relation));
@@ -306,7 +316,7 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->rs_base.rs_rd = relation;
 	scan->rs_base.rs_snapshot = snapshot;
 	scan->rs_base.rs_nkeys = nkeys;
-	scan->rs_base.rs_key = palloc0(sizeof(ScanKeyData) * nkeys);
+	scan->rs_base.rs_key = nkeys > 0 ? palloc0(sizeof(ScanKeyData) * nkeys) : NULL;
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
 	scan->compressed_rel = table_open(caminfo->compressed_relid, AccessShareLock);
@@ -319,7 +329,7 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	 * Don't read compressed data if transparent decompression is enabled or
 	 * it is requested by the scan.
 	 *
-	 * Transparent decompression reads compressed data itself, directly form
+	 * Transparent decompression reads compressed data itself, directly from
 	 * the compressed chunk, so avoid reading it again here.
 	 */
 	scan->compressed_read_done =
@@ -329,12 +339,6 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
 
 	scan->attrs_map = build_attribute_offset_map(tupdesc, c_tupdesc, &scan->count_colattno);
-
-	if (nkeys > 0)
-		scan->rs_base.rs_key = (ScanKey) palloc(sizeof(ScanKeyData) * nkeys);
-	else
-		scan->rs_base.rs_key = NULL;
-
 	initscan(scan, keys, nkeys);
 
 	if (flags & SO_TYPE_ANALYZE)
@@ -1141,42 +1145,135 @@ compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrateg
 	table_close(crel, NoLock);
 }
 
+/*
+ * Analyze the next block with the given blockno.
+ *
+ * The underlying ANALYZE functionality that calls this function samples
+ * blocks in the relation. To be able to analyze all the blocks across both
+ * the non-compressed and the compressed relations, this function relies on
+ * the TAM giving the impression that the total number of blocks is the sum of
+ * compressed and non-compressed blocks. This is done by returning the sum of
+ * the total number of blocks across both relations in the relation_size() TAM
+ * callback. However, returning the total block sum does not work for other
+ * cases where relation_size() is used, so this is guarded by a flag (see
+ * relation_size() for details).
+ *
+ * The non-compressed relation is sampled first, and, only once the blockno
+ * increases beyond the number of blocks in the non-compressed relation, the
+ * compressed relation is sampled.
+ */
 static bool
 compressionam_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 									  BufferAccessStrategy bstrategy)
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
+	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
+	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	/*
+	 * Compute the actual number of blocks in non-compressed relation. The
+	 * field rs_nblocks is set by postgresql based on the AM's
+	 * relation_size() callback. Since we "faked" the number of blocks for the
+	 * non-compressed relation to be the sum of the blocks of both relations,
+	 * we need to compute the actual number of blocks here.
+	 */
+	BlockNumber unblocks = (uhscan->rs_nblocks - chscan->rs_nblocks);
 
-	FEATURE_NOT_SUPPORTED;
+	/* Ensure the relation doesn't remain in analyze_relids after the
+	 * ANALYZE */
+	analyze_relids = list_delete_oid(analyze_relids, RelationGetRelid(scan->rs_rd));
 
-	return cscan->compressed_rel->rd_tableam->scan_analyze_next_block(cscan->cscan_desc,
-																	  blockno,
-																	  bstrategy);
+	if (blockno >= unblocks)
+	{
+		/* Get the compressed rel blockno by subtracting the number of
+		 * non-compressed blocks */
+		blockno -= unblocks;
+		return cscan->compressed_rel->rd_tableam->scan_analyze_next_block(cscan->cscan_desc,
+																		  blockno,
+																		  bstrategy);
+	}
+
+	return heapam->scan_analyze_next_block(cscan->uscan_desc, blockno, bstrategy);
 }
 
 /*
- * Sample from the compressed chunk.
+ * Get the next tuple to sample during ANALYZE.
  *
- * TODO: this needs more work and it is not clear that this is the best way to
- * analyze.
+ * Since the sampling happens across both the non-compressed and compressed
+ * relations, it is necessary to determine from which relation to return a
+ * tuple. This is driven by scan_analyze_next_block() above.
+ *
+ * When sampling from the compressed relation, a compressed segment is read
+ * and it is then necessary to return all tuples in the segment.
+ *
+ * NOTE: the function currently relies on heapAM's scan_analyze_next_tuple()
+ * to read compressed segments. This can lead to misrepresenting liverows and
+ * deadrows numbers since heap AM might skip tuples that are dead or
+ * concurrently inserted, but still count them in liverows or deadrows. Each
+ * compressed tuple represents many rows, but heapAM only counts each
+ * compressed tuple as one row. The only way to fix this is to either check
+ * the diff between the count before and after calling the heap AM function
+ * and then estimate the actual number of rows from that, or, reimplement the
+ * heapam_scan_analyze_next_tuple() function so that it can properly account
+ * for compressed tuples.
  */
 static bool
 compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin,
 									  double *liverows, double *deadrows, TupleTableSlot *slot)
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
-	TupleTableSlot *child_slot =
-		arrow_slot_get_compressed_slot(slot, RelationGetDescr(cscan->compressed_rel));
-	FEATURE_NOT_SUPPORTED;
+	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
+	uint16 tuple_index;
+	bool result;
 
-	bool result = cscan->compressed_rel->rd_tableam->scan_analyze_next_tuple(cscan->cscan_desc,
-																			 OldestXmin,
-																			 liverows,
-																			 deadrows,
-																			 child_slot);
+	/*
+	 * Since non-compressed blocks are always sampled first, the current
+	 * buffer for the compressed relation will be invalid until we reach the
+	 * end of the non-compressed blocks.
+	 */
+	if (chscan->rs_cbuf != InvalidBuffer)
+	{
+		/* Keep on returning tuples from the compressed segment until it is
+		 * consumed */
+		if (!TTS_EMPTY(slot))
+		{
+			tuple_index = arrow_slot_row_index(slot);
+
+			if (tuple_index != InvalidTupleIndex && !arrow_slot_is_consumed(slot))
+			{
+				ExecStoreArrowTuple(slot, tuple_index + 1);
+				*liverows += 1;
+				return true;
+			}
+		}
+
+		TupleTableSlot *child_slot =
+			arrow_slot_get_compressed_slot(slot, RelationGetDescr(cscan->compressed_rel));
+
+		result = cscan->compressed_rel->rd_tableam->scan_analyze_next_tuple(cscan->cscan_desc,
+																			OldestXmin,
+																			liverows,
+																			deadrows,
+																			child_slot);
+		/* Need to pick a row from the segment to sample. Might as well pick
+		 * the first one, but might consider picking a random one. */
+		tuple_index = 1;
+	}
+	else
+	{
+		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
+		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+
+		result = heapam->scan_analyze_next_tuple(cscan->uscan_desc,
+												 OldestXmin,
+												 liverows,
+												 deadrows,
+												 child_slot);
+		tuple_index = InvalidTupleIndex;
+	}
 
 	if (result)
-		ExecStoreArrowTuple(slot, 1);
+		ExecStoreArrowTuple(slot, tuple_index);
 	else
 		ExecClearTuple(slot);
 
@@ -1440,48 +1537,105 @@ compressionam_relation_toast_am(Relation rel)
  * ------------------------------------------------------------------------
  */
 
+/*
+ * Return the relation size in bytes.
+ *
+ * The relation size in bytes is computed from the number of blocks in the
+ * relation multiplied by the block size.
+ *
+ * However, since the compression TAM is a "meta" relation over separate
+ * non-compressed and compressed heaps, the total size is actually the sum of
+ * the number of blocks in both heaps. Unfortunately, returning this sum won't
+ * work since the "meta" relation is also the non-compressed relation and
+ * certain functions rely on knowing the "correct" number of blocks in the
+ * non-compressed heap (e.g., to allocate the next block during inserts).
+ *
+ * To make ANALYZE work, however, it is necessary to return the total sum of
+ * blocks (see scan_analyze_next_block()). We special-case this with a flag
+ * set in process utility where the ANALYZE command is captured.
+ */
 static uint64
 compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 {
-	uint64 size = table_block_relation_size(rel, forkNumber);
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	uint64 ubytes = table_block_relation_size(rel, forkNumber);
+	ListCell *lc;
+	bool analyzing = false;
 
-	/*
-	  CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	foreach (lc, analyze_relids)
+	{
+		Oid relid = lfirst_oid(lc);
+
+		if (relid == RelationGetRelid(rel))
+		{
+			analyzing = true;
+			// analyze_relids = list_delete_cell(analyze_relids, lc);
+			break;
+		}
+	}
+
+	if (!analyzing)
+		return ubytes;
+
+	/* For ANALYZE, need to return sum for both relations. */
 	Relation crel = try_relation_open(caminfo->compressed_relid, AccessShareLock);
 
 	if (crel == NULL)
-		return 0;
+		return ubytes;
 
-	uint64 size = table_block_relation_size(rel, forkNumber);
-
-	size += crel->rd_tableam->relation_size(crel, forkNumber);
-	relation_close(crel, AccessShareLock);
-	*/
-
-	return size;
+	uint64 cbytes = table_block_relation_size(crel, forkNumber);
+	relation_close(crel, NoLock);
+	return ubytes + cbytes;
 }
 
 static void
 compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
 									 double *tuples, double *allvisfrac)
 {
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	double ctuples;
+	double callvisfrac;
+	BlockNumber cpages;
+	BlockNumber totalpages;
+	BlockNumber relallvisible;
+	Relation crel;
 
 	if (!OidIsValid(caminfo->compressed_relid))
 		return;
 
-	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	heapam->relation_estimate_size(rel, attr_widths, pages, tuples, allvisfrac);
 
 	/* Cannot pass on attr_widths since they are cached widths for the
 	 * non-compressed relation which also doesn't have the same number of
-	 * attribute (columns). If we pass NULL it will use an estimate
+	 * attribute (columns). If we pass NULL it will compute the estimate
 	 * instead. */
-	crel->rd_tableam->relation_estimate_size(crel, NULL, pages, tuples, allvisfrac);
+	crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	crel->rd_tableam->relation_estimate_size(crel, NULL, &cpages, &ctuples, &callvisfrac);
+	table_close(crel, NoLock);
 
-	*tuples *= GLOBAL_MAX_ROWS_PER_COMPRESSION;
+	totalpages = *pages + cpages;
 
-	// TODO: merge with uncompressed rel size
-	table_close(crel, AccessShareLock);
+	if (totalpages == 0)
+	{
+		*pages = 0;
+		*allvisfrac = 0;
+		*tuples = 0;
+		return;
+	}
+
+	relallvisible =
+		(BlockNumber) rel->rd_rel->relallvisible + (BlockNumber) crel->rd_rel->relallvisible;
+
+	if (relallvisible == 0 || totalpages <= 0)
+		*allvisfrac = 0;
+	else if (relallvisible >= totalpages)
+		*allvisfrac = 1;
+	else
+		*allvisfrac = (double) relallvisible / totalpages;
+
+	*pages = totalpages;
+	*tuples = (ctuples * GLOBAL_MAX_ROWS_PER_COMPRESSION) + *tuples;
 }
 
 static void
