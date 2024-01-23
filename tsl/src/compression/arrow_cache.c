@@ -125,14 +125,13 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 					 * palloc'd. */
 					ArrowArray *arr = entry->arrow_columns[i];
 
-					for (int64 j = 0; j < arr->n_buffers; i++)
+					for (int64 j = 0; j < arr->n_buffers; j++)
 					{
 						/* Validity bitmap might be NULL even if it is counted
 						 * in n_buffers, so need to check for NULL values. */
 						if (arr->buffers[j])
 							pfree((void *) arr->buffers[j]);
 					}
-					pfree(arr->buffers);
 					pfree(entry->arrow_columns[i]);
 				}
 			}
