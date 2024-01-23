@@ -19,6 +19,7 @@
  * individual access methods, so use bit 16. */
 #define SK_NO_COMPRESSED 0x8000
 
+extern void compressionam_set_analyze_relid(Oid relid);
 extern const TableAmRoutine *compressionam_routine(void);
 extern void compressionam_handler_start_conversion(Oid relid, bool to_other_am);
 extern void compressionam_alter_access_method_begin(Oid relid, bool to_other_am);
