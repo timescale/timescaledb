@@ -6,7 +6,9 @@
 #include <postgres.h>
 #include <access/tupdesc.h>
 #include <nodes/bitmapset.h>
+#include <stdint.h>
 #include <storage/itemptr.h>
+#include <utils/guc.h>
 #include <utils/hsearch.h>
 #include <utils/memutils.h>
 
@@ -40,8 +42,37 @@ dlist_move_tail(dlist_head *head, dlist_node *node)
 }
 #endif
 
+static uint16
+get_cache_maxsize(void)
+{
+#ifdef TS_DEBUG
+	const char *maxsize = GetConfigOption("timescaledb.arrow_cache_maxsize", true, false);
+	char *endptr = NULL;
+
+	if (maxsize == NULL)
+		return ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES;
+
+	if (maxsize[0] == '\0')
+		elog(ERROR, "invalid arrow_cache_maxsize value");
+
+	long maxsizel = strtol(maxsize, &endptr, 10);
+
+	errno = 0;
+
+	if (errno == ERANGE || endptr == NULL || endptr[0] != '\0' || maxsizel <= 0 ||
+		maxsizel > UINT16_MAX)
+		elog(ERROR, "invalid arrow_cache_maxsize value");
+
+	elog(DEBUG2, "arrow cache maxsize is %ld", maxsizel);
+
+	return maxsizel & 0xFFFF;
+#else
+	return ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES;
+#endif
+}
+
 void
-arrow_column_cache_init(ArrowTupleTableSlot *aslot)
+arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 {
 	HASHCTL ctl;
 
@@ -52,64 +83,61 @@ arrow_column_cache_init(ArrowTupleTableSlot *aslot)
 	 * Consider adding an identifier using MemoryContextSetIdentifier for
 	 * debug purposes.
 	 */
-	aslot->arrowdata_mcxt =
-		AllocSetContextCreate(aslot->base.base.tts_mcxt, "Arrow data", ALLOCSET_START_SMALL_SIZES);
-	aslot->cache_total = 0;
-	aslot->cache_misses = 0;
+	acache->mcxt = AllocSetContextCreate(mcxt, "Arrow data", ALLOCSET_START_SMALL_SIZES);
+	acache->cache_total = 0;
+	acache->cache_misses = 0;
+	acache->maxsize = get_cache_maxsize();
 
-	elog(DEBUG2,
-		 "arrow decompression cache is under memory context '%s'",
-		 aslot->base.base.tts_mcxt->name);
+	elog(DEBUG2, "arrow decompression cache is under memory context '%s'", mcxt->name);
 
 	ctl.keysize = sizeof(ArrowColumnKey);
 	ctl.entrysize = sizeof(ArrowColumnCacheEntry);
-	ctl.hcxt = aslot->arrowdata_mcxt;
-	aslot->arrow_column_cache =
+	ctl.hcxt = acache->mcxt;
+	acache->htab =
 		hash_create("Arrow column data cache", 32, &ctl, HASH_ELEM | HASH_BLOBS | HASH_CONTEXT);
-	aslot->arrow_column_cache_lru_count = 0;
-	dlist_init(&aslot->arrow_column_cache_lru);
+	acache->arrow_column_cache_lru_count = 0;
+	dlist_init(&acache->arrow_column_cache_lru);
 }
 
 void
-arrow_column_cache_release(ArrowTupleTableSlot *aslot)
+arrow_column_cache_release(ArrowColumnCache *acache)
 {
 	elog(DEBUG2,
 		 "cache hits=%zu misses=%zu",
-		 aslot->cache_total - aslot->cache_misses,
-		 aslot->cache_misses);
-	hash_destroy(aslot->arrow_column_cache);
+		 acache->cache_total - acache->cache_misses,
+		 acache->cache_misses);
+	hash_destroy(acache->htab);
+	MemoryContextDelete(acache->mcxt);
 }
 
 ArrowColumnCacheEntry *
 arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 {
+	ArrowColumnCache *acache = &aslot->arrow_cache;
 	const ItemPointer compressed_tid = &aslot->compressed_slot->tts_tid;
 	const TupleDesc compressed_tupdesc = aslot->compressed_slot->tts_tupleDescriptor;
 	const int uncompressed_natts = aslot->noncompressed_slot->tts_tupleDescriptor->natts;
 	const ArrowColumnKey key = { .ctid = *compressed_tid };
 	bool found;
 
-	Assert(aslot->arrow_column_cache != NULL);
+	ArrowColumnCacheEntry *restrict entry = hash_search(acache->htab, &key, HASH_FIND, &found);
 
-	ArrowColumnCacheEntry *restrict entry =
-		hash_search(aslot->arrow_column_cache, &key, HASH_FIND, &found);
-
-	aslot->cache_total++;
+	acache->cache_total++;
 
 	/* If entry was not found, we might have to prune the LRU list before
 	 * allocating a new entry */
 	if (!found)
 	{
-		if (aslot->arrow_column_cache_lru_count >= ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES)
+		if (acache->arrow_column_cache_lru_count >= acache->maxsize)
 		{
 			/* If we don't have room in the cache for the new entry, pick the
 			 * least recently used and remove it. */
 			entry = dlist_container(ArrowColumnCacheEntry,
 									node,
-									dlist_pop_head_node(&aslot->arrow_column_cache_lru));
-			if (!hash_search(aslot->arrow_column_cache, &entry->key, HASH_REMOVE, NULL))
+									dlist_pop_head_node(&acache->arrow_column_cache_lru));
+			if (!hash_search(acache->htab, &entry->key, HASH_REMOVE, NULL))
 				elog(ERROR, "LRU cache for compressed rows corrupt");
-			--aslot->arrow_column_cache_lru_count;
+			--acache->arrow_column_cache_lru_count;
 
 			/* Free allocated memory in the entry. The entry itself is managed
 			 * by the hash table and might be recycled so should not be freed
@@ -140,14 +168,14 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 		}
 
 		/* Allocate a new entry in the hash table. */
-		entry = hash_search(aslot->arrow_column_cache, &key, HASH_ENTER, &found);
-		dlist_push_tail(&aslot->arrow_column_cache_lru, &entry->node);
-		++aslot->arrow_column_cache_lru_count;
+		entry = hash_search(acache->htab, &key, HASH_ENTER, &found);
+		dlist_push_tail(&acache->arrow_column_cache_lru, &entry->node);
+		++acache->arrow_column_cache_lru_count;
 		Assert(!found);
 	}
 	else
 	{
-		dlist_move_tail(&aslot->arrow_column_cache_lru, &entry->node);
+		dlist_move_tail(&acache->arrow_column_cache_lru, &entry->node);
 	}
 
 	Assert(entry);
@@ -160,8 +188,8 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	 */
 	if (!found)
 	{
-		MemoryContext oldmctx = MemoryContextSwitchTo(aslot->arrowdata_mcxt);
 		const int16 *attrs_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
+		MemoryContext oldmctx = MemoryContextSwitchTo(acache->mcxt);
 
 		entry->nvalid = 0;
 		entry->segmentby_columns = NULL;
@@ -184,12 +212,12 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 		}
 
 		MemoryContextSwitchTo(oldmctx);
-		aslot->cache_misses++;
+		acache->cache_misses++;
 	}
 	else
 	{
 		/* Move the entry found to the front of the LRU list */
-		dlist_move_tail(&aslot->arrow_column_cache_lru, &entry->node);
+		dlist_move_tail(&acache->arrow_column_cache_lru, &entry->node);
 	}
 
 	/*
@@ -226,6 +254,7 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 ArrowArray *
 arrow_column_cache_decompress(ArrowTupleTableSlot *aslot, Datum datum, AttrNumber attnum)
 {
+	const ArrowColumnCache *acache = &aslot->arrow_cache;
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(datum);
 	const TupleDesc noncompressed_tupdesc = aslot->noncompressed_slot->tts_tupleDescriptor;
 	Form_pg_attribute attr = TupleDescAttr(noncompressed_tupdesc, AttrNumberGetAttrOffset(attnum));
@@ -236,7 +265,7 @@ arrow_column_cache_decompress(ArrowTupleTableSlot *aslot, Datum datum, AttrNumbe
 		   header->compression_algorithm);
 	MemoryContext oldcxt = MemoryContextSwitchTo(aslot->decompression_mcxt);
 	ArrowArray *arrow_column =
-		decompress_all(PointerGetDatum(header), attr->atttypid, aslot->arrowdata_mcxt);
+		decompress_all(PointerGetDatum(header), attr->atttypid, acache->mcxt);
 
 	/*
 	 * Not sure how necessary this reset is, but keeping it for now.
