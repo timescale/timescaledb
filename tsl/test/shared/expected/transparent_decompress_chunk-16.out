@@ -607,8 +607,6 @@ QUERY PLAN
 QUERY PLAN
  Nested Loop (actual rows=7196 loops=1)
    Output: _hyper_X_X_chunk.device_id
-   Join Filter: (_hyper_X_X_chunk.device_id = "*VALUES*".column1)
-   Rows Removed by Join Filter: 28784
    ->  Unique (actual rows=2 loops=1)
          Output: "*VALUES*".column1
          ->  Sort (actual rows=2 loops=1)
@@ -617,12 +615,13 @@ QUERY PLAN
                Sort Method: quicksort 
                ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
                      Output: "*VALUES*".column1
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=17990 loops=2)
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=3598 loops=2)
          Output: _hyper_X_X_chunk.device_id
          Bulk Decompression: false
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=20 loops=2)
+         ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=4 loops=2)
                Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk._ts_meta_sequence_num, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-(17 rows)
+               Index Cond: (compress_hyper_X_X_chunk.device_id = "*VALUES*".column1)
+(16 rows)
 
 RESET enable_hashjoin;
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE WHERE device_id IN (VALUES (1));
@@ -638,37 +637,43 @@ QUERY PLAN
 --with multiple values can get a semi-join or nested loop depending on seq_page_cost.
 :PREFIX_VERBOSE SELECT device_id FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
 QUERY PLAN
- Hash Semi Join (actual rows=7196 loops=1)
+ Nested Loop (actual rows=7196 loops=1)
    Output: _hyper_X_X_chunk.device_id
-   Hash Cond: (_hyper_X_X_chunk.device_id = "*VALUES*".column1)
-   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=17990 loops=1)
+   ->  Unique (actual rows=2 loops=1)
+         Output: "*VALUES*".column1
+         ->  Sort (actual rows=2 loops=1)
+               Output: "*VALUES*".column1
+               Sort Key: "*VALUES*".column1
+               Sort Method: quicksort 
+               ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+                     Output: "*VALUES*".column1
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk (actual rows=3598 loops=2)
          Output: _hyper_X_X_chunk.device_id
          Bulk Decompression: false
-         ->  Seq Scan on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=20 loops=1)
+         ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_X_X_chunk (actual rows=4 loops=2)
                Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk._ts_meta_sequence_num, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-   ->  Hash (actual rows=2 loops=1)
-         Output: "*VALUES*".column1
-         Buckets: 1024  Batches: 1 
-         ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-               Output: "*VALUES*".column1
-(13 rows)
+               Index Cond: (compress_hyper_X_X_chunk.device_id = "*VALUES*".column1)
+(16 rows)
 
 SET seq_page_cost = 100;
 -- loop/row counts of this query is different on windows so we run it without analyze
 :PREFIX_NO_ANALYZE SELECT device_id FROM :TEST_TABLE WHERE device_id IN (VALUES (1), (2));
 QUERY PLAN
- Hash Semi Join
+ Nested Loop
    Output: _hyper_X_X_chunk.device_id
-   Hash Cond: (_hyper_X_X_chunk.device_id = "*VALUES*".column1)
+   ->  Unique
+         Output: "*VALUES*".column1
+         ->  Sort
+               Output: "*VALUES*".column1
+               Sort Key: "*VALUES*".column1
+               ->  Values Scan on "*VALUES*"
+                     Output: "*VALUES*".column1
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_X_X_chunk
          Output: _hyper_X_X_chunk.device_id
          ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_X_X_chunk
                Output: compress_hyper_X_X_chunk."time", compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk.v0, compress_hyper_X_X_chunk.v1, compress_hyper_X_X_chunk.v2, compress_hyper_X_X_chunk.v3, compress_hyper_X_X_chunk._ts_meta_count, compress_hyper_X_X_chunk._ts_meta_sequence_num, compress_hyper_X_X_chunk._ts_meta_min_1, compress_hyper_X_X_chunk._ts_meta_max_1
-   ->  Hash
-         Output: "*VALUES*".column1
-         ->  Values Scan on "*VALUES*"
-               Output: "*VALUES*".column1
-(11 rows)
+               Index Cond: (compress_hyper_X_X_chunk.device_id = "*VALUES*".column1)
+(14 rows)
 
 RESET seq_page_cost;
 -- test view
@@ -694,14 +699,15 @@ FROM :TEST_TABLE m1
 QUERY PLAN
  Limit
    ->  Nested Loop
-         Join Filter: ((m1."time" = m2."time") AND (m1.device_id = m2.device_id))
          ->  Sort
                Sort Key: m1."time", m1.device_id
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                      ->  Seq Scan on compress_hyper_X_X_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-               ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-(9 rows)
+               Filter: ("time" = m1."time")
+               ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                     Index Cond: (device_id = m1.device_id)
+(10 rows)
 
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -716,23 +722,22 @@ FROM :TEST_TABLE m1
 QUERY PLAN
  Limit
    ->  Merge Join
-         Merge Cond: (m2."time" = m1."time")
-         Join Filter: (m1.device_id = m2.device_id)
-         ->  Sort
-               Sort Key: m2."time", m2.device_id
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
-                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
-         ->  Materialize
-               ->  Nested Loop
-                     Join Filter: (m1."time" = m3."time")
-                     ->  Sort
-                           Sort Key: m3."time"
-                           ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
-                                 ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
-                                       Filter: (device_id = 3)
+         Merge Cond: (m1."time" = m3."time")
+         ->  Nested Loop
+               ->  Sort
+                     Sort Key: m1."time", m1.device_id
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m1
                            ->  Seq Scan on compress_hyper_X_X_chunk
-(18 rows)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m2
+                     Filter: ("time" = m1."time")
+                     ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1
+                           Index Cond: (device_id = m1.device_id)
+         ->  Sort
+               Sort Key: m3."time"
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m3
+                     ->  Seq Scan on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_2
+                           Filter: (device_id = 3)
+(17 rows)
 
 RESET min_parallel_table_scan_size;
 :PREFIX_NO_VERBOSE

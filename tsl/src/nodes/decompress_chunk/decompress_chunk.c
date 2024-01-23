@@ -1447,7 +1447,6 @@ static bool
 add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 								   CompressionInfo *info, EMCreationContext *context)
 {
-	Relids uncompressed_chunk_relids = info->chunk_rel->relids;
 	ListCell *lc;
 
 	TimescaleDBPrivate *compressed_fdw_private =
@@ -1462,6 +1461,17 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
+		/*
+		 * We want to base our equivalence member on the hypertable equivalence
+		 * member, not on the uncompressed chunk one, because the latter is
+		 * marked as child itself. This is mostly relevant for PG16 where we
+		 * have to specify a parent for the newly created equivalence member.
+		 */
+		if (cur_em->em_is_child)
+		{
+			continue;
+		}
+
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
 		var = (Var *) cur_em->em_expr;
@@ -1470,14 +1480,24 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		if (!(var && IsA(var, Var)))
 			continue;
 
-		if ((Index) var->varno != info->chunk_rel->relid)
+		if ((Index) var->varno != info->ht_rel->relid)
 			continue;
+
+		if (var->varattno <= 0)
+		{
+			/*
+			 * We can have equivalence members that refer to special variables,
+			 * but these variables can't be segmentby, so we're not interested
+			 * in them here.
+			 */
+			continue;
+		}
 
 		/* given that the em is a var of the uncompressed chunk, the relid of the chunk should
 		 * be set on the em */
-		Assert(bms_overlap(cur_em->em_relids, uncompressed_chunk_relids));
+		Assert(bms_is_member(info->ht_rel->relid, cur_em->em_relids));
 
-		const char *attname = get_attname(info->chunk_rte->relid, var->varattno, false);
+		const char *attname = get_attname(info->ht_rte->relid, var->varattno, false);
 
 		if (!ts_array_is_member(context->settings->fd.segmentby, attname))
 			continue;
@@ -1492,7 +1512,8 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		 * transformation might have substituted a constant, but we
 		 * don't want the child member to be marked as constant.
 		 */
-		new_relids = bms_difference(cur_em->em_relids, uncompressed_chunk_relids);
+		new_relids = bms_copy(cur_em->em_relids);
+		new_relids = bms_del_member(new_relids, info->ht_rel->relid);
 		new_relids = bms_add_members(new_relids, info->compressed_rel->relids);
 
 		/* copied from add_eq_member */
@@ -1504,6 +1525,10 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			em->em_is_const = false;
 			em->em_is_child = true;
 			em->em_datatype = cur_em->em_datatype;
+#if PG16_GE
+			em->em_jdomain = cur_em->em_jdomain;
+			em->em_parent = cur_em;
+#endif
 
 #if PG16_LT
 			/*
@@ -1511,10 +1536,10 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			 * em_relids. Note that this code assumes parent and child relids are singletons.
 			 */
 			Relids new_nullable_relids = cur_em->em_nullable_relids;
-			if (bms_overlap(new_nullable_relids, uncompressed_chunk_relids))
+			if (bms_is_member(info->ht_rel->relid, new_nullable_relids))
 			{
-				new_nullable_relids =
-					bms_difference(new_nullable_relids, uncompressed_chunk_relids);
+				new_nullable_relids = bms_copy(new_nullable_relids);
+				new_nullable_relids = bms_del_member(new_nullable_relids, info->ht_rel->relid);
 				new_nullable_relids =
 					bms_add_members(new_nullable_relids, info->compressed_rel->relids);
 			}
@@ -1544,27 +1569,6 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 			compressed_fdw_private->compressed_ec_em_pairs =
 				lappend(compressed_fdw_private->compressed_ec_em_pairs, list_make2(cur_ec, em));
 
-#if PG16_GE
-			/* Record EquivalenceMember for the compressed chunk as derived to prevent
-			 * infinite recursion.
-			 */
-
-			foreach (lc, cur_ec->ec_members)
-			{
-				EquivalenceMember *p_em = lfirst_node(EquivalenceMember, lc);
-				/* Assume non-child member are at the beginning */
-				if (p_em->em_is_child)
-					break;
-
-				RestrictInfo *d = make_simple_restrictinfo_compat(root, p_em->em_expr);
-				d->parent_ec = cur_ec;
-				d->left_em = p_em;
-				d->right_em = em;
-				cur_ec->ec_derives = lappend(cur_ec->ec_derives, d);
-			}
-
-#endif
-
 			return true;
 		}
 	}
@@ -1575,10 +1579,10 @@ static void
 compressed_rel_setup_equivalence_classes(PlannerInfo *root, CompressionInfo *info)
 {
 	EMCreationContext context = {
-		.uncompressed_relid = info->chunk_rte->relid,
+		.uncompressed_relid = info->ht_rte->relid,
 		.compressed_relid = info->compressed_rte->relid,
 
-		.uncompressed_relid_idx = info->chunk_rel->relid,
+		.uncompressed_relid_idx = info->ht_rel->relid,
 		.compressed_relid_idx = info->compressed_rel->relid,
 		.settings = info->settings,
 	};
