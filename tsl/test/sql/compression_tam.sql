@@ -21,10 +21,16 @@ ALTER TABLE readings SET (
 	  timescaledb.compress_segmentby = 'device'
 );
 
--- Set a test chunk as a global variable
+-- Set some test chunks as global variables
 SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk
   FROM timescaledb_information.chunks
  WHERE format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ LIMIT 1 \gset
+
+SELECT format('%I.%I', chunk_schema, chunk_name)::regclass AS chunk2
+  FROM timescaledb_information.chunks
+ WHERE format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ ORDER BY chunk2 DESC
  LIMIT 1 \gset
 
 -- We do some basic checks that the compressed data is the same as the
@@ -198,6 +204,81 @@ SET timescaledb.enable_columnarscan = false;
 EXPLAIN (analyze, costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY device ASC LIMIT 5;
 
+--
+-- Test ANALYZE.
+--
+-- First create a separate regular table with the chunk data as a
+-- reference of accurate stats. Analyze it and compare with analyze
+-- on the original chunk.
+--
+CREATE TABLE chunk_data (LIKE :chunk);
+INSERT INTO chunk_data SELECT * FROM :chunk;
+ANALYZE chunk_data;
+
+CREATE VIEW chunk_data_relstats AS
+SELECT relname, reltuples, relpages
+FROM pg_class
+WHERE oid = 'chunk_data'::regclass;
+
+CREATE VIEW chunk_data_attrstats AS
+SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
+FROM pg_stats
+WHERE format('%I.%I', schemaname, tablename)::regclass = 'chunk_data'::regclass;
+
+SELECT * FROM chunk_data_relstats;
+SELECT * FROM chunk_data_attrstats;
+
+-- Stats on compressed chunk before ANALYZE. Note that this chunk is
+-- partially compressed
+SELECT relname, reltuples, relpages
+FROM pg_class
+WHERE oid = :'chunk'::regclass;
+
+SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
+FROM pg_stats
+WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass;
+
+-- ANALYZE directly on chunk
+ANALYZE :chunk;
+
+-- Stats after ANALYZE. Show rows that differ. The number of relpages
+-- will differ because the chunk is compressed and uses less pages.
+SELECT relname, reltuples, relpages
+FROM pg_class
+WHERE oid = :'chunk'::regclass;
+
+-- There should be no difference in attrstats, so EXCEPT query should
+-- show no results
+SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
+FROM pg_stats
+WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
+EXCEPT
+SELECT * FROM chunk_data_attrstats;
+
+-- ANALYZE also via hypertable root and show that it will
+-- recurse to another chunk
+ALTER TABLE :chunk2 SET ACCESS METHOD tscompression;
+SELECT relname, reltuples, relpages
+FROM pg_class
+WHERE oid = :'chunk2'::regclass;
+
+SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
+FROM pg_stats
+WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass;
+
+SELECT count(*) FROM :chunk2;
+
+ANALYZE readings;
+
+SELECT relname, reltuples, relpages
+FROM pg_class
+WHERE oid = :'chunk2'::regclass;
+
+SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
+FROM pg_stats
+WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass;
+
+ALTER TABLE :chunk2 SET ACCESS METHOD heap;
 
 -- We should be able to change it back to heap.
 -- Compression metadata should be cleaned up
@@ -211,7 +292,6 @@ SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
 FROM _timescaledb_catalog.chunk c1
 INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
-
 ALTER TABLE :chunk SET ACCESS METHOD heap;
 SET timescaledb.enable_transparent_decompression TO true;
 
