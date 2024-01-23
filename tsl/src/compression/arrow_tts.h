@@ -11,13 +11,13 @@
 #include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
-#include <lib/ilist.h>
 #include <nodes/bitmapset.h>
 #include <utils/builtins.h>
 #include <utils/hsearch.h>
 #include <utils/palloc.h>
 
 #include "arrow_c_data_interface.h"
+#include "compression/arrow_cache.h"
 #include "compression/create.h"
 #include "nodes/decompress_chunk/detoaster.h"
 
@@ -65,12 +65,7 @@ typedef struct ArrowTupleTableSlot
 						 * value has index 1. If the index is 0 it means the
 						 * child slot points to a non-compressed tuple. */
 	uint16 total_row_count;
-	size_t arrow_column_cache_lru_count; /* Arrow column cache LRU list count */
-	dlist_head arrow_column_cache_lru;	 /* Arrow column cache LRU list */
-	HTAB *arrow_column_cache;			 /* Arrow column cache */
-	size_t cache_total;
-	size_t cache_misses;
-	MemoryContext arrowdata_mcxt;
+	ArrowColumnCache arrow_cache;
 	MemoryContext decompression_mcxt;
 	Bitmapset *segmentby_columns;
 	Bitmapset *valid_columns; /* Per-column validity replacing "nvalid" */
