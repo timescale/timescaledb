@@ -37,6 +37,7 @@
 #include <optimizer/plancat.h>
 #include <parser/analyze.h>
 #include <tcop/tcopprot.h>
+#include <utils/fmgrprotos.h>
 #include "compat/compat-msvc-exit.h"
 
 #include <math.h>
@@ -279,6 +280,47 @@ typedef struct
 	PlannerInfo *root;
 } PreprocessQueryContext;
 
+void
+replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid)
+{
+	/* whenever we encounter a FuncExpr with now(), replace it with the supplied funcid */
+	switch (nodeTag(clause))
+	{
+		case T_FuncExpr:
+		{
+			if (is_valid_now_func(clause))
+			{
+				FuncExpr *fe = castNode(FuncExpr, clause);
+				fe->funcid = funcid;
+				return;
+			}
+			break;
+		}
+		case T_OpExpr:
+		{
+			ListCell *lc;
+			OpExpr *oe = castNode(OpExpr, clause);
+			foreach (lc, oe->args)
+			{
+				replace_now_mock_walker(root, (Node *) lfirst(lc), funcid);
+			}
+			break;
+		}
+		case T_BoolExpr:
+		{
+			ListCell *lc;
+			BoolExpr *be = castNode(BoolExpr, clause);
+			foreach (lc, be->args)
+			{
+				replace_now_mock_walker(root, (Node *) lfirst(lc), funcid);
+			}
+			break;
+		}
+		default:
+			return;
+	}
+}
+
 /*
  * Preprocess the query tree, including, e.g., subqueries.
  *
@@ -310,6 +352,20 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			{
 				from->quals =
 					ts_constify_now(context->root, context->current_query->rtable, from->quals);
+#ifdef TS_DEBUG
+				/*
+				 * only replace if GUC is also set. This is used for testing purposes only,
+				 * so no need to change the output for other tests in DEBUG builds
+				 */
+				if (ts_current_timestamp_mock != NULL && strlen(ts_current_timestamp_mock) != 0)
+				{
+					Oid funcid_mock;
+					const char *funcname = "ts_now_mock()";
+					funcid_mock = DatumGetObjectId(
+						DirectFunctionCall1(regprocedurein, CStringGetDatum(funcname)));
+					replace_now_mock_walker(context->root, from->quals, funcid_mock);
+				}
+#endif
 			}
 			/*
 			 * We only amend space constraints for UPDATE/DELETE and SELECT FOR UPDATE

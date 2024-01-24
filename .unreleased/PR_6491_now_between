@@ -1,0 +1,1 @@
+Fixes: #6491 Enable now() plantime constification with BETWEEN
