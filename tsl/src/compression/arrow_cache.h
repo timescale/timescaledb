@@ -58,6 +58,7 @@ typedef struct ArrowColumnKey
 typedef struct ArrowColumnCache
 {
 	MemoryContext mcxt;
+	MemoryContext decompression_mcxt;	 /* Temporary data during decompression */
 	size_t arrow_column_cache_lru_count; /* Arrow column cache LRU list count */
 	dlist_head arrow_column_cache_lru;	 /* Arrow column cache LRU list */
 	HTAB *htab;							 /* Arrow column cache */
@@ -80,7 +81,6 @@ typedef struct ArrowColumnCacheEntry
 	ArrowColumnKey key;
 	int nvalid;		 /* Valid columns from the compressed tuple. */
 	dlist_node node; /* List link in LRU list. */
-	Bitmapset *segmentby_columns;
 	ArrowArray **arrow_columns;
 } ArrowColumnCacheEntry;
 
@@ -89,6 +89,5 @@ typedef struct ArrowTupleTableSlot ArrowTupleTableSlot;
 extern void arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt);
 extern void arrow_column_cache_release(ArrowColumnCache *acache);
 extern ArrowColumnCacheEntry *arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum);
-extern ArrowArray *arrow_column_cache_decompress(ArrowTupleTableSlot *aslot, Datum datum,
-												 AttrNumber attnum);
+
 #endif /* COMPRESSION_ARROW_CACHE_H_ */
