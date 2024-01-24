@@ -7,6 +7,7 @@
 -- path that combines the uncompressed and compressed parts of a chunk.
 
 set enable_parallel_append to off; -- for less flaky plans
+set max_parallel_workers_per_gather to 0;
 
 set timescaledb.enable_decompression_sorted_merge = off;
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
@@ -17,15 +18,17 @@ ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compres
 
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'6 hour') time,
-generate_series(1,3) device;
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'1 minute') time,
+generate_series(1,30) device;
 
 SELECT compress_chunk(c) FROM show_chunks('ht_metrics_compressed') c;
 -- make them partially compressed
 INSERT INTO ht_metrics_compressed
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'9 hour') time,
-generate_series(1,3) device;
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'2 minute') time,
+generate_series(1,30) device;
+
+ANALYZE ht_metrics_compressed;
 
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
