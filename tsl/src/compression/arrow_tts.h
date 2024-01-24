@@ -66,8 +66,7 @@ typedef struct ArrowTupleTableSlot
 						 * child slot points to a non-compressed tuple. */
 	uint16 total_row_count;
 	ArrowColumnCache arrow_cache;
-	MemoryContext decompression_mcxt;
-	Bitmapset *segmentby_columns;
+	Bitmapset *segmentby_attrs;
 	Bitmapset *valid_columns; /* Per-column validity replacing "nvalid" */
 	int16 *attrs_offset_map;
 } ArrowTupleTableSlot;
@@ -209,45 +208,8 @@ is_compressed_tid(const ItemPointerData *itemptr)
 	return (ItemPointerGetBlockNumber(itemptr) & COMPRESSED_FLAG) != 0;
 }
 
-static inline TupleTableSlot *
-arrow_slot_get_compressed_slot(TupleTableSlot *slot, const TupleDesc tupdesc)
-{
-	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-
-	Assert(TTS_IS_ARROWTUPLE(slot));
-
-	if (NULL == aslot->compressed_slot)
-	{
-		MemoryContext oldmctx;
-
-		if (NULL == tupdesc)
-			elog(ERROR, "cannot make compressed table slot without tuple descriptor");
-
-		oldmctx = MemoryContextSwitchTo(slot->tts_mcxt);
-		aslot->compressed_slot = MakeSingleTupleTableSlot(tupdesc, &TTSOpsBufferHeapTuple);
-		/* Set total row count */
-
-		aslot->count_attnum = InvalidAttrNumber;
-
-		for (int i = 0; i < tupdesc->natts; i++)
-		{
-			Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
-
-			if (namestrcmp(&attr->attname, COMPRESSION_COLUMN_METADATA_COUNT_NAME) == 0)
-			{
-				aslot->count_attnum = AttrOffsetGetAttrNumber(i);
-				break;
-			}
-		}
-
-		if (aslot->count_attnum == InvalidAttrNumber)
-			elog(ERROR, "missing count metadata in compressed relation");
-
-		MemoryContextSwitchTo(oldmctx);
-	}
-
-	return aslot->compressed_slot;
-}
+extern TupleTableSlot *arrow_slot_get_compressed_slot(TupleTableSlot *slot,
+													  const TupleDesc tupdesc);
 
 static inline TupleTableSlot *
 arrow_slot_get_noncompressed_slot(TupleTableSlot *slot)
