@@ -11,41 +11,52 @@ set enable_parallel_append to off; -- for less flaky plans
 set timescaledb.enable_decompression_sorted_merge = off;
 \set PREFIX 'EXPLAIN (analyze, costs off, timing off, summary off)'
 
-CREATE TABLE ht_metrics_compressed(time timestamptz, device int, value float);
-SELECT create_hypertable('ht_metrics_compressed','time');
-ALTER TABLE ht_metrics_compressed SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
+CREATE TABLE mapc_test(time timestamptz, device int, value float);
+SELECT create_hypertable('mapc_test','time', create_default_indexes => false);
+ALTER TABLE mapc_test SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='time');
 
-INSERT INTO ht_metrics_compressed
+INSERT INTO mapc_test
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'6 hour') time,
-generate_series(1,3) device;
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-15'::timestamptz,'4 second') time,
+generate_series(1,10) device;
 
-SELECT compress_chunk(c) FROM show_chunks('ht_metrics_compressed') c;
+select format('select count(*), min(time) from %s', x) from show_chunks('mapc_test') x \gexec
+
+SELECT compress_chunk(c) FROM show_chunks('mapc_test') c;
 -- make them partially compressed
-INSERT INTO ht_metrics_compressed
+INSERT INTO mapc_test
 SELECT time, device, device * 0.1
-FROM generate_series('2020-01-02'::timestamptz,'2020-01-18'::timestamptz,'9 hour') time,
-generate_series(1,3) device;
+FROM generate_series('2020-01-02'::timestamptz,'2020-01-15'::timestamptz,'4 minute') time,
+generate_series(1,10) device;
+
+create index on mapc_test(time);
+
+analyze mapc_test;
 
 -- chunkAppend eligible queries (from tsbench)
 -- sort is not pushed down
-:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time DESC, device LIMIT 1;
-:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('1d', time) DESC, device LIMIT 1;
-:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time desc limit 10;
-:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('2d',time) DESC LIMIT 1;
-:PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
-:PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time, device DESC LIMIT 1;
+:PREFIX SELECT * FROM mapc_test ORDER BY time DESC, device LIMIT 1;
+:PREFIX SELECT * FROM mapc_test ORDER BY time_bucket('1d', time) DESC, device LIMIT 1;
+:PREFIX SELECT * FROM mapc_test ORDER BY time desc limit 10;
+:PREFIX SELECT * FROM mapc_test ORDER BY time_bucket('2d',time) DESC LIMIT 1;
+:PREFIX SELECT * FROM mapc_test WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
+:PREFIX SELECT * FROM mapc_test WHERE device IN (1,2,3) ORDER BY time, device DESC LIMIT 1;
+
 -- index scan, no sort on top
-:PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1; -- index scan, no resorting required
-SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time DESC LIMIT 1;
-:PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC LIMIT 1; -- this uses the index and does not do sort on top
-SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY device, time DESC LIMIT 1;
-:PREFIX SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1; -- this also uses the index and does not do sort on top
-SELECT * FROM ht_metrics_compressed WHERE device = 3 ORDER BY time, device DESC LIMIT 1;
+:PREFIX SELECT * FROM mapc_test WHERE device = 3 ORDER BY time DESC LIMIT 1;
+SELECT * FROM mapc_test WHERE device = 3 ORDER BY time DESC LIMIT 1;
+
+-- index scan, no sort on top
+:PREFIX SELECT * FROM mapc_test WHERE device = 3 ORDER BY device, time DESC LIMIT 1;
+SELECT * FROM mapc_test WHERE device = 3 ORDER BY device, time DESC LIMIT 1;
+
+-- index scan, no sort on top
+:PREFIX SELECT * FROM mapc_test WHERE device = 3 ORDER BY time, device DESC LIMIT 1;
+SELECT * FROM mapc_test WHERE device = 3 ORDER BY time, device DESC LIMIT 1;
 
 -- not eligible for chunkAppend, but eligible for sort pushdown
-:PREFIX SELECT * FROM ht_metrics_compressed ORDER BY device, time DESC LIMIT 1; -- with pushdown
-:PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
+:PREFIX SELECT * FROM mapc_test ORDER BY device, time DESC LIMIT 1; -- with pushdown
+:PREFIX SELECT * FROM mapc_test WHERE device IN (1,2,3) ORDER BY device, time DESC LIMIT 1; -- with pushdown
 
 CREATE TABLE test1 (
 time timestamptz NOT NULL,
