@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 #include <access/tupdesc.h>
+#include <catalog/pg_attribute.h>
 #include <nodes/bitmapset.h>
 #include <stdint.h>
 #include <storage/itemptr.h>
@@ -16,6 +17,10 @@
 #include "arrow_tts.h"
 #include "compression.h"
 #include "debug_assert.h"
+#include <utils/palloc.h>
+
+static ArrowArray *arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid,
+												 Datum datum);
 
 /*
  * The function dlist_move_tail only exists for PG14 and above, so provide it
@@ -84,6 +89,12 @@ arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 	 * debug purposes.
 	 */
 	acache->mcxt = AllocSetContextCreate(mcxt, "Arrow data", ALLOCSET_START_SMALL_SIZES);
+	acache->decompression_mcxt = AllocSetContextCreate(acache->mcxt,
+													   "bulk decompression",
+													   /* minContextSize = */ 0,
+													   /* initBlockSize = */ 64 * 1024,
+													   /* maxBlockSize = */ 64 * 1024);
+
 	acache->cache_total = 0;
 	acache->cache_misses = 0;
 	acache->maxsize = get_cache_maxsize();
@@ -116,7 +127,6 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	ArrowColumnCache *acache = &aslot->arrow_cache;
 	const ItemPointer compressed_tid = &aslot->compressed_slot->tts_tid;
 	const TupleDesc compressed_tupdesc = aslot->compressed_slot->tts_tupleDescriptor;
-	const int uncompressed_natts = aslot->noncompressed_slot->tts_tupleDescriptor->natts;
 	const ArrowColumnKey key = { .ctid = *compressed_tid };
 	bool found;
 
@@ -163,8 +173,7 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 					pfree(entry->arrow_columns[i]);
 				}
 			}
-			pfree(entry->segmentby_columns);
-			pfree(entry->arrow_columns);
+			pfree((void *) entry->arrow_columns);
 		}
 
 		/* Allocate a new entry in the hash table. */
@@ -188,30 +197,9 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	 */
 	if (!found)
 	{
-		const int16 *attrs_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
-		MemoryContext oldmctx = MemoryContextSwitchTo(acache->mcxt);
-
 		entry->nvalid = 0;
-		entry->segmentby_columns = NULL;
-		entry->arrow_columns =
-			(ArrowArray **) palloc0(sizeof(ArrowArray *) * compressed_tupdesc->natts);
-
-		/*
-		 * Populate the segmentby_column bitmap with information about *all*
-		 * columns in the non-compressed version of the tuple. That way we do
-		 * not have to update this field if we start fetching more attributes.
-		 */
-		for (int i = 0; i < uncompressed_natts; i++)
-		{
-			const int16 cattoff = attrs_map[i];
-			const AttrNumber attno = AttrOffsetGetAttrNumber(i);
-			const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
-
-			if (!is_compressed_col(compressed_tupdesc, cattno))
-				entry->segmentby_columns = bms_add_member(entry->segmentby_columns, attno);
-		}
-
-		MemoryContextSwitchTo(oldmctx);
+		entry->arrow_columns = (ArrowArray **)
+			MemoryContextAllocZero(acache->mcxt, sizeof(ArrowArray *) * compressed_tupdesc->natts);
 		acache->cache_misses++;
 	}
 	else
@@ -219,6 +207,8 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 		/* Move the entry found to the front of the LRU list */
 		dlist_move_tail(&acache->arrow_column_cache_lru, &entry->node);
 	}
+
+	const int16 *attrs_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
 
 	/*
 	 * Fill in missing columns in the cache entry.
@@ -228,8 +218,7 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 	 */
 	for (; entry->nvalid < attnum; entry->nvalid++)
 	{
-		const int16 cattoff = aslot->attrs_offset_map[entry->nvalid];
-		const AttrNumber attno = AttrOffsetGetAttrNumber(entry->nvalid);
+		const int16 cattoff = attrs_map[entry->nvalid];
 		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
 
 		if (is_compressed_col(compressed_tupdesc, cattno))
@@ -238,8 +227,12 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 			Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
 
 			if (!isnull)
+			{
+				const TupleDesc tupdesc = aslot->base.base.tts_tupleDescriptor;
+				const Form_pg_attribute attr = TupleDescAttr(tupdesc, entry->nvalid);
 				entry->arrow_columns[entry->nvalid] =
-					arrow_column_cache_decompress(aslot, value, attno);
+					arrow_column_cache_decompress(acache, attr->atttypid, value);
+			}
 		}
 	}
 
@@ -251,21 +244,17 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
  *
  * Returns a pointer to the cached entry.
  */
-ArrowArray *
-arrow_column_cache_decompress(ArrowTupleTableSlot *aslot, Datum datum, AttrNumber attnum)
+static ArrowArray *
+arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum datum)
 {
-	const ArrowColumnCache *acache = &aslot->arrow_cache;
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(datum);
-	const TupleDesc noncompressed_tupdesc = aslot->noncompressed_slot->tts_tupleDescriptor;
-	Form_pg_attribute attr = TupleDescAttr(noncompressed_tupdesc, AttrNumberGetAttrOffset(attnum));
 	DecompressAllFunction decompress_all =
-		tsl_get_decompress_all_function(header->compression_algorithm, attr->atttypid);
+		tsl_get_decompress_all_function(header->compression_algorithm, typid);
 	Ensure(decompress_all != NULL,
 		   "missing decompression function %d",
 		   header->compression_algorithm);
-	MemoryContext oldcxt = MemoryContextSwitchTo(aslot->decompression_mcxt);
-	ArrowArray *arrow_column =
-		decompress_all(PointerGetDatum(header), attr->atttypid, acache->mcxt);
+	MemoryContext oldcxt = MemoryContextSwitchTo(acache->decompression_mcxt);
+	ArrowArray *arrow_column = decompress_all(PointerGetDatum(header), typid, acache->mcxt);
 
 	/*
 	 * Not sure how necessary this reset is, but keeping it for now.
@@ -273,7 +262,7 @@ arrow_column_cache_decompress(ArrowTupleTableSlot *aslot, Datum datum, AttrNumbe
 	 * The amount of data is bounded by the number of columns in the tuple
 	 * table slot, so it might be possible to skip this reset.
 	 */
-	MemoryContextReset(aslot->decompression_mcxt);
+	MemoryContextReset(acache->decompression_mcxt);
 	MemoryContextSwitchTo(oldcxt);
 	return arrow_column;
 }
