@@ -70,6 +70,22 @@ test inner join query_params q
 where test.time between '2020-01-01 00:00' and '2020-01-01 00:02'
 order by test.time;
 
+-- Also test outer join for better coverage of nullability handling.
+-- This test case generates a nullable equivalence member for test.b.
+explain (costs off)
+with query_params as (
+    select distinct a, b + 1 as b
+    from test_copy
+    where test_copy.a IN ('lat', 'lon')
+)
+select test.a, test.b
+from test
+full join query_params q
+    on q.a = test.a
+full join query_params q2
+    on q2.b = test.b
+;
+
 reset enable_seqscan;
 reset jit;
 

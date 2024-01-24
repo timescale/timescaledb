@@ -90,13 +90,13 @@ check_segmentby(Oid relid, List *segmentby_cols)
 
 	foreach (lc, segmentby_cols)
 	{
-		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
-		AttrNumber col_attno = get_attnum(relid, NameStr(col->colname));
+		char *colname = lfirst(lc);
+		AttrNumber col_attno = get_attnum(relid, colname);
 		if (col_attno == InvalidAttrNumber)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("column \"%s\" does not exist", NameStr(col->colname)),
+					 errmsg("column \"%s\" does not exist", colname),
 					 errhint("The timescaledb.compress_segmentby option must reference a valid "
 							 "column.")));
 		}
@@ -107,7 +107,7 @@ check_segmentby(Oid relid, List *segmentby_cols)
 		if (ts_array_is_member(segmentby, col_attname))
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
-					 errmsg("duplicate column name \"%s\"", NameStr(col->colname)),
+					 errmsg("duplicate column name \"%s\"", colname),
 					 errhint("The timescaledb.compress_segmentby option must reference distinct "
 							 "column.")));
 		segmentby = ts_array_add_element_text(segmentby, col_attname);
@@ -412,8 +412,7 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 	}
 	foreach (lc, segmentby_cols)
 	{
-		CompressedParsedCol *col = (CompressedParsedCol *) lfirst(lc);
-		if (namestrcmp(&col->colname, time_col_name) == 0)
+		if (strncmp(lfirst(lc), time_col_name, NAMEDATALEN) == 0)
 			found = true;
 	}
 
@@ -422,8 +421,7 @@ add_time_to_order_by_if_not_included(List *orderby_cols, List *segmentby_cols, H
 		/* Add time DESC NULLS FIRST to order by list */
 		CompressedParsedCol *col = palloc(sizeof(*col));
 		*col = (CompressedParsedCol){
-			.index = list_length(orderby_cols),
-			.asc = false,
+			.desc = true,
 			.nullsfirst = true,
 		};
 		namestrcpy(&col->colname, time_col_name);
@@ -629,7 +627,7 @@ check_modify_compression_options(Hypertable *ht, CompressionSettings *settings,
 				colname = ts_array_get_element_text(settings->fd.orderby, 1);
 				bool orderby_desc = ts_array_get_element_bool(settings->fd.orderby_desc, 1);
 				parsed = lfirst(list_nth_cell(parsed_orderby_cols, 0));
-				orderby_time_default_matches = (orderby_desc != parsed->asc);
+				orderby_time_default_matches = (orderby_desc == parsed->desc);
 			}
 
 			// this is okay only if the orderby that's already set is only the time column
@@ -922,102 +920,27 @@ compression_settings_update(CompressionSettings *settings, WithClauseResult *wit
 
 	if (!with_clause_options[CompressSegmentBy].is_default)
 	{
-		if (segmentby_cols)
-		{
-			List *d = NIL;
-			ListCell *lc;
-			foreach (lc, segmentby_cols)
-			{
-				CompressedParsedCol *col = lfirst(lc);
-				d = lappend(d, (void *) CStringGetTextDatum(NameStr(col->colname)));
-			}
-
-			settings->fd.segmentby =
-				construct_array((Datum *) d->elements, d->length, TEXTOID, -1, false, TYPALIGN_INT);
-		}
-		else
-		{
-			settings->fd.segmentby = NULL;
-		}
+		settings->fd.segmentby = ts_array_create_from_list_text(segmentby_cols);
 	}
 
-	if (!with_clause_options[CompressOrderBy].is_default)
+	if (!with_clause_options[CompressOrderBy].is_default || !settings->fd.orderby)
 	{
-		if (orderby_cols)
-		{
-			List *cols = NIL;
-			List *asc = NIL;
-			List *desc = NIL;
-			List *nullsfirst = NIL;
-			ListCell *lc;
-			foreach (lc, orderby_cols)
-			{
-				CompressedParsedCol *col = lfirst(lc);
-				cols = lappend(cols, (void *) CStringGetTextDatum(NameStr(col->colname)));
-				asc = lappend_int(asc, col->asc);
-				desc = lappend_int(desc, !col->asc);
-				nullsfirst = lappend_int(nullsfirst, col->nullsfirst);
-			}
-
-			settings->fd.orderby = construct_array((Datum *) cols->elements,
-												   cols->length,
-												   TEXTOID,
-												   -1,
-												   false,
-												   TYPALIGN_INT);
-			settings->fd.orderby_desc = construct_array((Datum *) desc->elements,
-														desc->length,
-														BOOLOID,
-														1,
-														true,
-														TYPALIGN_CHAR);
-			settings->fd.orderby_nullsfirst = construct_array((Datum *) nullsfirst->elements,
-															  nullsfirst->length,
-															  BOOLOID,
-															  1,
-															  true,
-															  TYPALIGN_CHAR);
-		}
-		else
-		{
-			settings->fd.orderby = NULL;
-			settings->fd.orderby_desc = NULL;
-			settings->fd.orderby_nullsfirst = NULL;
-		}
-	}
-	else if (orderby_cols && !settings->fd.orderby)
-	{
-		Assert(list_length(orderby_cols) > 0);
 		List *cols = NIL;
 		List *desc = NIL;
 		List *nullsfirst = NIL;
 		ListCell *lc;
+
 		foreach (lc, orderby_cols)
 		{
 			CompressedParsedCol *col = lfirst(lc);
-			cols = lappend(cols, (void *) CStringGetTextDatum(NameStr(col->colname)));
-			desc = lappend_int(desc, !col->asc);
+			cols = lappend(cols, (void *) NameStr(col->colname));
+			desc = lappend_int(desc, col->desc);
 			nullsfirst = lappend_int(nullsfirst, col->nullsfirst);
 		}
 
-		settings->fd.orderby = construct_array((Datum *) cols->elements,
-											   cols->length,
-											   TEXTOID,
-											   -1,
-											   false,
-											   TYPALIGN_INT);
-		settings->fd.orderby_desc = construct_array((Datum *) desc->elements,
-													desc->length,
-													BOOLOID,
-													1,
-													true,
-													TYPALIGN_CHAR);
-		settings->fd.orderby_nullsfirst = construct_array((Datum *) nullsfirst->elements,
-														  nullsfirst->length,
-														  BOOLOID,
-														  1,
-														  true,
-														  TYPALIGN_CHAR);
+		settings->fd.orderby = ts_array_create_from_list_text(cols);
+		settings->fd.orderby_desc = ts_array_create_from_list_bool(desc);
+		settings->fd.orderby_nullsfirst = ts_array_create_from_list_bool(nullsfirst);
 	}
 
 	ts_compression_settings_update(settings);

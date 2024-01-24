@@ -250,9 +250,7 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 static void
 continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation chunk_rel,
 												 HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
-												 bool update,
-												 bool is_distributed_hypertable_trigger,
-												 int32 parent_hypertable_id)
+												 bool update)
 {
 	error_no_default_fn_community();
 	pg_unreachable();

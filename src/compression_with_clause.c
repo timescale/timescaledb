@@ -122,25 +122,19 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 		throw_segment_by_error(inpstr);
 
 	List *collist = NIL;
-	short index = 0;
 	foreach (lc, select->groupClause)
 	{
-		ColumnRef *cf;
-		CompressedParsedCol *col = (CompressedParsedCol *) palloc(sizeof(*col));
-
 		if (!IsA(lfirst(lc), ColumnRef))
 			throw_segment_by_error(inpstr);
-		cf = lfirst(lc);
+
+		ColumnRef *cf = lfirst(lc);
 		if (list_length(cf->fields) != 1)
 			throw_segment_by_error(inpstr);
 
 		if (!IsA(linitial(cf->fields), String))
 			throw_segment_by_error(inpstr);
 
-		col->index = index;
-		index++;
-		namestrcpy(&col->colname, strVal(linitial(cf->fields)));
-		collist = lappend(collist, (void *) col);
+		collist = lappend(collist, pstrdup(strVal(linitial(cf->fields))));
 	}
 
 	return collist;
@@ -206,7 +200,6 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 		throw_order_by_error(inpstr);
 
 	List *collist = NIL;
-	short index = 0;
 	foreach (lc, select->sortClause)
 	{
 		SortBy *sort_by;
@@ -227,19 +220,17 @@ parse_order_collist(char *inpstr, Hypertable *hypertable)
 		if (!IsA(linitial(cf->fields), String))
 			throw_order_by_error(inpstr);
 
-		col->index = index;
-		index++;
 		namestrcpy(&col->colname, strVal(linitial(cf->fields)));
 
 		if (sort_by->sortby_dir != SORTBY_ASC && sort_by->sortby_dir != SORTBY_DESC &&
 			sort_by->sortby_dir != SORTBY_DEFAULT)
 			throw_order_by_error(inpstr);
-		col->asc = sort_by->sortby_dir == SORTBY_ASC || sort_by->sortby_dir == SORTBY_DEFAULT;
+		col->desc = sort_by->sortby_dir == SORTBY_DESC;
 
 		if (sort_by->sortby_nulls == SORTBY_NULLS_DEFAULT)
 		{
 			/* default null ordering is LAST for ASC, FIRST for DESC */
-			col->nullsfirst = !col->asc;
+			col->nullsfirst = col->desc;
 		}
 		else
 		{

@@ -66,7 +66,6 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
 											   const int64 bucket_width, int32 chunk_id,
-											   const bool is_raw_ht_distributed,
 											   const bool do_merged_refresh,
 											   const InternalTimeRange merged_refresh_window);
 static ContinuousAgg *get_cagg_by_relid(const Oid cagg_relid);
@@ -500,8 +499,7 @@ static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations, const int64 bucket_width,
-								   int32 chunk_id, const bool is_raw_ht_distributed,
-								   const bool do_merged_refresh,
+								   int32 chunk_id, const bool do_merged_refresh,
 								   const InternalTimeRange merged_refresh_window)
 {
 	CaggRefreshState refresh;
@@ -719,7 +717,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   invalidations,
 										   bucket_width,
 										   chunk_id,
-										   false,
 										   do_merged_refresh,
 										   merged_refresh_window);
 		if (invalidations)

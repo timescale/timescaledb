@@ -394,3 +394,21 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_constraint_add_table_f
 -- only define stub here, actual code will be filled in at end of update script
 CREATE FUNCTION _timescaledb_functions.constraint_clone(constraint_oid OID,target_oid REGCLASS) RETURNS VOID LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog, pg_temp;
 
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunks_in;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunks_in;
+
+CREATE FUNCTION _timescaledb_functions.metadata_insert_trigger() RETURNS TRIGGER LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  IF EXISTS (SELECT FROM _timescaledb_catalog.metadata WHERE key = NEW.key) THEN
+    UPDATE _timescaledb_catalog.metadata SET value = NEW.value WHERE key = NEW.key;
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END
+$$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE TRIGGER metadata_insert_trigger BEFORE INSERT ON _timescaledb_catalog.metadata FOR EACH ROW EXECUTE PROCEDURE _timescaledb_functions.metadata_insert_trigger();
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$ WHERE key <> 'uuid' $$);
+

@@ -143,7 +143,6 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 
 			switch (cmd->subtype)
 			{
-				case AT_AddConstraint:
 				case AT_SetOptions:
 				case AT_ResetOptions:
 				case AT_SetRelOptions:
@@ -162,6 +161,18 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 #endif
 					/* allowed on chunks */
 					break;
+				case AT_AddConstraint:
+				{
+					/* if this is an OSM chunk, block the operation */
+					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
+					if (chunk && chunk->fd.osm_chunk)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("operation not supported on OSM chunk tables")));
+					}
+					break;
+				}
 				default:
 					/* disable by default */
 					all_allowed = false;

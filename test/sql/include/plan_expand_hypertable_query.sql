@@ -156,7 +156,7 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m1.time < '2000-01-10' ORDER BY m1.time;
 
 \qecho must not exclude chunks on m2
-:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time;
+:PREFIX SELECT m1.time,m2.time FROM metrics_timestamptz m1 RIGHT JOIN metrics_timestamptz_2 m2 ON m1.time = m2.time AND m2.time < '2000-01-10' ORDER BY m1.time, m2.time;
 
 \qecho time_bucket exclusion
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) < 10::bigint ORDER BY time;
@@ -164,6 +164,46 @@ SELECT * FROM cte ORDER BY value;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) <= 10::bigint ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE 10::bigint > time_bucket(10, time) ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE 11::bigint > time_bucket(10, time) ORDER BY time;
+
+:PREFIX SELECT * FROM hyper WHERE time_bucket(10, time, 5) < 10::bigint ORDER BY time;
+:PREFIX SELECT * FROM hyper WHERE time_bucket(10, time, 5) < 11::bigint ORDER BY time;
+:PREFIX SELECT * FROM hyper WHERE time_bucket(10, time, 5) <= 10::bigint ORDER BY time;
+:PREFIX SELECT * FROM hyper WHERE 10::bigint > time_bucket(10, time, 5) ORDER BY time;
+:PREFIX SELECT * FROM hyper WHERE 11::bigint > time_bucket(10, time, 5) ORDER BY time;
+
+\qecho timestamp time_bucket exclusion
+SELECT count(DISTINCT tableoid) FROM metrics_timestamp;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time) < '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time) <= '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time) > '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time) >= '2000-01-15' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'3d'::interval) < '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'3d'::interval) <= '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'3d'::interval) > '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'3d'::interval) >= '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'2000-01-10'::timestamp) < '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'2000-01-10'::timestamp) <= '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'2000-01-10'::timestamp) > '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamp WHERE time_bucket('7d',time,'2000-01-10'::timestamp) >= '2000-01-25' ORDER BY time;
+
+\qecho timestamptz time_bucket exclusion
+SELECT count(DISTINCT tableoid) FROM metrics_timestamptz;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time) < '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time) <= '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time) > '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time) >= '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'3d'::interval) < '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'3d'::interval) <= '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'3d'::interval) > '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'3d'::interval) >= '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'2000-01-10'::timestamptz) < '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'2000-01-10'::timestamptz) <= '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'2000-01-10'::timestamptz) > '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'2000-01-10'::timestamptz) >= '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'Europe/Berlin') < '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'Europe/Berlin') <= '2000-01-05' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'Europe/Berlin') > '2000-01-25' ORDER BY time;
+:PREFIX SELECT * FROM metrics_timestamptz WHERE time_bucket('7d',time,'Europe/Berlin') >= '2000-01-25' ORDER BY time;
 
 \qecho test overflow behaviour of time_bucket exclusion
 :PREFIX SELECT * FROM hyper WHERE time > 950 AND time_bucket(10, time) < '9223372036854775807'::bigint ORDER BY time;
@@ -242,7 +282,6 @@ DEALLOCATE P5;
 DEALLOCATE P6;
 DEALLOCATE P7;
 DEALLOCATE P8;
-
 
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 100 ORDER BY time;
 :PREFIX SELECT * FROM hyper WHERE time_bucket(10, time) > 10 AND time_bucket(10, time) < 20 ORDER BY time;

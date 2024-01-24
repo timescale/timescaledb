@@ -292,8 +292,7 @@ CREATE TABLE _timescaledb_catalog.metadata (
   CONSTRAINT metadata_pkey PRIMARY KEY (key)
 );
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$
-  WHERE KEY = 'exported_uuid' $$);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$ WHERE key <> 'uuid' $$);
 
 -- Log with events that will be sent out with the telemetry. The log
 -- will be flushed after it has been sent out. We do not save it to

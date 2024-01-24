@@ -704,6 +704,15 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', NULL:
 EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
 
+\set ON_ERROR_STOP 0
+-- test adding constraint directly on OSM chunk is blocked
+ALTER TABLE test_chunkapp_fdw_child ADD CHECK (a > 0); -- non-dimensional
+ALTER TABLE test_chunkapp_fdw_child ADD CHECK (time > '1600-01-01'::timestamptz); -- dimensional
+-- but on hypertable, it is allowed
+ALTER TABLE test_chunkapp ADD CHECK (a > 0);
+\d+ test_chunkapp_fdw_child
+\set ON_ERROR_STOP 1
+
 -- test error is triggered when time dimension not found
 CREATE TABLE test2(time timestamptz not null, a int);
 SELECT create_hypertable('test2', 'time');
