@@ -87,6 +87,18 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 		{
 			decompress_clauses = lappend(decompress_clauses, ri);
 		}
+
+		if (context.needs_recheck)
+		{
+			/*
+			 * If we managed to push down the comparison of orderby column
+			 * to the compressed scan, most matched batches are likely to
+			 * match entirely, so the selectivity of the recheck will be
+			 * close to 1.
+			 */
+			ri->norm_selec = 1;
+			Assert(context.can_pushdown);
+		}
 	}
 	chunk_rel->baserestrictinfo = decompress_clauses;
 }

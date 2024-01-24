@@ -321,7 +321,7 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, RelOptInfo *chunk_rel)
  * we put cost of 1 tuple of compressed_scan as startup cost
  */
 static void
-cost_decompress_chunk(Path *path, Path *compressed_path)
+cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 {
 	/* startup_cost is cost before fetching first tuple */
 	if (compressed_path->rows > 0)
@@ -329,7 +329,8 @@ cost_decompress_chunk(Path *path, Path *compressed_path)
 
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
-	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE *
+				 clauselist_selectivity(root, path->parent->baserestrictinfo, 0, JOIN_INNER, NULL);
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
@@ -899,7 +900,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						  work_mem,
 						  -1);
 
-				cost_decompress_chunk(&dcpath->custom_path.path, &sort_path);
+				cost_decompress_chunk(root, &dcpath->custom_path.path, &sort_path);
 			}
 			/*
 			 * if chunk is partially compressed don't add this now but add an append path later
@@ -1749,7 +1750,7 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	path->custom_path.custom_paths = list_make1(compressed_path);
 	path->reverse = false;
 	path->compressed_pathkeys = NIL;
-	cost_decompress_chunk(&path->custom_path.path, compressed_path);
+	cost_decompress_chunk(root, &path->custom_path.path, compressed_path);
 
 	return path;
 }
