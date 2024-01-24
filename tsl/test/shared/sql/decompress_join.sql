@@ -14,6 +14,7 @@ ANALYZE compressed_join_temp;
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT *
 FROM compressed_join_temp t
 INNER JOIN metrics_compressed m ON t.time = m.time AND t.device_id = m.device_id
+ORDER BY t.time, t.device_id
 LIMIT 1;
 
 DROP TABLE compressed_join_temp;

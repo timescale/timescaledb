@@ -15,22 +15,33 @@ ANALYZE compressed_join_temp;
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT *
 FROM compressed_join_temp t
 INNER JOIN metrics_compressed m ON t.time = m.time AND t.device_id = m.device_id
+ORDER BY t.time, t.device_id
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
    ->  Nested Loop (actual rows=1 loops=1)
-         Join Filter: ((t."time" = m_1."time") AND (t.device_id = m_1.device_id))
-         Rows Removed by Join Filter: 431804
-         ->  Append (actual rows=43181 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_1 (actual rows=17990 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_2 (actual rows=25190 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_3 (actual rows=1 loops=1)
-                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
-         ->  Materialize (actual rows=10 loops=43181)
+         Join Filter: ((t."time" = m."time") AND (t.device_id = m.device_id))
+         Rows Removed by Join Filter: 683605
+         ->  Custom Scan (ChunkAppend) on metrics_compressed m (actual rows=68361 loops=1)
+               Order: m."time", m.device_id
+               ->  Sort (actual rows=17990 loops=1)
+                     Sort Key: m_1."time", m_1.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_1 (actual rows=17990 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+               ->  Sort (actual rows=25190 loops=1)
+                     Sort Key: m_2."time", m_2.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_2 (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+               ->  Sort (actual rows=25181 loops=1)
+                     Sort Key: m_3."time", m_3.device_id
+                     Sort Method: quicksort 
+                     ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_3 (actual rows=25190 loops=1)
+                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+         ->  Materialize (actual rows=10 loops=68361)
                ->  Seq Scan on compressed_join_temp t (actual rows=10 loops=1)
-(13 rows)
+(23 rows)
 
 DROP TABLE compressed_join_temp;
 -- test join with partially compressed chunks
