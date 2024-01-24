@@ -27,61 +27,61 @@ INSERT INTO const_now SELECT '3000-01-01','3000-01-01',2,0.5;
 :PREFIX SELECT FROM const_now WHERE time > now();
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > now())
+   Index Cond: ("time" > ts_now_mock())
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time >= now();
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" >= now())
+   Index Cond: ("time" >= ts_now_mock())
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time > now() - '24h'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > (now() - '@ 24 hours'::interval))
+   Index Cond: ("time" > (ts_now_mock() - '@ 24 hours'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time > now() + '10m'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > (now() + '@ 10 mins'::interval))
+   Index Cond: ("time" > (ts_now_mock() + '@ 10 mins'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time >= now() - '10m'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" >= (now() - '@ 10 mins'::interval))
+   Index Cond: ("time" >= (ts_now_mock() - '@ 10 mins'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
+   Index Cond: ("time" >= (ts_now_mock() + '@ 10 mins'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time > now() - '2d'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > (now() - '@ 2 days'::interval))
+   Index Cond: ("time" > (ts_now_mock() - '@ 2 days'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time > now() + '3d'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > (now() + '@ 3 days'::interval))
+   Index Cond: ("time" > (ts_now_mock() + '@ 3 days'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time > now() - '1week'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > (now() - '@ 7 days'::interval))
+   Index Cond: ("time" > (ts_now_mock() - '@ 7 days'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time > now() - '1month'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+   Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
 (2 rows)
 
 :PREFIX SELECT FROM const_now WHERE time > CURRENT_TIMESTAMP;
@@ -179,9 +179,9 @@ SET enable_indexscan TO false;
 :PREFIX SELECT FROM const_now WHERE time > now();
 QUERY PLAN
  Bitmap Heap Scan on _hyper_X_X_chunk
-   Recheck Cond: ("time" > now())
+   Recheck Cond: ("time" > ts_now_mock())
    ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
 (4 rows)
 
 RESET enable_indexscan;
@@ -189,21 +189,21 @@ RESET enable_indexscan;
 :PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND device_id = 2;
 QUERY PLAN
  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
+   Index Cond: ("time" >= (ts_now_mock() + '@ 10 mins'::interval))
    Filter: (device_id = 2)
 (3 rows)
 
 :PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND (device_id = 2 OR device_id = 3);
 QUERY PLAN
  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" >= (now() + '@ 10 mins'::interval))
+   Index Cond: ("time" >= (ts_now_mock() + '@ 10 mins'::interval))
    Filter: ((device_id = 2) OR (device_id = 3))
 (3 rows)
 
 :PREFIX SELECT FROM const_now WHERE time >= now() + '10m'::interval AND time >= now() - '10m'::interval;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: (("time" >= (now() + '@ 10 mins'::interval)) AND ("time" >= (now() - '@ 10 mins'::interval)))
+   Index Cond: (("time" >= (ts_now_mock() + '@ 10 mins'::interval)) AND ("time" >= (ts_now_mock() - '@ 10 mins'::interval)))
 (2 rows)
 
 -- variants we don't optimize
@@ -232,28 +232,28 @@ QUERY PLAN
 QUERY PLAN
  Append
    ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
+         Recheck Cond: (("time" > (ts_now_mock() - '@ 1 min'::interval)) OR ("time" > (ts_now_mock() + '@ 1 min'::interval)))
          ->  BitmapOr
                ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
-                     Index Cond: ("time" > (now() - '@ 1 min'::interval))
+                     Index Cond: ("time" > (ts_now_mock() - '@ 1 min'::interval))
                ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
-                     Index Cond: ("time" > (now() + '@ 1 min'::interval))
+                     Index Cond: ("time" > (ts_now_mock() + '@ 1 min'::interval))
    ->  Bitmap Heap Scan on _hyper_X_X_chunk
-         Recheck Cond: (("time" > (now() - '@ 1 min'::interval)) OR ("time" > (now() + '@ 1 min'::interval)))
+         Recheck Cond: (("time" > (ts_now_mock() - '@ 1 min'::interval)) OR ("time" > (ts_now_mock() + '@ 1 min'::interval)))
          ->  BitmapOr
                ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
-                     Index Cond: ("time" > (now() - '@ 1 min'::interval))
+                     Index Cond: ("time" > (ts_now_mock() - '@ 1 min'::interval))
                ->  Bitmap Index Scan on _hyper_X_X_chunk_const_now_time_idx
-                     Index Cond: ("time" > (now() + '@ 1 min'::interval))
+                     Index Cond: ("time" > (ts_now_mock() + '@ 1 min'::interval))
 (15 rows)
 
 :PREFIX SELECT FROM const_now WHERE device_id = 2 OR (time > now() - '1m'::interval AND time > now() + '1m'::interval);
 QUERY PLAN
  Append
    ->  Seq Scan on _hyper_X_X_chunk
-         Filter: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
+         Filter: ((device_id = 2) OR (("time" > (ts_now_mock() - '@ 1 min'::interval)) AND ("time" > (ts_now_mock() + '@ 1 min'::interval))))
    ->  Seq Scan on _hyper_X_X_chunk
-         Filter: ((device_id = 2) OR (("time" > (now() - '@ 1 min'::interval)) AND ("time" > (now() + '@ 1 min'::interval))))
+         Filter: ((device_id = 2) OR (("time" > (ts_now_mock() - '@ 1 min'::interval)) AND ("time" > (ts_now_mock() + '@ 1 min'::interval))))
 (5 rows)
 
 -- CTE
@@ -262,7 +262,7 @@ QUERY PLAN
 ) SELECT FROM q1;
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > now())
+   Index Cond: ("time" > ts_now_mock())
 (2 rows)
 
 :PREFIX WITH q1 AS (
@@ -271,9 +271,9 @@ QUERY PLAN
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
 (5 rows)
 
 -- JOIN
@@ -285,7 +285,7 @@ QUERY PLAN
          ->  Seq Scan on _hyper_X_X_chunk m2_2
    ->  Materialize
          ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1
-               Index Cond: ("time" > now())
+               Index Cond: ("time" > ts_now_mock())
 (7 rows)
 
 :PREFIX SELECT FROM const_now m1, const_now m2 WHERE m2.time > now();
@@ -296,17 +296,17 @@ QUERY PLAN
          ->  Seq Scan on _hyper_X_X_chunk m1_2
    ->  Materialize
          ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m2
-               Index Cond: ("time" > now())
+               Index Cond: ("time" > ts_now_mock())
 (7 rows)
 
 :PREFIX SELECT FROM const_now m1, const_now m2 WHERE m1.time > now() AND m2.time > now();
 QUERY PLAN
  Nested Loop
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m1
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
    ->  Materialize
          ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m2
-               Index Cond: ("time" > now())
+               Index Cond: ("time" > ts_now_mock())
 (6 rows)
 
 -- only top-level constraints in WHERE clause are constified
@@ -334,7 +334,7 @@ QUERY PLAN
                Index Cond: ("time" > now())
    ->  Materialize
          ->  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk m2
-               Index Cond: ("time" > now())
+               Index Cond: ("time" > ts_now_mock())
 (9 rows)
 
 -- test UPDATE
@@ -344,9 +344,9 @@ QUERY PLAN
    Update on const_now
    Update on _hyper_X_X_chunk const_now_1
    ->  Seq Scan on const_now
-         Filter: ("time" > now())
+         Filter: ("time" > ts_now_mock())
    ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
 (7 rows)
 
 -- test DELETE
@@ -356,9 +356,9 @@ QUERY PLAN
    Delete on const_now
    Delete on _hyper_X_X_chunk const_now_1
    ->  Seq Scan on const_now
-         Filter: ("time" > now())
+         Filter: ("time" > ts_now_mock())
    ->  Index Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk const_now_1
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
 (7 rows)
 
 -- test chunks actually get excluded
@@ -367,7 +367,7 @@ SET timescaledb.current_timestamp_mock TO '2010-01-01';
 :PREFIX SELECT FROM const_now WHERE time > now();
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > now())
+   Index Cond: ("time" > ts_now_mock())
 (2 rows)
 
 -- should exclude all but 1 chunk
@@ -375,14 +375,14 @@ SET timescaledb.current_timestamp_mock TO '2000-01-14';
 :PREFIX SELECT FROM const_now WHERE time > now();
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > now())
+   Index Cond: ("time" > ts_now_mock())
 (2 rows)
 
 -- should have one time filter false
 :PREFIX SELECT FROM const_now WHERE time > now();
 QUERY PLAN
  Index Only Scan using _hyper_X_X_chunk_const_now_time_idx on _hyper_X_X_chunk
-   Index Cond: ("time" > now())
+   Index Cond: ("time" > ts_now_mock())
 (2 rows)
 
 -- no constification because it's not partitioning column
@@ -390,9 +390,9 @@ QUERY PLAN
 QUERY PLAN
  Append
    ->  Seq Scan on _hyper_X_X_chunk
-         Filter: (time2 > now())
+         Filter: (time2 > ts_now_mock())
    ->  Seq Scan on _hyper_X_X_chunk
-         Filter: (time2 > now())
+         Filter: (time2 > ts_now_mock())
 (5 rows)
 
 DROP TABLE const_now;
@@ -413,9 +413,9 @@ PREPARE p1 AS SELECT FROM prep_const_now WHERE time > now();
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
 (5 rows)
 
 EXECUTE p1;
@@ -427,14 +427,48 @@ SET timescaledb.current_timestamp_mock TO '3002-01-01';
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
    ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > now())
+         Index Cond: ("time" > ts_now_mock())
 (5 rows)
+
+EXECUTE p1;
+(1 row)
+
+-- same test with ChunkAppend enabled
+set timescaledb.enable_chunk_append = on;
+set timescaledb.enable_constraint_aware_append = on;
+DEALLOCATE p1;
+PREPARE p1 AS SELECT FROM prep_const_now WHERE time > now();
+set timescaledb.current_timestamp_mock TO '3001-01-01';
+:PREFIX EXECUTE p1;
+QUERY PLAN
+ Custom Scan (ChunkAppend) on prep_const_now
+   Chunks excluded during startup: 0
+   ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > ts_now_mock())
+   ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > ts_now_mock())
+(6 rows)
 
 EXECUTE p1;
 (2 rows)
 
+SET timescaledb.current_timestamp_mock TO '3002-01-01';
+-- plan won't change cause the query didnt get replanned
+:PREFIX EXECUTE p1;
+QUERY PLAN
+ Custom Scan (ChunkAppend) on prep_const_now
+   Chunks excluded during startup: 1
+   ->  Index Only Scan using _hyper_X_X_chunk_prep_const_now_time_idx on _hyper_X_X_chunk
+         Index Cond: ("time" > ts_now_mock())
+(4 rows)
+
+EXECUTE p1;
+(1 row)
+
+set timescaledb.enable_chunk_append = off;
+set timescaledb.enable_constraint_aware_append = off;
 DROP TABLE prep_const_now;
 -- test outer var references dont trip up constify_now
 -- no optimization is done in this case
@@ -449,7 +483,7 @@ QUERY PLAN
    ->  Materialize
          ->  Nested Loop Semi Join
                ->  Index Scan using _hyper_X_X_chunk_metrics_tstz_time_idx on _hyper_X_X_chunk m2
-                     Index Cond: ("time" > now())
+                     Index Cond: ("time" > ts_now_mock())
                ->  Materialize
                      ->  Seq Scan on _hyper_X_X_chunk m3
 (8 rows)
@@ -482,9 +516,9 @@ SET timescaledb.current_timestamp_mock TO '2022-03-28 0:45+0';
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 day'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 day'::interval))
 (5 rows)
 
 SET timescaledb.current_timestamp_mock TO '2022-03-28 1:15+0';
@@ -493,9 +527,9 @@ SET timescaledb.current_timestamp_mock TO '2022-03-28 1:15+0';
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 day'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 day'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 day'::interval))
 (5 rows)
 
 TRUNCATE const_now_dst;
@@ -513,15 +547,15 @@ set timezone to 'utc+1';
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
 (11 rows)
 
 set timezone to 'utc-1';
@@ -530,15 +564,15 @@ set timezone to 'utc-1';
 QUERY PLAN
  Append
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
    ->  Index Only Scan using _hyper_X_X_chunk_const_now_dst_time_idx on _hyper_X_X_chunk
-         Index Cond: ("time" > (now() - '@ 1 mon'::interval))
+         Index Cond: ("time" > (ts_now_mock() - '@ 1 mon'::interval))
 (11 rows)
 
 DROP TABLE const_now_dst;
@@ -586,11 +620,11 @@ QUERY PLAN
          ->  Partial HashAggregate
                Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
                ->  Index Scan Backward using _hyper_X_X_chunk_now_view_test_time_idx on _hyper_X_X_chunk
-                     Index Cond: ("time" > (now() - '@ 168 hours'::interval))
+                     Index Cond: ("time" > (ts_now_mock() - '@ 168 hours'::interval))
          ->  Partial HashAggregate
                Group Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device
                ->  Index Scan Backward using _hyper_X_X_chunk_now_view_test_time_idx on _hyper_X_X_chunk
-                     Index Cond: ("time" > (now() - '@ 168 hours'::interval))
+                     Index Cond: ("time" > (ts_now_mock() - '@ 168 hours'::interval))
 (11 rows)
 
 DROP TABLE now_view_test CASCADE;
@@ -606,3 +640,203 @@ WHERE subq_1.time > m1.time;
 ------+-----------+----+----+----+----+------+-----------+----+----+----+----+------
 (0 rows)
 
+CREATE TABLE logged_data (
+    rawtag_id   INTEGER,
+    timestamp   TIMESTAMP WITH TIME ZONE NOT NULL,
+    value       REAL,
+    site_id     INTEGER
+);
+SELECT table_name FROM create_hypertable('logged_data', 'timestamp');
+ table_name  
+ logged_data
+(1 row)
+
+INSERT INTO logged_data (rawtag_id, timestamp, value, site_id)
+VALUES
+(1, '2023-01-01'::timestamptz, 13, 1),
+(1, '2023-01-07'::timestamptz, 13, 1),
+(1, '2023-01-10'::timestamptz, 13, 1),
+(1, '2023-01-15'::timestamptz, 13, 1),
+(1, '2023-01-20'::timestamptz, 15, 1),
+(2, '2023-01-01'::timestamptz, 90, 1),
+(3, '2023-01-07'::timestamptz, 2, 1),
+(4, '2023-01-10'::timestamptz, 13, 3),
+(2, '2023-01-15'::timestamptz, 13, 4),
+(5, '2023-01-20'::timestamptz, 13, 1);
+-- four chunks, all of them should be excluded at plantime
+SELECT COUNT(*) FROM show_chunks('logged_data');
+ count 
+     4
+(1 row)
+
+SET timescaledb.current_timestamp_mock TO '2024-01-01 0:30:00+00';
+SET timescaledb.enable_chunk_append TO true;
+SET timescaledb.enable_constraint_aware_append TO true;
+-- for all the queries below, exclusion should be happening at plantime
+EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+timestamp BETWEEN now() - interval '1 day' AND now()
+AND rawtag_id = 1 ORDER BY "timestamp" ASC;
+QUERY PLAN
+ Sort  (cost=0.01..0.02 rows=0 width=20) (actual rows=0 loops=1)
+   Sort Key: "timestamp"
+   Sort Method: quicksort 
+   ->  Result  (cost=0.00..0.00 rows=0 width=0) (actual rows=0 loops=1)
+         One-Time Filter: false
+(5 rows)
+
+EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+timestamp <= now() AND timestamp >= now() - interval '1 day'
+AND rawtag_id = 1 ORDER BY "timestamp" ASC;
+QUERY PLAN
+ Sort  (cost=0.01..0.02 rows=0 width=20) (actual rows=0 loops=1)
+   Sort Key: "timestamp"
+   Sort Method: quicksort 
+   ->  Result  (cost=0.00..0.00 rows=0 width=0) (actual rows=0 loops=1)
+         One-Time Filter: false
+(5 rows)
+
+EXPLAIN (ANALYZE, SUMMARY OFF, TIMING OFF) SELECT * FROM logged_data WHERE
+timestamp <= now() AND timestamp >= now() - interval '1 day'
+ORDER BY "timestamp" ASC;
+QUERY PLAN
+ Sort  (cost=0.01..0.02 rows=0 width=20) (actual rows=0 loops=1)
+   Sort Key: "timestamp"
+   Sort Method: quicksort 
+   ->  Result  (cost=0.00..0.00 rows=0 width=0) (actual rows=0 loops=1)
+         One-Time Filter: false
+(5 rows)
+
+-- mock_now() in the middle of the table
+SET timescaledb.current_timestamp_mock TO '2023-01-11';
+PREPARE pbtw AS SELECT * FROM logged_data WHERE
+timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
+ORDER BY "timestamp" ASC;
+EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+QUERY PLAN
+ Custom Scan (ChunkAppend) on logged_data  (cost=0.16..22.08 rows=3 width=20)
+   Order: logged_data."timestamp"
+   Chunks excluded during startup: 2
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+(6 rows)
+
+EXECUTE pbtw;
+ rawtag_id |          timestamp           | value | site_id 
+-----------+------------------------------+-------+---------
+         1 | Sat Jan 07 00:00:00 2023 UTC |    13 |       1
+         1 | Tue Jan 10 00:00:00 2023 UTC |    13 |       1
+(2 rows)
+
+-- now move mock_now() to the future
+SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
+EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+QUERY PLAN
+ Custom Scan (ChunkAppend) on logged_data  (cost=0.16..22.08 rows=3 width=20)
+   Order: logged_data."timestamp"
+   Chunks excluded during startup: 1
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+(9 rows)
+
+EXECUTE pbtw;
+ rawtag_id |          timestamp           | value | site_id 
+-----------+------------------------------+-------+---------
+         1 | Fri Jan 20 00:00:00 2023 UTC |    15 |       1
+(1 row)
+
+-- much further into the future, no rows should be returned
+SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
+EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+QUERY PLAN
+ Custom Scan (ChunkAppend) on logged_data  (cost=0.16..22.08 rows=3 width=20)
+   Order: logged_data."timestamp"
+   Chunks excluded during startup: 3
+(3 rows)
+
+EXECUTE pbtw;
+ rawtag_id | timestamp | value | site_id 
+-----------+-----------+-------+---------
+(0 rows)
+
+DEALLOCATE pbtw;
+-- repeat without ChunkAppend
+set timescaledb.enable_chunk_append = off;
+set timescaledb.enable_constraint_aware_append = off;
+SET timescaledb.current_timestamp_mock TO '2023-01-11';
+PREPARE pbtw AS SELECT * FROM logged_data WHERE
+timestamp BETWEEN now() - interval '5 day' AND now() AND rawtag_id = 1
+ORDER BY "timestamp" ASC;
+EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+QUERY PLAN
+ Merge Append  (cost=0.50..22.14 rows=3 width=20)
+   Sort Key: _hyper_X_X_chunk."timestamp"
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+(11 rows)
+
+EXECUTE pbtw;
+ rawtag_id |          timestamp           | value | site_id 
+-----------+------------------------------+-------+---------
+         1 | Sat Jan 07 00:00:00 2023 UTC |    13 |       1
+         1 | Tue Jan 10 00:00:00 2023 UTC |    13 |       1
+(2 rows)
+
+-- now move mock_now() to the future
+SET timescaledb.current_timestamp_mock TO '2023-01-21 0:30:00+00';
+EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+QUERY PLAN
+ Merge Append  (cost=0.50..22.14 rows=3 width=20)
+   Sort Key: _hyper_X_X_chunk."timestamp"
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+(11 rows)
+
+EXECUTE pbtw;
+ rawtag_id |          timestamp           | value | site_id 
+-----------+------------------------------+-------+---------
+         1 | Fri Jan 20 00:00:00 2023 UTC |    15 |       1
+(1 row)
+
+-- much further into the future, no rows should be returned
+SET timescaledb.current_timestamp_mock TO '2024-01-21 0:30:00+00';
+EXPLAIN (SUMMARY OFF, TIMING OFF) EXECUTE pbtw;
+QUERY PLAN
+ Merge Append  (cost=0.50..22.14 rows=3 width=20)
+   Sort Key: _hyper_X_X_chunk."timestamp"
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+   ->  Index Scan Backward using _hyper_X_X_chunk_logged_data_timestamp_idx on _hyper_X_X_chunk  (cost=0.16..7.36 rows=1 width=20)
+         Index Cond: (("timestamp" >= (ts_now_mock() - '@ 5 days'::interval)) AND ("timestamp" <= ts_now_mock()))
+         Filter: (rawtag_id = 1)
+(11 rows)
+
+EXECUTE pbtw;
+ rawtag_id | timestamp | value | site_id 
+-----------+-----------+-------+---------
+(0 rows)
+
+DEALLOCATE pbtw;
+DROP TABLE logged_data;

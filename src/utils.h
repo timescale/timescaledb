@@ -246,3 +246,5 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 		return InvalidOid;
 	}
 }
+
+void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);
