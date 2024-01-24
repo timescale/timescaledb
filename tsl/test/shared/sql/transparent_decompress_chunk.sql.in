@@ -9,6 +9,7 @@
 
 SET parallel_leader_participation TO off;
 SET min_parallel_table_scan_size TO '0';
+set work_mem to '256MB';
 
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
 

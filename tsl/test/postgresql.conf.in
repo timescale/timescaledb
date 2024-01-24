@@ -21,6 +21,9 @@ timescaledb.license='timescale'
 max_connections=200
 log_error_verbosity='VERBOSE'
 log_min_messages='INFO'
+
 # This breaks isolation tests, not sure why the statements end in
 # the isolation tester output.
 log_statement='all'
+
+log_duration='true'

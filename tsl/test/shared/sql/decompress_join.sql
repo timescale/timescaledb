@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+set work_mem to '256MB';
+
 -- disable memoize on PG14+
 SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
 SET enable_indexscan TO false;
@@ -14,7 +16,7 @@ ANALYZE compressed_join_temp;
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT *
 FROM compressed_join_temp t
 INNER JOIN metrics_compressed m ON t.time = m.time AND t.device_id = m.device_id
-ORDER BY t.time, t.device_id
+ORDER BY t.device_id, t.time
 LIMIT 1;
 
 DROP TABLE compressed_join_temp;
