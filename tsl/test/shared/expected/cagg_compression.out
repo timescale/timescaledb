@@ -82,7 +82,7 @@ WHERE
         )
     );
  count 
-     5
+    10
 (1 row)
 
 -- Compressed CAgg + Uncompressed Hypertable
@@ -144,7 +144,7 @@ WHERE
         )
     );
  count 
-     5
+    10
 (1 row)
 
 \o :TEST_RESULTS_SOURCE

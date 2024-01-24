@@ -261,34 +261,37 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
+  AND o1.v0 = 2
 ORDER BY o1.time;
 QUERY PLAN
- Merge Join (actual rows=82038 loops=1)
-   Merge Cond: (o2."time" = o1."time")
-   ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=82038 loops=1)
-         Order: o2."time"
-         ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=21586 loops=1)
-               Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-               Heap Fetches: 21586
-         ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (actual rows=30226 loops=1)
-               Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-               Heap Fetches: 30226
-         ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (actual rows=30226 loops=1)
-               Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-               Heap Fetches: 30226
-   ->  Materialize (actual rows=82038 loops=1)
-         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=82038 loops=1)
-               Order: o1."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=21586 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+ Merge Join (actual rows=21586 loops=1)
+   Merge Cond: (o1."time" = o2."time")
+   ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=21586 loops=1)
+         Order: o1."time"
+         ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=21586 loops=1)
+               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Filter: (v0 = 2)
+         ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=0 loops=1)
+               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Filter: (v0 = 2)
+               Rows Removed by Filter: 30226
+         ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=0 loops=1)
+               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+               Filter: (v0 = 2)
+               Rows Removed by Filter: 30226
+   ->  Materialize (actual rows=21587 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=21587 loops=1)
+               Order: o2."time"
+               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=21586 loops=1)
+                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
                      Heap Fetches: 21586
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=30226 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-                     Heap Fetches: 30226
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=30226 loops=1)
-                     Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-                     Heap Fetches: 30226
-(25 rows)
+               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (actual rows=1 loops=1)
+                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 1
+               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Heap Fetches: 0
+(27 rows)
 
 RESET enable_nestloop;
 -- test JOIN
@@ -387,36 +390,36 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test JOIN on time column with USING
@@ -427,36 +430,36 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 USING (time)
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test NATURAL JOIN on time column
@@ -467,7 +470,7 @@ FROM :TEST_TABLE o1
   NATURAL INNER JOIN :TEST_TABLE o2
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -487,36 +490,36 @@ FROM :TEST_TABLE o1
   LEFT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test RIGHT JOIN on time column
@@ -527,36 +530,36 @@ FROM :TEST_TABLE o1
   RIGHT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test JOIN on time column with ON clause expression order switched
@@ -567,36 +570,36 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o2.time = o1.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test JOIN on time column with equality condition in WHERE clause
@@ -608,36 +611,36 @@ FROM :TEST_TABLE o1
 WHERE o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test JOIN on time column with ORDER BY 2nd hypertable
@@ -648,36 +651,36 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test JOIN on time column and device_id
@@ -687,7 +690,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
     AND o1.time = o2.time
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -699,12 +702,12 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
                      Rows Removed by Filter: 891
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=991 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=991 loops=1)
                      Order: o2."time"
@@ -720,7 +723,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
 WHERE o1.device_id = 1
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -729,13 +732,13 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=1 loops=1)
                Order: o1."time"
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_time_idx on _hyper_X_X_chunk o1_1 (actual rows=1 loops=1)
-                     Filter: ((device_id = 1) AND (v1 = 3))
+                     Filter: ((device_id = 1) AND (v0 = 2))
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                      Index Cond: (device_id = 1)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
                ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                      Index Cond: (device_id = 1)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
                ->  Append (actual rows=100 loops=1)
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
@@ -755,7 +758,7 @@ QUERY PLAN
 SELECT o1.time
 FROM :TEST_TABLE o1,
   :TEST_TABLE o2
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
   AND o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
@@ -764,34 +767,35 @@ LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o2."time")
+         ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+               Order: o1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize (actual rows=100 loops=1)
-               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                     Order: o1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                           Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+               ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                     Order: o2."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                           Index Cond: (device_id = 2)
+                           Heap Fetches: 0
 (26 rows)
 
 -- test JOIN on time column with 3 hypertables
 -- should use 3 ChunkAppend
+SET join_collapse_limit TO 1;
 :PREFIX
 SELECT o1.time
 FROM :TEST_TABLE o1
@@ -800,52 +804,53 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
   AND o2.device_id = 2
   AND o3.device_id = 3
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
-                     Heap Fetches: 0
-         ->  Materialize (actual rows=100 loops=1)
-               ->  Merge Join (actual rows=100 loops=1)
-                     Merge Cond: (o3."time" = o1."time")
-                     ->  Custom Scan (ChunkAppend) on metrics o3 (actual rows=100 loops=1)
-                           Order: o3."time"
-                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_1 (actual rows=100 loops=1)
-                                 Index Cond: (device_id = 3)
+         Merge Cond: (o1."time" = o3."time")
+         ->  Merge Join (actual rows=100 loops=1)
+               Merge Cond: (o1."time" = o2."time")
+               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+                     Order: o1."time"
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 1)
+                           Filter: (v0 = 2)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                           Index Cond: (device_id = 1)
+                           Filter: (v0 = 2)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                           Index Cond: (device_id = 1)
+                           Filter: (v0 = 2)
+               ->  Materialize (actual rows=100 loops=1)
+                     ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                           Order: o2."time"
+                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                                 Index Cond: (device_id = 2)
                                  Heap Fetches: 100
-                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_2 (never executed)
-                                 Index Cond: (device_id = 3)
+                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                                 Index Cond: (device_id = 2)
                                  Heap Fetches: 0
-                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_3 (never executed)
-                                 Index Cond: (device_id = 3)
+                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                                 Index Cond: (device_id = 2)
                                  Heap Fetches: 0
-                     ->  Materialize (actual rows=100 loops=1)
-                           ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                                 Order: o1."time"
-                                 ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                                       Index Cond: (device_id = 1)
-                                       Filter: (v1 = 3)
-                                 ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                                       Index Cond: (device_id = 1)
-                                       Filter: (v1 = 3)
-                                 ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                                       Index Cond: (device_id = 1)
-                                       Filter: (v1 = 3)
+         ->  Materialize (actual rows=100 loops=1)
+               ->  Custom Scan (ChunkAppend) on metrics o3 (actual rows=100 loops=1)
+                     Order: o3."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 3)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_2 (never executed)
+                           Index Cond: (device_id = 3)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_3 (never executed)
+                           Index Cond: (device_id = 3)
+                           Heap Fetches: 0
 (40 rows)
 
+RESET join_collapse_limit;
 RESET enable_seqscan;
 \set TEST_TABLE 'metrics_space'
 \ir :TEST_QUERY_NAME
@@ -1235,33 +1240,34 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
+  AND o1.v0 = 2
 ORDER BY o1.time;
 QUERY PLAN
  Merge Join (actual rows=82038 loops=1)
-   Merge Cond: (o1."time" = o2."time")
-   ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=82038 loops=1)
-         Order: o1."time"
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=21586 loops=1)
-               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+   Merge Cond: (o2."time" = o1."time")
+   ->  Custom Scan (ChunkAppend) on metrics_space o2 (actual rows=82038 loops=1)
+         Order: o2."time"
+         ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=21586 loops=1)
+               Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
                Heap Fetches: 21586
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=30226 loops=1)
-               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_2 (actual rows=30226 loops=1)
+               Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
                Heap Fetches: 30226
-         ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=30226 loops=1)
-               Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+         ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_3 (actual rows=30226 loops=1)
+               Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
                Heap Fetches: 30226
    ->  Materialize (actual rows=82038 loops=1)
-         ->  Custom Scan (ChunkAppend) on metrics_space o2 (actual rows=82038 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=21586 loops=1)
-                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-                     Heap Fetches: 21586
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_2 (actual rows=30226 loops=1)
-                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-                     Heap Fetches: 30226
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_3 (actual rows=30226 loops=1)
-                     Index Cond: ((device_id = 2) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
-                     Heap Fetches: 30226
+         ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=82038 loops=1)
+               Order: o1."time"
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=21586 loops=1)
+                     Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Filter: (v0 = 2)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (actual rows=30226 loops=1)
+                     Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Filter: (v0 = 2)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (actual rows=30226 loops=1)
+                     Index Cond: ((device_id = 1) AND ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone))
+                     Filter: (v0 = 2)
 (25 rows)
 
 RESET enable_nestloop;
@@ -1419,7 +1425,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1442,13 +1448,13 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test JOIN on time column with USING
@@ -1459,7 +1465,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 USING (time)
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1482,13 +1488,13 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test NATURAL JOIN on time column
@@ -1499,7 +1505,7 @@ FROM :TEST_TABLE o1
   NATURAL INNER JOIN :TEST_TABLE o2
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1519,7 +1525,7 @@ FROM :TEST_TABLE o1
   LEFT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1542,13 +1548,13 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test RIGHT JOIN on time column
@@ -1559,7 +1565,7 @@ FROM :TEST_TABLE o1
   RIGHT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
@@ -1582,13 +1588,13 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test JOIN on time column with ON clause expression order switched
@@ -1599,7 +1605,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o2.time = o1.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1622,13 +1628,13 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test JOIN on time column with equality condition in WHERE clause
@@ -1640,7 +1646,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1663,13 +1669,13 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test JOIN on time column with ORDER BY 2nd hypertable
@@ -1680,7 +1686,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
@@ -1703,13 +1709,13 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test JOIN on time column and device_id
@@ -1719,7 +1725,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
     AND o1.time = o2.time
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1733,30 +1739,30 @@ QUERY PLAN
                ->  Merge Append (actual rows=100 loops=1)
                      Sort Key: o1_1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            Rows Removed by Filter: 297
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_2 (actual rows=0 loops=1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            Rows Removed by Filter: 86344
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_3 (actual rows=0 loops=1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            Rows Removed by Filter: 43172
                ->  Merge Append (never executed)
                      Sort Key: o1_4."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_4 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_5 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_6 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                ->  Merge Append (never executed)
                      Sort Key: o1_7."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_7 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_8 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_9 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
          ->  Materialize (actual rows=991 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space o2 (actual rows=991 loops=1)
                      Order: o2."time"
@@ -1784,7 +1790,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
 WHERE o1.device_id = 1
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -1793,11 +1799,11 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=1 loops=1)
                Order: o1."time"
                ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_1 (actual rows=1 loops=1)
-                     Filter: ((device_id = 1) AND (v1 = 3))
+                     Filter: ((device_id = 1) AND (v0 = 2))
                ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                     Filter: ((device_id = 1) AND (v1 = 3))
+                     Filter: ((device_id = 1) AND (v0 = 2))
                ->  Index Scan using _hyper_X_X_chunk_metrics_space_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                     Filter: ((device_id = 1) AND (v1 = 3))
+                     Filter: ((device_id = 1) AND (v0 = 2))
          ->  Materialize (actual rows=100 loops=1)
                ->  Append (actual rows=100 loops=1)
                      ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
@@ -1817,7 +1823,7 @@ QUERY PLAN
 SELECT o1.time
 FROM :TEST_TABLE o1,
   :TEST_TABLE o2
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
   AND o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
@@ -1843,17 +1849,18 @@ QUERY PLAN
                      Order: o1."time"
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (26 rows)
 
 -- test JOIN on time column with 3 hypertables
 -- should use 3 ChunkAppend
+SET join_collapse_limit TO 1;
 :PREFIX
 SELECT o1.time
 FROM :TEST_TABLE o1
@@ -1862,52 +1869,53 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
   AND o2.device_id = 2
   AND o3.device_id = 3
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o2."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics_space o2 (actual rows=100 loops=1)
-               Order: o2."time"
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 2)
+         Merge Cond: (o3."time" = o1."time")
+         ->  Custom Scan (ChunkAppend) on metrics_space o3 (actual rows=100 loops=1)
+               Order: o3."time"
+               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o3_1 (actual rows=100 loops=1)
+                     Index Cond: (device_id = 3)
                      Heap Fetches: 100
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                     Index Cond: (device_id = 2)
+               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o3_2 (never executed)
+                     Index Cond: (device_id = 3)
                      Heap Fetches: 0
-               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                     Index Cond: (device_id = 2)
+               ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o3_3 (never executed)
+                     Index Cond: (device_id = 3)
                      Heap Fetches: 0
          ->  Materialize (actual rows=100 loops=1)
                ->  Merge Join (actual rows=100 loops=1)
-                     Merge Cond: (o3."time" = o1."time")
-                     ->  Custom Scan (ChunkAppend) on metrics_space o3 (actual rows=100 loops=1)
-                           Order: o3."time"
-                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o3_1 (actual rows=100 loops=1)
-                                 Index Cond: (device_id = 3)
+                     Merge Cond: (o2."time" = o1."time")
+                     ->  Custom Scan (ChunkAppend) on metrics_space o2 (actual rows=100 loops=1)
+                           Order: o2."time"
+                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                                 Index Cond: (device_id = 2)
                                  Heap Fetches: 100
-                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o3_2 (never executed)
-                                 Index Cond: (device_id = 3)
+                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                                 Index Cond: (device_id = 2)
                                  Heap Fetches: 0
-                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o3_3 (never executed)
-                                 Index Cond: (device_id = 3)
+                           ->  Index Only Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                                 Index Cond: (device_id = 2)
                                  Heap Fetches: 0
                      ->  Materialize (actual rows=100 loops=1)
                            ->  Custom Scan (ChunkAppend) on metrics_space o1 (actual rows=100 loops=1)
                                  Order: o1."time"
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
                                        Index Cond: (device_id = 1)
-                                       Filter: (v1 = 3)
+                                       Filter: (v0 = 2)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
                                        Index Cond: (device_id = 1)
-                                       Filter: (v1 = 3)
+                                       Filter: (v0 = 2)
                                  ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
                                        Index Cond: (device_id = 1)
-                                       Filter: (v1 = 3)
+                                       Filter: (v0 = 2)
 (40 rows)
 
+RESET join_collapse_limit;
 RESET enable_seqscan;
 \set TEST_TABLE 'metrics_compressed'
 \ir :TEST_QUERY_NAME
@@ -2205,46 +2213,49 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
+  AND o1.v0 = 2
 ORDER BY o1.time;
 QUERY PLAN
- Merge Join (actual rows=82038 loops=1)
+ Merge Join (actual rows=21586 loops=1)
    Merge Cond: (o1."time" = o2."time")
-   ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=82038 loops=1)
+   ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=21586 loops=1)
          Order: o1."time"
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=21586 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Vectorized Filter: (("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (v0 = 2))
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=22 loops=1)
                      Index Cond: (device_id = 1)
                      Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (actual rows=30226 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (actual rows=0 loops=1)
+               Vectorized Filter: (("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (v0 = 2))
+               Rows Removed by Filter: 30226
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=31 loops=1)
                      Index Cond: (device_id = 1)
                      Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (actual rows=30226 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (actual rows=0 loops=1)
+               Vectorized Filter: (("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (v0 = 2))
+               Rows Removed by Filter: 30226
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=31 loops=1)
                      Index Cond: (device_id = 1)
                      Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-   ->  Materialize (actual rows=82038 loops=1)
-         ->  Custom Scan (ChunkAppend) on metrics_compressed o2 (actual rows=82038 loops=1)
+   ->  Materialize (actual rows=21587 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_compressed o2 (actual rows=21587 loops=1)
                Order: o2."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_1 (actual rows=21586 loops=1)
                      Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=22 loops=1)
                            Index Cond: (device_id = 2)
                            Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_2 (actual rows=30226 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_2 (actual rows=1 loops=1)
                      Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=31 loops=1)
+                     ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=1 loops=1)
                            Index Cond: (device_id = 2)
                            Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_3 (actual rows=30226 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o2_3 (never executed)
                      Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-                     ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (actual rows=31 loops=1)
+                     ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk compress_hyper_X_X_chunk_1 (never executed)
                            Index Cond: (device_id = 2)
                            Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
-(37 rows)
+(39 rows)
 
 RESET enable_nestloop;
 -- test JOIN
@@ -2364,7 +2375,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2374,15 +2385,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2407,7 +2418,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 USING (time)
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2417,15 +2428,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2450,7 +2461,7 @@ FROM :TEST_TABLE o1
   NATURAL INNER JOIN :TEST_TABLE o2
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2470,7 +2481,7 @@ FROM :TEST_TABLE o1
   LEFT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2480,15 +2491,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2513,7 +2524,7 @@ FROM :TEST_TABLE o1
   RIGHT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
@@ -2523,15 +2534,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2556,7 +2567,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o2.time = o1.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2566,15 +2577,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2600,7 +2611,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2610,15 +2621,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2643,7 +2654,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
@@ -2653,15 +2664,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2685,7 +2696,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
     AND o1.time = o2.time
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2694,19 +2705,19 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
                      Rows Removed by Filter: 6274
                      ->  Sort (actual rows=11 loops=1)
                            Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                            Sort Method: quicksort 
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=220 loops=1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
                      ->  Sort (never executed)
                            Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Filter: (v1 = 3)
+                     Filter: (v0 = 2)
                      ->  Sort (never executed)
                            Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                            ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
@@ -2735,7 +2746,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
 WHERE o1.device_id = 1
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2744,15 +2755,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=1 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=1 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2774,7 +2785,7 @@ QUERY PLAN
 SELECT o1.time
 FROM :TEST_TABLE o1,
   :TEST_TABLE o2
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
   AND o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
@@ -2787,15 +2798,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -2814,6 +2825,7 @@ QUERY PLAN
 
 -- test JOIN on time column with 3 hypertables
 -- should use 3 ChunkAppend
+SET join_collapse_limit TO 1;
 :PREFIX
 SELECT o1.time
 FROM :TEST_TABLE o1
@@ -2822,7 +2834,7 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
   AND o2.device_id = 2
   AND o3.device_id = 3
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -2846,15 +2858,15 @@ QUERY PLAN
                      ->  Custom Scan (ChunkAppend) on metrics_compressed o1 (actual rows=100 loops=1)
                            Order: o1."time"
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                                 Vectorized Filter: (v1 = 3)
+                                 Vectorized Filter: (v0 = 2)
                                  ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                        Index Cond: (device_id = 1)
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                                 Vectorized Filter: (v1 = 3)
+                                 Vectorized Filter: (v0 = 2)
                                  ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                                        Index Cond: (device_id = 1)
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                                 Vectorized Filter: (v1 = 3)
+                                 Vectorized Filter: (v0 = 2)
                                  ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                                        Index Cond: (device_id = 1)
                      ->  Materialize (actual rows=100 loops=1)
@@ -2871,6 +2883,7 @@ QUERY PLAN
                                              Index Cond: (device_id = 2)
 (43 rows)
 
+RESET join_collapse_limit;
 RESET enable_seqscan;
 \set TEST_TABLE 'metrics_space_compressed'
 \ir :TEST_QUERY_NAME
@@ -3512,6 +3525,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
+  AND o1.v0 = 2
 ORDER BY o1.time;
 QUERY PLAN
  Merge Join (actual rows=82038 loops=1)
@@ -3519,17 +3533,17 @@ QUERY PLAN
    ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=82038 loops=1)
          Order: o1."time"
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=21586 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Vectorized Filter: (("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (v0 = 2))
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=22 loops=1)
                      Index Cond: (device_id = 1)
                      Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (actual rows=30226 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Vectorized Filter: (("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (v0 = 2))
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=31 loops=1)
                      Index Cond: (device_id = 1)
                      Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (actual rows=30226 loops=1)
-               Vectorized Filter: ("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
+               Vectorized Filter: (("time" < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone) AND (v0 = 2))
                ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=31 loops=1)
                      Index Cond: (device_id = 1)
                      Filter: (_ts_meta_min_1 < 'Tue Feb 01 00:00:00 2000 PST'::timestamp with time zone)
@@ -3771,7 +3785,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -3781,15 +3795,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -3814,7 +3828,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 USING (time)
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -3824,15 +3838,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -3857,7 +3871,7 @@ FROM :TEST_TABLE o1
   NATURAL INNER JOIN :TEST_TABLE o2
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -3877,7 +3891,7 @@ FROM :TEST_TABLE o1
   LEFT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -3887,15 +3901,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -3920,7 +3934,7 @@ FROM :TEST_TABLE o1
   RIGHT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
@@ -3930,15 +3944,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -3963,7 +3977,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o2.time = o1.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -3973,15 +3987,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -4007,7 +4021,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -4017,15 +4031,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -4050,7 +4064,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 QUERY PLAN
@@ -4060,15 +4074,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -4092,7 +4106,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
     AND o1.time = o2.time
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -4103,21 +4117,21 @@ QUERY PLAN
                ->  Merge Append (actual rows=100 loops=1)
                      Sort Key: o1_1."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            Rows Removed by Filter: 2758
                            ->  Sort (actual rows=5 loops=1)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  Sort Method: quicksort 
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=88 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (actual rows=0 loops=1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            Rows Removed by Filter: 86344
                            ->  Sort (actual rows=88 loops=1)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  Sort Method: quicksort 
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=88 loops=1)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (actual rows=0 loops=1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            Rows Removed by Filter: 43172
                            ->  Sort (actual rows=44 loops=1)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
@@ -4126,34 +4140,34 @@ QUERY PLAN
                ->  Merge Append (never executed)
                      Sort Key: o1_4."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_4 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_5 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_6 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                ->  Merge Append (never executed)
                      Sort Key: o1_7."time"
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_7 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_8 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                      ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_9 (never executed)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                            ->  Sort (never executed)
                                  Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
                                  ->  Index Scan using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
@@ -4206,7 +4220,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
 WHERE o1.device_id = 1
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -4215,15 +4229,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=1 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=1 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -4245,7 +4259,7 @@ QUERY PLAN
 SELECT o1.time
 FROM :TEST_TABLE o1,
   :TEST_TABLE o2
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
   AND o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
@@ -4258,15 +4272,15 @@ QUERY PLAN
          ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                Order: o1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                     Vectorized Filter: (v1 = 3)
+                     Vectorized Filter: (v0 = 2)
                      ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                            Index Cond: (device_id = 1)
          ->  Materialize (actual rows=100 loops=1)
@@ -4285,6 +4299,7 @@ QUERY PLAN
 
 -- test JOIN on time column with 3 hypertables
 -- should use 3 ChunkAppend
+SET join_collapse_limit TO 1;
 :PREFIX
 SELECT o1.time
 FROM :TEST_TABLE o1
@@ -4293,7 +4308,7 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
   AND o2.device_id = 2
   AND o3.device_id = 3
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 QUERY PLAN
@@ -4317,15 +4332,15 @@ QUERY PLAN
                      ->  Custom Scan (ChunkAppend) on metrics_space_compressed o1 (actual rows=100 loops=1)
                            Order: o1."time"
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                                 Vectorized Filter: (v1 = 3)
+                                 Vectorized Filter: (v0 = 2)
                                  ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (actual rows=1 loops=1)
                                        Index Cond: (device_id = 1)
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_2 (never executed)
-                                 Vectorized Filter: (v1 = 3)
+                                 Vectorized Filter: (v0 = 2)
                                  ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                                        Index Cond: (device_id = 1)
                            ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk o1_3 (never executed)
-                                 Vectorized Filter: (v1 = 3)
+                                 Vectorized Filter: (v0 = 2)
                                  ->  Index Scan Backward using compress_hyper_X_X_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_X_X_chunk (never executed)
                                        Index Cond: (device_id = 1)
                      ->  Materialize (actual rows=100 loops=1)
@@ -4342,6 +4357,7 @@ QUERY PLAN
                                              Index Cond: (device_id = 2)
 (43 rows)
 
+RESET join_collapse_limit;
 RESET enable_seqscan;
 -- get results for all the queries
 -- run queries on uncompressed hypertable and store result

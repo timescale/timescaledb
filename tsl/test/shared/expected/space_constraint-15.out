@@ -12,12 +12,12 @@ QUERY PLAN
    ->  Append
          ->  Seq Scan on metrics_space metrics_space_1
                Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-               Filter: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = 1)
 (10 rows)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (1) FOR UPDATE;
@@ -26,12 +26,12 @@ QUERY PLAN
    ->  Append
          ->  Seq Scan on metrics_space metrics_space_1
                Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = 1)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-               Filter: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = 1)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = 1)
 (10 rows)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (1,3) FOR UPDATE;
@@ -40,18 +40,18 @@ QUERY PLAN
    ->  Append
          ->  Seq Scan on metrics_space metrics_space_1
                Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-               Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_5
-               Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_6
-               Filter: (device_id = ANY ('{1,3}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_7
-               Filter: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_5
+               Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_6
+               Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_7
+               Index Cond: (device_id = ANY ('{1,3}'::integer[]))
 (16 rows)
 
 -- check mismatching datatypes
@@ -89,12 +89,12 @@ QUERY PLAN
    ->  Append
          ->  Seq Scan on metrics_space metrics_space_1
                Filter: (device_id = '3'::bigint)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: (device_id = '3'::bigint)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = '3'::bigint)
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-               Filter: (device_id = '3'::bigint)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = '3'::bigint)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = '3'::bigint)
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = '3'::bigint)
 (10 rows)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (smallint '1', smallint '1') FOR UPDATE;
@@ -103,12 +103,12 @@ QUERY PLAN
    ->  Append
          ->  Seq Scan on metrics_space metrics_space_1
                Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = ANY ('{1,1}'::integer[]))
 (10 rows)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (int '1', int '1') FOR UPDATE;
@@ -117,12 +117,12 @@ QUERY PLAN
    ->  Append
          ->  Seq Scan on metrics_space metrics_space_1
                Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-               Filter: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = ANY ('{1,1}'::integer[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = ANY ('{1,1}'::integer[]))
 (10 rows)
 
 :PREFIX SELECT FROM metrics_space WHERE device_id IN (bigint '1', bigint '1') FOR UPDATE;
@@ -131,12 +131,12 @@ QUERY PLAN
    ->  Append
          ->  Seq Scan on metrics_space metrics_space_1
                Filter: (device_id = ANY ('{1,1}'::bigint[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-               Filter: (device_id = ANY ('{1,1}'::bigint[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-               Filter: (device_id = ANY ('{1,1}'::bigint[]))
-         ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-               Filter: (device_id = ANY ('{1,1}'::bigint[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+               Index Cond: (device_id = ANY ('{1,1}'::bigint[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+               Index Cond: (device_id = ANY ('{1,1}'::bigint[]))
+         ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+               Index Cond: (device_id = ANY ('{1,1}'::bigint[]))
 (10 rows)
 
 -- test valid variants we are optimizing
@@ -148,12 +148,12 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_2
          Delete on _hyper_X_X_chunk metrics_space_3
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: (device_id = 1)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                     Filter: (device_id = 1)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                     Filter: (device_id = 1)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
+                     Index Cond: (device_id = 1)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+                     Index Cond: (device_id = 1)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+                     Index Cond: (device_id = 1)
 (12 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id IN (1);
@@ -164,12 +164,12 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_2
          Delete on _hyper_X_X_chunk metrics_space_3
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: (device_id = 1)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                     Filter: (device_id = 1)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                     Filter: (device_id = 1)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
+                     Index Cond: (device_id = 1)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+                     Index Cond: (device_id = 1)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+                     Index Cond: (device_id = 1)
 (12 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id IN (1,1);
@@ -180,12 +180,12 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_2
          Delete on _hyper_X_X_chunk metrics_space_3
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: (device_id = ANY ('{1,1}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                     Filter: (device_id = ANY ('{1,1}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                     Filter: (device_id = ANY ('{1,1}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
+                     Index Cond: (device_id = ANY ('{1,1}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+                     Index Cond: (device_id = ANY ('{1,1}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+                     Index Cond: (device_id = ANY ('{1,1}'::integer[]))
 (12 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id IN (1,3);
@@ -199,18 +199,18 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_5
          Delete on _hyper_X_X_chunk metrics_space_6
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_5
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_6
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_5
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_6
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
 (21 rows)
 
 -- test multiple constraints
@@ -222,13 +222,16 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_2
          Delete on _hyper_X_X_chunk metrics_space_3
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                     Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                     Filter: ((device_id = 1) AND (_timescaledb_functions.get_partition_hash(device_id) = 242423622))
-(12 rows)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
+                     Index Cond: (device_id = 1)
+                     Filter: (_timescaledb_functions.get_partition_hash(device_id) = 242423622)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+                     Index Cond: (device_id = 1)
+                     Filter: (_timescaledb_functions.get_partition_hash(device_id) = 242423622)
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+                     Index Cond: (device_id = 1)
+                     Filter: (_timescaledb_functions.get_partition_hash(device_id) = 242423622)
+(15 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id = 1 AND device_id = 2;
 QUERY PLAN
@@ -252,8 +255,13 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_8
          Delete on _hyper_X_X_chunk metrics_space_9
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_1
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_2
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -268,8 +276,13 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_4
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_5
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -284,8 +297,13 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_7
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_7
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_8
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -300,7 +318,7 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-(60 rows)
+(75 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id IN (1) OR device_id IN (2);
 QUERY PLAN
@@ -316,8 +334,13 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_8
          Delete on _hyper_X_X_chunk metrics_space_9
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_1
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_2
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -332,8 +355,13 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_4
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_5
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -348,8 +376,13 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_7
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_7
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_8
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -364,7 +397,7 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-(60 rows)
+(75 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE device_id IN (1) OR device_id = 2;
 QUERY PLAN
@@ -380,8 +413,13 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_8
          Delete on _hyper_X_X_chunk metrics_space_9
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_1
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_2
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -396,8 +434,13 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_4
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_5
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -412,8 +455,13 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_7
-                     Filter: ((device_id = 1) OR (device_id = 2))
+               ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_7
+                     Recheck Cond: ((device_id = 1) OR (device_id = 2))
+                     ->  BitmapOr
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 1)
+                           ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
+                                 Index Cond: (device_id = 2)
                ->  Bitmap Heap Scan on _hyper_X_X_chunk metrics_space_8
                      Recheck Cond: ((device_id = 1) OR (device_id = 2))
                      ->  BitmapOr
@@ -428,7 +476,7 @@ QUERY PLAN
                                  Index Cond: (device_id = 1)
                            ->  Bitmap Index Scan on _hyper_X_X_chunk_metrics_space_device_id_time_idx
                                  Index Cond: (device_id = 2)
-(60 rows)
+(75 rows)
 
 :PREFIX DELETE FROM metrics_space WHERE (time > '2000-01-01' OR device_id = 1) OR (time < '3000-01-01' OR device_id = 2);
 QUERY PLAN
@@ -479,20 +527,20 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_8
          Delete on _hyper_X_X_chunk metrics_space_9
          ->  Append
-               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
-                     Index Cond: (device_id > 1)
+               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
+                     Filter: (device_id > 1)
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
                      Filter: (device_id > 1)
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
                      Filter: (device_id > 1)
-               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
-                     Index Cond: (device_id > 1)
+               ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
+                     Filter: (device_id > 1)
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_5
                      Filter: (device_id > 1)
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_6
                      Filter: (device_id > 1)
-               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_7
-                     Index Cond: (device_id > 1)
+               ->  Seq Scan on _hyper_X_X_chunk metrics_space_7
+                     Filter: (device_id > 1)
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_8
                      Filter: (device_id > 1)
                ->  Seq Scan on _hyper_X_X_chunk metrics_space_9
@@ -549,18 +597,18 @@ QUERY PLAN
                  Delete on _hyper_X_X_chunk metrics_space_5
                  Delete on _hyper_X_X_chunk metrics_space_6
                  ->  Append
-                       ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                             Filter: (device_id = ANY ('{1,3}'::integer[]))
-                       ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                             Filter: (device_id = ANY ('{1,3}'::integer[]))
-                       ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                             Filter: (device_id = ANY ('{1,3}'::integer[]))
-                       ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-                             Filter: (device_id = ANY ('{1,3}'::integer[]))
-                       ->  Seq Scan on _hyper_X_X_chunk metrics_space_5
-                             Filter: (device_id = ANY ('{1,3}'::integer[]))
-                       ->  Seq Scan on _hyper_X_X_chunk metrics_space_6
-                             Filter: (device_id = ANY ('{1,3}'::integer[]))
+                       ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
+                             Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+                       ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+                             Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+                       ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+                             Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+                       ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+                             Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+                       ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_5
+                             Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+                       ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_6
+                             Index Cond: (device_id = ANY ('{1,3}'::integer[]))
 (23 rows)
 
 :PREFIX WITH q1 AS (
@@ -589,22 +637,22 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk metrics_space_5
          Delete on _hyper_X_X_chunk metrics_space_6
          ->  Append
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_1
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_2
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_3
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_4
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_5
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
-               ->  Seq Scan on _hyper_X_X_chunk metrics_space_6
-                     Filter: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_1
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_2
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_3
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_4
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_5
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
+               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk metrics_space_6
+                     Index Cond: (device_id = ANY ('{1,3}'::integer[]))
 (34 rows)
 
 -- JOIN
-:PREFIX DELETE FROM metrics_space m1 using metrics_space m2 WHERE m1.device_id = 1 AND m2.device_id = 2;
+:PREFIX DELETE FROM metrics_space m1 using metrics_space m2 WHERE m1.device_id = 1 AND m2.device_id = 2 AND m1.v0 = 2;
 QUERY PLAN
  Custom Scan (HypertableModify)
    ->  Delete on metrics_space m1
@@ -613,23 +661,26 @@ QUERY PLAN
          Delete on _hyper_X_X_chunk m1_3
          ->  Nested Loop
                ->  Append
-                     ->  Seq Scan on _hyper_X_X_chunk m1_1
-                           Filter: (device_id = 1)
-                     ->  Seq Scan on _hyper_X_X_chunk m1_2
-                           Filter: (device_id = 1)
-                     ->  Seq Scan on _hyper_X_X_chunk m1_3
-                           Filter: (device_id = 1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_1
+                           Index Cond: (device_id = 2)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_2
+                           Index Cond: (device_id = 2)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_3
+                           Index Cond: (device_id = 2)
                ->  Materialize
                      ->  Append
-                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_1
-                                 Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_2
-                                 Index Cond: (device_id = 2)
-                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_3
-                                 Index Cond: (device_id = 2)
-(21 rows)
+                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1
+                                 Index Cond: (device_id = 1)
+                                 Filter: (v0 = 2)
+                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2
+                                 Index Cond: (device_id = 1)
+                                 Filter: (v0 = 2)
+                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3
+                                 Index Cond: (device_id = 1)
+                                 Filter: (v0 = 2)
+(24 rows)
 
-:PREFIX UPDATE metrics_space m1 set v0 = 0.1 FROM metrics_space m2 WHERE m2.device_id=1 AND m1.device_id=2;
+:PREFIX UPDATE metrics_space m1 set v0 = 0.1 FROM metrics_space m2 WHERE m2.device_id=1 AND m1.device_id=2 AND m1.v0 = 2;
 QUERY PLAN
  Custom Scan (HypertableModify)
    ->  Update on metrics_space m1
@@ -638,21 +689,24 @@ QUERY PLAN
          Update on _hyper_X_X_chunk m1_3
          ->  Nested Loop
                ->  Append
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1
-                           Index Cond: (device_id = 2)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2
-                           Index Cond: (device_id = 2)
-                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3
-                           Index Cond: (device_id = 2)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_1
+                           Index Cond: (device_id = 1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_2
+                           Index Cond: (device_id = 1)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_3
+                           Index Cond: (device_id = 1)
                ->  Materialize
                      ->  Append
-                           ->  Seq Scan on _hyper_X_X_chunk m2_1
-                                 Filter: (device_id = 1)
-                           ->  Seq Scan on _hyper_X_X_chunk m2_2
-                                 Filter: (device_id = 1)
-                           ->  Seq Scan on _hyper_X_X_chunk m2_3
-                                 Filter: (device_id = 1)
-(21 rows)
+                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_1
+                                 Index Cond: (device_id = 2)
+                                 Filter: (v0 = 2)
+                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_2
+                                 Index Cond: (device_id = 2)
+                                 Filter: (v0 = 2)
+                           ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m1_3
+                                 Index Cond: (device_id = 2)
+                                 Filter: (v0 = 2)
+(24 rows)
 
 -- test multiple space dimensions and different datatypes
 CREATE TABLE space_constraint(time timestamptz, s1 text, s2 numeric, s3 int, v float);

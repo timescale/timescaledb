@@ -765,7 +765,7 @@ FROM metrics m1
     INNER JOIN metrics_space m2 ON m1.time = m2.time
         AND m1.device_id = 1
         AND m2.device_id = 2
-	WHERE m1.v1 = 3 -- additional filter to force m1 as inner relation in join
+    WHERE m1.v0 = 2 -- additional filter to force m1 as inner relation in join
     ORDER BY m1.time,
         m1.device_id,
         m2.time,
@@ -788,13 +788,13 @@ QUERY PLAN
                      Order: m1."time"
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
                      ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3
                            Index Cond: (device_id = 1)
-                           Filter: (v1 = 3)
+                           Filter: (v0 = 2)
 (23 rows)
 
 -- test OUTER JOIN

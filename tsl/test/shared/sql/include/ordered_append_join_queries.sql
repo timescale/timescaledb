@@ -118,6 +118,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time < '2000-02-01'
   AND o1.device_id = 1
   AND o2.device_id = 2
+  AND o1.v0 = 2
 ORDER BY o1.time;
 
 RESET enable_nestloop;
@@ -166,7 +167,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -178,7 +179,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 USING (time)
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -190,7 +191,7 @@ FROM :TEST_TABLE o1
   NATURAL INNER JOIN :TEST_TABLE o2
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -202,7 +203,7 @@ FROM :TEST_TABLE o1
   LEFT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -214,7 +215,7 @@ FROM :TEST_TABLE o1
   RIGHT JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 
@@ -226,7 +227,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o2.time = o1.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -239,7 +240,7 @@ FROM :TEST_TABLE o1
 WHERE o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -251,7 +252,7 @@ FROM :TEST_TABLE o1
   INNER JOIN :TEST_TABLE o2 ON o1.time = o2.time
 WHERE o1.device_id = 1
   AND o2.device_id = 2
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o2.time
 LIMIT 100;
 
@@ -262,7 +263,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
     AND o1.time = o2.time
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -273,7 +274,7 @@ SELECT o1.time
 FROM :TEST_TABLE o1
 INNER JOIN :TEST_TABLE o2 ON o1.device_id = o2.device_id
 WHERE o1.device_id = 1
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
 
@@ -283,7 +284,7 @@ LIMIT 100;
 SELECT o1.time
 FROM :TEST_TABLE o1,
   :TEST_TABLE o2
-WHERE o1.v1 = 3
+WHERE o1.v0 = 2
   AND o1.time = o2.time
   AND o1.device_id = 1
   AND o2.device_id = 2
@@ -292,6 +293,8 @@ LIMIT 100;
 
 -- test JOIN on time column with 3 hypertables
 -- should use 3 ChunkAppend
+SET join_collapse_limit TO 1;
+
 :PREFIX
 SELECT o1.time
 FROM :TEST_TABLE o1
@@ -300,8 +303,10 @@ FROM :TEST_TABLE o1
 WHERE o1.device_id = 1
   AND o2.device_id = 2
   AND o3.device_id = 3
-  AND o1.v1 = 3
+  AND o1.v0 = 2
 ORDER BY o1.time
 LIMIT 100;
+
+RESET join_collapse_limit;
 
 RESET enable_seqscan;
