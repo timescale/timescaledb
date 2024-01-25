@@ -185,18 +185,14 @@ QUERY PLAN
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = v0 ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
  Limit (actual rows=0 loops=1)
-   ->  Gather Merge (actual rows=0 loops=1)
-         Workers Planned: 2
-         Workers Launched: 2
-         ->  Sort (actual rows=0 loops=2)
-               Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Worker 0:  Sort Method: quicksort 
-               Worker 1:  Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=2)
-                     Filter: (device_id = v0)
-                     Rows Removed by Filter: 8995
-                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
-(12 rows)
+   ->  Sort (actual rows=0 loops=1)
+         Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
+         Sort Method: quicksort 
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               Filter: (device_id = v0)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+(8 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id < v1 ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
@@ -227,14 +223,12 @@ QUERY PLAN
 :PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id = length(substring(version(), 1, 3)) ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
  Limit
-   ->  Gather Merge
-         Workers Planned: 2
-         ->  Sort
-               Sort Key: _hyper_X_X_chunk."time"
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
-                     Filter: (device_id = length("substring"(version(), 1, 3)))
-                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk
-(8 rows)
+   ->  Sort
+         Sort Key: _hyper_X_X_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
+               Filter: (device_id = length("substring"(version(), 1, 3)))
+               ->  Seq Scan on compress_hyper_X_X_chunk
+(6 rows)
 
 -- test segment meta pushdown
 -- order by column and const
@@ -316,18 +310,14 @@ QUERY PLAN
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < 1 ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
  Limit (actual rows=0 loops=1)
-   ->  Gather Merge (actual rows=0 loops=1)
-         Workers Planned: 2
-         Workers Launched: 2
-         ->  Sort (actual rows=0 loops=2)
-               Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Worker 0:  Sort Method: quicksort 
-               Worker 1:  Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=2)
-                     Vectorized Filter: (v0 < 1)
-                     Rows Removed by Filter: 8995
-                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
-(12 rows)
+   ->  Sort (actual rows=0 loops=1)
+         Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
+         Sort Method: quicksort 
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               Vectorized Filter: (v0 < 1)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+(8 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < device_id ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
@@ -363,35 +353,27 @@ QUERY PLAN
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v1 = device_id ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
  Limit (actual rows=0 loops=1)
-   ->  Gather Merge (actual rows=0 loops=1)
-         Workers Planned: 2
-         Workers Launched: 2
-         ->  Sort (actual rows=0 loops=2)
-               Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Worker 0:  Sort Method: quicksort 
-               Worker 1:  Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=2)
-                     Filter: (v1 = device_id)
-                     Rows Removed by Filter: 8995
-                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
-(12 rows)
+   ->  Sort (actual rows=0 loops=1)
+         Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
+         Sort Method: quicksort 
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               Filter: (v1 = device_id)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+(8 rows)
 
 --pushdown between two order by column (not pushed down)
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 = v1 ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
  Limit (actual rows=0 loops=1)
-   ->  Gather Merge (actual rows=0 loops=1)
-         Workers Planned: 2
-         Workers Launched: 2
-         ->  Sort (actual rows=0 loops=2)
-               Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Worker 0:  Sort Method: quicksort 
-               Worker 1:  Sort Method: quicksort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=2)
-                     Filter: (v0 = v1)
-                     Rows Removed by Filter: 8995
-                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
-(12 rows)
+   ->  Sort (actual rows=0 loops=1)
+         Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
+         Sort Method: quicksort 
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
+               Filter: (v0 = v1)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+(8 rows)
 
 --pushdown of quals on order by and segment by cols anded together
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' AND device_id = 1 ORDER BY time, device_id LIMIT 10;
