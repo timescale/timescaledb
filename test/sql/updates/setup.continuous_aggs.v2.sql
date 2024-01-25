@@ -7,22 +7,6 @@
 -- we keep them separate anyway so that we can do additional checking
 -- if necessary.
 
-SELECT
-  (string_to_array(extversion,'.'))[1] AS ts_major,
-  (string_to_array(extversion,'.'))[2] AS ts_minor
-  FROM pg_extension
- WHERE extname = 'timescaledb' \gset
-
-SELECT
-  :ts_major < 2 AS has_refresh_mat_view,
-  :ts_major < 2 AS has_drop_chunks_old_interface,
-  :ts_major < 2 AS has_ignore_invalidations_older_than,
-  :ts_major < 2 AS has_max_interval_per_job,
-  :ts_major >= 2 AS has_create_mat_view,
-  :ts_major >= 2 AS has_continuous_aggs_policy
-  FROM pg_extension
- WHERE extname = 'timescaledb' \gset
-
 -- disable background workers to prevent deadlocks between background processes
 -- on timescaledb 1.7.x
 CALL _timescaledb_testing.stop_workers();
@@ -51,38 +35,24 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-31 00:00'::timest
 INSERT INTO conditions_before
 SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timestamp, '1 day'), 'LA', 73, 55, NULL, 28, NULL, NULL, 8, true;
 
-\if :has_refresh_mat_view
-    CREATE VIEW rename_cols
-    WITH (timescaledb.continuous, timescaledb.materialized_only = false, timescaledb.refresh_lag='14 days') AS
-\else
-    -- rename_cols cagg view is also used for another test: if we can enable
-    -- compression on a cagg after an upgrade
-    -- This view has 3 cols which is fewer than the number of cols on the table
-    -- we had a bug related to that and need to verify if compression can be
-    -- enabled on such a view
-    CREATE MATERIALIZED VIEW rename_cols
-    WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
-\endif
-    SELECT time_bucket('1 week', timec) AS bucket,
-           location,
-	   round(avg(humidity)) AS humidity
-    FROM conditions_before
-\if :has_refresh_mat_view
-    GROUP BY bucket, location;
-\else
-    GROUP BY bucket, location
-    WITH NO DATA;
-\endif
+-- rename_cols cagg view is also used for another test: if we can enable
+-- compression on a cagg after an upgrade
+-- This view has 3 cols which is fewer than the number of cols on the table
+-- we had a bug related to that and need to verify if compression can be
+-- enabled on such a view
+CREATE MATERIALIZED VIEW rename_cols
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+SELECT time_bucket('1 week', timec) AS bucket,
+       location,
+ round(avg(humidity)) AS humidity
+FROM conditions_before
+GROUP BY bucket, location
+WITH NO DATA;
 
-\if :has_refresh_mat_view
-    CREATE VIEW mat_before
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
-\else
-    CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
-\endif
-    AS
-      SELECT time_bucket('1week', timec) as bucket,
+CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT time_bucket('1week', timec) as bucket,
 	location,
 	round(min(allnull)) as min_allnull,
 	round(max(temperature)) as max_temp,
@@ -119,46 +89,27 @@ SELECT generate_series('2018-11-01 00:00'::timestamp, '2018-12-15 00:00'::timest
 	last(highlow, timec) as last_hl,
 	first(highlow, timec) as first_hl,
 	histogram(temperature, 0, 100, 5)
-      FROM conditions_before
-\if :has_refresh_mat_view
-      GROUP BY bucket, location
-      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
+FROM conditions_before
+GROUP BY bucket, location
+HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
 
-    -- ALTER VIEW cannot rename columns before PG13, but ALTER TABLE
-    -- works for views.
-    ALTER TABLE rename_cols RENAME COLUMN bucket TO "time";
-\else
-      GROUP BY bucket, location
-      HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-
-    ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket TO "time";
-\endif
+ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket TO "time";
 
 \if :WITH_SUPERUSER
 GRANT SELECT ON mat_before TO cagg_user WITH GRANT OPTION;
 \endif
 
-\if :has_refresh_mat_view
-REFRESH MATERIALIZED VIEW rename_cols;
-REFRESH MATERIALIZED VIEW mat_before;
-\else
 CALL refresh_continuous_aggregate('rename_cols',NULL,NULL);
 CALL refresh_continuous_aggregate('mat_before',NULL,NULL);
-\endif
 
 -- we create separate schema for realtime agg since we dump all view definitions in public schema
 -- but realtime agg view definition is not stable across versions
 CREATE SCHEMA cagg;
 
-\if :has_refresh_mat_view
-    CREATE VIEW cagg.realtime_mat
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=false, timescaledb.refresh_lag='-30 day', timescaledb.max_interval_per_job ='1000 day')
-\else
-    CREATE MATERIALIZED VIEW IF NOT EXISTS cagg.realtime_mat
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=false)
-\endif
-    AS
-      SELECT time_bucket('1week', timec) as bucket,
+CREATE MATERIALIZED VIEW IF NOT EXISTS cagg.realtime_mat
+WITH ( timescaledb.continuous, timescaledb.materialized_only=false)
+AS
+SELECT time_bucket('1week', timec) as bucket,
 	location,
 	round(min(allnull)) as min_allnull,
 	round(max(temperature)) as max_temp,
@@ -195,52 +146,28 @@ CREATE SCHEMA cagg;
 	last(highlow, timec) as last_hl,
 	first(highlow, timec) as first_hl,
 	histogram(temperature, 0, 100, 5)
-      FROM conditions_before
-\if :has_refresh_mat_view
-      GROUP BY bucket, location
-      HAVING min(location) >= 'NYC' and avg(temperature) > 2;
-\else
-      GROUP BY bucket, location
-      HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
-\endif
+FROM conditions_before
+GROUP BY bucket, location
+HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
+
 \if :WITH_SUPERUSER
 GRANT SELECT ON cagg.realtime_mat TO cagg_user;
 \endif
 
-\if :has_refresh_mat_view
-REFRESH MATERIALIZED VIEW cagg.realtime_mat;
-\else
 CALL refresh_continuous_aggregate('cagg.realtime_mat',NULL,NULL);
-\endif
 
 -- test ignore_invalidation_older_than migration --
-\if :has_refresh_mat_view
-    CREATE VIEW mat_ignoreinval
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
-           timescaledb.refresh_lag='-30 day',
-           timescaledb.ignore_invalidation_older_than='30 days',
-           timescaledb.max_interval_per_job = '100000 days')
-\else
-    CREATE MATERIALIZED VIEW IF NOT EXISTS  mat_ignoreinval
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
-\endif
-    AS
-      SELECT time_bucket('1 week', timec) as bucket,
+CREATE MATERIALIZED VIEW IF NOT EXISTS  mat_ignoreinval
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+  SELECT time_bucket('1 week', timec) as bucket,
     max(temperature) as maxtemp
-      FROM conditions_before
-\if :has_refresh_mat_view
-      GROUP BY bucket;
-\else
-      GROUP BY bucket WITH NO DATA;
+  FROM conditions_before
+  GROUP BY bucket WITH NO DATA;
 
-    SELECT add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h');
-\endif
+SELECT add_continuous_aggregate_policy('mat_ignoreinval', '30 days'::interval, '-30 days'::interval, '336 h');
 
-\if :has_refresh_mat_view
-REFRESH MATERIALIZED VIEW mat_ignoreinval;
-\else
 CALL refresh_continuous_aggregate('mat_ignoreinval',NULL,NULL);
-\endif
 
 -- test new data beyond the invalidation threshold is properly handled --
 CREATE TABLE inval_test (time TIMESTAMPTZ NOT NULL, location TEXT, temperature DOUBLE PRECISION);
@@ -251,33 +178,17 @@ SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timest
 INSERT INTO inval_test
 SELECT generate_series('2018-12-01 00:00'::timestamp, '2018-12-20 00:00'::timestamp, '1 day'), 'NYC', generate_series(31.0, 50.0, 1.0);
 
-\if :has_refresh_mat_view
-    CREATE VIEW mat_inval
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
-           timescaledb.refresh_lag='-20 days',
-           timescaledb.refresh_interval='12 hours',
-           timescaledb.max_interval_per_job='100000 days' )
-\else
-    CREATE MATERIALIZED VIEW mat_inval
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-\endif
-    AS
-      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
-        max(temperature) as max_temp, round(avg(temperature)) as avg_temp
-      FROM inval_test
-\if :has_refresh_mat_view
-      GROUP BY bucket, location;
-\else
-      GROUP BY bucket, location WITH NO DATA;
+CREATE MATERIALIZED VIEW mat_inval
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+AS
+  SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
+    max(temperature) as max_temp, round(avg(temperature)) as avg_temp
+  FROM inval_test
+  GROUP BY bucket, location WITH NO DATA;
 
-    SELECT add_continuous_aggregate_policy('mat_inval', NULL, '-20 days'::interval, '12 hours');
-\endif
+SELECT add_continuous_aggregate_policy('mat_inval', NULL, '-20 days'::interval, '12 hours');
 
-\if :has_refresh_mat_view
-REFRESH MATERIALIZED VIEW mat_inval;
-\else
 CALL refresh_continuous_aggregate('mat_inval',NULL,NULL);
-\endif
 
 INSERT INTO inval_test
 SELECT generate_series('2118-12-01 00:00'::timestamp, '2118-12-20 00:00'::timestamp, '1 day'), 'POR', generate_series(135.25, 140.0, 0.25);
@@ -295,83 +206,41 @@ INSERT INTO int_time_test VALUES
 (10, - 4, 1), (11, - 3, 5), (12, - 3, 7), (13, - 3, 9), (14,-4, 11),
 (15, -4, 22), (16, -4, 23);
 
-\if :has_refresh_mat_view
-    CREATE VIEW mat_inttime
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
-           timescaledb.ignore_invalidation_older_than = 6,
-           timescaledb.refresh_lag = 2,
-           timescaledb.refresh_interval='12 hours')
-\else
-    CREATE MATERIALIZED VIEW mat_inttime
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-\endif
-    AS
-      SELECT time_bucket( 2, timeval), COUNT(col1)
-      FROM int_time_test
-\if :has_refresh_mat_view
-      GROUP BY 1;
-\else
-      GROUP BY 1 WITH NO DATA;
-\endif
+CREATE MATERIALIZED VIEW mat_inttime
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+AS
+  SELECT time_bucket( 2, timeval), COUNT(col1)
+  FROM int_time_test
+  GROUP BY 1 WITH NO DATA;
 
-\if :has_refresh_mat_view
-    CREATE VIEW mat_inttime2
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
-           timescaledb.refresh_lag = 2,
-           timescaledb.refresh_interval='12 hours')
-\else
-    CREATE MATERIALIZED VIEW mat_inttime2
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-\endif
-    AS
-      SELECT time_bucket( 2, timeval), COUNT(col1)
-      FROM int_time_test
-\if :has_refresh_mat_view
-      GROUP BY 1;
-\else
-      GROUP BY 1 WITH NO DATA;
+CREATE MATERIALIZED VIEW mat_inttime2
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+AS
+  SELECT time_bucket( 2, timeval), COUNT(col1)
+  FROM int_time_test
+  GROUP BY 1 WITH NO DATA;
 
-    SELECT add_continuous_aggregate_policy('mat_inttime', 6, 2, '12 hours');
-    SELECT add_continuous_aggregate_policy('mat_inttime2', NULL, 2, '12 hours');
-\endif
+SELECT add_continuous_aggregate_policy('mat_inttime', 6, 2, '12 hours');
+SELECT add_continuous_aggregate_policy('mat_inttime2', NULL, 2, '12 hours');
 
-\if :has_refresh_mat_view
-REFRESH MATERIALIZED VIEW mat_inttime;
-REFRESH MATERIALIZED VIEW mat_inttime2;
-\else
 CALL refresh_continuous_aggregate('mat_inttime',NULL,NULL);
 CALL refresh_continuous_aggregate('mat_inttime2',NULL,NULL);
-\endif
 
 -- Test that retention policies that conflict with continuous aggs are disabled --
 CREATE TABLE conflict_test (time TIMESTAMPTZ NOT NULL, location TEXT, temperature DOUBLE PRECISION);
 SELECT create_hypertable('conflict_test', 'time', chunk_time_interval => INTERVAL '1 week');
 
-\if :has_refresh_mat_view
-    CREATE VIEW mat_conflict
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true,
-           timescaledb.refresh_lag='1 day',
-           timescaledb.ignore_invalidation_older_than = '28 days',
-           timescaledb.refresh_interval='12 hours' )
-\else
-    CREATE MATERIALIZED VIEW mat_conflict
-    WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
-\endif
-    AS
-      SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
-        max(temperature) as max_temp, round(avg(temperature)) as avg_temp
-      FROM conflict_test
-\if :has_refresh_mat_view
-      GROUP BY bucket, location;
+CREATE MATERIALIZED VIEW mat_conflict
+WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
+AS
+  SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
+    max(temperature) as max_temp, round(avg(temperature)) as avg_temp
+  FROM conflict_test
+  GROUP BY bucket, location WITH NO DATA;
 
-    SELECT add_drop_chunks_policy('conflict_test', '14 days'::interval);
-\else
-      GROUP BY bucket, location WITH NO DATA;
-
-    SELECT add_continuous_aggregate_policy('mat_conflict', '28 days', '1 day', '12 hours');
-    SELECT add_retention_policy('conflict_test', '14 days'::interval) AS retention_jobid \gset
-    SELECT alter_job(:retention_jobid, scheduled=>false);
-\endif
+SELECT add_continuous_aggregate_policy('mat_conflict', '28 days', '1 day', '12 hours');
+SELECT add_retention_policy('conflict_test', '14 days'::interval) AS retention_jobid \gset
+SELECT alter_job(:retention_jobid, scheduled=>false);
 
 \if :WITH_SUPERUSER
 GRANT SELECT, TRIGGER, UPDATE
@@ -401,20 +270,9 @@ SELECT
 FROM
     generate_series(now() - interval '28 days', now(), '1 hour') AS time;
 
-\if :has_create_mat_view
 CREATE MATERIALIZED VIEW mat_drop
-\else
-CREATE VIEW mat_drop
-\endif
 WITH (
      timescaledb.materialized_only = TRUE,
-\if :has_ignore_invalidations_older_than
-     timescaledb.ignore_invalidation_older_than = '7 days',
-\endif
-\if :has_max_interval_per_job
-     timescaledb.refresh_lag='-30 day',
-     timescaledb.max_interval_per_job ='1000 day',
-\endif
      timescaledb.continuous
 ) AS
 SELECT
@@ -429,19 +287,8 @@ GROUP BY
     bucket,
     LOCATION;
 
-\if :has_continuous_aggs_policy
 SELECT add_continuous_aggregate_policy('mat_drop', '7 days', '-30 days'::interval, '20 min');
-\endif
 
-\if :has_refresh_mat_view
-REFRESH MATERIALIZED VIEW mat_drop;
-\else
 CALL refresh_continuous_aggregate('mat_drop',NULL,NULL);
-\endif
 
-\if :has_drop_chunks_old_interface
-SELECT drop_chunks(NOW() - INTERVAL '7 days', table_name => 'drop_test',
-		   cascade_to_materializations => FALSE);
-\else
 SELECT drop_chunks('drop_test', NOW() - INTERVAL '7 days');
-\endif

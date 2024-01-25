@@ -781,20 +781,16 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		 * The entire batch doesn't pass the vectorized quals, so we might be
 		 * able to avoid reading and decompressing other columns. Scroll it to
 		 * the end.
+		 * Note that this optimization can't work with "batch sorted merge",
+		 * because the latter always has to read the first row of the batch for
+		 * its sorting needs, so it always has to read and decompress all
+		 * columns. This can be improved by only decompressing the columns
+		 * needed for sorting.
 		 */
 		batch_state->next_batch_row = batch_state->total_batch_rows;
 
 		InstrCountTuples2(dcontext->ps, 1);
 		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows);
-
-		/*
-		 * Note that this optimization can't work with "batch sorted merge",
-		 * because the latter always has to read the first row of the batch for
-		 * its sorting needs, so it always has to read and decompress all
-		 * columns. This is not a problem at the moment, because for batch
-		 * sorted merge we disable bulk decompression entirely, at planning time.
-		 */
-		Assert(!dcontext->batch_sorted_merge);
 	}
 	else
 	{
@@ -861,39 +857,34 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			*column_values->output_isnull = result.is_null;
 			*column_values->output_value = result.val;
 		}
-		else if (column_values->decompression_type > 0)
+		else if (column_values->decompression_type > SIZEOF_DATUM)
 		{
-			Assert(column_values->decompression_type <= 8);
+			/*
+			 * Fixed-width by-reference type that doesn't fit into a Datum.
+			 * For now this only happens for 8-byte types on 32-bit systems,
+			 * but eventually we could also use it for bigger by-value types
+			 * such as UUID.
+			 */
 			const uint8 value_bytes = column_values->decompression_type;
 			const char *restrict src = column_values->buffers[1];
-
+			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
+			*column_values->output_isnull =
+				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+		}
+		else if (column_values->decompression_type > 0)
+		{
 			/*
+			 * Fixed-width by-value type that fits into a Datum.
+			 *
 			 * The conversion of Datum to more narrow types will truncate
 			 * the higher bytes, so we don't care if we read some garbage
 			 * into them, and can always read 8 bytes. These are unaligned
 			 * reads, so technically we have to do memcpy.
 			 */
-			uint64 value;
-			memcpy(&value, &src[value_bytes * arrow_row], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-			Datum datum = Int64GetDatum(value);
-#else
-			/*
-			 * On 32-bit systems, the data larger than 4 bytes go by
-			 * reference, so we have to jump through these hoops.
-			 */
-			Datum datum;
-			if (value_bytes <= 4)
-			{
-				datum = Int32GetDatum((uint32) value);
-			}
-			else
-			{
-				datum = Int64GetDatum(value);
-			}
-#endif
-			*column_values->output_value = datum;
+			const uint8 value_bytes = column_values->decompression_type;
+			Assert(value_bytes <= SIZEOF_DATUM);
+			const char *restrict src = column_values->buffers[1];
+			memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}
@@ -1063,12 +1054,10 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	Assert(TupIsNull(batch_state->decompressed_scan_slot));
 
 	/*
-	 * We might not have decompressed some columns if the vector quals didn't
-	 * pass for the entire batch. Have to decompress them anyway if we're asked
+	 * Check that we have decompressed all columns even if the vector quals
+	 * didn't pass for the entire batch. We need them because we're asked
 	 * to save the first tuple. This doesn't actually happen yet, because the
-	 * vectorized decompression is disabled with sorted merge, but we might want
-	 * to enable it for some queries. For now, just assert that it doesn't
-	 * happen.
+	 * vectorized decompression is disabled with sorted merge.
 	 */
 #ifdef USE_ASSERT_CHECKING
 	const int num_compressed_columns = dcontext->num_compressed_columns;
@@ -1080,7 +1069,9 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 #endif
 
 	/* Make the first tuple and save it. */
-	make_next_tuple(batch_state, dcontext->reverse, dcontext->num_compressed_columns);
+	Assert(batch_state->next_batch_row == 0);
+	const uint16 arrow_row = dcontext->reverse ? batch_state->total_batch_rows - 1 : 0;
+	make_next_tuple(batch_state, arrow_row, dcontext->num_compressed_columns);
 	ExecCopySlot(first_tuple_slot, batch_state->decompressed_scan_slot);
 
 	/*
@@ -1088,7 +1079,7 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	 * for the subsequent calls (matching tuple is in decompressed scan slot).
 	 */
 	const bool qual_passed =
-		vector_qual(batch_state, dcontext->reverse) && postgres_qual(dcontext, batch_state);
+		vector_qual(batch_state, arrow_row) && postgres_qual(dcontext, batch_state);
 	batch_state->next_batch_row++;
 
 	if (!qual_passed)
