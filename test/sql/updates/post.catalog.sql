@@ -43,7 +43,7 @@ SELECT count(*)
      AND refobjid = (SELECT oid FROM pg_extension WHERE extname = 'timescaledb');
 
 -- The list of tables configured to be dumped.
-SELECT unnest(extconfig)::regclass::text AS obj FROM pg_extension WHERE extname='timescaledb' ORDER BY 1;
+SELECT unnest(extconfig)::regclass::text, unnest(extcondition) FROM pg_extension WHERE extname = 'timescaledb' ORDER BY 1;
 
 -- Show dropped chunks
 SELECT id, hypertable_id, schema_name, table_name, dropped
