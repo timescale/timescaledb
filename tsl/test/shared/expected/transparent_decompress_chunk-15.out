@@ -193,8 +193,8 @@ QUERY PLAN
          Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                Filter: (device_id = v0)
-               Rows Removed by Filter: 215860
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=220 loops=1)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (8 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id < v1 ORDER BY time, device_id LIMIT 10;
@@ -222,10 +222,10 @@ QUERY PLAN
 :PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id = length(substring(version(), 1, 3)) ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
  Limit
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
-         Filter: (device_id = length("substring"(version(), 1, 3)))
-         ->  Sort
-               Sort Key: compress_hyper_X_X_chunk._ts_meta_min_1
+   ->  Sort
+         Sort Key: _hyper_X_X_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
+               Filter: (device_id = length("substring"(version(), 1, 3)))
                ->  Seq Scan on compress_hyper_X_X_chunk
 (6 rows)
 
@@ -312,8 +312,8 @@ QUERY PLAN
          Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                Vectorized Filter: (v0 < 1)
-               Rows Removed by Filter: 215860
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=220 loops=1)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (8 rows)
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < device_id ORDER BY time, device_id LIMIT 10;
@@ -347,8 +347,8 @@ QUERY PLAN
          Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                Filter: (v1 = device_id)
-               Rows Removed by Filter: 215860
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=220 loops=1)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (8 rows)
 
 --pushdown between two order by column (not pushed down)
@@ -360,8 +360,8 @@ QUERY PLAN
          Sort Method: quicksort 
          ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=0 loops=1)
                Filter: (v0 = v1)
-               Rows Removed by Filter: 215860
-               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=220 loops=1)
+               Rows Removed by Filter: 17990
+               ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
 (8 rows)
 
 --pushdown of quals on order by and segment by cols anded together
