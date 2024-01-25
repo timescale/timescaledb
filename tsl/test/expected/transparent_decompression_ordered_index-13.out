@@ -699,20 +699,19 @@ ON met.device_id = q.node and met.device_id_peer = q.device_id_peer
                                                                                       QUERY PLAN                                                                                       
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Nested Loop (actual rows=1 loops=1)
-   Join Filter: (nodetime.node = met.device_id)
+   Join Filter: (("*VALUES*".column2 = met.device_id_peer) AND ("*VALUES*".column3 = met.v0))
    ->  Nested Loop (actual rows=1 loops=1)
          Join Filter: (nodetime.node = "*VALUES*".column1)
          Rows Removed by Join Filter: 1
          ->  Seq Scan on nodetime (actual rows=1 loops=1)
          ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_1_4_chunk met (actual rows=1 loops=1)
-         Filter: ("*VALUES*".column3 = v0)
-         Rows Removed by Filter: 47
          Vectorized Filter: ((v0 > 2) AND ("time" = 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
+         Rows Removed by Filter: 47
          ->  Index Scan using compress_hyper_2_9_chunk_device_id_device_id_peer__ts_meta__idx on compress_hyper_2_9_chunk (actual rows=1 loops=1)
-               Index Cond: ((device_id = "*VALUES*".column1) AND (device_id_peer = "*VALUES*".column2))
+               Index Cond: (device_id = nodetime.node)
                Filter: ((_ts_meta_min_1 <= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone) AND (_ts_meta_max_1 >= 'Fri Jan 19 17:00:00 2018 PST'::timestamp with time zone))
-(14 rows)
+(13 rows)
 
 -- filter on compressed attr (v0) with seqscan enabled and indexscan
 -- disabled. filters on compressed attr should be above the seq scan.
