@@ -19,6 +19,15 @@ static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *da
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
 														  TupleDesc desc);
 
+bool
+ts_compression_settings_equal(const CompressionSettings *left, const CompressionSettings *right)
+{
+	return ts_array_equal(left->fd.segmentby, right->fd.segmentby) &&
+		   ts_array_equal(left->fd.orderby, right->fd.orderby) &&
+		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
+		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst);
+}
+
 CompressionSettings *
 ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid)
 {
