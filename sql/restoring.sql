@@ -12,7 +12,6 @@ BEGIN
     SET SESSION timescaledb.restoring = 'on';
     PERFORM _timescaledb_functions.stop_background_workers();
     --exported uuid may be included in the dump so backup the version
-    UPDATE _timescaledb_catalog.metadata SET key='exported_uuid_bak' WHERE key='exported_uuid';
     RETURN true;
 END
 $BODY$
@@ -39,12 +38,6 @@ BEGIN
     -- we cannot use reset here because the reset_val might not be off
     SET timescaledb.restoring TO off;
     PERFORM _timescaledb_functions.restart_background_workers();
-
-    --try to restore the backed up uuid, if the restore did not set one
-    INSERT INTO _timescaledb_catalog.metadata
-       SELECT 'exported_uuid', value, include_in_telemetry FROM _timescaledb_catalog.metadata WHERE key='exported_uuid_bak'
-       ON CONFLICT DO NOTHING;
-    DELETE FROM _timescaledb_catalog.metadata WHERE key='exported_uuid_bak';
 
     RETURN true;
 END

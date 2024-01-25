@@ -158,10 +158,20 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 	{
 		RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
-		if (contain_mutable_functions((Node *) rinfo->clause))
+		/*
+		 * The external parameters (e.g. from parameterized prepared statements)
+		 * are constant during query run time, so we can use them for startup
+		 * exclusion.
+		 * The join parameters have multiple values, so they are only used for
+		 * runtime exclusion.
+		 */
+		if (contain_mutable_functions((Node *) rinfo->clause) ||
+			ts_contains_external_param((Node *) rinfo->clause))
+		{
 			path->startup_exclusion = true;
+		}
 
-		if (ts_guc_enable_runtime_exclusion && ts_contain_param((Node *) rinfo->clause))
+		if (ts_guc_enable_runtime_exclusion && ts_contains_join_param((Node *) rinfo->clause))
 		{
 			ListCell *lc_var;
 

@@ -18,6 +18,7 @@ set(TEST_FILES
     compressed_collation.sql
     compression_create_compressed_table.sql
     compression_conflicts.sql
+    compression_defaults.sql
     compression_insert.sql
     compression_policy.sql
     compression_qualpushdown.sql
@@ -35,6 +36,7 @@ set(TEST_FILES
     reorder.sql
     skip_scan.sql
     size_utils_tsl.sql
+    transparent_decompression_join_index.sql
     vectorized_aggregation.sql)
 
 if(USE_TELEMETRY)
@@ -128,7 +130,6 @@ set(TEST_TEMPLATES
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
-    transparent_decompression_join_index.sql.in
     transparent_decompression_ordered_index.sql.in
     merge_append_partially_compressed.sql.in)
 

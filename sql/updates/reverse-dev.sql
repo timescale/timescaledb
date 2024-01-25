@@ -711,7 +711,6 @@ FROM
 ORDER BY id;
 
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
 
 GRANT SELECT ON _timescaledb_catalog.hypertable TO PUBLIC;
@@ -765,4 +764,27 @@ DROP FUNCTION _timescaledb_functions.constraint_clone;
 
 CREATE FUNCTION _timescaledb_functions.hypertable_constraint_add_table_fk_constraint(user_ht_constraint_name name,user_ht_schema_name name,user_ht_table_name name,compress_ht_id   integer) RETURNS void LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog,pg_temp;
 
+CREATE FUNCTION _timescaledb_functions.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
+AS 'BEGIN END' LANGUAGE PLPGSQL SET search_path TO pg_catalog,pg_temp;
 
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$
+  WHERE KEY = 'exported_uuid' $$);
+
+DROP TRIGGER metadata_insert_trigger ON _timescaledb_catalog.metadata;
+DROP FUNCTION _timescaledb_functions.metadata_insert_trigger();
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_orderby_defaults(regclass,text[]);
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_segmentby_defaults(regclass);
+
+--- re-include in the pg_dump config
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_hypertable', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_extension', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_cache.cache_inval_bgw_job', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
+
+-- Remove unwanted entry from extconfig and extcondition in pg_extension
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
+-- Associate the above table back to keep the dependencies safe
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_catalog.hypertable;
+-- include this now in the config
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');

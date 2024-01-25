@@ -24,10 +24,9 @@ typedef enum CompressHypertableOption
 
 typedef struct
 {
-	short index;
 	NameData colname;
 	bool nullsfirst;
-	bool asc;
+	bool desc;
 } CompressedParsedCol;
 
 extern TSDLLEXPORT WithClauseResult *ts_compress_hypertable_set_clause_parse(const List *defelems);

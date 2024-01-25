@@ -76,7 +76,6 @@ TS_FUNCTION_INFO_V1(ts_chunk_show_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_chunks);
 TS_FUNCTION_INFO_V1(ts_chunk_drop_single_chunk);
 TS_FUNCTION_INFO_V1(ts_chunk_attach_osm_table_chunk);
-TS_FUNCTION_INFO_V1(ts_chunks_in);
 TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
@@ -4269,26 +4268,6 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 	funcctx->user_fctx = dc_names;
 
 	return list_return_srf(fcinfo);
-}
-
-/**
- * This function is used to explicitly specify chunks that are being scanned. It's being
- * processed in the planning phase and removed from the query tree. This means that the
- * actual function implementation will only be executed if something went wrong during
- * explicit chunk exclusion.
- */
-Datum
-ts_chunks_in(PG_FUNCTION_ARGS)
-{
-	const char *funcname = get_func_name(FC_FN_OID(fcinfo));
-
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("illegal invocation of %s function", funcname),
-			 errhint("The %s function must appear in the WHERE clause and can only"
-					 " be combined with AND operator.",
-					 funcname)));
-	pg_unreachable();
 }
 
 /* Return the compression status for the chunk

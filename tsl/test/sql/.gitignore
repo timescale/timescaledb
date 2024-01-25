@@ -18,7 +18,6 @@
 /modify_exclusion-*.sql
 /plan_skip_scan-*.sql
 /transparent_decompression-*.sql
-/transparent_decompression_join_index-*.sql
 /transparent_decompression_ordered_index-*.sql
 /telemetry_stats-*.sql
 /merge_append_partially_compressed-*.sql
