@@ -339,10 +339,6 @@ cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
-
-	mybt();
-	my_print(path->parent->baserestrictinfo);
-	fprintf(stderr, "chunk %s rows %lf\n", bmsToString(path->parent->relids), path->rows);
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
