@@ -1418,3 +1418,31 @@ RESET timescaledb.debug_compression_path_info;
 DROP TABLE t6367;
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE test6367;
+
+-- Text limitting decompressed tuple during an UPDATE or DELETE
+CREATE TABLE test_limit (
+    timestamp int not null,
+    id bigint
+);
+SELECT * FROM create_hypertable('test_limit', 'timestamp', chunk_time_interval=>10000);
+INSERT INTO test_limit SELECT t, i FROM generate_series(1,10000,1) t CROSS JOIN generate_series(1,3,1) i;
+
+ALTER TABLE test_limit SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'timestamp'
+);
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
+
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+-- Updating or deleting everything will break the set limit.
+UPDATE test_limit SET id = 0;
+DELETE FROM test_limit WHERE id > 0;
+-- Setting to 0 should remove the limit.
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
+UPDATE test_limit SET id = 0;
+DELETE FROM test_limit WHERE id > 0;
+\set ON_ERROR_STOP 1
+
+DROP TABLE test_limit;
