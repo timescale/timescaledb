@@ -732,8 +732,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				   chunk_rel,
 				   compressed_rel,
 				   ts_chunk_is_partial(chunk));
+
 	set_baserel_size_estimates(root, compressed_rel);
-	double new_tuples_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	const double new_tuples_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	const double new_rows_estimate =
+		new_tuples_estimate *
+		clauselist_selectivity(root, chunk_rel->baserestrictinfo, 0, JOIN_INNER, NULL);
 
 	if (!compression_info->single_chunk)
 	{
@@ -742,13 +746,19 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		Assert(chunk_info->parent_reloid == ht->main_table_relid);
 		ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		hypertable_rel->rows += (new_tuples_estimate - chunk_rel->tuples);
+		hypertable_rel->rows =
+			clamp_row_est(hypertable_rel->rows + new_rows_estimate - chunk_rel->rows);
+		hypertable_rel->tuples =
+			clamp_row_est(hypertable_rel->tuples + new_tuples_estimate - chunk_rel->tuples);
 	}
 
+	/*
+	 * Note that we can be overwriting the estimate for uncompressed chunk part of a
+	 * partial chunk here, but the paths for the uncompressed part were already
+	 * built, so it is OK.
+	 */
 	chunk_rel->tuples = new_tuples_estimate;
-	chunk_rel->rows =
-		chunk_rel->tuples *
-		clauselist_selectivity(root, chunk_rel->baserestrictinfo, 0, JOIN_INNER, NULL);
+	chunk_rel->rows = new_rows_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
@@ -904,7 +914,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 				cost_sort(&sort_path,
 						  root,
-						  path_copy->required_compressed_pathkeys,
+						  sort_info.required_compressed_pathkeys,
 						  compressed_path->total_cost,
 						  compressed_path->rows,
 						  compressed_path->pathtarget->width,
