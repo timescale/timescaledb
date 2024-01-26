@@ -731,27 +731,27 @@ FROM metrics m1
 QUERY PLAN
  Limit
    ->  Merge Join
-         Merge Cond: (m2."time" = m1."time")
-         ->  Custom Scan (ChunkAppend) on metrics_space m2
-               Order: m2."time"
-               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_1
-                     Index Cond: (device_id = 2)
-               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_2
-                     Index Cond: (device_id = 2)
-               ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_3
-                     Index Cond: (device_id = 2)
+         Merge Cond: (m1."time" = m2."time")
+         ->  Custom Scan (ChunkAppend) on metrics m1
+               Order: m1."time"
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
+               ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3
+                     Index Cond: (device_id = 1)
+                     Filter: (v0 = 2)
          ->  Materialize
-               ->  Custom Scan (ChunkAppend) on metrics m1
-                     Order: m1."time"
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_1
-                           Index Cond: (device_id = 1)
-                           Filter: (v0 = 2)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_2
-                           Index Cond: (device_id = 1)
-                           Filter: (v0 = 2)
-                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk m1_3
-                           Index Cond: (device_id = 1)
-                           Filter: (v0 = 2)
+               ->  Custom Scan (ChunkAppend) on metrics_space m2
+                     Order: m2."time"
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_1
+                           Index Cond: (device_id = 2)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_2
+                           Index Cond: (device_id = 2)
+                     ->  Index Scan using _hyper_X_X_chunk_metrics_space_device_id_time_idx on _hyper_X_X_chunk m2_3
+                           Index Cond: (device_id = 2)
 (23 rows)
 
 -- test OUTER JOIN

@@ -20,9 +20,8 @@ ORDER BY t.device_id, t.time
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Nested Loop (actual rows=1 loops=1)
-         Join Filter: ((t."time" = m_1."time") AND (t.device_id = m_1.device_id))
-         Rows Removed by Join Filter: 820376
+   ->  Merge Join (actual rows=1 loops=1)
+         Merge Cond: ((m_1.device_id = t.device_id) AND (m_1."time" = t."time"))
          ->  Merge Append (actual rows=82038 loops=1)
                Sort Key: m_1.device_id, m_1."time"
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_1 (actual rows=21587 loops=1)
@@ -40,9 +39,11 @@ QUERY PLAN
                            Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
                            Sort Method: quicksort 
                            ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=310 loops=1)
-         ->  Materialize (actual rows=10 loops=82038)
+         ->  Sort (actual rows=1 loops=1)
+               Sort Key: t.device_id, t."time"
+               Sort Method: quicksort 
                ->  Seq Scan on compressed_join_temp t (actual rows=10 loops=1)
-(23 rows)
+(24 rows)
 
 DROP TABLE compressed_join_temp;
 -- test join with partially compressed chunks

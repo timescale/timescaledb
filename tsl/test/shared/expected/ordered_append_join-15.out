@@ -810,44 +810,44 @@ LIMIT 100;
 QUERY PLAN
  Limit (actual rows=100 loops=1)
    ->  Merge Join (actual rows=100 loops=1)
-         Merge Cond: (o3."time" = o1."time")
-         ->  Custom Scan (ChunkAppend) on metrics o3 (actual rows=100 loops=1)
-               Order: o3."time"
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_1 (actual rows=100 loops=1)
-                     Index Cond: (device_id = 3)
-                     Heap Fetches: 100
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_2 (never executed)
-                     Index Cond: (device_id = 3)
-                     Heap Fetches: 0
-               ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_3 (never executed)
-                     Index Cond: (device_id = 3)
-                     Heap Fetches: 0
+         Merge Cond: (o1."time" = o3."time")
+         ->  Merge Join (actual rows=100 loops=1)
+               Merge Cond: (o1."time" = o2."time")
+               ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
+                     Order: o1."time"
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 1)
+                           Filter: (v0 = 2)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
+                           Index Cond: (device_id = 1)
+                           Filter: (v0 = 2)
+                     ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
+                           Index Cond: (device_id = 1)
+                           Filter: (v0 = 2)
+               ->  Materialize (actual rows=100 loops=1)
+                     ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
+                           Order: o2."time"
+                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
+                                 Index Cond: (device_id = 2)
+                                 Heap Fetches: 100
+                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
+                                 Index Cond: (device_id = 2)
+                                 Heap Fetches: 0
+                           ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
+                                 Index Cond: (device_id = 2)
+                                 Heap Fetches: 0
          ->  Materialize (actual rows=100 loops=1)
-               ->  Merge Join (actual rows=100 loops=1)
-                     Merge Cond: (o1."time" = o2."time")
-                     ->  Custom Scan (ChunkAppend) on metrics o1 (actual rows=100 loops=1)
-                           Order: o1."time"
-                           ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_1 (actual rows=100 loops=1)
-                                 Index Cond: (device_id = 1)
-                                 Filter: (v0 = 2)
-                           ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_2 (never executed)
-                                 Index Cond: (device_id = 1)
-                                 Filter: (v0 = 2)
-                           ->  Index Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o1_3 (never executed)
-                                 Index Cond: (device_id = 1)
-                                 Filter: (v0 = 2)
-                     ->  Materialize (actual rows=100 loops=1)
-                           ->  Custom Scan (ChunkAppend) on metrics o2 (actual rows=100 loops=1)
-                                 Order: o2."time"
-                                 ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_1 (actual rows=100 loops=1)
-                                       Index Cond: (device_id = 2)
-                                       Heap Fetches: 100
-                                 ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_2 (never executed)
-                                       Index Cond: (device_id = 2)
-                                       Heap Fetches: 0
-                                 ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o2_3 (never executed)
-                                       Index Cond: (device_id = 2)
-                                       Heap Fetches: 0
+               ->  Custom Scan (ChunkAppend) on metrics o3 (actual rows=100 loops=1)
+                     Order: o3."time"
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_1 (actual rows=100 loops=1)
+                           Index Cond: (device_id = 3)
+                           Heap Fetches: 100
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_2 (never executed)
+                           Index Cond: (device_id = 3)
+                           Heap Fetches: 0
+                     ->  Index Only Scan Backward using _hyper_X_X_chunk_metrics_device_id_time_idx on _hyper_X_X_chunk o3_3 (never executed)
+                           Index Cond: (device_id = 3)
+                           Heap Fetches: 0
 (40 rows)
 
 RESET join_collapse_limit;
