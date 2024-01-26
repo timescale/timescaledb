@@ -50,12 +50,14 @@ DECLARE
   numchunks   INTEGER := 1;
   _message     text;
   _detail      text;
+  _sqlstate    text;
   -- chunk status bits:
   bit_compressed int := 1;
   bit_compressed_unordered int := 2;
   bit_frozen int := 4;
   bit_compressed_partial int := 8;
   creation_lag INTERVAL := NULL;
+  chunks_failure INTEGER := 0;
 BEGIN
 
   -- procedures with SET clause cannot execute transaction
@@ -110,10 +112,12 @@ BEGIN
       EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS
             _message = MESSAGE_TEXT,
-            _detail = PG_EXCEPTION_DETAIL;
+            _detail = PG_EXCEPTION_DETAIL,
+            _sqlstate = RETURNED_SQLSTATE;
         RAISE WARNING 'compressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
             USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = sqlstate;
+                  ERRCODE = _sqlstate;
+        chunks_failure := chunks_failure + 1;
       END;
     ELSIF
       (
@@ -134,10 +138,12 @@ BEGIN
       EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS
             _message = MESSAGE_TEXT,
-            _detail = PG_EXCEPTION_DETAIL;
+            _detail = PG_EXCEPTION_DETAIL,
+            _sqlstate = RETURNED_SQLSTATE;
         RAISE WARNING 'recompressing chunk "%" failed when compression policy is executed', chunk_rec.oid::regclass::text
             USING DETAIL = format('Message: (%s), Detail: (%s).', _message, _detail),
-                  ERRCODE = sqlstate;
+                  ERRCODE = _sqlstate;
+        chunks_failure := chunks_failure + 1;
       END;
     END IF;
     COMMIT;
@@ -154,6 +160,11 @@ BEGIN
          EXIT;
     END IF;
   END LOOP;
+
+  IF chunks_failure > 0 THEN
+    RAISE EXCEPTION 'compression policy failure'
+      USING DETAIL = format('Failed to compress %L chunks. Successfully compressed %L chunks.', chunks_failure, numchunks - chunks_failure);
+  END IF;
 END;
 $$ LANGUAGE PLPGSQL;
 
