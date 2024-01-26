@@ -63,6 +63,7 @@ bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
+TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
@@ -338,6 +339,23 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomIntVariable("timescaledb.max_tuples_decompressed_per_dml_transaction",
+							"The max number of tuples that can be decompressed during an "
+							"INSERT, UPDATE, or DELETE.",
+							" If the number of tuples exceeds this value, an error will "
+							"be thrown and transaction rolled back. "
+							"Setting this to 0 sets this value to unlimited number of "
+							"tuples decompressed.",
+							&ts_guc_max_tuples_decompressed_per_dml,
+							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	DefineCustomBoolVariable("timescaledb.enable_transparent_decompression",
 							 "Enable transparent decompression",

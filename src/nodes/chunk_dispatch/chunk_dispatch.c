@@ -433,6 +433,22 @@ chunk_dispatch_exec(CustomScanState *node)
 												   on_chunk_insert_state_changed,
 												   state);
 
+	if (ts_guc_max_tuples_decompressed_per_dml > 0)
+	{
+		if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+					 errmsg("tuple decompression limit exceeded by operation"),
+					 errdetail("current limit: %d, tuples decompressed: %lld",
+							   ts_guc_max_tuples_decompressed_per_dml,
+							   (long long int) cis->cds->tuples_decompressed),
+					 errhint("Consider increasing "
+							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
+							 "to 0 (unlimited).")));
+		}
+	}
+
 	/*
 	 * Set the result relation in the executor state to the target chunk.
 	 * This makes sure that the tuple gets inserted into the correct
