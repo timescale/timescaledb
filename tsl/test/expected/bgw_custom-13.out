@@ -953,6 +953,7 @@ SELECT count(*) > 1
 -- is dynamic and it will be printed in those messages.
 SET client_min_messages TO ERROR;
 CALL run_job(:compressjob_id);
+ERROR:  compression policy failure
 SET client_min_messages TO NOTICE;
 -- check compression status is not changed for the chunk whose status was manually updated
 SELECT status FROM _timescaledb_catalog.chunk where table_name = :'new_uncompressed_chunk_name';
