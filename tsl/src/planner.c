@@ -91,15 +91,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 			 * 2) if it is not a SELECT QUERY.
 			 * Caching is done by our hypertable expansion, which doesn't run in
 			 * these cases.
-			 *
-			 * Also on PG13 when a DELETE query runs through SPI, its command
-			 * type is CMD_SELECT. Apparently it goes into inheritance_planner,
-			 * which uses a hack to pretend it's actually a SELECT query, but
-			 * for some reason for non-SPI queries the query type is still
-			 * correct. You can observe it in the continuous_aggs-13 test.
-			 * Just ignore this assertion on 13 and look up the chunk.
 			 */
-			Assert(rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
 			fdw_private->cached_chunk_struct =
 				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
 		}

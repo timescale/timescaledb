@@ -31,6 +31,7 @@ set(TEST_FILES
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_columns.sql
     decompress_index.sql
+    foreign_keys.sql
     move.sql
     partialize_finalize.sql
     policy_generalization.sql

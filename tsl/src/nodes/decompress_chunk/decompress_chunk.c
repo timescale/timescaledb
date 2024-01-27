@@ -1682,7 +1682,7 @@ decompress_chunk_add_plannerinfo(PlannerInfo *root, CompressionInfo *info, Chunk
 
 	expand_planner_arrays(root, 1);
 	info->compressed_rte =
-		decompress_chunk_make_rte(compressed_reloid, AccessShareLock, root->parse);
+		decompress_chunk_make_rte(compressed_reloid, info->chunk_rte->rellockmode, root->parse);
 	root->simple_rte_array[compressed_index] = info->compressed_rte;
 
 	root->parse->rtable = lappend(root->parse->rtable, info->compressed_rte);
