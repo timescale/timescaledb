@@ -1276,6 +1276,15 @@ hypertable_validate_constraints(Oid relid)
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
+		if (form->contype == CONSTRAINT_FOREIGN)
+		{
+			if (ts_hypertable_relid_to_id(form->confrelid) != -1)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("hypertables cannot be used as foreign key references of "
+								"hypertables")));
+		}
+
 		if (form->contype == CONSTRAINT_CHECK && form->connoinherit)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),

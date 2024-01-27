@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <postgres.h>
 
+#include <postgres.h>
 #include <access/htup_details.h>
 #include <access/xact.h>
 #include <catalog/index.h>
@@ -56,6 +56,7 @@
 #include "export.h"
 #include "extension.h"
 #include "extension_constants.h"
+#include "foreign_key.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -2247,35 +2248,6 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 	}
 }
 
-/* process all regular-table alter commands to make sure they aren't adding
- * foreign-key constraints to hypertables */
-static void
-verify_constraint_plaintable(RangeVar *relation, Constraint *constr)
-{
-	Cache *hcache;
-	Hypertable *ht;
-
-	Assert(IsA(constr, Constraint));
-
-	hcache = ts_hypertable_cache_pin();
-
-	switch (constr->contype)
-	{
-		case CONSTR_FOREIGN:
-			ht = ts_hypertable_cache_get_entry_rv(hcache, constr->pktable);
-
-			if (NULL != ht)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("foreign keys to hypertables are not supported")));
-			break;
-		default:
-			break;
-	}
-
-	ts_cache_release(hcache);
-}
-
 /*
  * Verify that a constraint is supported on a hypertable.
  */
@@ -2293,6 +2265,16 @@ verify_constraint_hypertable(Hypertable *ht, Node *constr_node)
 		contype = constr->contype;
 		keys = (contype == CONSTR_EXCLUSION) ? constr->exclusions : constr->keys;
 		indexname = constr->indexname;
+
+		if (contype == CONSTR_FOREIGN)
+		{
+			Oid confrelid = ts_hypertable_relid(constr->pktable);
+			if (OidIsValid(confrelid))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("hypertables cannot be used as foreign key references of "
+								"hypertables")));
+		}
 
 		/* NO INHERIT constraints do not really make sense on a hypertable */
 		if (constr->is_no_inherit)
@@ -2345,9 +2327,7 @@ verify_constraint(RangeVar *relation, Constraint *constr)
 	Cache *hcache = ts_hypertable_cache_pin();
 	Hypertable *ht = ts_hypertable_cache_get_entry_rv(hcache, relation);
 
-	if (NULL == ht)
-		verify_constraint_plaintable(relation, constr);
-	else
+	if (ht)
 		verify_constraint_hypertable(ht, (Node *) constr);
 
 	ts_cache_release(hcache);
@@ -3019,9 +2999,6 @@ process_cluster_start(ProcessUtilityArgs *args)
 /*
  * Process create table statements.
  *
- * For regular tables, we need to ensure that they don't have any foreign key
- * constraints that point to hypertables.
- *
  * NOTE that this function should be called after parse analysis (in an end DDL
  * trigger or by running parse analysis manually).
  */
@@ -3368,10 +3345,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				col = (ColumnDef *) cmd->def;
 				if (ht && TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
 					check_altertable_add_column_for_compressed(ht, col);
-				if (NULL == ht)
-					foreach (constraint_lc, col->constraints)
-						verify_constraint_plaintable(stmt->relation, lfirst(constraint_lc));
-				else
+				if (ht)
 					foreach (constraint_lc, col->constraints)
 						verify_constraint_hypertable(ht, lfirst(constraint_lc));
 				break;
@@ -3380,7 +3354,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 #if PG16_LT
 			case AT_DropColumnRecurse:
 #endif
-				if (NULL != ht)
+				if (ht)
 					process_altertable_drop_column(ht, cmd);
 				break;
 			case AT_AddConstraint:
@@ -3389,15 +3363,13 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 #endif
 				Assert(IsA(cmd->def, Constraint));
 
-				if (NULL == ht)
-					verify_constraint_plaintable(stmt->relation, (Constraint *) cmd->def);
-				else
+				if (ht)
 					verify_constraint_hypertable(ht, cmd->def);
 				break;
 			case AT_AlterColumnType:
 				Assert(IsA(cmd->def, ColumnDef));
 
-				if (ht != NULL)
+				if (ht)
 					process_alter_column_type_start(ht, cmd);
 				break;
 			case AT_AttachPartition:
@@ -3407,7 +3379,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 
 				partstmt = (PartitionCmd *) cmd->def;
 				relation = partstmt->name;
-				Assert(NULL != relation);
+				Assert(relation);
 
 				if (OidIsValid(ts_hypertable_relid(relation)))
 				{
@@ -3875,7 +3847,7 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 
-	if (NULL != ht)
+	if (ht)
 	{
 		switch (cmd->type)
 		{
@@ -3889,6 +3861,40 @@ process_altertable_end_table(Node *parsetree, CollectedCommand *cmd)
 				break;
 		}
 	}
+
+	/*
+	 * Check any ALTER TABLE command is adding a FOREIGN KEY constraint
+	 * referencing a hypertable.
+	 */
+	if (cmd->type == SCT_AlterTable)
+	{
+		AlterTableStmt *stmt = castNode(AlterTableStmt, parsetree);
+		ListCell *lc;
+
+		foreach (lc, stmt->cmds)
+		{
+			AlterTableCmd *subcmd = (AlterTableCmd *) lfirst(lc);
+
+			if (subcmd->subtype != AT_AddConstraint ||
+				castNode(Constraint, subcmd->def)->contype != CONSTR_FOREIGN)
+				continue;
+
+			Constraint *c = castNode(Constraint, subcmd->def);
+			Oid confrelid = RangeVarGetRelid(c->pktable, AccessShareLock, true);
+			Hypertable *pk =
+				ts_hypertable_cache_get_entry(hcache, confrelid, CACHE_FLAG_MISSING_OK);
+			if (pk)
+			{
+				if (ht)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("hypertables cannot be used as foreign key references of "
+									"hypertables")));
+				ts_fk_propagate(relid, pk);
+			}
+		}
+	}
+
 	ts_cache_release(hcache);
 }
 
