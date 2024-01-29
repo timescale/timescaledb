@@ -52,6 +52,11 @@ INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_i
 ALTER TABLE metrics_compressed DROP COLUMN filler_3;
 INSERT INTO metrics_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id  , device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','20s') gtime(time), generate_series(1,10,1) gdevice(device_id);
 
+-- note that a Memoize node rightfully refuses to work if it only has default statistics,
+-- so for memoize.sql test to work, we need to have some statistics on the hypertable,
+-- hence this ANALYZE.
+ANALYZE metrics_compressed;
+
 -- compress chunks
 ALTER TABLE metrics_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');
 SELECT compress_chunk(show_chunks('metrics_compressed'));
@@ -67,6 +72,11 @@ ALTER TABLE metrics_space_compressed DROP COLUMN filler_2;
 INSERT INTO metrics_space_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-06 0:00:00+0'::timestamptz,'2000-01-12 23:55:00+0','20s') gtime(time), generate_series(1,10,1) gdevice(device_id);
 ALTER TABLE metrics_space_compressed DROP COLUMN filler_3;
 INSERT INTO metrics_space_compressed(time,device_id,v0,v1,v2,v3) SELECT time, device_id, device_id+1, device_id + 2, device_id + 0.5, NULL FROM generate_series('2000-01-13 0:00:00+0'::timestamptz,'2000-01-19 23:55:00+0','20s') gtime(time), generate_series(1,10,1) gdevice(device_id);
+
+-- note that a Memoize node rightfully refuses to work if it only has default statistics,
+-- so for memoize.sql test to work, we need to have some statistics on the hypertable,
+-- hence this ANALYZE.
+ANALYZE metrics_space_compressed;
 
 -- compress chunks
 ALTER TABLE metrics_space_compressed SET (timescaledb.compress, timescaledb.compress_orderby='time DESC', timescaledb.compress_segmentby='device_id');

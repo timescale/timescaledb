@@ -757,8 +757,13 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	 * partial chunk here, but the paths for the uncompressed part were already
 	 * built, so it is OK.
 	 */
-	chunk_rel->tuples = new_tuples_estimate;
 	chunk_rel->rows = new_rows_estimate;
+	/*
+	 * This is a workaround for the bug in upstream merge append cost estimation.
+	 * See
+	 * https://www.postgresql.org/message-id/flat/CALzhyqyhoXQDR-Usd_0HeWk%3DuqNLzoVeT8KhRoo%3DpV_KzgO3QQ%40mail.gmail.com
+	 */
+	chunk_rel->tuples = new_rows_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
