@@ -257,6 +257,27 @@ select count(*) from tab1;
 select compress_chunk(show_chunks('tab1'));
 select decompress_chunk(show_chunks('tab1'));
 select count(*) from tab1;
+
+-- Check compression progression messages
+SET client_min_messages TO LOG;
+select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+RESET client_min_messages;
+-- Analyze and use stats now on a larger data set
+INSERT INTO tab1
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+id,
+random() AS c1,
+random()* 100 AS c2
+FROM
+generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '5 minutes') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(id)
+ORDER BY
+time;
+ANALYZE _timescaledb_internal._hyper_1_2_chunk;
+SET client_min_messages TO LOG;
+select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+RESET client_min_messages;
 drop index predicate;
 
 --Tear down
