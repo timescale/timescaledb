@@ -21,10 +21,10 @@ static inline void
 vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 							const ArrowArray *vector, Datum array, uint64 *restrict final_result)
 {
-	const size_t result_bits = vector->length;
-	const size_t result_words = (result_bits + 63) / 64;
+	const size_t n_rows = vector->length;
+	const size_t result_words = (n_rows + 63) / 64;
 
-	uint64 *restrict array_result = NULL;
+	uint64 *restrict array_result = final_result;
 	/*
 	 * For OR, we need an intermediate storage to accumulate the results
 	 * from all elements.
@@ -37,17 +37,6 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 		for (size_t i = 0; i < result_words; i++)
 		{
 			array_result_storage[i] = 0;
-		}
-
-		if (vector->length % 64 != 0)
-		{
-			/*
-			 * Set the bits for past-the-end elements to 1. This way it's more
-			 * convenient to check for early exit, and the final result should
-			 * have them already set to 0 so it doesn't matter.
-			 */
-			const uint64 mask = ((uint64) -1) << (vector->length % 64);
-			array_result[vector->length / 64] = mask;
 		}
 	}
 
@@ -84,7 +73,7 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 
 			for (size_t word = 0; word < result_words; word++)
 			{
-				final_result[word] = 0;
+				array_result[word] = 0;
 			}
 			return;
 		}
@@ -111,7 +100,7 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 		}
 		else
 		{
-			single_result = final_result;
+			single_result = array_result;
 		}
 
 		vector_const_predicate(vector, constvalue, single_result);
@@ -125,46 +114,14 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 		}
 
 		/*
-		 * On big arrays, we want to sometimes check if we can exit early,
-		 * to avoid being slower than the non-vectorized version which exits
-		 * at first possibility. The frequency is chosen by benchmarking.
-		 * In debug mode, do this more frequently to simplify testing.
+		 * The bitmaps are small, no more than 15 qwords for our maximal
+		 * compressed batch size of 1000 rows, so we can check for early exit
+		 * after every row.
 		 */
-#ifdef NDEBUG
-		if (array_index > 0 && array_index % 16 == 0)
-#else
-		if (array_index > 0 && array_index % 3 == 0)
-#endif
+		VectorQualSummary summary = get_vector_qual_summary(array_result, n_rows);
+		if (summary == (is_or ? AllRowsPass : NoRowsPass))
 		{
-			if (is_or)
-			{
-				bool all_rows_match = true;
-				for (size_t word = 0; word < result_words; word++)
-				{
-					/*
-					 * Note that we have set the bits for past-the-end rows in
-					 * array_result to 1, so we can use simple comparison to
-					 * zero here.
-					 */
-					all_rows_match &= (~array_result[word] == 0);
-				}
-				if (all_rows_match)
-				{
-					return;
-				}
-			}
-			else
-			{
-				bool any_rows_match = false;
-				for (size_t word = 0; word < result_words; word++)
-				{
-					any_rows_match |= (final_result[word] != 0);
-				}
-				if (!any_rows_match)
-				{
-					return;
-				}
-			}
+			return;
 		}
 	}
 

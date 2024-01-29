@@ -175,7 +175,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	}
 }
 
-static bool
+static void
 compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
 				   uint64 *restrict result)
 {
@@ -348,60 +348,40 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 			}
 		}
 	}
-
-	/*
-	 * Have to return whether we have any passing rows.
-	 */
-	bool have_passing_rows = false;
-	for (size_t i = 0; i < n_batch_result_words; i++)
-	{
-		have_passing_rows |= result[i] != 0;
-	}
-
-	return have_passing_rows;
 }
 
-static bool compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
+static void compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
 							 Node *qual, uint64 *restrict result);
 
-static bool
+static void
 compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
 						 List *quals, uint64 *restrict result)
 {
 	ListCell *lc;
 	foreach (lc, quals)
 	{
-		if (!compute_one_qual(dcontext, batch_state, lfirst(lc), result))
+		compute_one_qual(dcontext, batch_state, lfirst(lc), result);
+		if (get_vector_qual_summary(result, batch_state->total_batch_rows) == NoRowsPass)
 		{
 			/*
 			 * Exit early if no rows pass already. This might allow us to avoid
 			 * reading the columns required for the subsequent quals.
 			 */
-			return false;
+			return;
 		}
 	}
-	return true;
 }
 
-static bool
+static void
 compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
 						 List *quals, uint64 *restrict result)
 {
-	const size_t n_result_words = (batch_state->total_batch_rows + 63) / 64;
+	const size_t n_rows = batch_state->total_batch_rows;
+	const size_t n_result_words = (n_rows + 63) / 64;
 	uint64 *or_result = palloc(sizeof(uint64) * n_result_words);
 	for (size_t i = 0; i < n_result_words; i++)
 	{
 		or_result[i] = 0;
-	}
-	if (batch_state->total_batch_rows % 64 != 0)
-	{
-		/*
-		 * Set the bits for past-the-end elements to 1. This way it's more
-		 * convenient to check for early exit, and the final result should
-		 * have them already set to 0 so it doesn't matter.
-		 */
-		const uint64 mask = ((uint64) -1) << (batch_state->total_batch_rows % 64);
-		or_result[n_result_words - 1] = mask;
 	}
 
 	uint64 *one_qual_result = palloc(sizeof(uint64) * n_result_words);
@@ -414,47 +394,42 @@ compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batc
 			one_qual_result[i] = (uint64) -1;
 		}
 		compute_one_qual(dcontext, batch_state, lfirst(lc), one_qual_result);
-		bool all_rows_pass = true;
 		for (size_t i = 0; i < n_result_words; i++)
 		{
 			or_result[i] |= one_qual_result[i];
-			/*
-			 * Note that we have set the bits for past-the-end rows in
-			 * or_result to 1, so we can use simple comparison to zero here.
-			 */
-			all_rows_pass &= (~or_result[i] == 0);
 		}
-		if (all_rows_pass)
+
+		if (get_vector_qual_summary(or_result, n_rows) == AllRowsPass)
 		{
 			/*
 			 * We can sometimes avoing reading the columns required for the
 			 * rest of conditions if we break out early here.
 			 */
-			return true;
+			return;
 		}
 	}
-	bool have_passing_rows = false;
+
 	for (size_t i = 0; i < n_result_words; i++)
 	{
 		result[i] &= or_result[i];
-		have_passing_rows |= result[i] != 0;
 	}
-	return have_passing_rows;
 }
 
-static bool
+static void
 compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
 				 uint64 *restrict result)
 {
 	if (!IsA(qual, BoolExpr))
 	{
-		return compute_plain_qual(dcontext, batch_state, qual, result);
+		compute_plain_qual(dcontext, batch_state, qual, result);
+		return;
 	}
 
 	BoolExpr *boolexpr = castNode(BoolExpr, qual);
 	if (boolexpr->boolop == AND_EXPR)
 	{
-		return compute_qual_conjunction(dcontext, batch_state, boolexpr->args, result);
+		compute_qual_conjunction(dcontext, batch_state, boolexpr->args, result);
+		return;
 	}
 
 	/*
@@ -462,7 +437,7 @@ compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
 	 * NOT and consider it non-vectorizable at planning time. So only OR is left.
 	 */
 	Assert(boolexpr->boolop == OR_EXPR);
-	return compute_qual_disjunction(dcontext, batch_state, boolexpr->args, result);
+	compute_qual_disjunction(dcontext, batch_state, boolexpr->args, result);
 }
 
 /*
@@ -470,22 +445,18 @@ compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
  * it means the entire batch is filtered out, and we use this for further
  * optimizations.
  */
-static bool
+static VectorQualSummary
 compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_state)
 {
-	if (!dcontext->vectorized_quals_constified)
-	{
-		return true;
-	}
-
 	/*
 	 * Allocate the bitmap that will hold the vectorized qual results. We will
 	 * initialize it to all ones and AND the individual quals to it.
 	 */
-	const int bitmap_bytes = sizeof(uint64) * (((uint64) batch_state->total_batch_rows + 63) / 64);
+	const size_t n_rows = batch_state->total_batch_rows;
+	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
 	batch_state->vector_qual_result = palloc(bitmap_bytes);
 	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
-	if (batch_state->total_batch_rows % 64 != 0)
+	if (n_rows % 64 != 0)
 	{
 		/*
 		 * We have to zero out the bits for past-the-end elements in the last
@@ -499,10 +470,12 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	/*
 	 * Compute the quals.
 	 */
-	return compute_qual_conjunction(dcontext,
-									batch_state,
-									dcontext->vectorized_quals_constified,
-									batch_state->vector_qual_result);
+	compute_qual_conjunction(dcontext,
+							 batch_state,
+							 dcontext->vectorized_quals_constified,
+							 batch_state->vector_qual_result);
+
+	return get_vector_qual_summary(batch_state->vector_qual_result, n_rows);
 }
 
 /*
@@ -635,8 +608,10 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		}
 	}
 
-	const bool have_passing_rows = compute_vector_quals(dcontext, batch_state);
-	if (!have_passing_rows && !dcontext->batch_sorted_merge)
+	VectorQualSummary vector_qual_summary = dcontext->vectorized_quals_constified != NIL ?
+												compute_vector_quals(dcontext, batch_state) :
+												AllRowsPass;
+	if (vector_qual_summary == NoRowsPass && !dcontext->batch_sorted_merge)
 	{
 		/*
 		 * The entire batch doesn't pass the vectorized quals, so we might be
@@ -668,6 +643,15 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				decompress_column(dcontext, batch_state, i);
 				Assert(column_values->decompression_type != DT_Invalid);
 			}
+		}
+
+		/*
+		 * If all rows pass, no need to test the vector qual for each row. This
+		 * is a common case for time range conditions.
+		 */
+		if (vector_qual_summary == AllRowsPass)
+		{
+			batch_state->vector_qual_result = NULL;
 		}
 	}
 
