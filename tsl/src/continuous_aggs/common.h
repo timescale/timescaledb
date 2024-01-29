@@ -109,3 +109,5 @@ extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Qu
 extern void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist);
 extern void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo);
 extern bool function_allowed_in_cagg_definition(Oid funcid);
+extern Oid get_watermark_function_oid(void);
+extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);

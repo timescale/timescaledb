@@ -385,6 +385,13 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		compressed_chunk_interval + current_chunk_interval > max_chunk_interval)
 		return NULL;
 
+	/* Get reloid of the previous compressed chunk */
+	Oid prev_comp_reloid = ts_chunk_get_relid(previous_chunk->fd.compressed_chunk_id, false);
+	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
+	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
+	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+		return NULL;
+
 	return previous_chunk;
 }
 
@@ -575,6 +582,11 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	Chunk *compressed_chunk;
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
+
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("decompress_chunk must not be called on the internal compressed chunk")));
 
 	compressed_hypertable =
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);

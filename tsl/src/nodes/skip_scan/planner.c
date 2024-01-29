@@ -292,7 +292,7 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			 * information used for creating the original one and we don't want to
 			 * duplicate all the checks done when creating the original one.
 			 */
-			subpath = (Path *) ts_chunk_append_path_copy(ca, new_paths);
+			subpath = (Path *) ts_chunk_append_path_copy(ca, new_paths, ca->cpath.path.pathtarget);
 		}
 		else
 		{
