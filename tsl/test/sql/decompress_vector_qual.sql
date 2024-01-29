@@ -38,6 +38,24 @@ set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
 
 
+-- Test various combinations of arithmetic types.
+create table arithmetic(ts int, a int2, b int4, c int8, d float4, e float8,
+    ax int2, bx int4, cx int8, dx float4, ex float8);
+select create_hypertable('arithmetic', 'ts');
+alter table arithmetic set (timescaledb.compress);
+insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+    (101, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+select count(compress_chunk(x, true)) from show_chunks('arithmetic') x;
+set timescaledb.debug_require_vector_qual to 'only';
+select * from arithmetic where
+        a > 1::int2 and a > 1::int4 and a > 1::int8
+    and b > 1::int2 and b > 1::int4 and b > 1::int8
+    and c > 1::int2 and c > 1::int4 and c > 1::int8
+    and d > 1::int2 and d > 1::int4 and d > 1::int8 and d > 1::float4 and d > 1::float8
+    and e > 1::int2 and e > 1::int4 and e > 1::int8 and e > 1::float4 and e > 1::float8
+;
+
+
 -- Test columns that don't support bulk decompression.
 alter table vectorqual add column tag name;
 insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');

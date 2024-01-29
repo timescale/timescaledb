@@ -101,9 +101,7 @@ typedef struct CrossModuleFunctions
 	PGFunction continuous_agg_invalidation_trigger;
 	void (*continuous_agg_call_invalidation_trigger)(int32 hypertable_id, Relation chunk_rel,
 													 HeapTuple chunk_tuple,
-													 HeapTuple chunk_newtuple, bool update,
-													 bool is_distributed_hypertable_trigger,
-													 int32 parent_hypertable_id);
+													 HeapTuple chunk_newtuple, bool update);
 	PGFunction continuous_agg_refresh;
 	void (*continuous_agg_invalidate_raw_ht)(const Hypertable *raw_ht, int64 start, int64 end);
 	void (*continuous_agg_invalidate_mat_ht)(const Hypertable *raw_ht, const Hypertable *mat_ht,
@@ -157,6 +155,7 @@ typedef struct CrossModuleFunctions
 	PGFunction chunk_unfreeze_chunk;
 	PGFunction recompress_chunk_segmentwise;
 	PGFunction get_compressed_chunk_index_for_recompression;
+	void (*preprocess_query_tsl)(Query *parse);
 } CrossModuleFunctions;
 
 extern TSDLLEXPORT CrossModuleFunctions *ts_cm_functions;

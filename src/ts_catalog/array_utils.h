@@ -10,9 +10,6 @@
 
 #include "export.h"
 
-#ifndef TIMESCALEDB_ARRAY_UTILS_H
-#define TIMESCALEDB_ARRAY_UTILS_H
-
 /*
  * Array helper function for internal catalog arrays.
  * These are not suitable for arbitrary dimension
@@ -21,6 +18,7 @@
  */
 
 extern TSDLLEXPORT int ts_array_length(ArrayType *arr);
+extern TSDLLEXPORT bool ts_array_equal(ArrayType *left, ArrayType *right);
 extern TSDLLEXPORT bool ts_array_is_member(ArrayType *arr, const char *name);
 extern TSDLLEXPORT int ts_array_position(ArrayType *arr, const char *name);
 
@@ -33,4 +31,5 @@ extern TSDLLEXPORT ArrayType *ts_array_add_element_text(ArrayType *arr, const ch
 extern TSDLLEXPORT ArrayType *ts_array_replace_text(ArrayType *arr, const char *old,
 													const char *new);
 
-#endif
+extern TSDLLEXPORT ArrayType *ts_array_create_from_list_bool(List *values);
+extern TSDLLEXPORT ArrayType *ts_array_create_from_list_text(List *values);

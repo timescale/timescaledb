@@ -135,7 +135,9 @@ jobs:
       run: ./scripts/check_unreferenced_files.sh
     - name: Check for missing gitignore entries for template test files
       if: always()
-      run: ./scripts/check_missing_gitignore_for_template_tests.sh
+      run: |
+        ./bootstrap
+        ./scripts/check_missing_gitignore_for_template_tests.sh
     - name: Check for unnecessary template test files
       if: always()
       run: ./scripts/check_unecessary_template_tests.sh

@@ -1677,7 +1677,7 @@ CREATE TABLE transactions
 SELECT create_hypertable('transactions', 'time');
      create_hypertable      
 ----------------------------
- (46,public,transactions,t)
+ (44,public,transactions,t)
 (1 row)
 
 INSERT INTO transactions VALUES ( '2018-01-01 09:20:00-08', 0, 0, 0, 0, 0, 1, 10);
@@ -1720,7 +1720,7 @@ WHERE user_view_name = 'cashflows'
 -- Show both the columns and the view definitions to see that
 -- references are correct in the view as well.
 \d+ "_timescaledb_internal".:"DIRECT_VIEW_NAME"
-                         View "_timescaledb_internal._direct_view_47"
+                         View "_timescaledb_internal._direct_view_45"
   Column   |           Type           | Collation | Nullable | Default | Storage | Description 
 -----------+--------------------------+-----------+----------+---------+---------+-------------
  bucket    | timestamp with time zone |           |          |         | plain   | 
@@ -1739,7 +1739,7 @@ View definition:
   GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"PART_VIEW_NAME"
-                         View "_timescaledb_internal._partial_view_47"
+                         View "_timescaledb_internal._partial_view_45"
   Column   |           Type           | Collation | Nullable | Default | Storage | Description 
 -----------+--------------------------+-----------+----------+---------+---------+-------------
  bucket    | timestamp with time zone |           |          |         | plain   | 
@@ -1758,7 +1758,7 @@ View definition:
   GROUP BY (time_bucket('@ 1 day'::interval, "time")), amount;
 
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
-                          Table "_timescaledb_internal._materialized_hypertable_47"
+                          Table "_timescaledb_internal._materialized_hypertable_45"
   Column   |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
 -----------+--------------------------+-----------+----------+---------+---------+--------------+-------------
  bucket    | timestamp with time zone |           | not null |         | plain   |              | 
@@ -1766,12 +1766,12 @@ View definition:
  cashflow  | bigint                   |           |          |         | plain   |              | 
  cashflow2 | bigint                   |           |          |         | plain   |              | 
 Indexes:
-    "_materialized_hypertable_47_amount_bucket_idx" btree (amount, bucket DESC)
-    "_materialized_hypertable_47_bucket_idx" btree (bucket DESC)
+    "_materialized_hypertable_45_amount_bucket_idx" btree (amount, bucket DESC)
+    "_materialized_hypertable_45_bucket_idx" btree (bucket DESC)
 Triggers:
-    ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_47 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
-Child tables: _timescaledb_internal._hyper_47_52_chunk,
-              _timescaledb_internal._hyper_47_53_chunk
+    ts_insert_blocker BEFORE INSERT ON _timescaledb_internal._materialized_hypertable_45 FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
+Child tables: _timescaledb_internal._hyper_45_52_chunk,
+              _timescaledb_internal._hyper_45_53_chunk
 
 \d+ 'cashflows'
                                     View "public.cashflows"
@@ -1786,7 +1786,7 @@ View definition:
     amount,
     cashflow,
     cashflow2
-   FROM _timescaledb_internal._materialized_hypertable_47;
+   FROM _timescaledb_internal._materialized_hypertable_45;
 
 SELECT * FROM cashflows;
             bucket            | amount | cashflow | cashflow2 
@@ -1911,7 +1911,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
     create_hypertable     
 --------------------------
- (54,public,conditions,t)
+ (52,public,conditions,t)
 (1 row)
 
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
@@ -1944,7 +1944,7 @@ View definition:
  SELECT location,
     bucket,
     avg
-   FROM _timescaledb_internal._materialized_hypertable_55;
+   FROM _timescaledb_internal._materialized_hypertable_53;
 
 -- Should return NO ROWS
 SELECT * FROM conditions_daily ORDER BY bucket, avg;
@@ -1961,17 +1961,17 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=fals
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_55.location,
-    _materialized_hypertable_55.bucket,
-    _materialized_hypertable_55.avg
-   FROM _timescaledb_internal._materialized_hypertable_55
-  WHERE _materialized_hypertable_55.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(55)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_53.location,
+    _materialized_hypertable_53.bucket,
+    _materialized_hypertable_53.avg
+   FROM _timescaledb_internal._materialized_hypertable_53
+  WHERE _materialized_hypertable_53.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(53)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT conditions.location,
     time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     avg(conditions.temperature) AS avg
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(55)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(53)), '-infinity'::timestamp with time zone)
   GROUP BY conditions.location, (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- Should return ROWS because now it is realtime
@@ -1999,7 +1999,7 @@ View definition:
  SELECT location,
     bucket,
     avg
-   FROM _timescaledb_internal._materialized_hypertable_55;
+   FROM _timescaledb_internal._materialized_hypertable_53;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT * FROM conditions_daily ORDER BY bucket, avg;

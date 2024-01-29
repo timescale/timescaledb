@@ -13,6 +13,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
+#include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/paths.h>
 #include <optimizer/plancat.h>
@@ -662,6 +663,46 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 	}
 }
 
+/*
+ * Copy of the Postgres' static function from createplan.c.
+ *
+ * Some places in this file build Sort nodes that don't have a directly
+ * corresponding Path node.  The cost of the sort is, or should have been,
+ * included in the cost of the Path node we're working from, but since it's
+ * not split out, we have to re-figure it using cost_sort().  This is just
+ * to label the Sort node nicely for EXPLAIN.
+ *
+ * limit_tuples is as for cost_sort (in particular, pass -1 if no limit)
+ */
+static void
+ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
+{
+	Plan *lefttree = plan->plan.lefttree;
+	Path sort_path; /* dummy for result of cost_sort */
+
+	/*
+	 * This function shouldn't have to deal with IncrementalSort plans because
+	 * they are only created from corresponding Path nodes.
+	 */
+	Assert(IsA(plan, Sort));
+
+	cost_sort(&sort_path,
+			  root,
+			  NIL,
+			  lefttree->total_cost,
+			  lefttree->plan_rows,
+			  lefttree->plan_width,
+			  0.0,
+			  work_mem,
+			  limit_tuples);
+	plan->plan.startup_cost = sort_path.startup_cost;
+	plan->plan.total_cost = sort_path.total_cost;
+	plan->plan.plan_rows = lefttree->plan_rows;
+	plan->plan.plan_width = lefttree->plan_width;
+	plan->plan.parallel_aware = false;
+	plan->plan.parallel_safe = lefttree->parallel_safe;
+}
+
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 							 List *decompressed_tlist, List *clauses, List *custom_plans)
@@ -955,6 +996,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 								  sortOperators,
 								  collations,
 								  nullsFirst);
+
+		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ 0);
 
 		decompress_plan->custom_plans = list_make1(sort);
 	}

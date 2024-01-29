@@ -26,15 +26,14 @@ BEGIN
   FROM timescale_version;
 
   PERFORM add_reorder_policy('policy_test_timestamptz','policy_test_timestamptz_time_idx');
+  PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
 
   -- some policy API functions got renamed for 2.0 so we need to make
   -- sure to use the right name for the version. The schedule_interval
   -- parameter of add_compression_policy was introduced in 2.8.0
   IF ts_major = 2 AND ts_minor < 8 THEN
-    PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
     PERFORM add_compression_policy('policy_test_timestamptz','10d'::interval);
   ELSE
-    PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
     PERFORM add_compression_policy('policy_test_timestamptz','10d'::interval, schedule_interval => '3 days 12:00:00'::interval);
   END IF;
 END

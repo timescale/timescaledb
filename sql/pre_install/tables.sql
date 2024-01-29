@@ -66,7 +66,7 @@ CREATE TABLE _timescaledb_catalog.hypertable (
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
 
 -- The tablespace table maps tablespaces to hypertables.
 -- This allows spreading a hypertable's chunks across multiple disks.
@@ -292,8 +292,7 @@ CREATE TABLE _timescaledb_catalog.metadata (
   CONSTRAINT metadata_pkey PRIMARY KEY (key)
 );
 
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$
-  WHERE KEY = 'exported_uuid' $$);
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$ WHERE key <> 'uuid' $$);
 
 -- Log with events that will be sent out with the telemetry. The log
 -- will be flushed after it has been sent out. We do not save it to
@@ -482,8 +481,6 @@ CREATE TABLE _timescaledb_internal.job_errors (
   finish_time timestamptz,
   error_data jsonb
 );
-
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
 
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not

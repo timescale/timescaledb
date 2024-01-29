@@ -4,10 +4,14 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
+#include <fmgr.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
+#include <utils/fmgroids.h>
 
+#include <compat/compat.h>
 #include <debug_assert.h>
 #include "array_utils.h"
 
@@ -27,6 +31,26 @@ ts_array_length(ArrayType *arr)
 	Assert(ARR_NDIM(arr) == 1);
 
 	return ARR_DIMS(arr)[0];
+}
+
+extern TSDLLEXPORT bool
+ts_array_equal(ArrayType *left, ArrayType *right)
+{
+	/* Quick exit if both are NULL or point to same thing. */
+	if (left == right)
+		return true;
+
+	if (left == NULL || right == NULL)
+		return false;
+
+	Assert(left != NULL && right != NULL && ARR_NDIM(left) == 1 && ARR_NDIM(right) == 1);
+
+	Datum result = OidFunctionCall2Coll(F_ARRAY_EQ,
+										DEFAULT_COLLATION_OID,
+										PointerGetDatum(left),
+										PointerGetDatum(right));
+
+	return DatumGetBool(result);
 }
 
 extern TSDLLEXPORT bool
@@ -222,4 +246,40 @@ ts_array_add_element_bool(ArrayType *arr, bool value)
 
 		return DatumGetArrayTypeP(d);
 	}
+}
+
+extern TSDLLEXPORT ArrayType *
+ts_array_create_from_list_text(List *values)
+{
+	if (!values)
+		return NULL;
+
+	List *datums = NIL;
+	ListCell *lc;
+	foreach (lc, values)
+	{
+		datums = lappend(datums, (void *) CStringGetTextDatum(lfirst(lc)));
+	}
+
+	Assert(datums);
+	return construct_array((Datum *) datums->elements,
+						   datums->length,
+						   TEXTOID,
+						   -1,
+						   false,
+						   TYPALIGN_INT);
+}
+
+extern TSDLLEXPORT ArrayType *
+ts_array_create_from_list_bool(List *values)
+{
+	if (!values)
+		return NULL;
+
+	return construct_array((Datum *) values->elements,
+						   values->length,
+						   BOOLOID,
+						   1,
+						   true,
+						   TYPALIGN_CHAR);
 }
