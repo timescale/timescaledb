@@ -160,7 +160,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 INSERT INTO test_defaults SELECT '2000-01-01', 2;
 SELECT * FROM test_defaults ORDER BY 1,2;
 
-call recompress_chunk(:'compressed_chunk');
+SELECT _timescaledb_functions.recompress_chunk(:'compressed_chunk');
 SELECT * FROM test_defaults ORDER BY 1,2;
 -- here we will have an additional compressed row after recompression because the new
 -- data corresponds to a new segment
@@ -187,7 +187,7 @@ EXPLAIN (COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 
 -- check plan again after recompression
-CALL recompress_chunk(:'chunk_to_compress_prep');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress_prep');
 EXPLAIN (COSTS OFF) EXECUTE p1;
 EXECUTE p1;
 
@@ -207,7 +207,7 @@ select compress_chunk(show_chunks('mytab'));
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 -- segmentwise recompression should not create a new compressed chunk, so verify compressed chunk is the same after recompression
-call recompress_chunk(:'chunk_to_compress_mytab');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress_mytab');
 select compressed_chunk_name as compressed_chunk_name_after_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 select :'compressed_chunk_name_before_recompression' as before_segmentwise_recompression, :'compressed_chunk_name_after_recompression' as after_segmentwise_recompression;
 
@@ -216,7 +216,7 @@ SELECT t, a, 3, 2
 FROM generate_series('2023-01-01'::timestamptz, '2023-01-02'::timestamptz, '1 hour'::interval) t
 CROSS JOIN generate_series(1, 10, 1) a;
 -- recompress will insert newly inserted tuples into compressed chunk along with inserting into the compressed chunk index
-CALL recompress_chunk(:'chunk_to_compress_mytab');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress_mytab');
 -- make sure we are hitting the index and that the index contains the tuples
 SET enable_seqscan TO off;
 EXPLAIN (COSTS OFF) SELECT count(*) FROM mytab where a = 2;
@@ -230,7 +230,7 @@ select compress_chunk(show_chunks('mytab'));
 select compressed_chunk_name as compressed_chunk_name_before_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 INSERT INTO mytab VALUES ('2023-01-01'::timestamptz, 2, 3, 2);
 -- expect to see a different compressed chunk after recompressing now as the operation is decompress + compress
-call recompress_chunk(:'chunk_to_compress_mytab');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress_mytab');
 select compressed_chunk_name as compressed_chunk_name_after_recompression from compressed_chunk_info_view where hypertable_name = 'mytab' \gset
 select :'compressed_chunk_name_before_recompression' as before_recompression, :'compressed_chunk_name_after_recompression' as after_recompression;
 
@@ -250,12 +250,12 @@ insert into nullseg_one values (:'start_time', NULL, 4);
 select show_chunks as chunk_to_compress from show_chunks('nullseg_one') limit 1 \gset
 select compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name from compressed_chunk_info_view where hypertable_name = 'nullseg_one' \gset
 
-call recompress_chunk(:'chunk_to_compress');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress');
 
 select * from :compressed_chunk_name;
 -- insert again, check both index insertion works and NULL values properly handled
 insert into nullseg_one values (:'start_time', NULL, 4);
-call recompress_chunk(:'chunk_to_compress');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress');
 select * from :compressed_chunk_name;
 
 -- test multiple NULL segmentby columns
@@ -273,11 +273,11 @@ insert into nullseg_many values (:'start_time', 1, 4, NULL);
 select show_chunks as chunk_to_compress from show_chunks('nullseg_many') limit 1 \gset
 select compressed_chunk_schema || '.' || compressed_chunk_name as compressed_chunk_name from compressed_chunk_info_view where hypertable_name = 'nullseg_many' \gset
 
-call recompress_chunk(:'chunk_to_compress');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress');
 
 select * from :compressed_chunk_name;
 -- insert again, check both index insertion works and NULL values properly handled
 -- should match existing segment (1, NULL)
 insert into nullseg_many values (:'start_time', 1, NULL, NULL);
-call recompress_chunk(:'chunk_to_compress');
+SELECT _timescaledb_functions.recompress_chunk(:'chunk_to_compress');
 select * from :compressed_chunk_name;

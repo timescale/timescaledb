@@ -125,8 +125,18 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 (2 rows)
 
 -- recompress the partial chunks
-CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-CALL recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+            recompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+            recompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
 -- check chunk compression status
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"
@@ -166,8 +176,18 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 (2 rows)
 
 -- recompress the paritial chunks
-CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-CALL recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+            recompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+            recompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
 -- test for IS NULL checks
 -- should not UPDATE any rows
 UPDATE sample_table SET temperature = 34.21 WHERE sensor_id IS NULL;
@@ -197,8 +217,18 @@ WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 (2 rows)
 
 -- recompress the paritial chunks
-CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-CALL recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+            recompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+            recompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
 -- check chunk compression status
 SELECT chunk_status,
        chunk_name as "CHUNK_NAME"

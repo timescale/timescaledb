@@ -433,10 +433,20 @@ SELECT count(*) from test2;
 -- it contains transaction-terminating commands.
 \set ON_ERROR_STOP 0
 START TRANSACTION;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk             
+------------------------------------------
+ _timescaledb_internal._hyper_14_62_chunk
+(1 row)
+
 ROLLBACK;
 \set ON_ERROR_STOP 1
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk             
+------------------------------------------
+ _timescaledb_internal._hyper_14_62_chunk
+(1 row)
+
 -- Demonstrate that no locks are held on the hypertable, chunk, or the
 -- compressed chunk after recompress_chunk has executed.
 SELECT pid, locktype, relation, relation::regclass, mode, granted
@@ -506,11 +516,11 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 
 \set ON_ERROR_STOP 0
 -- call recompress_chunk when status is not unordered
-CALL recompress_chunk(:'CHUNK_NAME'::regclass, true);
-psql:include/recompress_basic.sql:115: NOTICE:  nothing to recompress in chunk "_hyper_14_62_chunk"
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass, true);
+psql:include/recompress_basic.sql:115: ERROR:  function _timescaledb_functions.recompress_chunk(regclass, boolean) does not exist at character 8
 -- This will succeed and compress the chunk for the test below.
-CALL recompress_chunk(:'CHUNK_NAME'::regclass, false);
-psql:include/recompress_basic.sql:118: ERROR:  nothing to recompress in chunk "_hyper_14_62_chunk"
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass, false);
+psql:include/recompress_basic.sql:118: ERROR:  function _timescaledb_functions.recompress_chunk(regclass, boolean) does not exist at character 8
 --now decompress it , then try and recompress
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
              decompress_chunk             
@@ -518,8 +528,12 @@ SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
  _timescaledb_internal._hyper_14_62_chunk
 (1 row)
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:122: ERROR:  call compress_chunk instead of recompress_chunk
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk             
+------------------------------------------
+ _timescaledb_internal._hyper_14_62_chunk
+(1 row)
+
 \set ON_ERROR_STOP 1
 -- test recompress policy
 CREATE TABLE metrics(time timestamptz NOT NULL);

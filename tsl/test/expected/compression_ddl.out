@@ -1018,7 +1018,12 @@ SELECT * FROM test_defaults ORDER BY 1,2;
  Mon Jan 01 00:00:00 2001 PST |         1 |    | 42
 (3 rows)
 
-CALL recompress_all_chunks('test_defaults', 1, false);
+SELECT _timescaledb_functions.recompress_chunk(chunk) FROM show_chunks('test_defaults') chunk LIMIT 1;
+             recompress_chunk             
+------------------------------------------
+ _timescaledb_internal._hyper_15_92_chunk
+(1 row)
+
 SELECT * FROM test_defaults ORDER BY 1,2;
              time             | device_id | c1 | c2 
 ------------------------------+-----------+----+----
@@ -1419,7 +1424,12 @@ ORDER BY device_id;
          5 |  3596
 (5 rows)
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk              
+-------------------------------------------
+ _timescaledb_internal._hyper_31_110_chunk
+(1 row)
+
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-01 0:00:00+0'
@@ -1503,7 +1513,12 @@ ORDER BY device_id;
          5 |  7192
 (5 rows)
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk              
+-------------------------------------------
+ _timescaledb_internal._hyper_31_112_chunk
+(1 row)
+
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-07 0:00:00+0'
@@ -1591,7 +1606,12 @@ ORDER BY device_id;
          5 | 10788
 (5 rows)
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk              
+-------------------------------------------
+ _timescaledb_internal._hyper_31_114_chunk
+(1 row)
+
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-15 0:00:00+0'
@@ -1683,7 +1703,12 @@ ORDER BY device_id;
          5 | 14384
 (5 rows)
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk              
+-------------------------------------------
+ _timescaledb_internal._hyper_31_116_chunk
+(1 row)
+
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-22 0:00:00+0'
@@ -1779,7 +1804,12 @@ ORDER BY device_id;
          5 | 17980
 (5 rows)
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
+             recompress_chunk              
+-------------------------------------------
+ _timescaledb_internal._hyper_31_118_chunk
+(1 row)
+
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-28 0:00:00+0'

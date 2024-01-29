@@ -428,7 +428,6 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
 ALTER EXTENSION timescaledb ADD TABLE _timescaledb_catalog.hypertable;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
 
-<<<<<<< HEAD
 CREATE FUNCTION _timescaledb_functions.relation_approximate_size(relation REGCLASS)
 RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
 AS '@MODULE_PATHNAME@', 'ts_relation_approximate_size' LANGUAGE C STRICT VOLATILE;
@@ -446,9 +445,8 @@ $BODY$
    SELECT sum(total_bytes)::bigint
    FROM @extschema@.hypertable_approximate_detailed_size(hypertable);
 $BODY$ SET search_path TO pg_catalog, pg_temp;
-=======
+
 DROP PROCEDURE IF EXISTS @@extschema@@.recompress_chunk;
 -- create stub for recompress_chunk
 CREATE FUNCTION _timescaledb_functions.recompress_chunk(chunk REGCLASS) RETURNS REGCLASS LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog, pg_temp;
 
->>>>>>> 47bc8d73c (Remove public recompress_chunk procedure)

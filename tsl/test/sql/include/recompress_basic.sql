@@ -59,11 +59,11 @@ SELECT count(*) from test2;
 -- it contains transaction-terminating commands.
 \set ON_ERROR_STOP 0
 START TRANSACTION;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
 ROLLBACK;
 \set ON_ERROR_STOP 1
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
 
 -- Demonstrate that no locks are held on the hypertable, chunk, or the
 -- compressed chunk after recompress_chunk has executed.
@@ -112,14 +112,14 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 
 \set ON_ERROR_STOP 0
 -- call recompress_chunk when status is not unordered
-CALL recompress_chunk(:'CHUNK_NAME'::regclass, true);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass, true);
 
 -- This will succeed and compress the chunk for the test below.
-CALL recompress_chunk(:'CHUNK_NAME'::regclass, false);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass, false);
 
 --now decompress it , then try and recompress
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT _timescaledb_functions.recompress_chunk(:'CHUNK_NAME'::regclass);
 \set ON_ERROR_STOP 1
 
 -- test recompress policy

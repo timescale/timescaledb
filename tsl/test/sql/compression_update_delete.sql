@@ -95,8 +95,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 
 -- recompress the partial chunks
-CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-CALL recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 
 -- check chunk compression status
 SELECT chunk_status,
@@ -118,8 +118,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 
 -- recompress the paritial chunks
-CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-CALL recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 
 -- test for IS NULL checks
 -- should not UPDATE any rows
@@ -142,8 +142,8 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
 
 -- recompress the paritial chunks
-CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
-CALL recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+SELECT _timescaledb_functions.recompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
 
 -- check chunk compression status
 SELECT chunk_status,
