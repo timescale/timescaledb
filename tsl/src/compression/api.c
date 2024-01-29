@@ -44,7 +44,6 @@
 #include "create.h"
 #include "api.h"
 #include "compression.h"
-#include "compat/compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "utils.h"
@@ -386,6 +385,13 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		compressed_chunk_interval + current_chunk_interval > max_chunk_interval)
 		return NULL;
 
+	/* Get reloid of the previous compressed chunk */
+	Oid prev_comp_reloid = ts_chunk_get_relid(previous_chunk->fd.compressed_chunk_id, false);
+	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
+	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
+	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+		return NULL;
+
 	return previous_chunk;
 }
 
@@ -403,7 +409,7 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	const DimensionSlice *mergable_slice =
 		ts_hypercube_get_slice_by_dimension_id(mergable_chunk->cube, time_dim->fd.id);
 	if (!mergable_slice)
-		elog(ERROR, "mergable chunk has no time dimension slice");
+		elog(ERROR, "mergeable chunk has no time dimension slice");
 	const DimensionSlice *compressed_slice =
 		ts_hypercube_get_slice_by_dimension_id(cxt->srcht_chunk->cube, time_dim->fd.id);
 	if (!compressed_slice)
@@ -501,7 +507,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 *
 	 * In contrast, when the compressed chunk part is created in the same transaction as the tuples
 	 * are written, the compressed chunk (i.e., the catalog entry) becomes visible to other
-	 * transactions only after the transaction that performs the compression is commited and
+	 * transactions only after the transaction that performs the compression is committed and
 	 * the uncompressed chunk is truncated.
 	 */
 	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
@@ -576,6 +582,11 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	Chunk *compressed_chunk;
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
+
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("decompress_chunk must not be called on the internal compressed chunk")));
 
 	compressed_hypertable =
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
@@ -724,7 +735,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.srcht_chunk->table_id, ShareLock);
 
-	/* Aquire locks on catalog tables to keep till end of txn */
+	/* Acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
 	/* Create compressed chunk using existing table */
@@ -1126,7 +1137,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ts_chunk_clear_status(uncompressed_chunk,
 						  CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL);
 
-	/* lock both chunks, compresssed and uncompressed */
+	/* lock both chunks, compressed and uncompressed */
 	/* TODO: Take RowExclusive locks instead of AccessExclusive */
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
@@ -1230,7 +1241,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
 
 	/* Index scan */
-	Relation index_rel = index_open(row_compressor.index_oid, AccessExclusiveLock);
+	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
 
 	index_scan = index_beginscan(compressed_chunk_rel, index_rel, snapshot, 0, 0);
 	TupleTableSlot *slot = table_slot_create(compressed_chunk_rel, NULL);
@@ -1386,16 +1397,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
-	index_close(index_rel, AccessExclusiveLock);
+	index_close(index_rel, ExclusiveLock);
 	row_decompressor_close(&decompressor);
-
-#if PG14_LT
-	int options = 0;
-#else
-	ReindexParams params = { 0 };
-	ReindexParams *options = &params;
-#endif
-	reindex_relation(compressed_chunk->table_id, 0, options);
 
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);

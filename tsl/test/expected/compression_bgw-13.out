@@ -131,7 +131,6 @@ ERROR:  relation is not a hypertable or continuous aggregate
 \set ON_ERROR_STOP 1
 -- We're done with the table, so drop it.
 DROP TABLE IF EXISTS conditions CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_2_4_chunk
 NOTICE:  drop cascades to view dummyv1
 --TEST 7
 --compression policy for smallint, integer or bigint based partition hypertable

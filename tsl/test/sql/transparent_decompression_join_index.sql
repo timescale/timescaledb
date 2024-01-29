@@ -2,8 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
-
 -- github issue 5585
 create table test (
     time timestamptz not null,
@@ -28,8 +26,11 @@ alter table test set (timescaledb.compress, timescaledb.compress_segmentby='a, b
 select compress_chunk(show_chunks('test'));
 -- force an index scan
 set enable_seqscan = 'off';
--- disable jit to avoid test flakiness
+-- make some tweaks to avoid flakiness
+analyze test;
+analyze test_copy;
 set jit = off;
+set max_parallel_workers_per_gather = 0;
 
 explain (costs off) with query_params as (
 	select distinct a, b
@@ -68,6 +69,22 @@ test inner join query_params q
     on q.a = test.a and q.b = test.b
 where test.time between '2020-01-01 00:00' and '2020-01-01 00:02'
 order by test.time;
+
+-- Also test outer join for better coverage of nullability handling.
+-- This test case generates a nullable equivalence member for test.b.
+explain (costs off)
+with query_params as (
+    select distinct a, b + 1 as b
+    from test_copy
+    where test_copy.a IN ('lat', 'lon')
+)
+select test.a, test.b
+from test
+full join query_params q
+    on q.a = test.a
+full join query_params q2
+    on q2.b = test.b
+;
 
 reset enable_seqscan;
 reset jit;

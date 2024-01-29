@@ -250,9 +250,7 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 static void
 continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation chunk_rel,
 												 HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
-												 bool update,
-												 bool is_distributed_hypertable_trigger,
-												 int32 parent_hypertable_id)
+												 bool update)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -264,6 +262,12 @@ PGDLLEXPORT Datum
 ts_tsl_loaded(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(ts_cm_functions != &ts_cm_functions_default);
+}
+
+static void
+preprocess_query_tsl_default_fn_community(Query *parse)
+{
+	/* No op in community licensed code */
 }
 
 /*
@@ -371,6 +375,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
+	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

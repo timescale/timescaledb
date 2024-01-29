@@ -145,7 +145,7 @@ jobs:
         find . -name regression.diffs -exec cat {} + > regression.log
         find . -name postmaster.log -exec cat {} + > postgres.log
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
-        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Coredumps

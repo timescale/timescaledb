@@ -367,7 +367,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 
 	/*
 	 * If the chunk's tuple descriptor matches exactly the hypertable
-	 * (the common case), we can re-use most of the parent's ON
+	 * (the common case), we can reuse most of the parent's ON
 	 * CONFLICT SET state, skipping a bunch of work.  Otherwise, we
 	 * need to create state specific to this partition.
 	 */

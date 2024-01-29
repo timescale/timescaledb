@@ -108,6 +108,38 @@ select count(*) from vectorqual where device = 1 /* can't apply vector ops to th
      1
 (1 row)
 
+-- Test various combinations of arithmetic types.
+create table arithmetic(ts int, a int2, b int4, c int8, d float4, e float8,
+    ax int2, bx int4, cx int8, dx float4, ex float8);
+select create_hypertable('arithmetic', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+    create_hypertable    
+-------------------------
+ (3,public,arithmetic,t)
+(1 row)
+
+alter table arithmetic set (timescaledb.compress);
+insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+    (101, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+select count(compress_chunk(x, true)) from show_chunks('arithmetic') x;
+ count 
+-------
+     1
+(1 row)
+
+set timescaledb.debug_require_vector_qual to 'only';
+select * from arithmetic where
+        a > 1::int2 and a > 1::int4 and a > 1::int8
+    and b > 1::int2 and b > 1::int4 and b > 1::int8
+    and c > 1::int2 and c > 1::int4 and c > 1::int8
+    and d > 1::int2 and d > 1::int4 and d > 1::int8 and d > 1::float4 and d > 1::float8
+    and e > 1::int2 and e > 1::int4 and e > 1::int8 and e > 1::float4 and e > 1::float8
+;
+ ts  | a | b | c | d | e | ax | bx | cx | dx | ex 
+-----+---+---+---+---+---+----+----+----+----+----
+ 101 | 2 | 3 | 4 | 5 | 6 |  7 |  8 |  9 | 10 | 11
+(1 row)
+
 -- Test columns that don't support bulk decompression.
 alter table vectorqual add column tag text;
 insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
@@ -132,7 +164,55 @@ select tag from vectorqual where metric2 > 0;
  tag5
 (5 rows)
 
+-- Can't vectorize parameterized join clauses for now.
+set timescaledb.debug_require_vector_qual to 'forbid';
+set enable_hashjoin to off;
+set enable_mergejoin to off;
+with values(x) as materialized(select distinct metric2 from vectorqual)
+    select x, (select metric2 from vectorqual where metric2 = x) from values order by 1;
+ x  | metric2 
+----+---------
+ 12 |      12
+ 22 |      22
+ 32 |      32
+ 42 |      42
+ 52 |      52
+(5 rows)
+
+reset enable_hashjoin;
+reset enable_mergejoin;
+-- Can't vectorize initplan parameters either.
+select count(*) from vectorqual where metric2
+    = (select metric2 from vectorqual order by 1 limit 1);
+ count 
+-------
+     1
+(1 row)
+
+-- Can vectorize clauses with query parameters.
+set timescaledb.debug_require_vector_qual to 'only';
+set plan_cache_mode to 'force_generic_plan';
+prepare p as select count(*) from vectorqual where metric3 = $1;
+execute p(33);
+ count 
+-------
+     1
+(1 row)
+
+deallocate p;
+-- Also try query parameter in combination with a stable function.
+create function stable_identity(x anyelement) returns anyelement as $$ select x $$ language sql stable;
+prepare p(int4) as select count(*) from vectorqual where metric3 = stable_identity($1);
+execute p(33);
+ count 
+-------
+     1
+(1 row)
+
+deallocate p;
+reset plan_cache_mode;
 -- Queries without aggregation.
+set timescaledb.debug_require_vector_qual to 'only';
 select * from vectorqual where ts > '2021-01-01 00:00:00' order by vectorqual;
             ts            | metric2 | device | metric3 | metric4 | tag  
 --------------------------+---------+--------+---------+---------+------
@@ -395,7 +475,7 @@ select create_hypertable('singlebatch', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
     create_hypertable     
 --------------------------
- (3,public,singlebatch,t)
+ (5,public,singlebatch,t)
 (1 row)
 
 alter table singlebatch set (timescaledb.compress);
@@ -920,7 +1000,7 @@ select create_hypertable('date_table', 'ts');
 NOTICE:  adding not-null constraint to column "ts"
     create_hypertable    
 -------------------------
- (5,public,date_table,t)
+ (7,public,date_table,t)
 (1 row)
 
 alter table date_table set (timescaledb.compress);

@@ -15,6 +15,7 @@ list(
   cagg_multi_iso.spec
   cagg_concurrent_refresh.spec
   deadlock_drop_chunks_compress.spec
+  parallel_compression.spec
   osm_range_updates_iso.spec)
 
 if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
@@ -27,19 +28,19 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     cagg_concurrent_invalidation.spec
+    cagg_watermark_concurrent_update.spec
     compression_chunk_race.spec
     compression_freeze.spec
     compression_merge_race.spec
+    compression_recompress.spec
     decompression_chunk_and_parallel_query_wo_idx.spec)
   if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
     list(APPEND TEST_FILES freeze_chunk.spec compression_dml_iso.spec)
   endif()
   # These tests are using markers for the isolation tests (to avoid race
-  # conditions causing differing output), which were added after 12.7, 13.3, and
-  # 14.0.
-  if(PG_VERSION VERSION_GREATER "12.7"
-     OR PG_VERSION VERSION_GREATER "13.3"
-     OR PG_VERSION VERSION_GREATER_EQUAL "14.0")
+  # conditions causing differing output), which were added after 13.3 and in all
+  # later major versions.
+  if(PG_VERSION VERSION_GREATER "13.3")
     list(APPEND TEST_FILES deadlock_recompress_chunk.spec)
   endif()
 

@@ -5,7 +5,7 @@ name: Check for changelog entry file
     branches:
       - main
 jobs:
-  # Check if the PR creates a sperate file with changelog entry in the
+  # Check if the PR creates a separate file with changelog entry in the
   # ".unreleased"  folder
   #
   # This check can be disabled by adding the following line in the PR text
@@ -22,15 +22,26 @@ jobs:
     name: Check for file with CHANGELOG entry
     runs-on: ubuntu-latest
     steps:
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip
+
+      - name: Install Python Dependencies
+        run: |
+          pip install PyGithub
+
       - name: Checkout source
         uses: actions/checkout@v3
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+
       - name: Check if the pull request adds file in ".unreleased" folder
         shell: bash --norc --noprofile {0}
         env:
           BODY: ${{ github.event.pull_request.body }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           folder=".unreleased"

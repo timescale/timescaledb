@@ -321,6 +321,14 @@ INNER JOIN _timescaledb_catalog.hypertable h ON(h.id = ca.mat_hypertable_id)
 WHERE user_view_name = 'mat_with_test'
 \gset
 \set ON_ERROR_STOP 0
+-- triggers not allowed on  continuous aggregate
+CREATE OR REPLACE FUNCTION not_allowed() RETURNS trigger AS $$
+BEGIN
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER not_allowed_trigger INSTEAD OF INSERT ON mat_with_test
+FOR EACH ROW EXECUTE FUNCTION not_allowed();
+ERROR:  triggers are not supported on continuous aggregate
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'false');
 ERROR:  cannot alter create_group_indexes option for continuous aggregates
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
@@ -564,13 +572,12 @@ SELECT compress_chunk(ch) FROM show_chunks('i2980_cagg2') ch;
 (1 row)
 
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'false');
-ERROR:  cannot change configuration on already compressed chunks
+ERROR:  cannot disable compression on hypertable with compressed chunks
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress = 'true');
 NOTICE:  defaulting compress_orderby to bucket
-ERROR:  cannot change configuration on already compressed chunks
 ALTER MATERIALIZED VIEW i2980_cagg2 SET ( timescaledb.compress, timescaledb.compress_segmentby = 'bucket');
 NOTICE:  defaulting compress_orderby to bucket
-ERROR:  cannot change configuration on already compressed chunks
+ERROR:  cannot use column "bucket" for both ordering and segmenting
 --Errors with compression policy on caggs--
 select add_continuous_aggregate_policy('i2980_cagg2', interval '10 day', interval '2 day' ,'4h') AS job_id ;
  job_id 

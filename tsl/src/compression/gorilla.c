@@ -870,7 +870,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 
 			uint8 output = this_input >> startbit_rel;
 			output |= ((uint64) next_input) << offs;
-			output &= (1ull << BITS_PER_LEADING_ZEROS) - 1ull;
+			output &= (1ULL << BITS_PER_LEADING_ZEROS) - 1ULL;
 
 			lane_dest[output_in_lane] = output;
 		}

@@ -56,7 +56,7 @@ pg_attribute_unused() assertions(void)
 	 * we simply align the start of data[] on a MAXALIGN (8-byte) boundary. Individual items in the
 	 * array are then aligned as specified by the array element type. See top of array.h header in
 	 * Postgres source code since it uses the same trick. Thus, we make sure that all fields
-	 * before the alignment sentinal are 8-byte aligned, and also that the two Simple8bRleSerialized
+	 * before the alignment sentinel are 8-byte aligned, and also that the two Simple8bRleSerialized
 	 * elements before the data element are themselves 8-byte aligned as well.
 	 */
 

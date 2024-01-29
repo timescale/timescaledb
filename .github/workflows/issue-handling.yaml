@@ -29,6 +29,29 @@ jobs:
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           labeled: continuous_aggregate
 
+  notify-sec:
+    name: Notify security channel
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'issues'
+      && github.event.action != 'closed'
+      && ( contains(github.event.issues.issue.labels.*.name, 'segfault')
+           || contains(github.event.issues.issue.labels.*.name, 'security') )
+    env:
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_SECURITY }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+
+      - name: Generate message
+        run: |
+          gh api ${{ github.url }} --template='{"channel": $SLACK_CHANNEL, "text": "Issue <{{.url}}|#{{.number}} {{.title}}> needs attention"}' >message.json
+
+      - name: Send slack message
+        uses: krider2010/slack-bot-action@1.0.1
+        env:
+          MESSAGE_FILE: message.json
+
   close-issue:
     name: Issue is closed
     runs-on: ubuntu-latest

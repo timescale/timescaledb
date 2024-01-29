@@ -6,11 +6,8 @@
 -- should clean them up in each post.*.sql file after generating the
 -- output, but now we do it here.
 
-SELECT :'TEST_VERSION' >= '2.0.0' AS has_create_mat_view \gset
-
 SET client_min_messages TO WARNING;
 
-\if :has_create_mat_view
 DROP MATERIALIZED VIEW IF EXISTS mat_inval CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mat_drop CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mat_before CASCADE;
@@ -19,16 +16,6 @@ DROP MATERIALIZED VIEW IF EXISTS mat_inttime CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mat_inttime2 CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS mat_ignoreinval CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS cagg.realtime_mat CASCADE;
-\else
-DROP VIEW IF EXISTS mat_inval CASCADE;
-DROP VIEW IF EXISTS mat_drop CASCADE;
-DROP VIEW IF EXISTS mat_before CASCADE;
-DROP VIEW IF EXISTS mat_conflict CASCADE;
-DROP VIEW IF EXISTS mat_inttime CASCADE;
-DROP VIEW IF EXISTS mat_inttime2 CASCADE;
-DROP VIEW IF EXISTS mat_ignoreinval CASCADE;
-DROP VIEW IF EXISTS cagg.realtime_mat CASCADE;
-\endif
 
 DROP TABLE IF EXISTS public.hyper_timestamp;
 DROP TABLE IF EXISTS public."two_Partitions";
@@ -60,5 +47,5 @@ DROP FUNCTION IF EXISTS integer_now_test;
 DROP SCHEMA IF EXISTS cagg;
 DROP SCHEMA IF EXISTS _timescaledb_testing;
 
-
 RESET client_min_messages;
+

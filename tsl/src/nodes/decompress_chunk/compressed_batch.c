@@ -642,20 +642,16 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		 * The entire batch doesn't pass the vectorized quals, so we might be
 		 * able to avoid reading and decompressing other columns. Scroll it to
 		 * the end.
+		 * Note that this optimization can't work with "batch sorted merge",
+		 * because the latter always has to read the first row of the batch for
+		 * its sorting needs, so it always has to read and decompress all
+		 * columns. This can be improved by only decompressing the columns
+		 * needed for sorting.
 		 */
 		batch_state->next_batch_row = batch_state->total_batch_rows;
 
 		InstrCountTuples2(dcontext->ps, 1);
 		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows);
-
-		/*
-		 * Note that this optimization can't work with "batch sorted merge",
-		 * because the latter always has to read the first row of the batch for
-		 * its sorting needs, so it always has to read and decompress all
-		 * columns. This is not a problem at the moment, because for batch
-		 * sorted merge we disable bulk decompression entirely, at planning time.
-		 */
-		Assert(!dcontext->batch_sorted_merge);
 	}
 	else
 	{
@@ -896,12 +892,10 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	Assert(TupIsNull(batch_state->decompressed_scan_slot));
 
 	/*
-	 * We might not have decompressed some columns if the vector quals didn't
-	 * pass for the entire batch. Have to decompress them anyway if we're asked
+	 * Check that we have decompressed all columns even if the vector quals
+	 * didn't pass for the entire batch. We need them because we're asked
 	 * to save the first tuple. This doesn't actually happen yet, because the
-	 * vectorized decompression is disabled with sorted merge, but we might want
-	 * to enable it for some queries. For now, just assert that it doesn't
-	 * happen.
+	 * vectorized decompression is disabled with sorted merge.
 	 */
 #ifdef USE_ASSERT_CHECKING
 	const int num_compressed_columns = dcontext->num_compressed_columns;
@@ -913,7 +907,9 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 #endif
 
 	/* Make the first tuple and save it. */
-	make_next_tuple(batch_state, dcontext->reverse, dcontext->num_compressed_columns);
+	Assert(batch_state->next_batch_row == 0);
+	const uint16 arrow_row = dcontext->reverse ? batch_state->total_batch_rows - 1 : 0;
+	make_next_tuple(batch_state, arrow_row, dcontext->num_compressed_columns);
 	ExecCopySlot(first_tuple_slot, batch_state->decompressed_scan_slot);
 
 	/*
@@ -921,7 +917,7 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	 * for the subsequent calls (matching tuple is in decompressed scan slot).
 	 */
 	const bool qual_passed =
-		vector_qual(batch_state, dcontext->reverse) && postgres_qual(dcontext, batch_state);
+		vector_qual(batch_state, arrow_row) && postgres_qual(dcontext, batch_state);
 	batch_state->next_batch_row++;
 
 	if (!qual_passed)

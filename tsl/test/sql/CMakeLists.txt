@@ -10,19 +10,21 @@ set(TEST_FILES
     cagg_invalidation.sql
     cagg_permissions.sql
     cagg_policy.sql
+    cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
-    cagg_watermark.sql
     compress_default.sql
     compressed_detoaster.sql
     compressed_collation.sql
     compression_create_compressed_table.sql
     compression_conflicts.sql
+    compression_defaults.sql
     compression_insert.sql
     compression_policy.sql
     compression_qualpushdown.sql
     compression_settings.sql
     compression_sorted_merge_distinct.sql
+    compression_sorted_merge_columns.sql
     decompress_index.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
@@ -34,6 +36,7 @@ set(TEST_FILES
     reorder.sql
     skip_scan.sql
     size_utils_tsl.sql
+    transparent_decompression_join_index.sql
     vectorized_aggregation.sql)
 
 if(USE_TELEMETRY)
@@ -60,7 +63,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_merge.sql
     compression_indexscan.sql
     compression_segment_meta.sql
-    compress_sorted_merge_filter.sql
+    compression_sorted_merge_filter.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
@@ -122,12 +125,12 @@ set(SOLO_TESTS
 
 set(TEST_TEMPLATES
     bgw_custom.sql.in
+    cagg_watermark.sql.in
     compression_bgw.sql.in
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
     transparent_decompression.sql.in
-    transparent_decompression_join_index.sql.in
     transparent_decompression_ordered_index.sql.in
     merge_append_partially_compressed.sql.in)
 
@@ -142,7 +145,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_TEMPLATES
     cagg_bgw.sql.in
     cagg_ddl.sql.in
-    cagg_query.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_errors.sql.in

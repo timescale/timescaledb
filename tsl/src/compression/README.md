@@ -69,11 +69,11 @@ compression mechanism works. It can store any type of data.
 
 # Merging chunks while compressing #
 
-## Setup ## 
+## Setup ##
 
 Chunks will be merged during compression if we specify the `compress_chunk_time_interval` parameter.
 This value will be used to merge chunks adjacent on the time dimension if possible. This allows usage
-of smaller chunk intervals which are rolled into bigger compressed chunks. 
+of smaller chunk intervals which are rolled into bigger compressed chunks.
 
 ## Operation ##
 
@@ -84,9 +84,49 @@ and chunk interval can be increased not to go over compress chunk time interval)
 After compression completes, catalog is updated by dropping the compressed chunk and increasing the chunk
 interval of the adjacent chunk to include its time dimension slice. Chunk constraints are updated as necessary.
 
-## Compression setup where time dimension is not the first column on order by ## 
+## Compression setup where time dimension is not the first column on order by ##
 
 When merging such chunks, due to the nature of sequence number ordering, we will inherently be left with
-chunks where the sequence numbers are not correctly ordered. In order to mitigate this issue, chunks are 
+chunks where the sequence numbers are not correctly ordered. In order to mitigate this issue, chunks are
 recompressed immediately. This has obvious performance implications which might make merging chunks
 not optimal for certain setups.
+
+# Picking default for `segment_by` and `order_by`.
+
+We have two functions to determine the columns for `timescaledb.compress_segmentby` and `timescaledb.compress_orderby` . These functions can be called
+by the UI to give good defaults. They can also be called internally when a hypertable has compression enabled
+but no values are provided to specify these options.
+
+## `_timescaledb_functions.get_segmentby_defaults`
+
+This function determines a segment-by column to use. It returns a JSONB with the following top-level keys:
+- columns: an array of column names that should be used for segment by. Right now it always returns a single column.
+- confidence: a number between 0 and 10 (most confident) indicating how sure we are.
+- message: a message that should be shown to the user to evaluate the result.
+
+The intuition is as follows:
+
+we use 2 criterias:
+- We want to pick an "important" column for querying. We measure "importance", in terms of how early the column comes in an index (i.e. leading columns are very important, others less so).
+- The column has many rows for the same column value so that the segments will have many rows. We establish that a column will have many values if (i) it is not a dimension and (ii) either statistics tell us so (via `stadistinct` > 1) or, if statistics aren't populated, we check whether the column is a generated identity or serial column.
+
+Naturally, statistics give us more confidence that the column has enough rows per segment. In this case we break ties by preferring columns from unique indexes. Otherwise, we prefer columns from non-unique indexes (we are less likely to run into a unique column there).
+
+Thus, our preference is based on the whether the column is from a unique or regular index as well as the position of the column in the index. Given these preferences, we think ties happened rarely but will be resolved arbitrarily.
+
+One final point: a number of tables don't have any indexed columns that aren't dimensions or serial columns. In this case, we have medium confidence that an empty segment by is correct.
+
+## `_timescaledb_functions.get_orderby_defaults`
+
+This function determines which order by columns to use. It returns a JSONB with the following top-level keys:
+
+- clauses: an array of column names and sort order key words that shold be used for order by.
+- confidence: a number between 0 and 10 (most confident) indicating how sure we are.
+- message: a message that should be shown to the user to evaluate the result.
+
+The order by is built in three steps:
+1) Use the column order in a unique index (removing the segment_by columns).
+2) Add any dimension columns
+3) Add the first attribute of any other index (to establish min-max filters on those columns).
+
+All non-dimension columns are returned without a sort specifier (thus using `ASC` as default). The dimension columns use `DESC`.

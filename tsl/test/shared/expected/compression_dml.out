@@ -101,7 +101,6 @@ QUERY PLAN
 (4 rows)
 
 DROP TABLE mytab CASCADE;
-NOTICE:  drop cascades to table _timescaledb_internal.compress_hyper_X_X_chunk
 -- test varchar segmentby
 CREATE TABLE comp_seg_varchar (
   time timestamptz NOT NULL,

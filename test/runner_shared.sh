@@ -36,7 +36,7 @@ TEST_ROLE_DEFAULT_PERM_USER_2=${TEST_ROLE_DEFAULT_PERM_USER_2:-default_perm_user
 shift
 
 # setup clusterwide settings on first run
-# we use mkdir here because it is an atomic operation unlike existance of a lockfile
+# we use mkdir here because it is an atomic operation unlike existence of a lockfile
 # where creating and checking are 2 separate operations
 if mkdir ${TEST_OUTPUT_DIR}/.pg_init 2>/dev/null; then
   ${PSQL} "$@" -U ${USER} -d postgres -v ECHO=none -c "ALTER USER ${TEST_ROLE_SUPERUSER} WITH SUPERUSER;" >/dev/null
@@ -83,7 +83,6 @@ ${PSQL} -U ${TEST_PGUSER} \
                -e 's!^ \{1,\}QUERY PLAN \{1,\}$!QUERY PLAN!' \
                -e 's!:  actual rows!: actual rows!' \
                -e '/^-\{1,\}$/d' \
-               -e 's!\(_timescaledb_functions.chunks_in([^,]\{1,\}, ARRAY\[\)[^]]\{1,\}\]!\1..]!' \
                -e 's! Memory: [0-9]\{1,\}kB!!' \
                -e 's! Memory Usage: [0-9]\{1,\}kB!!' \
                -e 's! Average  Peak Memory: [0-9]\{1,\}kB!!' | \

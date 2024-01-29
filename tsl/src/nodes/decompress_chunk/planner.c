@@ -13,6 +13,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
+#include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/paths.h>
 #include <optimizer/plancat.h>
@@ -373,15 +374,24 @@ is_not_runtime_constant_walker(Node *node, void *context)
 	{
 		case T_Var:
 		case T_PlaceHolderVar:
-		case T_Param:
 			/*
-			 * We might want to support these nodes to have vectorizable
-			 * join clauses (T_Var), join clauses referencing a variable that is
-			 * above outer join (T_PlaceHolderVar) or initplan parameters and
-			 * prepared statement parameters (T_Param). We don't support them at
-			 * the moment.
+			 * We might want to support these nodes to have vectorizable join
+			 * clauses (T_Var) or join clauses referencing a variable that is
+			 * above outer join (T_PlaceHolderVar). We don't support them at the
+			 * moment.
 			 */
 			return true;
+		case T_Param:
+			/*
+			 * We support external query parameters (e.g. from parameterized
+			 * prepared statements), because they are constant for the duration
+			 * of the query.
+			 *
+			 * Join and initplan parameters are passed as PARAM_EXEC and require
+			 * support in the Rescan functions of the custom scan node. We don't
+			 * support them at the moment.
+			 */
+			return castNode(Param, node)->paramkind != PARAM_EXTERN;
 		default:
 			if (check_functions_in_node(node,
 										contains_volatile_functions_checker,
@@ -641,6 +651,46 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 	}
 }
 
+/*
+ * Copy of the Postgres' static function from createplan.c.
+ *
+ * Some places in this file build Sort nodes that don't have a directly
+ * corresponding Path node.  The cost of the sort is, or should have been,
+ * included in the cost of the Path node we're working from, but since it's
+ * not split out, we have to re-figure it using cost_sort().  This is just
+ * to label the Sort node nicely for EXPLAIN.
+ *
+ * limit_tuples is as for cost_sort (in particular, pass -1 if no limit)
+ */
+static void
+ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
+{
+	Plan *lefttree = plan->plan.lefttree;
+	Path sort_path; /* dummy for result of cost_sort */
+
+	/*
+	 * This function shouldn't have to deal with IncrementalSort plans because
+	 * they are only created from corresponding Path nodes.
+	 */
+	Assert(IsA(plan, Sort));
+
+	cost_sort(&sort_path,
+			  root,
+			  NIL,
+			  lefttree->total_cost,
+			  lefttree->plan_rows,
+			  lefttree->plan_width,
+			  0.0,
+			  work_mem,
+			  limit_tuples);
+	plan->plan.startup_cost = sort_path.startup_cost;
+	plan->plan.total_cost = sort_path.total_cost;
+	plan->plan.plan_rows = lefttree->plan_rows;
+	plan->plan.plan_width = lefttree->plan_width;
+	plan->plan.parallel_aware = false;
+	plan->plan.parallel_safe = lefttree->parallel_safe;
+}
+
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
 							 List *decompressed_tlist, List *clauses, List *custom_plans)
@@ -770,7 +820,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				   &chunk_attrs_needed);
 
 	/*
-	 * Determine which compressed colum goes to which output column.
+	 * Determine which compressed column goes to which output column.
 	 */
 	build_decompression_map(root, dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
 
@@ -829,7 +879,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				}
 
 				Ensure(IsA(em->em_expr, Var),
-					   "non-Var pathkey not expected for compressed batch sorted mege");
+					   "non-Var pathkey not expected for compressed batch sorted merge");
 
 				/*
 				 * We found a Var equivalence member that belongs to the
@@ -934,6 +984,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 								  sortOperators,
 								  collations,
 								  nullsFirst);
+
+		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ 0);
 
 		decompress_plan->custom_plans = list_make1(sort);
 	}

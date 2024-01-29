@@ -1,7 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_SUPERUSER
 -- github issue 5585
 create table test (
     time timestamptz not null,
@@ -33,8 +32,11 @@ select compress_chunk(show_chunks('test'));
 
 -- force an index scan
 set enable_seqscan = 'off';
--- disable jit to avoid test flakiness
+-- make some tweaks to avoid flakiness
+analyze test;
+analyze test_copy;
 set jit = off;
+set max_parallel_workers_per_gather = 0;
 explain (costs off) with query_params as (
 	select distinct a, b
 	from test_copy
@@ -65,7 +67,7 @@ order by test.time;
                            Filter: (((a)::text = ANY ('{lat,lon}'::text[])) AND (b = 1))
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
                Vectorized Filter: (("time" >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND ("time" <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
-               ->  Index Scan using compress_hyper_2_2_chunk__compressed_hypertable_2_a_b__ts_meta_ on compress_hyper_2_2_chunk
+               ->  Index Scan using compress_hyper_2_2_chunk_a_b__ts_meta_sequence_num_idx on compress_hyper_2_2_chunk
                      Index Cond: ((a = (test_copy.a)::text) AND (b = test_copy.b))
                      Filter: ((_ts_meta_max_1 >= 'Wed Jan 01 00:00:00 2020 PST'::timestamp with time zone) AND (_ts_meta_min_1 <= 'Wed Jan 01 00:02:00 2020 PST'::timestamp with time zone))
 (13 rows)
@@ -94,6 +96,41 @@ order by test.time;
  Wed Jan 01 00:01:00 2020 PST | t                          | lat | 1 | 2 | lat | 1
  Wed Jan 01 00:01:00 2020 PST | t                          | lon | 1 | 2 | lon | 1
 (3 rows)
+
+-- Also test outer join for better coverage of nullability handling.
+-- This test case generates a nullable equivalence member for test.b.
+explain (costs off)
+with query_params as (
+    select distinct a, b + 1 as b
+    from test_copy
+    where test_copy.a IN ('lat', 'lon')
+)
+select test.a, test.b
+from test
+full join query_params q
+    on q.a = test.a
+full join query_params q2
+    on q2.b = test.b
+;
+                              QUERY PLAN                               
+-----------------------------------------------------------------------
+ Hash Full Join
+   Hash Cond: (_hyper_1_1_chunk.b = q2.b)
+   CTE query_params
+     ->  Unique
+           ->  Sort
+                 Sort Key: test_copy.a, ((test_copy.b + 1))
+                 ->  Seq Scan on test_copy
+                       Filter: ((a)::text = ANY ('{lat,lon}'::text[]))
+   ->  Hash Full Join
+         Hash Cond: ((_hyper_1_1_chunk.a)::text = (q.a)::text)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+               ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Hash
+               ->  CTE Scan on query_params q
+   ->  Hash
+         ->  CTE Scan on query_params q2
+(16 rows)
 
 reset enable_seqscan;
 reset jit;

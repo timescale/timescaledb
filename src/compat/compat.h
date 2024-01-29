@@ -535,7 +535,7 @@ get_reindex_options(ReindexStmt *stmt)
 /*
  * PG15 added additional `force_flush` argument to shm_mq_send().
  *
- * Our _compat() version currently uses force_flush = true on PG15 to preseve
+ * Our _compat() version currently uses force_flush = true on PG15 to preserve
  * the same behaviour on all supported PostgreSQL versions.
  *
  * https://git.postgresql.org/gitweb/?p=postgresql.git;a=commit;h=46846433

@@ -13,8 +13,10 @@
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <utils/acl.h>
+#include <utils/inval.h>
 #include <utils/snapmgr.h>
 
+#include "debug_point.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "hypertable.h"
@@ -80,8 +82,8 @@ cagg_watermark_init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int3
 								   Int32GetDatum(mat_hypertable_id));
 }
 
-static int64
-cagg_watermark_get(Hypertable *mat_ht)
+int64
+ts_cagg_watermark_get(int32 hypertable_id)
 {
 	PG_USED_FOR_ASSERTS_ONLY short count = 0;
 	Datum watermark = (Datum) 0;
@@ -99,7 +101,7 @@ cagg_watermark_get(Hypertable *mat_ht)
 	iterator.ctx.snapshot = GetTransactionSnapshot();
 	Assert(iterator.ctx.snapshot != NULL);
 
-	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, mat_ht->fd.id);
+	cagg_watermark_init_scan_by_mat_hypertable_id(&iterator, hypertable_id);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -114,13 +116,13 @@ cagg_watermark_get(Hypertable *mat_ht)
 	if (value_isnull)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("watermark not defined for continuous aggregate: %d", mat_ht->fd.id)));
+				 errmsg("watermark not defined for continuous aggregate: %d", hypertable_id)));
 
 	/* Log the read watermark, needed for MVCC tap tests */
 	ereport(DEBUG5,
 			(errcode(ERRCODE_SUCCESSFUL_COMPLETION),
 			 errmsg("watermark for continuous aggregate, '%d' is: " INT64_FORMAT,
-					mat_ht->fd.id,
+					hypertable_id,
 					DatumGetInt64(watermark))));
 
 	return DatumGetInt64(watermark);
@@ -152,7 +154,7 @@ cagg_watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
 						cagg->data.mat_hypertable_id)));
 
 	/* Get the stored watermark */
-	watermark->value = cagg_watermark_get(ht);
+	watermark->value = ts_cagg_watermark_get(cagg->data.mat_hypertable_id);
 
 	return watermark;
 }
@@ -250,7 +252,7 @@ TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark_materialized);
  *
  * The difference between this function and `ts_continuous_agg_watermark` is
  * that this one get the max open dimension of the materialization hypertable
- * insted of get the stored value in the catalog table.
+ * instead of get the stored value in the catalog table.
  */
 Datum
 ts_continuous_agg_watermark_materialized(PG_FUNCTION_ARGS)
@@ -322,6 +324,8 @@ typedef struct WatermarkUpdate
 {
 	int64 watermark;
 	bool force_update;
+	bool invalidate_rel_cache;
+	Oid ht_relid;
 } WatermarkUpdate;
 
 static ScanTupleResult
@@ -339,6 +343,19 @@ cagg_watermark_update_scan_internal(TupleInfo *ti, void *data)
 		form->watermark = watermark_update->watermark;
 		ts_catalog_update(ti->scanrel, new_tuple);
 		heap_freetuple(new_tuple);
+
+		/*
+		 * During query planning, the values of the watermark function are constified using the
+		 * constify_cagg_watermark() function. However, this function's value changes when we update
+		 * the Cagg (the volatility of the function is STABLE not IMMUTABLE). To ensure that caches,
+		 * such as the query plan cache, are properly evicted, we send an invalidation message for
+		 * the hypertable.
+		 */
+		if (watermark_update->invalidate_rel_cache)
+		{
+			DEBUG_WAITPOINT("cagg_watermark_update_internal_before_refresh");
+			CacheInvalidateRelcacheByRelid(watermark_update->ht_relid);
+		}
 	}
 	else
 	{
@@ -357,11 +374,15 @@ cagg_watermark_update_scan_internal(TupleInfo *ti, void *data)
 }
 
 static void
-cagg_watermark_update_internal(int32 mat_hypertable_id, int64 new_watermark, bool force_update)
+cagg_watermark_update_internal(int32 mat_hypertable_id, Oid ht_relid, int64 new_watermark,
+							   bool force_update, bool invalidate_rel_cache)
 {
 	bool watermark_updated;
 	ScanKeyData scankey[1];
-	WatermarkUpdate data = { .watermark = new_watermark, .force_update = force_update };
+	WatermarkUpdate data = { .watermark = new_watermark,
+							 .force_update = force_update,
+							 .invalidate_rel_cache = invalidate_rel_cache,
+							 .ht_relid = ht_relid };
 
 	ScanKeyInit(&scankey[0],
 				Anum_continuous_aggs_watermark_mat_hypertable_id,
@@ -397,10 +418,17 @@ ts_cagg_watermark_update(Hypertable *mat_ht, int64 watermark, bool watermark_isn
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("invalid materialized hypertable ID: %d", mat_ht->fd.id)));
 
-	watermark = cagg_compute_watermark(cagg, watermark, watermark_isnull);
-	cagg_watermark_update_internal(mat_ht->fd.id, watermark, force_update);
+	/* If we have a real-time CAgg, it uses a watermark function. So, we have to invalidate the rel
+	 * cache to force a replanning of prepared statements. See cagg_watermark_update_internal for
+	 * more information. */
+	bool invalidate_rel_cache = !cagg->data.materialized_only;
 
-	return;
+	watermark = cagg_compute_watermark(cagg, watermark, watermark_isnull);
+	cagg_watermark_update_internal(mat_ht->fd.id,
+								   mat_ht->main_table_relid,
+								   watermark,
+								   force_update,
+								   invalidate_rel_cache);
 }
 
 TSDLLEXPORT void

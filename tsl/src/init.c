@@ -53,7 +53,9 @@ PG_MODULE_MAGIC;
 #error "cannot compile the TSL for ApacheOnly mode"
 #endif
 
+#if PG16_LT
 extern void PGDLLEXPORT _PG_init(void);
+#endif
 
 /*
  * Cross module function initialization.
@@ -175,6 +177,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
+	.preprocess_query_tsl = tsl_preprocess_query,
 };
 
 static void

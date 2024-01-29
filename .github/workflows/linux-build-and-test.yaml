@@ -73,7 +73,7 @@ jobs:
 
         # Force use of OpenSSL 3.1.4, since OpenSSL 3.2.0 crashes with recent
         # PostgreSQL versions on OS X (see https://github.com/Homebrew/homebrew-core/issues/155651)
-        brew install --overwrite python@3.11
+        brew install --overwrite python@3.12
         brew unlink openssl@3
         curl -L https://raw.githubusercontent.com/Homebrew/homebrew-core/e68186ba5a05a6ea9a30d6c7744de9a46bd3aadd/Formula/o/openssl@3.rb > openssl@3.rb
         brew install openssl@3.rb
@@ -161,7 +161,7 @@ jobs:
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DLINTER_STRICT=ON
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }}
         make -j $MAKE_JOBS -C build
         make -C build install
 
@@ -214,7 +214,7 @@ jobs:
            if [ $(find /cores -type f | wc -l) -gt 0 ]; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
         fi
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
-        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs

@@ -149,8 +149,7 @@ static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 static int create_segment_filter_scankey(RowDecompressor *decompressor,
 										 char *segment_filter_col_name, StrategyNumber strategy,
 										 ScanKeyData *scankeys, int num_scankeys,
-										 Bitmapset **null_columns, Datum value, bool isnull);
-static void run_analyze_on_chunk(Oid chunk_relid);
+										 Bitmapset **null_columns, Datum value, bool is_null_check);
 static void create_per_compressed_column(RowDecompressor *decompressor);
 
 /********************
@@ -425,7 +424,6 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
 		}
 
-		run_analyze_on_chunk(in_rel->rd_id);
 		if (row_compressor.rows_compressed_into_current_value > 0)
 			row_compressor_flush(&row_compressor, mycid, true);
 
@@ -530,12 +528,6 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 
 	table_endscan(scan);
 
-	/* Perform an analyze on the chunk to get up-to-date stats before compressing.
-	 * We do it at this point because we've just read out the entire chunk into
-	 * tuplesort, so its pages are likely to be cached and we can save on I/O.
-	 */
-	run_analyze_on_chunk(in_rel->rd_id);
-
 	ExecDropSingleTupleTableSlot(slot);
 
 	tuplesort_performsort(tuplesortstate);
@@ -557,7 +549,7 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
 		elog(ERROR, "table \"%s\" does not have column \"%s\"", get_rel_name(table), attname);
 
 	att_tup = (Form_pg_attribute) GETSTRUCT(tp);
-	/* Other valdation checks beyond just existence of a valid comparison operator could be useful
+	/* Other validation checks beyond just existence of a valid comparison operator could be useful
 	 */
 
 	*att_nums = att_tup->attnum;
@@ -591,26 +583,8 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
 	ReleaseSysCache(tp);
 }
 
-static void
-run_analyze_on_chunk(Oid chunk_relid)
-{
-	VacuumRelation vr = {
-		.type = T_VacuumRelation,
-		.relation = NULL,
-		.oid = chunk_relid,
-		.va_cols = NIL,
-	};
-	VacuumStmt vs = {
-		.type = T_VacuumStmt,
-		.rels = list_make1(&vr),
-		.is_vacuumcmd = false,
-		.options = NIL,
-	};
-
-	ExecVacuum(NULL, &vs, true);
-}
-
-/* Find segment by index for setting the correct sequence number if
+/*
+ * Find segment by index for setting the correct sequence number if
  * we are trying to roll up chunks while compressing
  */
 static Oid
@@ -1123,10 +1097,9 @@ row_compressor_append_row(RowCompressor *row_compressor, TupleTableSlot *row)
 static void
 row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool changed_groups)
 {
-	int16 col;
 	HeapTuple compressed_tuple;
 
-	for (col = 0; col < row_compressor->n_input_columns; col++)
+	for (int col = 0; col < row_compressor->n_input_columns; col++)
 	{
 		PerColumn *column = &row_compressor->per_column[col];
 		Compressor *compressor;
@@ -1215,7 +1188,7 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 
 	/* free the compressed values now that we're done with them (the old compressor is freed in
 	 * finish()) */
-	for (col = 0; col < row_compressor->n_input_columns; col++)
+	for (int col = 0; col < row_compressor->n_input_columns; col++)
 	{
 		PerColumn *column = &row_compressor->per_column[col];
 		int16 compressed_col;
@@ -1388,7 +1361,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 	/*
 	 * We need to make sure decompressed_is_nulls is in a defined state. While this
 	 * will get written for normal columns it will not get written for dropped columns
-	 * since dropped columns don't exist in the compressed chunk so we initiallize
+	 * since dropped columns don't exist in the compressed chunk so we initialize
 	 * with true here.
 	 */
 	memset(decompressor.decompressed_is_nulls, true, out_desc->natts);
@@ -1465,7 +1438,7 @@ create_per_compressed_column(RowDecompressor *decompressor)
 
 	Assert(OidIsValid(compressed_data_type_oid));
 
-	for (int16 col = 0; col < decompressor->in_desc->natts; col++)
+	for (int col = 0; col < decompressor->in_desc->natts; col++)
 	{
 		Oid decompressed_type;
 		bool is_compressed;

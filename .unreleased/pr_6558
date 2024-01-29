@@ -1,0 +1,1 @@
+Fixes: #6523 Reduce locking level on compressed chunk index during segmentwise recompression

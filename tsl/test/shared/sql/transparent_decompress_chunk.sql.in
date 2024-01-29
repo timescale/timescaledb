@@ -7,6 +7,9 @@
 \set PREFIX_NO_ANALYZE 'EXPLAIN (verbose, costs off)'
 \set PREFIX_NO_VERBOSE 'EXPLAIN (costs off)'
 
+SET parallel_leader_participation TO off;
+SET min_parallel_table_scan_size TO '0';
+
 SELECT show_chunks('metrics_compressed') AS "TEST_TABLE" ORDER BY 1::text LIMIT 1 \gset
 
 -- this should use DecompressChunk node
@@ -57,7 +60,7 @@ ORDER BY time, device_id;
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = 1 ORDER BY time, device_id LIMIT 10;
 
 -- test IS NULL / IS NOT NULL
-:PREFIX SELECT * FROM :TEST_TABLE WHERE device_id IS NOT NULL ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id IS NOT NULL ORDER BY time, device_id LIMIT 10;
 
 :PREFIX SELECT * FROM :TEST_TABLE WHERE device_id IS NULL ORDER BY time, device_id LIMIT 10;
 
@@ -76,18 +79,18 @@ ORDER BY time, device_id;
 
 -- test function calls
 -- not yet pushed down
-:PREFIX SELECT * FROM :TEST_TABLE WHERE device_id = length(substring(version(), 1, 3)) ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE device_id = length(substring(version(), 1, 3)) ORDER BY time, device_id LIMIT 10;
 
 --
 -- test segment meta pushdown
 --
 -- order by column and const
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time = '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time < '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time <= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time >= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
-:PREFIX SELECT * FROM :TEST_TABLE WHERE '2000-01-01 1:00:00+0' < time ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time = '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time < '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time <= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time >= '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE '2000-01-01 1:00:00+0' < time ORDER BY time, device_id LIMIT 10;
 
 --pushdowns between order by and segment by columns
 :PREFIX SELECT * FROM :TEST_TABLE WHERE v0 < 1 ORDER BY time, device_id LIMIT 10;
@@ -102,17 +105,17 @@ ORDER BY time, device_id;
 :PREFIX_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' AND device_id = 1 ORDER BY time, device_id LIMIT 10;
 
 --pushdown of quals on order by and segment by cols or together (not pushed down)
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' OR device_id = 1 ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time > '2000-01-01 1:00:00+0' OR device_id = 1 ORDER BY time, device_id LIMIT 10;
 
 --functions not yet optimized
 :PREFIX SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;
 
 -- test sort optimization interaction
-:PREFIX SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
 
-:PREFIX SELECT time, device_id FROM :TEST_TABLE ORDER BY time DESC, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT time, device_id FROM :TEST_TABLE ORDER BY time DESC, device_id LIMIT 10;
 
-:PREFIX SELECT time, device_id FROM :TEST_TABLE ORDER BY device_id, time DESC LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT time, device_id FROM :TEST_TABLE ORDER BY device_id, time DESC LIMIT 10;
 
 -- test aggregate
 :PREFIX SELECT count(*) FROM :TEST_TABLE;
@@ -187,8 +190,6 @@ CREATE OR REPLACE VIEW compressed_view AS SELECT time, device_id, v1, v2 FROM :T
 
 DROP VIEW compressed_view;
 
-SET parallel_leader_participation TO off;
-SET min_parallel_table_scan_size TO '0';
 -- test INNER JOIN
 :PREFIX_NO_VERBOSE
 SELECT *
@@ -229,6 +230,7 @@ FROM metrics m1
     INNER JOIN metrics_space m2 ON m1.time = m2.time
         AND m1.device_id = 1
         AND m2.device_id = 2
+	WHERE m1.v1 = 3 -- additional filter to force m1 as inner relation in join
     ORDER BY m1.time,
         m1.device_id,
         m2.time,

@@ -25,7 +25,10 @@ static void osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString
 									 QueryEnvironment *queryEnv, DestReceiver *dest,
 									 QueryCompletion *qc);
 
+#if PG16_LT
 extern void PGDLLEXPORT _PG_init(void);
+#endif
+
 void
 _PG_init(void)
 {

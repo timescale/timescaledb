@@ -66,7 +66,6 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
 											   const int64 bucket_width, int32 chunk_id,
-											   const bool is_raw_ht_distributed,
 											   const bool do_merged_refresh,
 											   const InternalTimeRange merged_refresh_window);
 static ContinuousAgg *get_cagg_by_relid(const Oid cagg_relid);
@@ -481,7 +480,7 @@ continuous_agg_scan_refresh_window_ranges(const InternalTimeRange *refresh_windo
  * Invalid ranges:           [-----] [-]   [--] [-] [---]
  * Merged range:             [---------------------------)
  *
- * The maximum number of individual (non-mergable) ranges are
+ * The maximum number of individual (non-mergeable) ranges are
  * #buckets_in_window/2 (i.e., every other bucket is invalid).
  *
  * Since it might not be efficient to materialize a lot buckets separately
@@ -500,8 +499,7 @@ static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations, const int64 bucket_width,
-								   int32 chunk_id, const bool is_raw_ht_distributed,
-								   const bool do_merged_refresh,
+								   int32 chunk_id, const bool do_merged_refresh,
 								   const InternalTimeRange merged_refresh_window)
 {
 	CaggRefreshState refresh;
@@ -719,7 +717,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   invalidations,
 										   bucket_width,
 										   chunk_id,
-										   false,
 										   do_merged_refresh,
 										   merged_refresh_window);
 		if (invalidations)
@@ -739,10 +736,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
-	int rc;
 
 	/* Connect to SPI manager due to the underlying SPI calls */
-	if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
+	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
+	if (rc != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* Lock down search_path */
@@ -833,7 +830,8 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	{
 		emit_up_to_date_notice(cagg, callctx);
 
-		if ((rc = SPI_finish()) != SPI_OK_FINISH)
+		rc = SPI_finish();
+		if (rc != SPI_OK_FINISH)
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 
 		return;
@@ -855,6 +853,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);
 
-	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+	rc = SPI_finish();
+	if (rc != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }

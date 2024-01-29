@@ -567,3 +567,24 @@ ts_get_mock_time_or_current_time(void)
 	return res;
 }
 #endif
+
+TS_FUNCTION_INFO_V1(ts_now_mock);
+
+/* return mock time for testing */
+Datum
+ts_now_mock(PG_FUNCTION_ARGS)
+{
+	Datum res;
+#ifdef TS_DEBUG
+	if (ts_current_timestamp_mock != NULL && strlen(ts_current_timestamp_mock) != 0)
+	{
+		res = DirectFunctionCall3(timestamptz_in,
+								  CStringGetDatum(ts_current_timestamp_mock),
+								  0,
+								  Int32GetDatum(-1));
+		return res;
+	}
+#endif
+	res = TimestampTzGetDatum(GetCurrentTimestamp());
+	return res;
+}

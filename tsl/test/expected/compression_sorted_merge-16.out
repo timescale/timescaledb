@@ -833,7 +833,7 @@ EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, time, x2 FROM test1 ORD
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..63.44 rows=3000 width=12)
          Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.x2
          Batch Sorted Merge: true
-         ->  Sort  (cost=0.00..0.00 rows=0 width=0)
+         ->  Sort  (cost=1.05..1.06 rows=3 width=56)
                Output: compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk.x4, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_sequence_num, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3
                Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk  (cost=0.00..1.03 rows=3 width=56)
@@ -858,7 +858,7 @@ EXPLAIN (verbose) SELECT 1 as one, 2 as two, 3 as three, x2, time FROM test1 ORD
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk  (cost=1.06..63.44 rows=3000 width=12)
          Output: _hyper_1_1_chunk.x2, _hyper_1_1_chunk."time"
          Batch Sorted Merge: true
-         ->  Sort  (cost=0.00..0.00 rows=0 width=0)
+         ->  Sort  (cost=1.05..1.06 rows=3 width=56)
                Output: compress_hyper_2_2_chunk."time", compress_hyper_2_2_chunk.x1, compress_hyper_2_2_chunk.x2, compress_hyper_2_2_chunk.x3, compress_hyper_2_2_chunk.x4, compress_hyper_2_2_chunk.x5, compress_hyper_2_2_chunk._ts_meta_count, compress_hyper_2_2_chunk._ts_meta_sequence_num, compress_hyper_2_2_chunk._ts_meta_min_1, compress_hyper_2_2_chunk._ts_meta_max_1, compress_hyper_2_2_chunk._ts_meta_min_2, compress_hyper_2_2_chunk._ts_meta_max_2, compress_hyper_2_2_chunk._ts_meta_min_3, compress_hyper_2_2_chunk._ts_meta_max_3
                Sort Key: compress_hyper_2_2_chunk._ts_meta_max_1 DESC
                ->  Seq Scan on _timescaledb_internal.compress_hyper_2_2_chunk  (cost=0.00..1.03 rows=3 width=56)
@@ -1440,7 +1440,7 @@ SELECT time, segment_by, x1 FROM test_costs WHERE segment_by > 900 and segment_b
          Output: compress_hyper_10_22_chunk."time", compress_hyper_10_22_chunk.segment_by, compress_hyper_10_22_chunk.x1, compress_hyper_10_22_chunk._ts_meta_count, compress_hyper_10_22_chunk._ts_meta_sequence_num, compress_hyper_10_22_chunk._ts_meta_min_1, compress_hyper_10_22_chunk._ts_meta_max_1, compress_hyper_10_22_chunk._ts_meta_min_2, compress_hyper_10_22_chunk._ts_meta_max_2
          Sort Key: compress_hyper_10_22_chunk._ts_meta_max_1 DESC
          Sort Method: quicksort 
-         ->  Index Scan using compress_hyper_10_22_chunk__compressed_hypertable_10_segment_by on _timescaledb_internal.compress_hyper_10_22_chunk (actual rows=98 loops=1)
+         ->  Index Scan using compress_hyper_10_22_chunk_segment_by__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_10_22_chunk (actual rows=98 loops=1)
                Output: compress_hyper_10_22_chunk."time", compress_hyper_10_22_chunk.segment_by, compress_hyper_10_22_chunk.x1, compress_hyper_10_22_chunk._ts_meta_count, compress_hyper_10_22_chunk._ts_meta_sequence_num, compress_hyper_10_22_chunk._ts_meta_min_1, compress_hyper_10_22_chunk._ts_meta_max_1, compress_hyper_10_22_chunk._ts_meta_min_2, compress_hyper_10_22_chunk._ts_meta_max_2
                Index Cond: ((compress_hyper_10_22_chunk.segment_by > 900) AND (compress_hyper_10_22_chunk.segment_by < 999))
 (11 rows)
@@ -1481,6 +1481,7 @@ SELECT compress_chunk(i) FROM show_chunks('bugtab') i;
  _timescaledb_internal._hyper_11_23_chunk
 (1 row)
 
+ANALYZE bugtab;
 :PREFIX
 SELECT "time","hin"::text,"model"::text,"block"::text,"message_name"::text,"signal_name"::text,"signal_numeric_value","signal_string_value"::text FROM :chunk_table_bugtab ORDER BY "time" DESC;
                                                                                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                                                                                               

@@ -61,11 +61,6 @@ typedef struct ContinuousAggsCacheInvalEntry
 {
 	int32 hypertable_id;
 	Oid hypertable_relid;
-	int32 entry_id; /*
-					 * This is what actually gets written to the hypertable log. It can be the same
-					 * as the hypertable_id for normal hypertables. In the distributed case it is
-					 * the ID of the parent hypertable in the Access Node.
-					 */
 	Dimension hypertable_open_dimension;
 	Oid previous_chunk_relid;
 	AttrNumber previous_chunk_open_dimension;
@@ -81,14 +76,11 @@ static int64 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid);
 static HTAB *continuous_aggs_cache_inval_htab = NULL;
 static MemoryContext continuous_aggs_trigger_mctx = NULL;
 
-void _continuous_aggs_cache_inval_init(void);
-void _continuous_aggs_cache_inval_fini(void);
-
 static int64 tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc);
 static inline void cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry,
-										  int32 hypertable_id, int32 entry_id);
+										  int32 hypertable_id);
 static inline void cache_entry_switch_to_chunk(ContinuousAggsCacheInvalEntry *cache_entry,
-											   Oid chunk_id, Relation chunk_relation);
+											   Oid chunk_reloid, Relation chunk_relation);
 static inline void update_cache_entry(ContinuousAggsCacheInvalEntry *cache_entry, int64 timeval);
 static void cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry);
 static void cache_inval_cleanup(void);
@@ -148,8 +140,7 @@ tuple_get_time(Dimension *d, HeapTuple tuple, AttrNumber col, TupleDesc tupdesc)
 }
 
 static inline void
-cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id,
-					   int32 entry_id)
+cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hypertable_id)
 {
 	Cache *ht_cache = ts_hypertable_cache_pin();
 	/* NOTE: we can remove the id=>relid scan, if it becomes an issue, by getting the
@@ -163,7 +154,6 @@ cache_inval_entry_init(ContinuousAggsCacheInvalEntry *cache_entry, int32 hyperta
 	}
 
 	cache_entry->hypertable_id = hypertable_id;
-	cache_entry->entry_id = entry_id;
 	cache_entry->hypertable_relid = ht->main_table_relid;
 	cache_entry->hypertable_open_dimension = *hyperspace_get_open_dimension(ht->space, 0);
 	if (cache_entry->hypertable_open_dimension.partitioning != NULL)
@@ -233,22 +223,14 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 	 * rows (which act like deletes) and once with the new rows.
 	 */
 	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	char *hypertable_id_str, *parent_hypertable_id_str;
-	int32 hypertable_id, parent_hypertable_id = 0;
-	bool is_distributed_hypertable_trigger = false;
+	char *hypertable_id_str;
+	int32 hypertable_id;
 
 	if (trigdata == NULL || trigdata->tg_trigger == NULL || trigdata->tg_trigger->tgnargs < 0)
 		elog(ERROR, "must supply hypertable id");
 
 	hypertable_id_str = trigdata->tg_trigger->tgargs[0];
 	hypertable_id = atol(hypertable_id_str);
-
-	if (trigdata->tg_trigger->tgnargs > 1)
-	{
-		parent_hypertable_id_str = trigdata->tg_trigger->tgargs[1];
-		parent_hypertable_id = atol(parent_hypertable_id_str);
-		is_distributed_hypertable_trigger = true;
-	}
 
 	if (!CALLED_AS_TRIGGER(fcinfo))
 		elog(ERROR, "continuous agg trigger function must be called by trigger manager");
@@ -258,9 +240,7 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
 						 trigdata->tg_relation,
 						 trigdata->tg_trigtuple,
 						 trigdata->tg_newtuple,
-						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event),
-						 is_distributed_hypertable_trigger,
-						 parent_hypertable_id);
+						 TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event));
 	if (!TRIGGER_FIRED_BY_UPDATE(trigdata->tg_event))
 		return PointerGetDatum(trigdata->tg_trigtuple);
 	else
@@ -275,8 +255,7 @@ continuous_agg_trigfn(PG_FUNCTION_ARGS)
  */
 void
 execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tuple,
-					 HeapTuple chunk_newtuple, bool update, bool is_distributed_hypertable_trigger,
-					 int32 parent_hypertable_id)
+					 HeapTuple chunk_newtuple, bool update)
 {
 	ContinuousAggsCacheInvalEntry *cache_entry;
 	bool found;
@@ -290,10 +269,7 @@ execute_cagg_trigger(int32 hypertable_id, Relation chunk_rel, HeapTuple chunk_tu
 		hash_search(continuous_aggs_cache_inval_htab, &hypertable_id, HASH_ENTER, &found);
 
 	if (!found)
-		cache_inval_entry_init(cache_entry,
-							   hypertable_id,
-							   is_distributed_hypertable_trigger ? parent_hypertable_id :
-																   hypertable_id);
+		cache_inval_entry_init(cache_entry, hypertable_id);
 
 	/* handle the case where we need to repopulate the cached chunk data */
 	if (cache_entry->previous_chunk_relid != chunk_relid)
@@ -327,15 +303,15 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 		return;
 
 	/* The materialization worker uses a READ COMMITTED isolation level by default. Therefore, if we
-	 * use a stronger isolation level, the isolation thereshold could update without us seeing the
+	 * use a stronger isolation level, the isolation threshold could update without us seeing the
 	 * new value. In order to prevent serialization errors, we always append invalidation entries in
 	 * the case when we're using a strong enough isolation level that we won't see the new
-	 * threshold. The same applies for distributed member invalidation triggers of hypertables.
-	 * The materializer can handle invalidations that are beyond the threshold gracefully.
+	 * threshold. The materializer can handle invalidations that are beyond the threshold
+	 * gracefully.
 	 */
 	if (IsolationUsesXactSnapshot())
 	{
-		invalidation_hyper_log_add_entry(entry->entry_id,
+		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
 		return;
@@ -344,7 +320,7 @@ cache_inval_entry_write(ContinuousAggsCacheInvalEntry *entry)
 	liv = get_lowest_invalidated_time_for_hypertable(entry->hypertable_relid);
 
 	if (entry->lowest_modified_value < liv)
-		invalidation_hyper_log_add_entry(entry->entry_id,
+		invalidation_hyper_log_add_entry(entry->hypertable_id,
 										 entry->lowest_modified_value,
 										 entry->greatest_modified_value);
 };

@@ -50,10 +50,8 @@
 #include "hypertable_cache.h"
 #include "trigger.h"
 #include "scanner.h"
-#include "ts_catalog/catalog.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "hypercube.h"
 #include "indexing.h"
 #include "guc.h"
 #include "errors.h"
@@ -1497,7 +1495,7 @@ ts_hypertable_create_internal(FunctionCallInfo fcinfo, Oid table_relid,
 		ts_cache_release(hcache);
 
 		/*
-		 * Validate create_hypertable arguments and use defaults accoring to the
+		 * Validate create_hypertable arguments and use defaults according to the
 		 * hypertable_distributed_default guc.
 		 *
 		 * Validate data nodes and check permissions on them if this is a
@@ -2216,7 +2214,6 @@ bool
 ts_hypertable_set_compress_interval(Hypertable *ht, int64 compress_interval)
 {
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
-	Assert(TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht));
 
 	Dimension *time_dimension =
 		ts_hyperspace_get_mutable_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
@@ -2239,30 +2236,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	Oid tspc_oid = get_rel_tablespace(table_relid);
 	NameData schema_name, table_name, associated_schema_name;
 	ChunkSizingInfo *chunk_sizing_info;
-	Relation rel;
-	rel = table_open(table_relid, AccessExclusiveLock);
-	Size row_size = MAXALIGN(SizeofHeapTupleHeader);
-	/* estimate tuple width of compressed hypertable */
-	for (int i = 1; i <= RelationGetNumberOfAttributes(rel); i++)
-	{
-		bool is_varlena = false;
-		Oid outfunc;
-		Form_pg_attribute att = TupleDescAttr(rel->rd_att, i - 1);
-		getTypeOutputInfo(att->atttypid, &outfunc, &is_varlena);
-		if (is_varlena)
-			row_size += 18;
-		else
-			row_size += att->attlen;
-	}
-	if (row_size > MaxHeapTupleSize)
-	{
-		ereport(WARNING,
-				(errmsg("compressed row size might exceed maximum row size"),
-				 errdetail("Estimated row size of compressed hypertable is %zu. This exceeds the "
-						   "maximum size of %zu and can cause compression of chunks to fail.",
-						   row_size,
-						   MaxHeapTupleSize)));
-	}
+	LockRelationOid(table_relid, AccessExclusiveLock);
 	/*
 	 * Check that the user has permissions to make this table to a compressed
 	 * hypertable
@@ -2273,7 +2247,6 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 		ereport(ERROR,
 				(errcode(ERRCODE_TS_HYPERTABLE_EXISTS),
 				 errmsg("table \"%s\" is already a hypertable", get_rel_name(table_relid))));
-		table_close(rel, AccessExclusiveLock);
 	}
 
 	namestrcpy(&schema_name, get_namespace_name(get_rel_namespace(table_relid)));
@@ -2314,29 +2287,7 @@ ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id)
 	}
 
 	insert_blocker_trigger_add(table_relid);
-	/* lock will be released after the transaction is done */
-	table_close(rel, NoLock);
 	return true;
-}
-
-TSDLLEXPORT void
-ts_hypertable_clone_constraints_to_compressed(const Hypertable *user_ht, List *constraint_list)
-{
-	CatalogSecurityContext sec_ctx;
-
-	ListCell *lc;
-	Assert(TS_HYPERTABLE_HAS_COMPRESSION_TABLE(user_ht));
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	foreach (lc, constraint_list)
-	{
-		NameData *conname = lfirst(lc);
-		CatalogInternalCall4(DDL_ADD_HYPERTABLE_FK_CONSTRAINT,
-							 NameGetDatum(conname),
-							 NameGetDatum(&user_ht->fd.schema_name),
-							 NameGetDatum(&user_ht->fd.table_name),
-							 Int32GetDatum(user_ht->fd.compressed_hypertable_id));
-	}
-	ts_catalog_restore_user(&sec_ctx);
 }
 
 /*
@@ -2396,7 +2347,8 @@ ts_hypertable_get_open_dim_max_value(const Hypertable *ht, int dimension_index, 
 	int64 max_value =
 		max_isnull ? ts_time_get_min(timetype) : ts_time_value_to_internal(maxdat, timetype);
 
-	if ((res = SPI_finish()) != SPI_OK_FINISH)
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
 
 	return max_value;

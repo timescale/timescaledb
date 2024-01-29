@@ -16,6 +16,7 @@ set(TEST_FILES
     copy.sql
     copy_where.sql
     ddl_errors.sql
+    debug_utils.sql
     drop_extension.sql
     drop_hypertable.sql
     drop_owned.sql

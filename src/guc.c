@@ -61,8 +61,10 @@ bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
+TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
+TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
@@ -339,6 +341,23 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomIntVariable("timescaledb.max_tuples_decompressed_per_dml_transaction",
+							"The max number of tuples that can be decompressed during an "
+							"INSERT, UPDATE, or DELETE.",
+							" If the number of tuples exceeds this value, an error will "
+							"be thrown and transaction rolled back. "
+							"Setting this to 0 sets this value to unlimited number of "
+							"tuples decompressed.",
+							&ts_guc_max_tuples_decompressed_per_dml,
+							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	DefineCustomBoolVariable("timescaledb.enable_transparent_decompression",
 							 "Enable transparent decompression",
 							 "Enable transparent decompression when querying hypertable",
@@ -401,6 +420,17 @@ _guc_init(void)
 							 "Enable now() constify",
 							 "Enable constifying now() in query constraints",
 							 &ts_guc_enable_now_constify,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable("timescaledb.enable_cagg_watermark_constify",
+							 "Enable cagg watermark constify",
+							 "Enable constifying cagg watermark for real-time caggs",
+							 &ts_guc_enable_cagg_watermark_constify,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -579,6 +609,19 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	/* this information is useful in general on customer deployments */
+	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_compression_path_info",
+							 /* short_desc= */ "show various compression-related debug info",
+							 /* long_desc= */ "this is for debugging/information purposes",
+							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
+							 /* bootValue= */ false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
 #ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
 							   /* short_desc= */ "cloud provider",
@@ -627,17 +670,6 @@ _guc_init(void)
 							 /* valueAddr= */ (int *) &ts_guc_debug_require_vector_qual,
 							 /* bootValue= */ RVQ_Allow,
 							 /* options = */ require_vector_qual_options,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
-	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_compression_path_info",
-							 /* short_desc= */ "show various compression-related debug info",
-							 /* long_desc= */ "this is for debugging purposes",
-							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
-							 /* bootValue= */ false,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,
 							 /* check_hook= */ NULL,

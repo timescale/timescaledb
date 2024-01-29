@@ -19,6 +19,15 @@ static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *da
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
 														  TupleDesc desc);
 
+bool
+ts_compression_settings_equal(const CompressionSettings *left, const CompressionSettings *right)
+{
+	return ts_array_equal(left->fd.segmentby, right->fd.segmentby) &&
+		   ts_array_equal(left->fd.orderby, right->fd.orderby) &&
+		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
+		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst);
+}
+
 CompressionSettings *
 ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid)
 {
@@ -176,11 +185,11 @@ ts_compression_settings_rename_column_hypertable(Hypertable *ht, char *old, char
 	if (ht->fd.compressed_hypertable_id)
 	{
 		ListCell *lc;
-		List *chunk_ids = ts_chunk_get_chunk_ids_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		foreach (lc, chunk_ids)
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		foreach (lc, chunks)
 		{
-			Oid relid = ts_chunk_get_relid(lfirst_int(lc), false);
-			ts_compression_settings_rename_column(relid, old, new);
+			Chunk *chunk = lfirst(lc);
+			ts_compression_settings_rename_column(chunk->table_id, old, new);
 		}
 	}
 }
@@ -206,6 +215,24 @@ ts_compression_settings_update(CompressionSettings *settings)
 	Catalog *catalog = ts_catalog_get();
 	FormData_compression_settings *fd = &settings->fd;
 	ScanKeyData scankey[1];
+
+	if (settings->fd.orderby && settings->fd.segmentby)
+	{
+		Datum datum;
+		bool isnull;
+
+		ArrayIterator it = array_create_iterator(settings->fd.orderby, 0, NULL);
+		while (array_iterate(it, &datum, &isnull))
+		{
+			if (ts_array_is_member(settings->fd.segmentby, TextDatumGetCString(datum)))
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("cannot use column \"%s\" for both ordering and segmenting",
+								TextDatumGetCString(datum)),
+						 errhint("Use separate columns for the timescaledb.compress_orderby and"
+								 " timescaledb.compress_segmentby options.")));
+		}
+	}
 
 	/*
 	 * The default compression settings will always have orderby settings but the user may have

@@ -42,7 +42,7 @@ typedef struct AllowedFnHashEntry
 } AllowedFnHashEntry;
 
 // Get a HTAB of AllowedFnHashEntrys containing all and only those functions
-// that are withing visible_extensions. This function should be equivalent to
+// that are within visible_extensions. This function should be equivalent to
 // the SQL
 //     SELECT objid
 //     FROM pg_catalog.pg_depend, pg_catalog.pg_extension extension
@@ -222,7 +222,7 @@ ts_function_telemetry_read(const char **visible_extensions, int num_visible_exte
  * This function resets the shared function counts after we send back telemetry
  * in preparation for the next recording cycle. Note that there is no way to
  * atomically read and reset the counts in the shared hashmap, so writes that
- * occur between sending the old counts and reseting for the next cycle will be
+ * occur between sending the old counts and resetting for the next cycle will be
  * lost. Since this this telemetry is only ever an approximation of reality, we
  * believe this loss is acceptable considering that the alternatives are
  * resetting the counts whenever the telemetry is read (potentially even more

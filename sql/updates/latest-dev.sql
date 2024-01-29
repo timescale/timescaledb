@@ -28,6 +28,13 @@ BEGIN
       MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
       DETAIL = 'The following data nodes should be removed: '||data_nodes;
   END IF;
+
+  IF EXISTS(SELECT FROM _timescaledb_catalog.metadata WHERE key = 'dist_uuid') THEN
+    RAISE USING
+      ERRCODE = 'feature_not_supported',
+      MESSAGE = 'cannot upgrade because multi-node has been removed in 2.14.0',
+      DETAIL = 'This node appears to be part of a multi-node installation';
+  END IF;
 END $$;
 
 DROP FUNCTION IF EXISTS _timescaledb_functions.ping_data_node;
@@ -76,7 +83,7 @@ DROP FUNCTION IF EXISTS @extschema@.create_distributed_restore_point;
 DROP FUNCTION IF EXISTS @extschema@.set_replication_factor;
 
 CREATE TABLE _timescaledb_catalog.compression_settings (
-	relid regclass NOT NULL,
+  relid regclass NOT NULL,
   segmentby text[],
   orderby text[],
   orderby_desc bool[],
@@ -95,8 +102,8 @@ INSERT INTO _timescaledb_catalog.compression_settings(relid, segmentby, orderby,
     array_agg(NOT orderby_asc ORDER BY orderby_column_index) FILTER(WHERE orderby_column_index >= 1) AS compress_orderby_desc,
     array_agg(orderby_nullsfirst ORDER BY orderby_column_index) FILTER(WHERE orderby_column_index >= 1) AS compress_orderby_nullsfirst
   FROM _timescaledb_catalog.hypertable_compression hc
-		INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = hc.hypertable_id
-	GROUP BY hypertable_id, ht.schema_name, ht.table_name;
+    INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = hc.hypertable_id
+  GROUP BY hypertable_id, ht.schema_name, ht.table_name;
 
 GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
@@ -279,7 +286,6 @@ WHERE EXISTS (
 );
 
 ALTER SEQUENCE _timescaledb_catalog.hypertable_id_seq OWNED BY _timescaledb_catalog.hypertable.id;
-SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable_id_seq', '');
 
 GRANT SELECT ON _timescaledb_catalog.hypertable TO PUBLIC;
@@ -316,3 +322,108 @@ ALTER TABLE _timescaledb_catalog.dimension
     ADD CONSTRAINT dimension_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
 ALTER TABLE _timescaledb_catalog.tablespace
     ADD CONSTRAINT tablespace_hypertable_id_fkey FOREIGN KEY (hypertable_id) REFERENCES _timescaledb_catalog.hypertable(id) ON DELETE CASCADE;
+
+CREATE SCHEMA _timescaledb_debug;
+
+-- Migrate existing compressed hypertables to new internal format
+DO $$
+DECLARE
+  chunk regclass;
+  hypertable regclass;
+  ht_id integer;
+  index regclass;
+  column_name name;
+  cmd text;
+BEGIN
+  SET timescaledb.restoring TO ON;
+
+  -- Detach compressed chunks from their parent hypertables
+  FOR chunk, hypertable, ht_id IN
+    SELECT
+      format('%I.%I',ch.schema_name,ch.table_name)::regclass chunk,
+      format('%I.%I',ht.schema_name,ht.table_name)::regclass hypertable,
+      ht.id
+    FROM _timescaledb_catalog.chunk ch
+    INNER JOIN _timescaledb_catalog.hypertable ht_uncomp
+      ON ch.hypertable_id = ht_uncomp.compressed_hypertable_id
+    INNER JOIN _timescaledb_catalog.hypertable ht
+      ON ht.id = ht_uncomp.compressed_hypertable_id
+  LOOP
+
+    cmd := format('ALTER TABLE %s NO INHERIT %s', chunk, hypertable);
+    EXECUTE cmd;
+    -- remove references to indexes from the compressed hypertable
+    DELETE FROM _timescaledb_catalog.chunk_index WHERE hypertable_id = ht_id;
+
+  END LOOP;
+
+
+  FOR hypertable IN
+    SELECT
+      format('%I.%I',ht.schema_name,ht.table_name)::regclass hypertable
+    FROM _timescaledb_catalog.hypertable ht_uncomp
+    INNER JOIN _timescaledb_catalog.hypertable ht
+      ON ht.id = ht_uncomp.compressed_hypertable_id
+  LOOP
+
+    -- remove indexes from the compressed hypertable (but not chunks)
+    FOR index IN
+      SELECT indexrelid::regclass FROM pg_index WHERE indrelid = hypertable
+    LOOP
+      cmd := format('DROP INDEX %s', index);
+      EXECUTE cmd;
+    END LOOP;
+
+    -- remove columns from the compressed hypertable (but not chunks)
+    FOR column_name IN
+      SELECT attname FROM pg_attribute WHERE attrelid = hypertable AND attnum > 0
+    LOOP
+      cmd := format('ALTER TABLE %s DROP COLUMN %I', hypertable, column_name);
+      EXECUTE cmd;
+    END LOOP;
+
+  END LOOP;
+
+  SET timescaledb.restoring TO OFF;
+END $$;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.hypertable_constraint_add_table_fk_constraint;
+DROP FUNCTION IF EXISTS _timescaledb_functions.hypertable_constraint_add_table_fk_constraint;
+
+-- only define stub here, actual code will be filled in at end of update script
+CREATE FUNCTION _timescaledb_functions.constraint_clone(constraint_oid OID,target_oid REGCLASS) RETURNS VOID LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog, pg_temp;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.chunks_in;
+DROP FUNCTION IF EXISTS _timescaledb_internal.chunks_in;
+
+CREATE FUNCTION _timescaledb_functions.metadata_insert_trigger() RETURNS TRIGGER LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  IF EXISTS (SELECT FROM _timescaledb_catalog.metadata WHERE key = NEW.key) THEN
+    UPDATE _timescaledb_catalog.metadata SET value = NEW.value WHERE key = NEW.key;
+    RETURN NULL;
+  END IF;
+  RETURN NEW;
+END
+$$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE TRIGGER metadata_insert_trigger BEFORE INSERT ON _timescaledb_catalog.metadata FOR EACH ROW EXECUTE PROCEDURE _timescaledb_functions.metadata_insert_trigger();
+
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.metadata', $$ WHERE key <> 'uuid' $$);
+
+-- Remove unwanted entries from extconfig and extcondition in pg_extension
+-- We use ALTER EXTENSION DROP TABLE to remove these entries.
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_cache.cache_inval_hypertable;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_cache.cache_inval_extension;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_cache.cache_inval_bgw_job;
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_internal.job_errors;
+
+-- Associate the above tables back to keep the dependencies safe
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_cache.cache_inval_hypertable;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_cache.cache_inval_extension;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_cache.cache_inval_bgw_job;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_internal.job_errors;
+
+ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
+ALTER EXTENSION timescaledb ADD TABLE _timescaledb_catalog.hypertable;
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', 'WHERE id >= 1');
