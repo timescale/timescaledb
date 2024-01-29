@@ -21,7 +21,8 @@ typedef struct ChunkAppendPath
 	int first_partial_path;
 } ChunkAppendPath;
 
-extern TSDLLEXPORT ChunkAppendPath *ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths);
+extern TSDLLEXPORT ChunkAppendPath *ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths,
+															  PathTarget *pathtarget);
 extern Path *ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
 										 Path *subpath, bool parallel_aware, bool ordered,
 										 List *nested_oids);
