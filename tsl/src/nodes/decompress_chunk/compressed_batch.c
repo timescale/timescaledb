@@ -329,19 +329,17 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		}
 	}
 
-	/* Process the result. */
-	const size_t n_batch_result_words = (batch_state->total_batch_rows + 63) / 64;
+	/* Translate the result if the column had a default value. */
 	if (column_values->arrow == NULL)
 	{
-		/* The column had a default value. */
 		Assert(column_values->decompression_type == DT_Default);
-
 		if (!(default_value_predicate_result & 1))
 		{
 			/*
 			 * We had a default value for the compressed column, and it
 			 * didn't pass the predicate, so the entire batch didn't pass.
 			 */
+			const size_t n_batch_result_words = (batch_state->total_batch_rows + 63) / 64;
 			for (size_t i = 0; i < n_batch_result_words; i++)
 			{
 				result[i] = 0;
