@@ -839,39 +839,34 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			*column_values->output_isnull = result.is_null;
 			*column_values->output_value = result.val;
 		}
-		else if (column_values->decompression_type > 0)
+		else if (column_values->decompression_type > SIZEOF_DATUM)
 		{
-			Assert(column_values->decompression_type <= 8);
+			/*
+			 * Fixed-width by-reference type that doesn't fit into a Datum.
+			 * For now this only happens for 8-byte types on 32-bit systems,
+			 * but eventually we could also use it for bigger by-value types
+			 * such as UUID.
+			 */
 			const uint8 value_bytes = column_values->decompression_type;
 			const char *restrict src = column_values->buffers[1];
-
+			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
+			*column_values->output_isnull =
+				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+		}
+		else if (column_values->decompression_type > 0)
+		{
 			/*
+			 * Fixed-width by-value type that fits into a Datum.
+			 *
 			 * The conversion of Datum to more narrow types will truncate
 			 * the higher bytes, so we don't care if we read some garbage
 			 * into them, and can always read 8 bytes. These are unaligned
 			 * reads, so technically we have to do memcpy.
 			 */
-			uint64 value;
-			memcpy(&value, &src[value_bytes * arrow_row], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-			Datum datum = Int64GetDatum(value);
-#else
-			/*
-			 * On 32-bit systems, the data larger than 4 bytes go by
-			 * reference, so we have to jump through these hoops.
-			 */
-			Datum datum;
-			if (value_bytes <= 4)
-			{
-				datum = Int32GetDatum((uint32) value);
-			}
-			else
-			{
-				datum = Int64GetDatum(value);
-			}
-#endif
-			*column_values->output_value = datum;
+			const uint8 value_bytes = column_values->decompression_type;
+			Assert(value_bytes <= SIZEOF_DATUM);
+			const char *restrict src = column_values->buffers[1];
+			memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}

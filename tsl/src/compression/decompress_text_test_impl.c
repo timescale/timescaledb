@@ -77,7 +77,7 @@ decompress_generic_text_check_arrow(ArrowArray *arrow, int errorlevel, Decompres
 						 errdetail("At row %d\n", i)));
 			}
 
-			if (strncmp(arrow_cstring, rowbyrow_cstring, rowbyrow_len))
+			if (strncmp(arrow_cstring, rowbyrow_cstring, rowbyrow_len) != 0)
 			{
 				ereport(errorlevel,
 						(errcode(ERRCODE_INTERNAL_ERROR),
