@@ -759,8 +759,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	 */
 	chunk_rel->rows = new_rows_estimate;
 	/*
-	 * This is a workaround for the bug in upstream merge append cost estimation.
-	 * See
+	 * This is a workaround for the bug in upstream merge append cost estimation. See
 	 * https://www.postgresql.org/message-id/flat/CALzhyqyhoXQDR-Usd_0HeWk%3DuqNLzoVeT8KhRoo%3DpV_KzgO3QQ%40mail.gmail.com
 	 */
 	chunk_rel->tuples = new_rows_estimate;
