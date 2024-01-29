@@ -69,7 +69,7 @@ create_group_subpath(PlannerInfo *root, RelOptInfo *rel, List *group, List *path
 }
 
 ChunkAppendPath *
-ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths)
+ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths, PathTarget *pathtarget)
 {
 	ListCell *lc;
 	double total_cost = 0, rows = 0;
@@ -85,6 +85,7 @@ ts_chunk_append_path_copy(ChunkAppendPath *ca, List *subpaths)
 	}
 	new->cpath.path.total_cost = total_cost;
 	new->cpath.path.rows = rows;
+	new->cpath.path.pathtarget = copy_pathtarget(pathtarget);
 
 	return new;
 }
