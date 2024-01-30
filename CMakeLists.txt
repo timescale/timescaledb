@@ -681,8 +681,7 @@ add_subdirectory(test)
 add_subdirectory(src)
 
 if(NOT APACHE_ONLY)
-
-    add_subdirectory(tsl)
+  add_subdirectory(tsl)
 endif()
 
 add_custom_target(licensecheck
