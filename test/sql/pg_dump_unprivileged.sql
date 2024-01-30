@@ -15,6 +15,16 @@ CREATE database dump_unprivileged;
 
 \! utils/pg_dump_unprivileged.sh
 
+\c dump_unprivileged :ROLE_SUPERUSER
+DROP EXTENSION timescaledb;
+GRANT ALL ON DATABASE dump_unprivileged TO dump_unprivileged;
+\c dump_unprivileged dump_unprivileged
+-- Create the timescale extension and table as underprivileged user
+CREATE EXTENSION timescaledb;
+CREATE TABLE t1 (a int);
+-- pg_dump currently fails when dumped
+\! utils/pg_dump_unprivileged.sh
+
 \c template1 :ROLE_SUPERUSER
 DROP EXTENSION timescaledb;
 DROP DATABASE dump_unprivileged WITH (FORCE);

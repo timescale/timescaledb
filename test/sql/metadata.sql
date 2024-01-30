@@ -9,10 +9,12 @@ CREATE OR REPLACE FUNCTION _timescaledb_internal.test_exported_uuid() RETURNS UU
     AS :MODULE_PATHNAME, 'ts_test_exported_uuid' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _timescaledb_internal.test_install_timestamp() RETURNS TIMESTAMPTZ
     AS :MODULE_PATHNAME, 'ts_test_install_timestamp' LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+INSERT INTO _timescaledb_catalog.metadata (key, value, include_in_telemetry) SELECT 'metadata_test', 'FOO', TRUE;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- uuid and install_timestamp should already be in the table before we generate
 SELECT COUNT(*) from _timescaledb_catalog.metadata;
+
 SELECT _timescaledb_internal.test_uuid() as uuid_1 \gset
 SELECT _timescaledb_internal.test_exported_uuid() as uuid_ex_1 \gset
 SELECT _timescaledb_internal.test_install_timestamp() as timestamp_1 \gset
@@ -49,9 +51,11 @@ ALTER DATABASE :TEST_DBNAME SET timescaledb.restoring='off';
 SELECT COUNT(*) FROM _timescaledb_catalog.metadata;
 -- Verify that this is the old exported_uuid
 SELECT _timescaledb_internal.test_exported_uuid() = :'uuid_ex_1' as exported_uuids_equal;
--- Verify that the uuid and timestamp are new
+-- Verify that the uuid is new
 SELECT _timescaledb_internal.test_uuid() = :'uuid_1' as exported_uuids_diff;
-SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as exported_uuids_diff;
+-- Verify that the install_timestamp got restored
+SELECT _timescaledb_internal.test_install_timestamp() = :'timestamp_1' as timestamps_equal;
+SELECT * FROM _timescaledb_catalog.metadata WHERE key = 'metadata_test';
 
 -- check metadata version matches expected value
 SELECT x.extversion = m.value AS "version match"

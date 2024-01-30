@@ -44,12 +44,6 @@ ERROR:  could not open relation with OID 0
 SELECT _timescaledb_internal.chunk_status(0);
 WARNING:  function _timescaledb_internal.chunk_status(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid
-SELECT _timescaledb_internal.chunks_in(NULL,NULL);
-WARNING:  function _timescaledb_internal.chunks_in(record,integer[]) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
- chunks_in 
- 
-(1 row)
-
 SELECT _timescaledb_internal.chunks_local_size(NULL,NULL);
 WARNING:  function _timescaledb_internal.chunks_local_size(name,name) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
  chunks_local_size 

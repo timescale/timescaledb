@@ -16,7 +16,6 @@ SELECT _timescaledb_internal.chunk_id_from_relid(0);
 SELECT _timescaledb_internal.chunk_index_clone(0);
 SELECT _timescaledb_internal.chunk_index_replace(0,0);
 SELECT _timescaledb_internal.chunk_status(0);
-SELECT _timescaledb_internal.chunks_in(NULL,NULL);
 SELECT _timescaledb_internal.chunks_local_size(NULL,NULL);
 SELECT _timescaledb_internal.compressed_chunk_local_stats(NULL,NULL);
 SELECT _timescaledb_internal.create_chunk(0,NULL,NULL,NULL,0);

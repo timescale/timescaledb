@@ -510,3 +510,88 @@ SELECT timeCustom t, min(series_0) FROM PUBLIC.testtable2 GROUP BY t ORDER BY t 
                                  Worker 0:  actual rows=1 loops=1
 (33 rows)
 
+RESET timescaledb.enable_chunkwise_aggregation;
+RESET enable_hashagg;
+-- Test aggregation pushdown with MergeAppend node
+CREATE TABLE merge_append_test (start_time timestamptz, sensor_id int, cluster varchar (253), cost_recommendation_memory numeric);
+SELECT * FROM create_hypertable('merge_append_test', 'start_time');
+WARNING:  column type "character varying" used for "cluster" does not follow best practices
+NOTICE:  adding not-null constraint to column "start_time"
+ hypertable_id | schema_name |    table_name     | created 
+---------------+-------------+-------------------+---------
+             4 | public      | merge_append_test | t
+(1 row)
+
+CREATE INDEX merge_append_test_sensorid ON merge_append_test USING btree (start_time, sensor_id);
+INSERT INTO merge_append_test
+SELECT
+    date_series,
+    1,
+    'production-1',
+   random() * 100
+   FROM generate_series('2023-10-01 00:00:00', '2023-12-01 00:00:00', INTERVAL '1 hour') AS date_series
+;
+INSERT INTO merge_append_test
+SELECT
+    date_series,
+    sensor_id,
+    'production-2',
+   random() * 100
+   FROM generate_series('2023-10-01 00:00:00', '2023-12-01 00:00:00', INTERVAL '1 hour') AS date_series,
+generate_series(1, 100, 1) AS sensor_id
+;
+ANALYZE merge_append_test;
+SET enable_seqscan = off;
+SET random_page_cost = 0;
+SET cpu_operator_cost = 0;
+SET enable_hashagg = off;
+RESET parallel_setup_cost;
+RESET parallel_tuple_cost;
+SELECT set_config(CASE WHEN current_setting('server_version_num')::int < 160000 THEN 'force_parallel_mode' ELSE 'debug_parallel_query' END, 'off', false);
+ set_config 
+------------
+ off
+(1 row)
+
+:PREFIX
+SELECT
+    start_time, sensor_id,
+    SUM(cost_recommendation_memory)
+FROM
+    merge_append_test
+WHERE
+    start_time >= '2023-11-27 00:00:00Z'
+    AND start_time <= '2023-12-01 00:00:00Z'
+    AND sensor_id < 10
+    AND CLUSTER = 'production-2'
+GROUP BY
+    1, 2;
+                                                                                                                             QUERY PLAN                                                                                                                             
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate (actual rows=873 loops=1)
+   Output: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id, sum(_hyper_4_17_chunk.cost_recommendation_memory)
+   Group Key: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id
+   ->  Merge Append (actual rows=873 loops=1)
+         Sort Key: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id
+         ->  Partial GroupAggregate (actual rows=648 loops=1)
+               Output: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id, PARTIAL sum(_hyper_4_17_chunk.cost_recommendation_memory)
+               Group Key: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id
+               ->  Index Scan using _hyper_4_17_chunk_merge_append_test_sensorid on _timescaledb_internal._hyper_4_17_chunk (actual rows=648 loops=1)
+                     Output: _hyper_4_17_chunk.start_time, _hyper_4_17_chunk.sensor_id, _hyper_4_17_chunk.cost_recommendation_memory
+                     Index Cond: ((_hyper_4_17_chunk.start_time >= 'Sun Nov 26 16:00:00 2023 PST'::timestamp with time zone) AND (_hyper_4_17_chunk.start_time <= 'Thu Nov 30 16:00:00 2023 PST'::timestamp with time zone) AND (_hyper_4_17_chunk.sensor_id < 10))
+                     Filter: ((_hyper_4_17_chunk.cluster)::text = 'production-2'::text)
+                     Rows Removed by Filter: 72
+         ->  Partial GroupAggregate (actual rows=225 loops=1)
+               Output: _hyper_4_18_chunk.start_time, _hyper_4_18_chunk.sensor_id, PARTIAL sum(_hyper_4_18_chunk.cost_recommendation_memory)
+               Group Key: _hyper_4_18_chunk.start_time, _hyper_4_18_chunk.sensor_id
+               ->  Index Scan using _hyper_4_18_chunk_merge_append_test_sensorid on _timescaledb_internal._hyper_4_18_chunk (actual rows=225 loops=1)
+                     Output: _hyper_4_18_chunk.start_time, _hyper_4_18_chunk.sensor_id, _hyper_4_18_chunk.cost_recommendation_memory
+                     Index Cond: ((_hyper_4_18_chunk.start_time >= 'Sun Nov 26 16:00:00 2023 PST'::timestamp with time zone) AND (_hyper_4_18_chunk.start_time <= 'Thu Nov 30 16:00:00 2023 PST'::timestamp with time zone) AND (_hyper_4_18_chunk.sensor_id < 10))
+                     Filter: ((_hyper_4_18_chunk.cluster)::text = 'production-2'::text)
+                     Rows Removed by Filter: 25
+(21 rows)
+
+RESET enable_seqscan;
+RESET random_page_cost;
+RESET cpu_operator_cost;
+RESET enable_hashagg;

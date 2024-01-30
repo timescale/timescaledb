@@ -34,7 +34,8 @@ DETAIL:  Dimensions cannot have NULL values.
 
 insert into non_compressed values( 3 , 16 , 20, 4);
 ALTER TABLE foo2 set (timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
-ERROR:  the option timescaledb.compress must be set to true to enable compression
+ERROR:  cannot use column "c" for both ordering and segmenting
+HINT:  Use separate columns for the timescaledb.compress_orderby and timescaledb.compress_segmentby options.
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c' , timescaledb.compress_orderby = 'c');
 ERROR:  cannot use column "c" for both ordering and segmenting
 HINT:  Use separate columns for the timescaledb.compress_orderby and timescaledb.compress_segmentby options.
@@ -46,7 +47,7 @@ create table default_skipped (a integer not null, b integer, c integer, d intege
 select create_hypertable('default_skipped', 'a', chunk_time_interval=> 10);
       create_hypertable       
 ------------------------------
- (6,public,default_skipped,t)
+ (5,public,default_skipped,t)
 (1 row)
 
 alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
@@ -78,12 +79,8 @@ ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_orderby='d Asc 
 ALTER TABLE foo3 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c', timescaledb.compress_orderby = 'd DeSc NullS lAsT');
 -- Negative test cases ---
 ALTER TABLE foo2 set (timescaledb.compress, timescaledb.compress_segmentby = '"bacB toD",c');
-ERROR:  must specify a column to order by
-DETAIL:  The timescaledb.compress_orderby option was previously set and must also be specified in the updated configuration.
 alter table default_skipped set (timescaledb.compress, timescaledb.compress_orderby = 'a asc', timescaledb.compress_segmentby = 'c');
 alter table default_skipped set (timescaledb.compress, timescaledb.compress_segmentby = 'c');
-ERROR:  must specify a column to order by
-DETAIL:  The timescaledb.compress_orderby option was previously set and must also be specified in the updated configuration.
 create table reserved_column_prefix (a integer, _ts_meta_foo integer, "bacB toD" integer, c integer, d integer);
 select table_name from create_hypertable('reserved_column_prefix', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
@@ -221,7 +218,7 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
 (1 row)
 
 SELECT decompress_chunk(ch) FROM show_chunks('foo') ch limit 1;
-ERROR:  chunk "_hyper_15_2_chunk" is not compressed
+ERROR:  chunk "_hyper_10_2_chunk" is not compressed
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
 SELECT format('%I.%I',chunk_schema,chunk_name) AS "CHUNK_NAME"
@@ -229,9 +226,9 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'foo'
 ORDER BY chunk_name LIMIT 1\gset
 select decompress_chunk(:'CHUNK_NAME');
-ERROR:  chunk "_hyper_15_2_chunk" is not compressed
+ERROR:  chunk "_hyper_10_2_chunk" is not compressed
 select decompress_chunk(:'CHUNK_NAME', if_compressed=>true);
-NOTICE:  chunk "_hyper_15_2_chunk" is not compressed
+NOTICE:  chunk "_hyper_10_2_chunk" is not compressed
  decompress_chunk 
 ------------------
  
@@ -241,16 +238,16 @@ NOTICE:  chunk "_hyper_15_2_chunk" is not compressed
 select compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_15_2_chunk
+ _timescaledb_internal._hyper_10_2_chunk
 (1 row)
 
 select compress_chunk(:'CHUNK_NAME');
-ERROR:  chunk "_hyper_15_2_chunk" is already compressed
+ERROR:  chunk "_hyper_10_2_chunk" is already compressed
 select compress_chunk(:'CHUNK_NAME', if_not_compressed=>true);
-NOTICE:  chunk "_hyper_15_2_chunk" is already compressed
+NOTICE:  chunk "_hyper_10_2_chunk" is already compressed
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_15_2_chunk
+ _timescaledb_internal._hyper_10_2_chunk
 (1 row)
 
 SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
@@ -258,23 +255,20 @@ ERROR:  compression not enabled on "non_compressed"
 DETAIL:  It is not possible to compress chunks on a hypertable or continuous aggregate that does not have compression enabled.
 HINT:  Enable compression using ALTER TABLE/MATERIALIZED VIEW with the timescaledb.compress option.
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'c');
-ERROR:  cannot change configuration on already compressed chunks
-DETAIL:  There are compressed chunks that prevent changing the existing compression configuration.
 ALTER TABLE foo set (timescaledb.compress='f');
-ERROR:  cannot change configuration on already compressed chunks
-DETAIL:  There are compressed chunks that prevent changing the existing compression configuration.
+ERROR:  cannot disable compression on hypertable with compressed chunks
 ALTER TABLE foo reset (timescaledb.compress);
 ERROR:  compression options cannot be reset
 SELECT decompress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 ERROR:  missing compressed hypertable
 --should succeed
 SELECT decompress_chunk(ch, true) FROM show_chunks('foo') ch;
-NOTICE:  chunk "_hyper_15_3_chunk" is not compressed
-NOTICE:  chunk "_hyper_15_4_chunk" is not compressed
-NOTICE:  chunk "_hyper_15_5_chunk" is not compressed
+NOTICE:  chunk "_hyper_10_3_chunk" is not compressed
+NOTICE:  chunk "_hyper_10_4_chunk" is not compressed
+NOTICE:  chunk "_hyper_10_5_chunk" is not compressed
             decompress_chunk             
 -----------------------------------------
- _timescaledb_internal._hyper_15_2_chunk
+ _timescaledb_internal._hyper_10_2_chunk
  
  
  
@@ -293,7 +287,7 @@ FROM _timescaledb_catalog.hypertable comp_hyper
 INNER JOIN _timescaledb_catalog.hypertable uncomp_hyper ON (comp_hyper.id = uncomp_hyper.compressed_hypertable_id)
 WHERE uncomp_hyper.table_name like 'foo' ORDER BY comp_hyper.id LIMIT 1 \gset
 select add_retention_policy(:'COMPRESSED_HYPER_NAME', INTERVAL '4 months', true);
-ERROR:  cannot add retention policy to compressed hypertable "_compressed_hypertable_18"
+ERROR:  cannot add retention policy to compressed hypertable "_compressed_hypertable_11"
 HINT:  Please add the policy to the corresponding uncompressed hypertable instead.
 --Constraint checking for compression
 create table fortable(col integer primary key);
@@ -367,7 +361,7 @@ CREATE TABLE table_fk (
 SELECT create_hypertable('table_fk', 'time');
    create_hypertable    
 ------------------------
- (23,public,table_fk,t)
+ (16,public,table_fk,t)
 (1 row)
 
 ALTER TABLE table_fk DROP COLUMN id1;
@@ -386,7 +380,7 @@ ORDER BY ch1.id limit 1 \gset
 select compress_chunk(:'CHUNK_NAME');
              compress_chunk              
 -----------------------------------------
- _timescaledb_internal._hyper_19_7_chunk
+ _timescaledb_internal._hyper_12_7_chunk
 (1 row)
 
 SELECT  total_chunks , number_compressed_chunks
@@ -423,17 +417,16 @@ WHERE ch1.hypertable_id = ht.id and ht.table_name like 'table_constr2' \gset
 SELECT compress_chunk(:'CHUNK_NAME');
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_25_10_chunk
+ _timescaledb_internal._hyper_18_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 set (timescaledb.compress=false);
-ERROR:  cannot change configuration on already compressed chunks
-DETAIL:  There are compressed chunks that prevent changing the existing compression configuration.
+ERROR:  cannot disable compression on hypertable with compressed chunks
 --decompress all chunks and disable compression.
 SELECT decompress_chunk(:'CHUNK_NAME');
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_25_10_chunk
+ _timescaledb_internal._hyper_18_10_chunk
 (1 row)
 
 ALTER TABLE table_constr2 SET (timescaledb.compress=false);
@@ -445,7 +438,7 @@ NOTICE:  adding not-null constraint to column "time"
 DETAIL:  Dimensions cannot have NULL values.
       create_hypertable       
 ------------------------------
- (27,public,test_table_int,t)
+ (20,public,test_table_int,t)
 (1 row)
 
 CREATE OR REPLACE function dummy_now() returns BIGINT LANGUAGE SQL IMMUTABLE as  'SELECT 5::BIGINT';
@@ -466,7 +459,7 @@ WHERE id = :compressjob_id;
 SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
         config         
 -----------------------
- {"hypertable_id": 27}
+ {"hypertable_id": 20}
 (1 row)
 
 --should fail
@@ -513,7 +506,7 @@ CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4
 SELECT create_hypertable('metric', 'time', 'dev_id', 10);
   create_hypertable   
 ----------------------
- (29,public,metric,t)
+ (22,public,metric,t)
 (1 row)
 
 ALTER TABLE metric SET (
@@ -528,7 +521,7 @@ FROM generate_series('2021-08-17 00:00:00'::timestamp,
 SELECT compress_chunk(show_chunks('metric'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_29_17_chunk
+ _timescaledb_internal._hyper_22_17_chunk
 (1 row)
 
 -- column does not exist the first time
@@ -554,7 +547,7 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 HINT:  Use datatype TIMESTAMPTZ instead.
  create_hypertable  
 --------------------
- (31,public,test,t)
+ (24,public,test,t)
 (1 row)
 
 INSERT INTO test VALUES ('2001-01-01 00:00', 'home'),
@@ -579,14 +572,14 @@ EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT DISTINCT 1 FROM test;
 --------------------------------------------
  Unique
    ->  Result
-         ->  Seq Scan on _hyper_31_19_chunk
+         ->  Seq Scan on _hyper_24_19_chunk
 (3 rows)
 
 --compress chunks
 SELECT COMPRESS_CHUNK(X) FROM SHOW_CHUNKS('test') X;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_31_19_chunk
+ _timescaledb_internal._hyper_24_19_chunk
 (1 row)
 
 ANALYZE test;
@@ -603,8 +596,8 @@ EXPLAIN (COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT DISTINCT 1 FROM test;
 -----------------------------------------------------------------
  Unique
    ->  Result
-         ->  Custom Scan (DecompressChunk) on _hyper_31_19_chunk
-               ->  Seq Scan on compress_hyper_32_20_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_24_19_chunk
+               ->  Seq Scan on compress_hyper_25_20_chunk
 (4 rows)
 
 --github issue 4398
@@ -616,7 +609,7 @@ NOTICE:  adding not-null constraint to column "tm"
 DETAIL:  Dimensions cannot have NULL values.
  hypertable_id | schema_name | table_name | created 
 ---------------+-------------+------------+---------
-            33 | public      | ts_table   | t
+            26 | public      | ts_table   | t
 (1 row)
 
 --should report a warning
@@ -639,7 +632,7 @@ SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12
 NOTICE:  migrating data to chunks
    create_hypertable    
 ------------------------
- (35,public,readings,t)
+ (28,public,readings,t)
 (1 row)
 
 create unique index readings_uniq_idx on readings("time",battery_temperature);
@@ -647,7 +640,7 @@ ALTER TABLE readings SET (timescaledb.compress,timescaledb.compress_segmentby = 
 SELECT compress_chunk(show_chunks('readings'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
+ _timescaledb_internal._hyper_28_22_chunk
 (1 row)
 
 ALTER TABLE readings DROP COLUMN battery_status;
@@ -661,25 +654,25 @@ SELECT readings FROM readings;
 
 -- #5577 On-insert decompression after schema changes may not work properly
 SELECT decompress_chunk(show_chunks('readings'),true);
-NOTICE:  chunk "_hyper_35_24_chunk" is not compressed
+NOTICE:  chunk "_hyper_28_24_chunk" is not compressed
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
+ _timescaledb_internal._hyper_28_22_chunk
  
 (2 rows)
 
 SELECT compress_chunk(show_chunks('readings'),true);
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
- _timescaledb_internal._hyper_35_24_chunk
+ _timescaledb_internal._hyper_28_22_chunk
+ _timescaledb_internal._hyper_28_24_chunk
 (2 rows)
 
 \set ON_ERROR_STOP 0
 INSERT INTO readings ("time", battery_temperature) VALUES
     ('2022-11-11 11:11:11',0.2) -- same record as inserted
 ;
-ERROR:  duplicate key value violates unique constraint "_hyper_35_24_chunk_readings_uniq_idx"
+ERROR:  duplicate key value violates unique constraint "_hyper_28_24_chunk_readings_uniq_idx"
 \set ON_ERROR_STOP 1
 SELECT * from readings;
              time             | battery_temperature 
@@ -698,8 +691,8 @@ SELECT assert_equal(count(1), 2::bigint) FROM readings;
 SELECT decompress_chunk(show_chunks('readings'),true);
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_35_22_chunk
- _timescaledb_internal._hyper_35_24_chunk
+ _timescaledb_internal._hyper_28_22_chunk
+ _timescaledb_internal._hyper_28_24_chunk
 (2 rows)
 
 -- #5553 Unique constraints are not always respected on compressed tables
@@ -711,7 +704,7 @@ NOTICE:  adding not-null constraint to column "time"
 NOTICE:  migrating data to chunks
     create_hypertable     
 --------------------------
- (37,public,main_table,t)
+ (30,public,main_table,t)
 (1 row)
 
 ALTER TABLE main_table SET (
@@ -721,19 +714,19 @@ ALTER TABLE main_table SET (
 SELECT compress_chunk(show_chunks('main_table'));
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_37_27_chunk
+ _timescaledb_internal._hyper_30_27_chunk
 (1 row)
 
 -- insert rejected
 \set ON_ERROR_STOP 0
 INSERT INTO main_table VALUES
     ('2011-11-11 11:11:11', 'foo');
-ERROR:  duplicate key value violates unique constraint "_hyper_37_27_chunk_xm"
+ERROR:  duplicate key value violates unique constraint "_hyper_30_27_chunk_xm"
 -- insert rejected in case 1st row doesn't violate constraint with different segmentby
 INSERT INTO main_table VALUES
     ('2011-11-11 11:12:11', 'bar'),
     ('2011-11-11 11:11:11', 'foo');
-ERROR:  duplicate key value violates unique constraint "_hyper_37_27_chunk_xm"
+ERROR:  duplicate key value violates unique constraint "_hyper_30_27_chunk_xm"
 \set ON_ERROR_STOP 1
 SELECT assert_equal(count(1), 1::bigint) FROM main_table;
  assert_equal 
@@ -745,7 +738,7 @@ SELECT assert_equal(count(1), 1::bigint) FROM main_table;
 SELECT decompress_chunk(show_chunks('main_table'), TRUE);
              decompress_chunk             
 ------------------------------------------
- _timescaledb_internal._hyper_37_27_chunk
+ _timescaledb_internal._hyper_30_27_chunk
 (1 row)
 
 DROP TABLE IF EXISTS readings;
@@ -759,7 +752,7 @@ CREATE TABLE readings(
 SELECT create_hypertable('readings', 'time', chunk_time_interval => interval '12 hour');
    create_hypertable    
 ------------------------
- (39,public,readings,t)
+ (32,public,readings,t)
 (1 row)
 
 CREATE UNIQUE INDEX readings_uniq_idx ON readings("time", battery_temperature);
@@ -771,7 +764,7 @@ INSERT INTO readings("time", candy, battery_temperature)
 SELECT compress_chunk(show_chunks('readings'), TRUE);
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_39_29_chunk
+ _timescaledb_internal._hyper_32_29_chunk
 (1 row)
 
 -- no error happens

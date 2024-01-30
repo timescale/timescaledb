@@ -363,6 +363,8 @@ extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
 											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
+extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings);
+
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);

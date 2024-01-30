@@ -143,7 +143,6 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 
 			switch (cmd->subtype)
 			{
-				case AT_AddConstraint:
 				case AT_SetOptions:
 				case AT_ResetOptions:
 				case AT_SetRelOptions:
@@ -162,6 +161,18 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 #endif
 					/* allowed on chunks */
 					break;
+				case AT_AddConstraint:
+				{
+					/* if this is an OSM chunk, block the operation */
+					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
+					if (chunk && chunk->fd.osm_chunk)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("operation not supported on OSM chunk tables")));
+					}
+					break;
+				}
 				default:
 					/* disable by default */
 					all_allowed = false;
@@ -3958,19 +3969,8 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 	Assert(IsA(cmd->def, List));
 	inpdef = (List *) cmd->def;
 	ts_with_clause_filter(inpdef, &compress_options, &pg_options);
-	if (compress_options)
-	{
-		parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
-		/* We allow updating compress chunk time interval independently of other compression
-		 * options. */
-		if (parse_results[CompressEnabled].is_default &&
-			parse_results[CompressChunkTimeInterval].is_default)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("the option timescaledb.compress must be set to true to enable "
-							"compression")));
-	}
-	else
+
+	if (!compress_options)
 		return DDL_CONTINUE;
 
 	if (pg_options != NIL)
@@ -3978,6 +3978,9 @@ process_altertable_set_options(AlterTableCmd *cmd, Hypertable *ht)
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only timescaledb.compress parameters allowed when specifying compression "
 						"parameters for hypertable")));
+
+	parse_results = ts_compress_hypertable_set_clause_parse(compress_options);
+
 	ts_cm_functions->process_compress_table(cmd, ht, parse_results);
 	return DDL_DONE;
 }

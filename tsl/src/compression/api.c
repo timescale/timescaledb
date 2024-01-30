@@ -385,6 +385,13 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		compressed_chunk_interval + current_chunk_interval > max_chunk_interval)
 		return NULL;
 
+	/* Get reloid of the previous compressed chunk */
+	Oid prev_comp_reloid = ts_chunk_get_relid(previous_chunk->fd.compressed_chunk_id, false);
+	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
+	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
+	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+		return NULL;
+
 	return previous_chunk;
 }
 
@@ -575,6 +582,11 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	Chunk *compressed_chunk;
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
+
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("decompress_chunk must not be called on the internal compressed chunk")));
 
 	compressed_hypertable =
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
@@ -901,48 +913,28 @@ decompress_segment_changed_group(CompressedSegmentInfo **current_segment, TupleT
 extern Datum
 tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 {
-	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
-
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
-	if (NULL == uncompressed_chunk)
-		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
+	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 
+	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ShareLock);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ShareLock);
 
 	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
 
-	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
-	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
+	ResultRelInfo *indstate = ts_catalog_open_indexes(compressed_chunk_rel);
+	Oid index_oid = get_compressed_chunk_index(indstate, settings);
 
-	RowCompressor row_compressor;
-	row_compressor_init(settings,
-						&row_compressor,
-						uncompressed_rel_tupdesc,
-						compressed_chunk_rel,
-						compressed_rel_tupdesc->natts,
-						true /*need_bistate*/,
-						true /*reset_sequence*/,
-						0 /*insert options*/);
+	ts_catalog_close_indexes(indstate);
 
-	/*
-	 * Keep the ExclusiveLock on the compressed chunk. This lock will be requested
-	 * by recompression later on, both in the case of segmentwise recompression, and
-	 * in the case of decompress-compress. This implicitly locks the index too, so
-	 * it cannot be dropped in another session, which is what we want to prevent by
-	 * locking the compressed chunk here
-	 */
 	table_close(compressed_chunk_rel, NoLock);
 	table_close(uncompressed_chunk_rel, NoLock);
 
-	row_compressor_close(&row_compressor);
-
-	if (OidIsValid(row_compressor.index_oid))
+	if (OidIsValid(index_oid))
 	{
-		PG_RETURN_OID(uncompressed_chunk_id);
+		PG_RETURN_OID(index_oid);
 	}
 	else
 		PG_RETURN_NULL();
@@ -1229,7 +1221,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
 
 	/* Index scan */
-	Relation index_rel = index_open(row_compressor.index_oid, AccessExclusiveLock);
+	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
 
 	index_scan = index_beginscan(compressed_chunk_rel, index_rel, snapshot, 0, 0);
 	TupleTableSlot *slot = table_slot_create(compressed_chunk_rel, NULL);
@@ -1385,7 +1377,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
-	index_close(index_rel, AccessExclusiveLock);
+	index_close(index_rel, ExclusiveLock);
 	row_decompressor_close(&decompressor);
 
 	/* changed chunk status, so invalidate any plans involving this chunk */

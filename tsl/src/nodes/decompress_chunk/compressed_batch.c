@@ -221,27 +221,286 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	}
 }
 
+static void
+compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
+				   uint64 *restrict result)
+{
+	/*
+	 * For now, we support NullTest, "Var ? Const" predicates and
+	 * ScalarArrayOperations.
+	 */
+	List *args = NULL;
+	RegProcedure vector_const_opcode = InvalidOid;
+	ScalarArrayOpExpr *saop = NULL;
+	OpExpr *opexpr = NULL;
+	NullTest *nulltest = NULL;
+	if (IsA(qual, NullTest))
+	{
+		nulltest = castNode(NullTest, qual);
+		args = list_make1(nulltest->arg);
+	}
+	else if (IsA(qual, ScalarArrayOpExpr))
+	{
+		saop = castNode(ScalarArrayOpExpr, qual);
+		args = saop->args;
+		vector_const_opcode = get_opcode(saop->opno);
+	}
+	else
+	{
+		opexpr = castNode(OpExpr, qual);
+		args = opexpr->args;
+		vector_const_opcode = get_opcode(opexpr->opno);
+	}
+
+	/*
+	 * Find the compressed column referred to by the Var.
+	 */
+	Var *var = castNode(Var, linitial(args));
+	CompressionColumnDescription *column_description = NULL;
+	int column_index = 0;
+	for (; column_index < dcontext->num_total_columns; column_index++)
+	{
+		column_description = &dcontext->template_columns[column_index];
+		if (column_description->output_attno == var->varattno)
+		{
+			break;
+		}
+	}
+	Ensure(column_index < dcontext->num_total_columns,
+		   "decompressed column %d not found in batch",
+		   var->varattno);
+	Assert(column_description != NULL);
+	Assert(column_description->typid == var->vartype);
+	Ensure(column_description->type == COMPRESSED_COLUMN,
+		   "only compressed columns are supported in vectorized quals");
+	Assert(column_index < dcontext->num_compressed_columns);
+
+	CompressedColumnValues *column_values = &batch_state->compressed_columns[column_index];
+
+	if (column_values->decompression_type == DT_Invalid)
+	{
+		/*
+		 * We decompress the compressed columns on demand, so that we can
+		 * skip decompressing some columns if the entire batch doesn't pass
+		 * the quals.
+		 */
+		decompress_column(dcontext, batch_state, column_index);
+		Assert(column_values->decompression_type != DT_Invalid);
+	}
+
+	Assert(column_values->decompression_type != DT_Iterator);
+
+	/*
+	 * Prepare to compute the vector predicate. We have to handle the
+	 * default values in a special way because they don't produce the usual
+	 * decompressed ArrowArrays.
+	 */
+	uint64 default_value_predicate_result;
+	uint64 *predicate_result = result;
+	const ArrowArray *vector = column_values->arrow;
+	if (column_values->arrow == NULL)
+	{
+		/*
+		 * The compressed column had a default value. We can't fall back to
+		 * the non-vectorized quals now, so build a single-value ArrowArray
+		 * with this default value, check if it passes the predicate, and apply
+		 * it to the entire batch.
+		 */
+		Assert(column_values->decompression_type == DT_Default);
+
+		/*
+		 * We saved the actual default value into the decompressed scan slot
+		 * above, so pull it from there.
+		 */
+		vector = make_single_value_arrow(column_description->typid,
+										 *column_values->output_value,
+										 *column_values->output_isnull);
+
+		/*
+		 * We start from an all-valid bitmap, because the predicate is
+		 * AND-ed to it.
+		 */
+		default_value_predicate_result = 1;
+		predicate_result = &default_value_predicate_result;
+	}
+
+	if (nulltest)
+	{
+		vector_nulltest(vector, nulltest->nulltesttype, predicate_result);
+	}
+	else
+	{
+		/*
+		 * Find the vector_const predicate.
+		 */
+		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
+		Assert(vector_const_predicate != NULL);
+
+		Ensure(IsA(lsecond(args), Const),
+			   "failed to evaluate runtime constant in vectorized filter");
+
+		/*
+		 * The vectorizable predicates should be STRICT, so we shouldn't see null
+		 * constants here.
+		 */
+		Const *constnode = castNode(Const, lsecond(args));
+		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
+
+		/*
+		 * At last, compute the predicate.
+		 */
+		if (saop)
+		{
+			vector_array_predicate(vector_const_predicate,
+								   saop->useOr,
+								   vector,
+								   constnode->constvalue,
+								   predicate_result);
+		}
+		else
+		{
+			vector_const_predicate(vector, constnode->constvalue, predicate_result);
+		}
+
+		/*
+		 * Account for nulls which shouldn't pass the predicate. Note that the
+		 * vector here might have only one row, in contrast with the number of
+		 * rows in the batch, if the column has a default value in this batch.
+		 */
+		const size_t n_vector_result_words = (vector->length + 63) / 64;
+		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
+		for (size_t i = 0; i < n_vector_result_words; i++)
+		{
+			predicate_result[i] &= validity[i];
+		}
+	}
+
+	/* Translate the result if the column had a default value. */
+	if (column_values->arrow == NULL)
+	{
+		Assert(column_values->decompression_type == DT_Default);
+		if (!(default_value_predicate_result & 1))
+		{
+			/*
+			 * We had a default value for the compressed column, and it
+			 * didn't pass the predicate, so the entire batch didn't pass.
+			 */
+			const size_t n_batch_result_words = (batch_state->total_batch_rows + 63) / 64;
+			for (size_t i = 0; i < n_batch_result_words; i++)
+			{
+				result[i] = 0;
+			}
+		}
+	}
+}
+
+static void compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
+							 Node *qual, uint64 *restrict result);
+
+static void
+compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
+						 List *quals, uint64 *restrict result)
+{
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		compute_one_qual(dcontext, batch_state, lfirst(lc), result);
+		if (get_vector_qual_summary(result, batch_state->total_batch_rows) == NoRowsPass)
+		{
+			/*
+			 * Exit early if no rows pass already. This might allow us to avoid
+			 * reading the columns required for the subsequent quals.
+			 */
+			return;
+		}
+	}
+}
+
+static void
+compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
+						 List *quals, uint64 *restrict result)
+{
+	const size_t n_rows = batch_state->total_batch_rows;
+	const size_t n_result_words = (n_rows + 63) / 64;
+	uint64 *or_result = palloc(sizeof(uint64) * n_result_words);
+	for (size_t i = 0; i < n_result_words; i++)
+	{
+		or_result[i] = 0;
+	}
+
+	uint64 *one_qual_result = palloc(sizeof(uint64) * n_result_words);
+
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		for (size_t i = 0; i < n_result_words; i++)
+		{
+			one_qual_result[i] = (uint64) -1;
+		}
+		compute_one_qual(dcontext, batch_state, lfirst(lc), one_qual_result);
+		for (size_t i = 0; i < n_result_words; i++)
+		{
+			or_result[i] |= one_qual_result[i];
+		}
+
+		if (get_vector_qual_summary(or_result, n_rows) == AllRowsPass)
+		{
+			/*
+			 * We can sometimes avoing reading the columns required for the
+			 * rest of conditions if we break out early here.
+			 */
+			return;
+		}
+	}
+
+	for (size_t i = 0; i < n_result_words; i++)
+	{
+		result[i] &= or_result[i];
+	}
+}
+
+static void
+compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state, Node *qual,
+				 uint64 *restrict result)
+{
+	if (!IsA(qual, BoolExpr))
+	{
+		compute_plain_qual(dcontext, batch_state, qual, result);
+		return;
+	}
+
+	BoolExpr *boolexpr = castNode(BoolExpr, qual);
+	if (boolexpr->boolop == AND_EXPR)
+	{
+		compute_qual_conjunction(dcontext, batch_state, boolexpr->args, result);
+		return;
+	}
+
+	/*
+	 * Postgres removes NOT for operators we can vectorize, so we don't support
+	 * NOT and consider it non-vectorizable at planning time. So only OR is left.
+	 */
+	Assert(boolexpr->boolop == OR_EXPR);
+	compute_qual_disjunction(dcontext, batch_state, boolexpr->args, result);
+}
+
 /*
  * Compute the vectorized filters. Returns true if we have any passing rows. If not,
  * it means the entire batch is filtered out, and we use this for further
  * optimizations.
  */
-static bool
+static VectorQualSummary
 compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_state)
 {
-	if (!dcontext->vectorized_quals_constified)
-	{
-		return true;
-	}
-
 	/*
 	 * Allocate the bitmap that will hold the vectorized qual results. We will
 	 * initialize it to all ones and AND the individual quals to it.
 	 */
-	const int bitmap_bytes = sizeof(uint64) * (((uint64) batch_state->total_batch_rows + 63) / 64);
+	const size_t n_rows = batch_state->total_batch_rows;
+	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
 	batch_state->vector_qual_result = palloc(bitmap_bytes);
 	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
-	if (batch_state->total_batch_rows % 64 != 0)
+	if (n_rows % 64 != 0)
 	{
 		/*
 		 * We have to zero out the bits for past-the-end elements in the last
@@ -255,191 +514,12 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	/*
 	 * Compute the quals.
 	 */
-	ListCell *lc;
-	foreach (lc, dcontext->vectorized_quals_constified)
-	{
-		/*
-		 * For now, we support NullTest, "Var ? Const" predicates and
-		 * ScalarArrayOperations.
-		 */
-		List *args = NULL;
-		RegProcedure vector_const_opcode = InvalidOid;
-		ScalarArrayOpExpr *saop = NULL;
-		OpExpr *opexpr = NULL;
-		NullTest *nulltest = NULL;
-		if (IsA(lfirst(lc), NullTest))
-		{
-			nulltest = castNode(NullTest, lfirst(lc));
-			args = list_make1(nulltest->arg);
-		}
-		else if (IsA(lfirst(lc), ScalarArrayOpExpr))
-		{
-			saop = castNode(ScalarArrayOpExpr, lfirst(lc));
-			args = saop->args;
-			vector_const_opcode = get_opcode(saop->opno);
-		}
-		else
-		{
-			opexpr = castNode(OpExpr, lfirst(lc));
-			args = opexpr->args;
-			vector_const_opcode = get_opcode(opexpr->opno);
-		}
+	compute_qual_conjunction(dcontext,
+							 batch_state,
+							 dcontext->vectorized_quals_constified,
+							 batch_state->vector_qual_result);
 
-		/*
-		 * Find the compressed column referred to by the Var.
-		 */
-		Var *var = castNode(Var, linitial(args));
-		CompressionColumnDescription *column_description = NULL;
-		int column_index = 0;
-		for (; column_index < dcontext->num_total_columns; column_index++)
-		{
-			column_description = &dcontext->template_columns[column_index];
-			if (column_description->output_attno == var->varattno)
-			{
-				break;
-			}
-		}
-		Ensure(column_index < dcontext->num_total_columns,
-			   "decompressed column %d not found in batch",
-			   var->varattno);
-		Assert(column_description != NULL);
-		Assert(column_description->typid == var->vartype);
-		Ensure(column_description->type == COMPRESSED_COLUMN,
-			   "only compressed columns are supported in vectorized quals");
-		Assert(column_index < dcontext->num_compressed_columns);
-
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[column_index];
-
-		if (column_values->decompression_type == DT_Invalid)
-		{
-			/*
-			 * We decompress the compressed columns on demand, so that we can
-			 * skip decompressing some columns if the entire batch doesn't pass
-			 * the quals.
-			 */
-			decompress_column(dcontext, batch_state, column_index);
-			Assert(column_values->decompression_type != DT_Invalid);
-		}
-
-		Assert(column_values->decompression_type != DT_Iterator);
-
-		/*
-		 * Prepare to compute the vector predicate. We have to handle the
-		 * default values in a special way because they don't produce the usual
-		 * decompressed ArrowArrays.
-		 */
-		uint64 default_value_predicate_result;
-		uint64 *predicate_result = batch_state->vector_qual_result;
-		const ArrowArray *vector = column_values->arrow;
-		if (column_values->arrow == NULL)
-		{
-			/*
-			 * The compressed column had a default value. We can't fall back to
-			 * the non-vectorized quals now, so build a single-value ArrowArray
-			 * with this default value, check if it passes the predicate, and apply
-			 * it to the entire batch.
-			 */
-			Assert(column_values->decompression_type == DT_Default);
-
-			/*
-			 * We saved the actual default value into the decompressed scan slot
-			 * above, so pull it from there.
-			 */
-			vector = make_single_value_arrow(column_description->typid,
-											 *column_values->output_value,
-											 *column_values->output_isnull);
-
-			/*
-			 * We start from an all-valid bitmap, because the predicate is
-			 * AND-ed to it.
-			 */
-			default_value_predicate_result = 1;
-			predicate_result = &default_value_predicate_result;
-		}
-
-		if (nulltest)
-		{
-			vector_nulltest(vector, nulltest->nulltesttype, predicate_result);
-		}
-		else
-		{
-			/*
-			 * Find the vector_const predicate.
-			 */
-			VectorPredicate *vector_const_predicate =
-				get_vector_const_predicate(vector_const_opcode);
-			Assert(vector_const_predicate != NULL);
-
-			Ensure(IsA(lsecond(args), Const),
-				   "failed to evaluate runtime constant in vectorized filter");
-
-			/*
-			 * The vectorizable predicates should be STRICT, so we shouldn't see null
-			 * constants here.
-			 */
-			Const *constnode = castNode(Const, lsecond(args));
-			Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
-
-			/*
-			 * At last, compute the predicate.
-			 */
-			if (saop)
-			{
-				vector_array_predicate(vector_const_predicate,
-									   saop->useOr,
-									   vector,
-									   constnode->constvalue,
-									   predicate_result);
-			}
-			else
-			{
-				vector_const_predicate(vector, constnode->constvalue, predicate_result);
-			}
-
-			/* Account for nulls which shouldn't pass the predicate. */
-			const size_t n = vector->length;
-			const size_t n_words = (n + 63) / 64;
-			const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
-			for (size_t i = 0; i < n_words; i++)
-			{
-				predicate_result[i] &= validity[i];
-			}
-		}
-
-		/* Process the result. */
-		if (column_values->arrow == NULL)
-		{
-			/* The column had a default value. */
-			Assert(column_values->decompression_type == DT_Default);
-
-			if (!(default_value_predicate_result & 1))
-			{
-				/*
-				 * We had a default value for the compressed column, and it
-				 * didn't pass the predicate, so the entire batch didn't pass.
-				 */
-				for (int i = 0; i < bitmap_bytes / 8; i++)
-				{
-					batch_state->vector_qual_result[i] = 0;
-				}
-			}
-		}
-
-		/*
-		 * Have to return whether we have any passing rows.
-		 */
-		bool have_passing_rows = false;
-		for (int i = 0; i < bitmap_bytes / 8; i++)
-		{
-			have_passing_rows |= batch_state->vector_qual_result[i];
-		}
-		if (!have_passing_rows)
-		{
-			return false;
-		}
-	}
-
-	return true;
+	return get_vector_qual_summary(batch_state->vector_qual_result, n_rows);
 }
 
 /*
@@ -572,8 +652,10 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		}
 	}
 
-	const bool have_passing_rows = compute_vector_quals(dcontext, batch_state);
-	if (!have_passing_rows && !dcontext->batch_sorted_merge)
+	VectorQualSummary vector_qual_summary = dcontext->vectorized_quals_constified != NIL ?
+												compute_vector_quals(dcontext, batch_state) :
+												AllRowsPass;
+	if (vector_qual_summary == NoRowsPass && !dcontext->batch_sorted_merge)
 	{
 		/*
 		 * The entire batch doesn't pass the vectorized quals, so we might be
@@ -605,6 +687,15 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				decompress_column(dcontext, batch_state, i);
 				Assert(column_values->decompression_type != DT_Invalid);
 			}
+		}
+
+		/*
+		 * If all rows pass, no need to test the vector qual for each row. This
+		 * is a common case for time range conditions.
+		 */
+		if (vector_qual_summary == AllRowsPass)
+		{
+			batch_state->vector_qual_result = NULL;
 		}
 	}
 

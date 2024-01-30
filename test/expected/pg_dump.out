@@ -262,8 +262,8 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         4 |                    | 4_4_timecustom_device_id_series_2_key | timecustom_device_id_series_2_key
 (12 rows)
 
---force a value to exist for exported_uuid
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
+INSERT INTO _timescaledb_catalog.metadata VALUES ('metadata_test', 'FOO', false);
 \c postgres :ROLE_SUPERUSER
 -- We shell out to a script in order to grab the correct hostname from the
 -- environmental variables that originally called this psql command. Sadly
@@ -348,6 +348,13 @@ SELECT count(*) = 1 FROM _timescaledb_catalog.metadata WHERE key LIKE 'exported%
  ?column? 
 ----------
  t
+(1 row)
+
+--we should have the original value of metadata_test
+SELECT * FROM _timescaledb_catalog.metadata  WHERE key='metadata_test';
+      key      | value | include_in_telemetry 
+---------------+-------+----------------------
+ metadata_test | FOO   | f
 (1 row)
 
 --main table and chunk schemas should be the same
@@ -539,7 +546,8 @@ SELECT * FROM ONLY "test_schema"."two_Partitions";
 ------------+-----------+----------+----------+----------+-------------+----------
 (0 rows)
 
---query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
+--query for the extension tables/sequences that will not be dumped by pg_dump (should
+--be empty except for views and explicitly excluded tables)
 SELECT objid::regclass
 FROM pg_catalog.pg_depend
 WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
@@ -550,6 +558,9 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
         ORDER BY objid::regclass::text COLLATE "C";
                        objid                       
 ---------------------------------------------------
+ _timescaledb_cache.cache_inval_bgw_job
+ _timescaledb_cache.cache_inval_extension
+ _timescaledb_cache.cache_inval_hypertable
  _timescaledb_catalog.compression_algorithm
  _timescaledb_catalog.tablespace_id_seq
  _timescaledb_catalog.telemetry_event
@@ -557,6 +568,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  _timescaledb_internal.bgw_policy_chunk_stats
  _timescaledb_internal.compressed_chunk_stats
  _timescaledb_internal.hypertable_chunk_local_size
+ _timescaledb_internal.job_errors
  timescaledb_experimental.policies
  timescaledb_information.chunks
  timescaledb_information.compression_settings
@@ -566,7 +578,7 @@ WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
  timescaledb_information.job_errors
  timescaledb_information.job_stats
  timescaledb_information.jobs
-(16 rows)
+(20 rows)
 
 -- Make sure we can't run our restoring functions as a normal perm user as that would disable functionality for the whole db
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER

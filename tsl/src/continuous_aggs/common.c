@@ -15,8 +15,7 @@ static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
 									bool is_cagg_create);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
-								 bool finalized);
-static Oid cagg_get_boundary_converter_funcoid(Oid typoid);
+								 const bool finalized);
 static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
 static FuncExpr *build_boundary_call(int32 ht_id, Oid type);
 static Const *cagg_boundary_make_lower_bound(Oid type);
@@ -985,7 +984,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
  * Get oid of function to convert from our internal representation
  * to postgres representation.
  */
-static Oid
+Oid
 cagg_get_boundary_converter_funcoid(Oid typoid)
 {
 	char *function_name;
@@ -1079,20 +1078,31 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 }
 
 /*
- * Build function call that returns boundary for a hypertable
- * wrapped in type conversion calls when required.
+ * Return the Oid of the cagg_watermark function
  */
-static FuncExpr *
-build_boundary_call(int32 ht_id, Oid type)
+Oid
+get_watermark_function_oid(void)
 {
 	Oid argtyp[] = { INT4OID };
-	FuncExpr *boundary;
 
 	Oid boundary_func_oid =
 		LookupFuncName(list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(BOUNDARY_FUNCTION)),
 					   lengthof(argtyp),
 					   argtyp,
 					   false);
+
+	return boundary_func_oid;
+}
+
+/*
+ * Build function call that returns boundary for a hypertable
+ * wrapped in type conversion calls when required.
+ */
+static FuncExpr *
+build_boundary_call(int32 ht_id, Oid type)
+{
+	FuncExpr *boundary;
+	Oid boundary_func_oid = get_watermark_function_oid();
 	List *func_args =
 		list_make1(makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(ht_id), false, true));
 

@@ -37,6 +37,7 @@
 #include <optimizer/plancat.h>
 #include <parser/analyze.h>
 #include <tcop/tcopprot.h>
+#include <utils/fmgrprotos.h>
 #include "compat/compat-msvc-exit.h"
 
 #include <math.h>
@@ -279,6 +280,47 @@ typedef struct
 	PlannerInfo *root;
 } PreprocessQueryContext;
 
+void
+replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid)
+{
+	/* whenever we encounter a FuncExpr with now(), replace it with the supplied funcid */
+	switch (nodeTag(clause))
+	{
+		case T_FuncExpr:
+		{
+			if (is_valid_now_func(clause))
+			{
+				FuncExpr *fe = castNode(FuncExpr, clause);
+				fe->funcid = funcid;
+				return;
+			}
+			break;
+		}
+		case T_OpExpr:
+		{
+			ListCell *lc;
+			OpExpr *oe = castNode(OpExpr, clause);
+			foreach (lc, oe->args)
+			{
+				replace_now_mock_walker(root, (Node *) lfirst(lc), funcid);
+			}
+			break;
+		}
+		case T_BoolExpr:
+		{
+			ListCell *lc;
+			BoolExpr *be = castNode(BoolExpr, clause);
+			foreach (lc, be->args)
+			{
+				replace_now_mock_walker(root, (Node *) lfirst(lc), funcid);
+			}
+			break;
+		}
+		default:
+			return;
+	}
+}
+
 /*
  * Preprocess the query tree, including, e.g., subqueries.
  *
@@ -310,6 +352,20 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 			{
 				from->quals =
 					ts_constify_now(context->root, context->current_query->rtable, from->quals);
+#ifdef TS_DEBUG
+				/*
+				 * only replace if GUC is also set. This is used for testing purposes only,
+				 * so no need to change the output for other tests in DEBUG builds
+				 */
+				if (ts_current_timestamp_mock != NULL && strlen(ts_current_timestamp_mock) != 0)
+				{
+					Oid funcid_mock;
+					const char *funcname = "ts_now_mock()";
+					funcid_mock = DatumGetObjectId(
+						DirectFunctionCall1(regprocedurein, CStringGetDatum(funcname)));
+					replace_now_mock_walker(context->root, from->quals, funcid_mock);
+				}
+#endif
 			}
 			/*
 			 * We only amend space constraints for UPDATE/DELETE and SELECT FOR UPDATE
@@ -474,6 +530,9 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 			 * Preprocess the hypertables in the query and warm up the caches.
 			 */
 			preprocess_query((Node *) parse, &context);
+
+			if (ts_guc_enable_optimizations)
+				ts_cm_functions->preprocess_query_tsl(parse);
 		}
 
 		if (prev_planner_hook != NULL)
@@ -791,7 +850,8 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
 					if (contain_mutable_functions((Node *) rinfo->clause) ||
-						ts_contain_param((Node *) rinfo->clause))
+						ts_contains_external_param((Node *) rinfo->clause) ||
+						ts_contains_join_param((Node *) rinfo->clause))
 						return true;
 				}
 				return false;
@@ -832,7 +892,8 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 						RestrictInfo *rinfo = (RestrictInfo *) lfirst(lc);
 
 						if (contain_mutable_functions((Node *) rinfo->clause) ||
-							ts_contain_param((Node *) rinfo->clause))
+							ts_contains_external_param((Node *) rinfo->clause) ||
+							ts_contains_join_param((Node *) rinfo->clause))
 							return true;
 					}
 					return false;
@@ -1475,21 +1536,43 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 }
 
 static bool
-contain_param_exec_walker(Node *node, void *context)
+contains_join_param_walker(Node *node, void *context)
 {
 	if (node == NULL)
+	{
 		return false;
+	}
 
-	if (IsA(node, Param))
+	if (IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXEC)
 		return true;
 
-	return expression_tree_walker(node, contain_param_exec_walker, context);
+	return expression_tree_walker(node, contains_join_param_walker, context);
 }
 
 bool
-ts_contain_param(Node *node)
+ts_contains_join_param(Node *node)
 {
-	return contain_param_exec_walker(node, NULL);
+	return contains_join_param_walker(node, NULL);
+}
+
+static bool
+contains_external_param_walker(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return false;
+	}
+
+	if (IsA(node, Param) && castNode(Param, node)->paramkind == PARAM_EXTERN)
+		return true;
+
+	return expression_tree_walker(node, contains_external_param_walker, context);
+}
+
+bool
+ts_contains_external_param(Node *node)
+{
+	return contains_external_param_walker(node, NULL);
 }
 
 static List *
