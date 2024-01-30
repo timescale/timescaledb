@@ -24,8 +24,10 @@ setup {
    generate_series(1, 5, 1) AS g2(sensor_id)
    ORDER BY time;
 
+   CREATE UNIQUE INDEX ON sensor_data (time, sensor_id);
+
    ALTER TABLE sensor_data SET (
-   timescaledb.compress, 
+   timescaledb.compress,
    timescaledb.compress_segmentby = 'sensor_id',
    timescaledb.compress_orderby = 'time');
 
@@ -59,6 +61,19 @@ step "s1_rollback" {
 	ROLLBACK;
 }
 
+step "s1_compress" {
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+}
+
+step "s1_decompress" {
+   SELECT count(*) FROM (SELECT decompress_chunk(i) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+}
+
 session "s2"
 ## locking up the catalog table will block the recompression from releasing the index lock
 ## we should not be deadlocking since the index lock has been reduced to ExclusiveLock
@@ -76,5 +91,21 @@ step "s2_select_from_compressed_chunk" {
 step "s2_wait_for_select_to_finish" {
 }
 
+step "s2_insert" {
+   INSERT INTO sensor_data VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) ON CONFLICT (time, sensor_id) DO NOTHING;
+}
+
+session "s3"
+
+step "s3_block_chunk_insert" {
+	SELECT debug_waitpoint_enable('chunk_insert_before_lock');
+}
+
+step "s3_release_chunk_insert" {
+	SELECT debug_waitpoint_release('chunk_insert_before_lock');
+}
+
 
 permutation "s2_block_on_compressed_chunk_size" "s1_begin" "s1_recompress_chunk" "s2_select_from_compressed_chunk" "s2_wait_for_select_to_finish" "s2_unblock" "s1_rollback"
+
+permutation "s1_compress" "s3_block_chunk_insert" "s2_insert" "s1_decompress" "s1_compress" "s3_release_chunk_insert"
