@@ -10,6 +10,8 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <parser/parsetree.h>
+#include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
 #include <catalog/pg_type.h>
@@ -140,19 +142,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (!chunk)
 			elog(ERROR, "no chunk found or created");
 
-		cis = ts_chunk_insert_state_create(chunk, dispatch);
-
-		/*
-		 * We might have been blocked by a compression operation
-		 * while trying to fetch the above lock so lets update the
-		 * chunk catalog data because the status might have changed.
-		 *
-		 * This works even in higher levels of isolation since
-		 * catalog data is always read from latest snapshot.
-		 */
-		chunk = ts_chunk_get_by_relid(chunk->table_id, true);
-		ts_set_compression_status(cis, chunk);
-
+		cis = ts_chunk_insert_state_create(chunk->table_id, dispatch);
 		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
 	}
 	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)
@@ -173,13 +163,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 			 */
 			if (ts_cm_functions->decompress_batches_for_insert)
 			{
-				/* Get the chunk if its not already been loaded.
-				 * It's needed for decompress_batches_for_insert
-				 * which only uses some ids from it.
-				 */
-				if (chunk == NULL)
-					chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
-				ts_cm_functions->decompress_batches_for_insert(cis, chunk, slot);
+				ts_cm_functions->decompress_batches_for_insert(cis, slot);
 				OnConflictAction onconflict_action =
 					chunk_dispatch_get_on_conflict_action(dispatch);
 				/* mark rows visible */
