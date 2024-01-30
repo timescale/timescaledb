@@ -1,4 +1,4 @@
-Parsed test spec with 2 sessions
+Parsed test spec with 3 sessions
 
 starting permutation: s2_block_on_compressed_chunk_size s1_begin s1_recompress_chunk s2_select_from_compressed_chunk s2_wait_for_select_to_finish s2_unblock s1_rollback
 step s2_block_on_compressed_chunk_size: 
@@ -35,3 +35,99 @@ recompress
 step s1_rollback: 
 	ROLLBACK;
 
+
+starting permutation: s1_compress s3_block_chunk_insert s2_insert s1_decompress s1_compress s3_release_chunk_insert
+step s1_compress: 
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+
+compression_status
+------------------
+Compressed        
+(1 row)
+
+s1: NOTICE:  chunk "_hyper_X_X_chunk" is already compressed
+count
+-----
+    1
+(1 row)
+
+compression_status
+------------------
+Compressed        
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_block_chunk_insert: 
+	SELECT debug_waitpoint_enable('chunk_insert_before_lock');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_insert: 
+   INSERT INTO sensor_data VALUES ('2022-01-01 20:00'::timestamptz, 1, 1.0, 1.0), ('2022-01-01 21:00'::timestamptz, 2, 2.0, 2.0) ON CONFLICT (time, sensor_id) DO NOTHING;
+ <waiting ...>
+step s1_decompress: 
+   SELECT count(*) FROM (SELECT decompress_chunk(i) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+
+count
+-----
+    1
+(1 row)
+
+compression_status
+------------------
+Uncompressed      
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s1_compress: 
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM (SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('sensor_data') i) i;
+   SELECT compression_status FROM chunk_compression_stats('sensor_data');
+   SELECT count(*) FROM sensor_data;
+
+compression_status
+------------------
+Uncompressed      
+(1 row)
+
+count
+-----
+    1
+(1 row)
+
+compression_status
+------------------
+Compressed        
+(1 row)
+
+count
+-----
+15840
+(1 row)
+
+step s3_release_chunk_insert: 
+	SELECT debug_waitpoint_release('chunk_insert_before_lock');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_insert: <... completed>
+ERROR:  chunk not found

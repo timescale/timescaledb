@@ -19,6 +19,7 @@
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
+#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
@@ -28,10 +29,10 @@
 #include "errors.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
+#include "debug_point.h"
 #include "ts_catalog/continuous_agg.h"
 #include "chunk_index.h"
 #include "indexing.h"
-#include <utils/inval.h>
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
@@ -582,6 +583,7 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
 
+	DEBUG_WAITPOINT("chunk_insert_before_lock");
 	rel = table_open(chunk->table_id, RowExclusiveLock);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
