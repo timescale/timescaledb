@@ -126,8 +126,7 @@ typedef struct CrossModuleFunctions
 	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
-	void (*decompress_batches_for_insert)(ChunkInsertState *state, Chunk *chunk,
-										  TupleTableSlot *slot);
+	void (*decompress_batches_for_insert)(const ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(HypertableModifyState *ht_state);
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module

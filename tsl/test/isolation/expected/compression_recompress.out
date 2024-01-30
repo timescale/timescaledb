@@ -130,4 +130,3 @@ debug_waitpoint_release
 (1 row)
 
 step s2_insert: <... completed>
-ERROR:  chunk not found
