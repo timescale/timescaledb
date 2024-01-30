@@ -405,5 +405,4 @@ consumeCompressedData(StringInfo si, int bytes)
  */
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
 
-const CompressionAlgorithmDefinition *
-algorithm_definition(CompressionAlgorithm algo);
+const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);

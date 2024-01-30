@@ -1,7 +1,6 @@
-set(SOURCES test_chunk_stats.c test_merge_chunk.c
-    compression_unit_test.c compression_sql_test.c
-    decompress_text_test_impl.c
-            test_continuous_agg.c)
+set(SOURCES
+    test_chunk_stats.c test_merge_chunk.c compression_unit_test.c
+    compression_sql_test.c decompress_text_test_impl.c test_continuous_agg.c)
 
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 
@@ -16,8 +15,3 @@ target_include_directories(${TSL_TESTS_LIB_NAME}
                            PRIVATE ${CMAKE_SOURCE_DIR}/test/src)
 target_include_directories(${TSL_TESTS_LIB_NAME} PRIVATE ${PG_INCLUDEDIR})
 target_compile_definitions(${TSL_TESTS_LIB_NAME} PUBLIC TS_SUBMODULE)
-
-if (COMPRESSION_FUZZING)
-    target_link_libraries(${TSL_TESTS_LIB_NAME} ${LIB_FUZZER_FULL_NAMEPATH} stdc++)
-    target_compile_options(${TSL_TESTS_LIB_NAME} PUBLIC -fsanitize=fuzzer-no-link -static-libsan -lstdc++)
-endif()
