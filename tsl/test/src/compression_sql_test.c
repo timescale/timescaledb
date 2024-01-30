@@ -11,10 +11,9 @@
 #include <funcapi.h>
 #include <utils/builtins.h>
 
-#include "compression_test.h"
+#include "compression_sql_test.h"
 
-#include "compression.h"
-#include "arrow_c_data_interface.h"
+#include "compression/arrow_c_data_interface.h"
 
 #if !defined(NDEBUG) || defined(TS_COMPRESSION_FUZZING)
 

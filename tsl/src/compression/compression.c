@@ -47,7 +47,6 @@
 #include "array.h"
 #include "chunk.h"
 #include "compression.h"
-#include "compression_test.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"

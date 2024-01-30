@@ -5,7 +5,7 @@
  */
 #pragma once
 
-#include "compression.h"
+#include "compression/compression.h"
 
 int decompress_ARRAY_TEXT(const uint8 *Data, size_t Size, bool bulk);
 

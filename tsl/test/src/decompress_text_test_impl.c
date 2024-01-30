@@ -7,11 +7,9 @@
 
 #include <libpq/pqformat.h>
 
-#include "compression.h"
+#include "compression_sql_test.h"
 
-#include "compression_test.h"
-
-#include "arrow_c_data_interface.h"
+#include "compression/arrow_c_data_interface.h"
 
 static uint32
 arrow_get_str(ArrowArray *arrow, int arrow_row, const char **str)
