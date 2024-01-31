@@ -240,9 +240,6 @@ jobs:
             exit 1
         fi
 
-        # Check that the server is still alive.
-        psql -c "select 1"
-
         ls db/corpus | wc -l
 
         fn="ts_read_compressed_data_directory('${{ matrix.case.algo }}',
@@ -267,9 +264,11 @@ jobs:
         echo "Internal program errors: $errors"
         [ $errors -eq 0 ] || exit 1
 
-
         # Shouldn't have any WARNINGS in the log.
         ! grep -F "] WARNING: " postgres.log
+
+        # Check that the server is still alive.
+        psql -c "select 1"
 
     - name: Collect the logs
       if: always()
