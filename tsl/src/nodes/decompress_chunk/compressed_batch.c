@@ -100,6 +100,23 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	return arrow;
 }
 
+static int
+get_max_text_datum_size(ArrowArray *text_array)
+{
+	int maxbytes = 0;
+	uint32 *offsets = (uint32 *) text_array->buffers[1];
+	for (int i = 0; i < text_array->length; i++)
+	{
+		const int curbytes = offsets[i + 1] - offsets[i];
+		if (curbytes > maxbytes)
+		{
+			maxbytes = curbytes;
+		}
+	}
+
+	return maxbytes;
+}
+
 static void
 translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
 						  uint64 *restrict final_result)
