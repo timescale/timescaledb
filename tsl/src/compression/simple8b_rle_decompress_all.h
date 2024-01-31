@@ -21,6 +21,11 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 {
 	const uint16 n_total_values = compressed->num_elements;
 
+	/*
+	 * Caller must have allocated a properly sized buffer, see the comment above.
+	 */
+	Assert(n_buffer_elements >= n_total_values + 63);
+
 	const uint16 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint16 num_blocks = compressed->num_blocks;

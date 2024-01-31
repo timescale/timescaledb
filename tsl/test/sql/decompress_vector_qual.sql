@@ -352,3 +352,40 @@ select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
 select * from date_table where ts <  CURRENT_DATE;
 
+-- Text columns. Only tests bulk decompression for now.
+create table text_table(ts int, d int);
+select create_hypertable('text_table', 'ts');
+alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
+
+insert into text_table select x, 0 /*, default */ from generate_series(1, 1000) x;
+select count(compress_chunk(x, true)) from show_chunks('text_table') x;
+alter table text_table add column a text default 'default';
+
+insert into text_table select x, 1, '' from generate_series(1, 1000) x;
+insert into text_table select x, 2, 'same' from generate_series(1, 1000) x;
+insert into text_table select x, 3, 'different' || x from generate_series(1, 1000) x;
+insert into text_table select x, 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
+insert into text_table select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+insert into text_table select x, 6, 'одинаковый' from generate_series(1, 1000) x;
+insert into text_table select x, 7, '異なる' || x from generate_series(1, 1000) x;
+
+-- Some text values with varying lengths in a single batch. They are all different
+-- to prevent dictionary compression, because we want to test particular orders
+-- here as well.
+insert into text_table select x,       8, repeat(        x::text || 'a',         x) from generate_series(1, 100) x;
+insert into text_table select x + 100, 8, repeat((101 - x)::text || 'b', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 200, 8, repeat((101 - x)::text || 'c', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 300, 8, repeat(        x::text || 'd',         x) from generate_series(1, 100) x;
+
+set timescaledb.debug_require_vector_qual to 'forbid';
+select sum(length(a)) from text_table;
+select count(distinct a) from text_table;
+
+select count(compress_chunk(x, true)) from show_chunks('text_table') x;
+select format('call recompress_chunk(''%s'')', x) from show_chunks('text_table') x \gexec
+
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'forbid';
+
+select sum(length(a)) from text_table;
+select count(distinct a) from text_table;
