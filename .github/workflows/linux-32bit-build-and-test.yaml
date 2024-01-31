@@ -21,7 +21,7 @@ jobs:
       pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -54,7 +54,7 @@ jobs:
 
     steps:
 
-    # /__e/node16/bin/node (used by actions/checkout@v3) needs 64-bit libraries
+    # /__e/node16/bin/node (used by actions/checkout@v4) needs 64-bit libraries
     - name: Install 64-bit libraries for GitHub actions
       run: |
         apt-get update
@@ -70,7 +70,7 @@ jobs:
           icu-devtools
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -186,7 +186,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Regression diff linux-i386 PG${{ matrix.pg }}
         path: |
@@ -195,21 +195,21 @@ jobs:
 
     - name: Save stacktraces
       if: always() && steps.coredumps.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Stacktraces linux-i386 PG${{ matrix.pg }}
         path: stacktrace.log
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
         path: postgres.log
 
     - name: Save TAP test logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |

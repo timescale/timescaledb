@@ -46,7 +46,7 @@ jobs:
         { psql -c "select 1" && exit 1 ; } || :
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build TimescaleDB
       run: |
@@ -55,7 +55,7 @@ jobs:
         sudo make -C build install
 
     - name: Checkout sqlsmith
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: 'timescale/sqlsmith'
         path: 'sqlsmith'
@@ -130,7 +130,7 @@ jobs:
 
     - name: Upload Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps
