@@ -21,6 +21,17 @@
 
 #include "compat/compat.h"
 
+/* Convenience macro to execute a simple or complex statement inside a memory
+ * context */
+#define TS_WITH_MEMORY_CONTEXT(MCXT, STMT)                                                         \
+	do                                                                                             \
+	{                                                                                              \
+		MemoryContext _oldmcxt = MemoryContextSwitchTo((MCXT));                                    \
+		do                                                                                         \
+			STMT while (0);                                                                        \
+		MemoryContextSwitchTo(_oldmcxt);                                                           \
+	} while (0)
+
 /*
  * Get the function name in a PG_FUNCTION.
  *

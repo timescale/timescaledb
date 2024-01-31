@@ -51,7 +51,6 @@ static void
 tts_arrow_init(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-	MemoryContext oldmctx;
 
 	aslot->arrow_columns = NULL;
 	aslot->segmentby_attrs = NULL;
@@ -69,11 +68,11 @@ tts_arrow_init(TupleTableSlot *slot)
 	 * the compressed child slot until the tuple descriptor is known.
 	 */
 	aslot->compressed_slot = NULL;
-	oldmctx = MemoryContextSwitchTo(slot->tts_mcxt);
-	aslot->noncompressed_slot =
-		MakeSingleTupleTableSlot(slot->tts_tupleDescriptor, &TTSOpsBufferHeapTuple);
-	aslot->child_slot = aslot->noncompressed_slot;
-	MemoryContextSwitchTo(oldmctx);
+	TS_WITH_MEMORY_CONTEXT(slot->tts_mcxt, {
+		aslot->noncompressed_slot =
+			MakeSingleTupleTableSlot(slot->tts_tupleDescriptor, &TTSOpsBufferHeapTuple);
+		aslot->child_slot = aslot->noncompressed_slot;
+	});
 	ItemPointerSetInvalid(&slot->tts_tid);
 
 	arrow_column_cache_init(&aslot->arrow_cache, slot->tts_mcxt);
@@ -442,9 +441,8 @@ set_attr_value(TupleTableSlot *slot, AttrNumber attno)
 		slot->tts_isnull[attoff] = !arrow_row_is_valid(validity, (aslot->tuple_index - 1));
 	}
 
-	MemoryContext oldmcxt = MemoryContextSwitchTo(slot->tts_mcxt);
-	aslot->valid_columns = bms_add_member(aslot->valid_columns, attno);
-	MemoryContextSwitchTo(oldmcxt);
+	TS_WITH_MEMORY_CONTEXT(slot->tts_mcxt,
+						   { aslot->valid_columns = bms_add_member(aslot->valid_columns, attno); });
 }
 
 static void
