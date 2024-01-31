@@ -16,11 +16,11 @@ env:
   name: "Sanitizer"
   PG_SRC_DIR: "pgbuild"
   PG_INSTALL_DIR: "postgresql"
-  extra_packages: "clang-15 llvm-15 llvm-15-dev llvm-15-tools"
-  llvm_config: "llvm-config-15"
-  CLANG: "clang-15"
-  CC: "clang-15"
-  CXX: "clang-15"
+  extra_packages: "clang-17 llvm-17 llvm-17-dev llvm-17-tools"
+  llvm_config: "llvm-config-17"
+  CLANG: "clang-17"
+  CC: "clang-17"
+  CXX: "clang-17"
   # gcc CFLAGS, disable inlining for function name pattern matching to work for suppressions
   # CFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
   # CXXFLAGS: "-g -fsanitize=address,undefined -fno-omit-frame-pointer -O1 -fno-inline"
@@ -44,7 +44,7 @@ env:
     log_exe_name=true print_suppressions=false exitcode=27
 
   UBSAN_OPTIONS: suppressions=${{ github.workspace }}/scripts/suppressions/suppr_ub.txt
-    print_stacktrace=1 halt_on_error=1 log_path=${{ github.workspace }}/sanitizer
+    print_stacktrace=1 abort_on_error=1 log_path=${{ github.workspace }}/sanitizer
     log_exe_name=true print_suppressions=false exitcode=27
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
@@ -71,7 +71,7 @@ jobs:
       fail-fast: false
       matrix:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
-        os: ["ubuntu-22.04"]
+        os: ubuntu-latest
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
     - name: Install Linux Dependencies
