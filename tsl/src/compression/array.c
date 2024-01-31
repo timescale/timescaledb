@@ -509,40 +509,20 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	uint32 offset = 0;
 	for (int i = 0; i < n_notnull; i++)
 	{
-		Datum vardata = PointerGetDatum(consumeCompressedData(si, sizes[i]));
-
+		void *vardata = consumeCompressedData(si, sizes[i]);
 		/*
 		 * Check for potentially corrupt varlena headers since we're reading them
-		 * directly from compressed data.
+		 * directly from compressed data. We can only have a plain datum
+		 * with 1-byte or 4-byte header here, no TOAST or compressed data.
 		 */
-		if (VARATT_IS_4B_U(vardata))
-		{
-			/*
-			 * Full varsize must be larger or equal than the header size so that
-			 * the calculation of size without header doesn't overflow.
-			 */
-			CheckCompressedData(VARSIZE_4B(vardata) >= VARHDRSZ);
-		}
-		else if (VARATT_IS_1B(vardata))
-		{
-			/* Can't have a TOAST pointer here. */
-			CheckCompressedData(!VARATT_IS_1B_E(vardata));
-
-			/*
-			 * Full varsize must be larger or equal than the header size so that
-			 * the calculation of size without header doesn't overflow.
-			 */
-			CheckCompressedData(VARSIZE_1B(vardata) >= VARHDRSZ_SHORT);
-		}
-		else
-		{
-			/*
-			 * Can only have an uncompressed datum with 1-byte or 4-byte header
-			 * here, no TOAST or compressed data.
-			 */
-			CheckCompressedData(false);
-		}
-
+		CheckCompressedData(VARATT_IS_4B_U(vardata) ||
+							(VARATT_IS_1B(vardata) && !VARATT_IS_1B_E(vardata)));
+		/*
+		 * Full varsize must be larger or equal than the header size so that the
+		 * calculation of size without header doesn't overflow.
+		 */
+		CheckCompressedData((VARATT_IS_1B(vardata) && VARSIZE_1B(vardata) >= VARHDRSZ_SHORT) ||
+							(VARSIZE_4B(vardata) >= VARHDRSZ));
 		/* Varsize must match the size stored in the sizes array for this element. */
 		CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
 
