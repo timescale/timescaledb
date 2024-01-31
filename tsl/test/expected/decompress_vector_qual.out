@@ -1136,6 +1136,12 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same';
   1000 |   1 | 1000 |   2 |   2
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a != 'same';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  6000 |   1 | 1000 |   0 |   7
+(1 row)
+
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'одинаковый';
  count | min | max  | min | max 
 -------+-----+------+-----+-----

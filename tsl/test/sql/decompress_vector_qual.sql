@@ -401,6 +401,7 @@ set timescaledb.debug_require_vector_qual to 'only';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'default';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = '';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a != 'same';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'одинаковый';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same-with-nulls';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different1';

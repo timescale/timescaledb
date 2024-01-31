@@ -15,8 +15,9 @@
 #include <varatt.h>
 #endif
 
-void
-vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
+static void
+vector_const_text_comparison(const ArrowArray *arrow, const Datum constdatum, bool needequal,
+							 uint64 *restrict result)
 {
 	Assert(!arrow->dictionary);
 
@@ -39,10 +40,10 @@ vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 	const uint32 end = offsets[row + 1];                                                           \
 	Assert(end >= start);                                                                          \
 	const uint32 veclen = end - start;                                                             \
-	bool valid = veclen != textlen ?                                                               \
-					 false :                                                                       \
-					 (strncmp((char *) &values[start], (char *) cstring, textlen) == 0);           \
-	word |= ((uint64) valid) << bit_index;
+	bool isequal = veclen != textlen ?                                                             \
+					   false :                                                                     \
+					   (strncmp((char *) &values[start], (char *) cstring, textlen) == 0);         \
+	word |= ((uint64) (isequal == needequal)) << bit_index;
 
 			INNER_LOOP
 		}
@@ -61,6 +62,18 @@ vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 	}
 
 #undef INNER_LOOP
+}
+
+void
+vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
+{
+	vector_const_text_comparison(arrow, constdatum, /* needequal = */ true, result);
+}
+
+void
+vector_const_textne(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
+{
+	vector_const_text_comparison(arrow, constdatum, /* needequal = */ false, result);
 }
 
 /*

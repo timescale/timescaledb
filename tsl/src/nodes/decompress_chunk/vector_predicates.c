@@ -45,6 +45,9 @@ get_vector_const_predicate(Oid pg_predicate)
 
 		case F_TEXTEQ:
 			return vector_const_texteq;
+
+		case F_TEXTNE:
+			return vector_const_textne;
 	}
 
 	if (GetDatabaseEncoding() == PG_UTF8)

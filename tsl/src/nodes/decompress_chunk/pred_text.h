@@ -12,6 +12,9 @@
 extern void vector_const_texteq(const ArrowArray *arrow, const Datum constdatum,
 								uint64 *restrict result);
 
+extern void vector_const_textne(const ArrowArray *arrow, const Datum constdatum,
+								uint64 *restrict result);
+
 extern void vector_const_textlike_utf8(const ArrowArray *arrow, const Datum constdatum,
 									   uint64 *restrict result);
 
