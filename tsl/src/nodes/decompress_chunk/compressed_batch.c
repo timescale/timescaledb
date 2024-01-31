@@ -458,11 +458,14 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 			translate_from_dictionary(vector, predicate_result_nodict, predicate_result);
 		}
 
-		/* Account for nulls which shouldn't pass the predicate. */
-		const size_t n = vector->length;
-		const size_t n_words = (n + 63) / 64;
+		/*
+		 * Account for nulls which shouldn't pass the predicate. Note that the
+		 * vector here might have only one row, in contrast with the number of
+		 * rows in the batch, if the column has a default value in this batch.
+		 */
+		const size_t n_vector_result_words = (vector->length + 63) / 64;
 		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
-		for (size_t i = 0; i < n_words; i++)
+		for (size_t i = 0; i < n_vector_result_words; i++)
 		{
 			predicate_result[i] &= validity[i];
 		}

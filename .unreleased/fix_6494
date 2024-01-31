@@ -1,0 +1,1 @@
+Fixes: #6494 Fix create_hypertable referenced by fk succeeds

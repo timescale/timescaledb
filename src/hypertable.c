@@ -1218,9 +1218,11 @@ hypertable_create_schema(const char *schema_name)
 /*
  * Check that existing table constraints are supported.
  *
- * Hypertables do not support some constraints. For instance, NO INHERIT
- * constraints cannot be enforced on a hypertable since they only exist on the
- * parent table, which will have no tuples.
+ * Hypertables do not support the following constraints:
+ *
+ * - NO INHERIT constraints cannot be enforced on a hypertable since they only
+ *   exist on the parent table, which will have no tuples.
+ * - FOREIGN KEY constraints referencing a hypertable.
  */
 static void
 hypertable_validate_constraints(Oid relid)
@@ -1250,6 +1252,31 @@ hypertable_validate_constraints(Oid relid)
 					 errmsg("cannot have NO INHERIT constraints on hypertable \"%s\"",
 							get_rel_name(relid)),
 					 errhint("Remove all NO INHERIT constraints from table \"%s\" before "
+							 "making it a hypertable.",
+							 get_rel_name(relid))));
+	}
+
+	systable_endscan(scan);
+
+	/* Check for foreign keys that reference this table */
+	ScanKeyInit(&scankey,
+				Anum_pg_constraint_confrelid,
+				BTEqualStrategyNumber,
+				F_OIDEQ,
+				ObjectIdGetDatum(relid));
+
+	scan = systable_beginscan(catalog, 0, false, NULL, 1, &scankey);
+
+	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
+	{
+		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
+
+		if (form->contype == CONSTRAINT_FOREIGN)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+					 errmsg("cannot have FOREIGN KEY constraints to hypertable \"%s\"",
+							get_rel_name(relid)),
+					 errhint("Remove all FOREIGN KEY constraints to table \"%s\" before "
 							 "making it a hypertable.",
 							 get_rel_name(relid))));
 	}
