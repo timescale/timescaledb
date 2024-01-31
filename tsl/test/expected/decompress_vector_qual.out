@@ -1268,6 +1268,12 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '異_る_'
      9 |   1 |   9 |   7 |   7
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  7000 |   1 | 1000 |   0 |   7
+(1 row)
+
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
@@ -1302,6 +1308,18 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1500 |   1 | 1000 |   3 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%__';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1491 |   1 | 1000 |   3 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%___';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1401 |   1 | 1000 |   3 |   5
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
