@@ -14,6 +14,8 @@
 #include <utils/syscache.h>
 #include <funcapi.h>
 
+#include <stdalign.h>
+
 #include "compression/array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
@@ -509,7 +511,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	uint32 offset = 0;
 	for (int i = 0; i < n_notnull; i++)
 	{
-		Datum vardata = PointerGetDatum(consumeCompressedData(si, sizes[i]));
+		void *vardata = consumeCompressedData(si, sizes[i]);
 
 		/*
 		 * Check for potentially corrupt varlena headers since we're reading them
@@ -517,6 +519,13 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		 */
 		if (VARATT_IS_4B_U(vardata))
 		{
+			/*
+			 * Should have proper alignment, accessing an unaligned struct is UB.
+			 * The compression code respects the alignment requirements, see
+			 * datum_to_bytes_and_advance().
+			 */
+			CheckCompressedData(PointerGetDatum(vardata) % alignof(varattrib_4b) == 0);
+
 			/*
 			 * Full varsize must be larger or equal than the header size so that
 			 * the calculation of size without header doesn't overflow.
