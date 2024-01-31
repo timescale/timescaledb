@@ -135,12 +135,12 @@ vector_const_like_impl(const ArrowArray *arrow, const Datum constdatum, uint64 *
 void
 vector_const_textlike_utf8(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
 {
-	return vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, true);
+	vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, true);
 }
 
 void
 vector_const_textnlike_utf8(const ArrowArray *arrow, const Datum constdatum,
 							uint64 *restrict result)
 {
-	return vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, false);
+	vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, false);
 }
