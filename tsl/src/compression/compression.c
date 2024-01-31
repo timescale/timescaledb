@@ -2145,7 +2145,7 @@ compressed_insert_key_columns(Relation relation)
 }
 
 void
-decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlot *slot)
+decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 {
 	/* COPY operation can end up flushing an empty buffer which
 	 * could in turn send an empty slot our way. No need to decompress
@@ -2172,15 +2172,15 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 				 errmsg("inserting into compressed chunk with unique constraints disabled"),
 				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
-	Chunk *comp = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-	Relation in_rel = relation_open(comp->table_id, RowExclusiveLock);
+	Oid comp_relid = ts_chunk_get_relid(cis->compressed_chunk_id, false);
+	Relation in_rel = relation_open(comp_relid, RowExclusiveLock);
 
 	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
 	Bitmapset *key_columns = compressed_insert_key_columns(out_rel);
 	Bitmapset *null_columns = NULL;
 
 	int num_scankeys;
-	ScanKeyData *scankeys = build_scankeys(chunk->hypertable_relid,
+	ScanKeyData *scankeys = build_scankeys(cis->hypertable_relid,
 										   in_rel->rd_id,
 										   &decompressor,
 										   key_columns,

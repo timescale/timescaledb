@@ -34,17 +34,17 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_compressed_chunk(
 
 CREATE OR REPLACE FUNCTION @extschema@.compress_chunk(
     uncompressed_chunk REGCLASS,
-    if_not_compressed BOOLEAN = false
+    if_not_compressed BOOLEAN = true
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_compress_chunk' LANGUAGE C STRICT VOLATILE;
 
 CREATE OR REPLACE FUNCTION @extschema@.decompress_chunk(
     uncompressed_chunk REGCLASS,
-    if_compressed BOOLEAN = false
+    if_compressed BOOLEAN = true
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_decompress_chunk' LANGUAGE C STRICT VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
     uncompressed_chunk REGCLASS,
-    if_compressed BOOLEAN = false
+    if_compressed BOOLEAN = true
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_recompress_chunk_segmentwise' LANGUAGE C STRICT VOLATILE;
 
 -- find the index on the compressed chunk that can be used to recompress efficiently
@@ -63,7 +63,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.get_compressed_chunk_index_for
 --   chunk: Chunk to recompress.
 --   if_not_compressed: Print notice instead of error if chunk is already compressed.
 CREATE OR REPLACE PROCEDURE @extschema@.recompress_chunk(chunk REGCLASS,
-                                             if_not_compressed BOOLEAN = false)
+                                             if_not_compressed BOOLEAN = true)
 AS $$
 DECLARE
   status INT;
@@ -101,7 +101,7 @@ BEGIN
         -- or if we'd better fall back to decompressing & recompressing entire chunk
         SELECT _timescaledb_functions.get_compressed_chunk_index_for_recompression(chunk) INTO STRICT compressed_chunk_index;
         IF compressed_chunk_index IS NOT NULL THEN
-            PERFORM _timescaledb_functions.recompress_chunk_segmentwise(chunk);
+            PERFORM _timescaledb_functions.recompress_chunk_segmentwise(chunk, if_not_compressed);
         ELSE
             PERFORM @extschema@.decompress_chunk(chunk);
             COMMIT;

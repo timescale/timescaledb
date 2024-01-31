@@ -33,7 +33,7 @@ jobs:
           pip install PyGithub requests
 
       - name: Checkout TimescaleDB
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run the Backport Script
         env:

@@ -27,7 +27,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build matrix
       id: set-matrix
@@ -87,7 +87,7 @@ jobs:
       run: sudo chmod 777 /cores
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -142,7 +142,7 @@ jobs:
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -193,7 +193,7 @@ jobs:
 
     - name: Save LCOV coverage report
       if: matrix.coverage
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ./build/codecov/codecov-report
@@ -219,7 +219,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
@@ -228,7 +228,7 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: postgres.log
@@ -265,14 +265,14 @@ jobs:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: Save TAP test logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |

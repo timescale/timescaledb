@@ -1,0 +1,1 @@
+Implements: #6579 Change compress_chunk and decompress_chunk to idempotent version by default
