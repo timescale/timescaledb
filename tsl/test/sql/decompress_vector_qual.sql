@@ -374,85 +374,85 @@ select * from date_table where ts <  CURRENT_DATE;
 
 
 -- Vectorized comparison for text
-create table t(ts int, d int);
-select create_hypertable('t', 'ts');
-alter table t set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
+create table text_table(ts int, d int);
+select create_hypertable('text_table', 'ts');
+alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
 
-insert into t select x, 0 /*, default */ from generate_series(1, 1000) x;
-select count(compress_chunk(x, true)) from show_chunks('t') x;
-alter table t add column a text default 'default';
+insert into text_table select x, 0 /*, default */ from generate_series(1, 1000) x;
+select count(compress_chunk(x, true)) from show_chunks('text_table') x;
+alter table text_table add column a text default 'default';
 
-insert into t select x, 1, '' from generate_series(1, 1000) x;
-insert into t select x, 2, 'same' from generate_series(1, 1000) x;
-insert into t select x, 3, 'different' || x from generate_series(1, 1000) x;
-insert into t select x, 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
-insert into t select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
-insert into t select x, 6, 'одинаковый' from generate_series(1, 1000) x;
-insert into t select x, 7, '異なる' || x from generate_series(1, 1000) x;
+insert into text_table select x, 1, '' from generate_series(1, 1000) x;
+insert into text_table select x, 2, 'same' from generate_series(1, 1000) x;
+insert into text_table select x, 3, 'different' || x from generate_series(1, 1000) x;
+insert into text_table select x, 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
+insert into text_table select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+insert into text_table select x, 6, 'одинаковый' from generate_series(1, 1000) x;
+insert into text_table select x, 7, '異なる' || x from generate_series(1, 1000) x;
 
-select count(compress_chunk(x, true)) from show_chunks('t') x;
-select format('call recompress_chunk(''%s'')', x) from show_chunks('t') x \gexec
+select count(compress_chunk(x, true)) from show_chunks('text_table') x;
+select format('call recompress_chunk(''%s'')', x) from show_chunks('text_table') x \gexec
 
 set timescaledb.debug_require_vector_qual to 'only';
 -- -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
 -- set timescaledb.debug_require_vector_qual to 'forbid';
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'default';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = '';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a != 'same';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'одинаковый';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'same-with-nulls';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = '異なる1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different-with-nulls1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different1000';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different-with-nulls999';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same', 'different500');
-select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('same-with-nulls', 'different-with-nulls499');
-select count(*), min(ts), max(ts), min(d), max(d) from t where a in ('different500', 'default');
-select count(*), min(ts), max(ts), min(d), max(d) from t where a = 'different500' or a = 'default';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'default';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a != 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'одинаковый';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same-with-nulls';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '異なる1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1000';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls999';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same', 'different500');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same-with-nulls', 'different-with-nulls499');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('different500', 'default');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different500' or a = 'default';
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a is null;
-select count(*), min(ts), max(ts), min(d), max(d) from t where a is not null;
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is null;
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is not null;
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одинаковый%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одилаковый%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одимаковый%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異なる%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異オる%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異にる%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '異_る_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%same%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одинаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одилаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одимаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異なる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異オる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異にる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '異_る_';
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%\1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%__';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%___';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%nulls_';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_%1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%__';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%___';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%nulls_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_%1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'same_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a not like '%different1%';
 
 \set ON_ERROR_STOP 0
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%\';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\';
 \set ON_ERROR_STOP 1
 
 reset timescaledb.debug_require_vector_qual;
-select count(distinct a) from t;
+select count(distinct a) from text_table;
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
