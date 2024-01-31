@@ -18,19 +18,14 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/vector_predicates.h"
 
-/*
- * Create a single value ArrowArray from Postgres Datum. This is used to run
- * the usual vectorized predicates on compressed columns with default values.
- */
 static ArrowArray *
-make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
+make_single_value_arrow_pod(Oid pgtype, Datum datum, bool isnull)
 {
 	struct ArrowWithBuffers
 	{
 		ArrowArray arrow;
-		uint64 arrow_buffers_array_storage[3];
-		uint64 nulls_buffer[1];
-		uint32 offsets_buffer[2];
+		uint64 arrow_buffers_array_storage[2];
+		uint64 validity_buffer[1];
 		uint64 values_buffer[8 /* 64-byte padding as required by Arrow. */];
 	};
 
@@ -38,19 +33,9 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	ArrowArray *arrow = &with_buffers->arrow;
 	arrow->length = 1;
 	arrow->buffers = (const void **) with_buffers->arrow_buffers_array_storage;
-	arrow->buffers[0] = &with_buffers->nulls_buffer;
-
-	if (pgtype == TEXTOID)
-	{
-		arrow->n_buffers = 3;
-		arrow->buffers[1] = with_buffers->offsets_buffer;
-		arrow->buffers[2] = with_buffers->values_buffer;
-	}
-	else
-	{
-		arrow->n_buffers = 2;
-		arrow->buffers[1] = with_buffers->values_buffer;
-	}
+	arrow->n_buffers = 2;
+	arrow->buffers[0] = with_buffers->validity_buffer;
+	arrow->buffers[1] = with_buffers->values_buffer;
 
 	if (isnull)
 	{
@@ -65,18 +50,6 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 
 	arrow_set_row_validity((uint64 *) arrow->buffers[0], 0, true);
 
-	if (pgtype == TEXTOID)
-	{
-		text *detoasted = PG_DETOAST_DATUM(datum);
-		((uint32 *) arrow->buffers[1])[1] = VARSIZE_ANY_EXHDR(detoasted);
-		arrow->buffers[2] = VARDATA(detoasted);
-		return arrow;
-	}
-
-	/*
-	 * Fixed-width by-value types.
-	 */
-	arrow->buffers[1] = with_buffers->values_buffer;
 #define FOR_TYPE(PGTYPE, CTYPE, FROMDATUM)                                                         \
 	case PGTYPE:                                                                                   \
 		*((CTYPE *) arrow->buffers[1]) = FROMDATUM(datum);                                         \
@@ -98,6 +71,61 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 	}
 
 	return arrow;
+}
+
+static ArrowArray *
+make_single_value_arrow_text(Datum datum, bool isnull)
+{
+	struct ArrowWithBuffers
+	{
+		ArrowArray arrow;
+		uint64 arrow_buffers_array_storage[3];
+		uint64 validity_buffer[1];
+		uint32 offsets_buffer[2];
+		uint64 values_buffer[8 /* 64-byte padding as required by Arrow. */];
+	};
+
+	struct ArrowWithBuffers *with_buffers = palloc0(sizeof(struct ArrowWithBuffers));
+	ArrowArray *arrow = &with_buffers->arrow;
+	arrow->length = 1;
+	arrow->buffers = (const void **) with_buffers->arrow_buffers_array_storage;
+	arrow->n_buffers = 3;
+	arrow->buffers[0] = with_buffers->validity_buffer;
+	arrow->buffers[1] = with_buffers->offsets_buffer;
+	arrow->buffers[2] = with_buffers->values_buffer;
+
+	if (isnull)
+	{
+		/*
+		 * The validity bitmap was initialized to invalid on allocation, and
+		 * the Datum might be invalid if the value is null (important on i386
+		 * where it might be pass-by-reference), so don't read it.
+		 */
+		arrow->null_count = 1;
+		return arrow;
+	}
+
+	arrow_set_row_validity((uint64 *) arrow->buffers[0], 0, true);
+
+	text *detoasted = PG_DETOAST_DATUM(datum);
+	((uint32 *) arrow->buffers[1])[1] = VARSIZE_ANY_EXHDR(detoasted);
+	arrow->buffers[2] = VARDATA(detoasted);
+	return arrow;
+}
+
+/*
+ * Create a single value ArrowArray from Postgres Datum. This is used to run
+ * the usual vectorized predicates on compressed columns with default values.
+ */
+static ArrowArray *
+make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
+{
+	if (pgtype == TEXTOID)
+	{
+		return make_single_value_arrow_text(datum, isnull);
+	}
+
+	return make_single_value_arrow_pod(pgtype, datum, isnull);
 }
 
 static int
