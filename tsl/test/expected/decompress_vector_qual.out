@@ -1268,22 +1268,10 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '異_る_'
      9 |   1 |   9 |   7 |   7
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
    112 |   1 | 1000 |   3 |   3
-(1 row)
-
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_';
- count | min | max  | min | max 
--------+-----+------+-----+-----
-  1500 |   1 | 1000 |   3 |   5
-(1 row)
-
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%';
- count | min | max  | min | max 
--------+-----+------+-----+-----
-  1500 |   1 | 1000 |   3 |   5
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
@@ -1292,10 +1280,10 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%differen
      1 |   1 |   1 |   3 |   3
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
- count | min | max | min | max 
--------+-----+-----+-----+-----
-   199 |   1 | 991 |   3 |   5
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1500 |   1 | 1000 |   3 |   5
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%1';
@@ -1304,22 +1292,52 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different
    200 |   1 | 991 |   3 |   5
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
- count | min | max  | min | max 
--------+-----+------+-----+-----
-  6888 |   1 | 1000 |   0 |   7
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%\1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+   200 |   1 | 991 |   3 |   5
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1500 |   1 | 1000 |   3 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+   199 |   1 | 991 |   3 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%nulls_';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     5 |   1 |   9 |   5 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
    112 |   1 | 1000 |   3 |   3
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\%';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     1 |   1 |   1 |   3 |   3
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_%1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+   199 |   1 | 991 |   3 |   5
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_';
@@ -1334,28 +1352,16 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different
      9 |  11 |  91 |   3 |   3
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_%1';
- count | min | max | min | max 
--------+-----+-----+-----+-----
-   199 |   1 | 991 |   3 |   5
-(1 row)
-
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%nulls_';
- count | min | max | min | max 
--------+-----+-----+-----+-----
-     5 |   1 |   9 |   5 |   5
-(1 row)
-
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      0 |     |     |     |    
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\1';
- count | min | max | min | max 
--------+-----+-----+-----+-----
-     1 |   1 |   1 |   3 |   3
+select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  6888 |   1 | 1000 |   0 |   7
 (1 row)
 
 \set ON_ERROR_STOP 0

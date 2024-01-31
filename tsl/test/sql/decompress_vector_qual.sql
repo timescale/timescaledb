@@ -426,21 +426,22 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異オ�
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異にる%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '異_る_';
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_1';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_%1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%\1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%nulls_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_%1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
 
 \set ON_ERROR_STOP 0
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\';
