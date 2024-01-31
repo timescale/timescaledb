@@ -10,6 +10,9 @@
 /*
  * Specialization of bulk simple8brle decompression for a data type specified by
  * ELEMENT_TYPE macro.
+ *
+ * The buffer must have a padding of 63 elements after the last one, because
+ * decompression is performed always in full blocks.
  */
 static uint16
 FUNCTION_NAME(simple8brle_decompress_all_buf,

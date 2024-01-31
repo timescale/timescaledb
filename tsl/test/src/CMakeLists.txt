@@ -1,5 +1,6 @@
-set(SOURCES test_chunk_stats.c test_merge_chunk.c test_compression.c
-            test_continuous_agg.c)
+set(SOURCES
+    test_chunk_stats.c test_merge_chunk.c compression_unit_test.c
+    compression_sql_test.c decompress_text_test_impl.c test_continuous_agg.c)
 
 include(${PROJECT_SOURCE_DIR}/tsl/src/build-defs.cmake)
 

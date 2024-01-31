@@ -131,6 +131,6 @@ if(_install_checks)
   add_dependencies(installcheck installcheck-t)
 endif()
 
-if(CMAKE_BUILD_TYPE MATCHES Debug)
+if(CMAKE_BUILD_TYPE MATCHES Debug OR COMPRESSION_FUZZING)
   add_subdirectory(src)
-endif(CMAKE_BUILD_TYPE MATCHES Debug)
+endif()
