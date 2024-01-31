@@ -402,10 +402,22 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одим
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異なる%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異オる%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異にる%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%same%';
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same%';
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_%1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%nulls_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\1';
+
+\set ON_ERROR_STOP 0
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\';
+\set ON_ERROR_STOP 1
 
 reset timescaledb.debug_require_vector_qual;
 select count(distinct a) from t;

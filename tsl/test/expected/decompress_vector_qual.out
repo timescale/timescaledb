@@ -1227,30 +1227,76 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異に�
      0 |     |     |     |    
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  1500 |   1 | 1000 |   2 |   4
+   112 |   1 | 1000 |   3 |   3
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     1 |   1 |   1 |   3 |   3
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  1000 |   1 | 1000 |   2 |   2
+  6888 |   1 | 1000 |   0 |   7
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%same%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  5500 |   1 | 1000 |   0 |   7
+   112 |   1 | 1000 |   3 |   3
 (1 row)
 
-select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same%';
- count | min | max  | min | max 
--------+-----+------+-----+-----
-  1500 |   1 | 1000 |   2 |   4
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     0 |     |     |     |    
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     9 |   1 |   9 |   3 |   3
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     9 |  11 |  91 |   3 |   3
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different_%1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+   199 |   1 | 991 |   3 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%nulls_';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     5 |   1 |   9 |   5 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\%';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     0 |     |     |     |    
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     1 |   1 |   1 |   3 |   3
+(1 row)
+
+\set ON_ERROR_STOP 0
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\';
+ERROR:  LIKE pattern must not end with escape character
+\set ON_ERROR_STOP 1
 reset timescaledb.debug_require_vector_qual;
 select count(distinct a) from t;
  count 
