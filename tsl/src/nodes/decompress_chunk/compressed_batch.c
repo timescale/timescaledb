@@ -118,66 +118,6 @@ get_max_text_datum_size(ArrowArray *text_array)
 }
 
 static void
-translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
-						  uint64 *restrict final_result)
-{
-	Assert(arrow->dictionary != NULL);
-
-	/* Translate dictionary results to per-value results. */
-	const size_t n = arrow->length;
-	int16 *restrict indices = (int16 *) arrow->buffers[1];
-	for (size_t outer = 0; outer < n / 64; outer++)
-	{
-		uint64 word = 0;
-		for (size_t inner = 0; inner < 64; inner++)
-		{
-			const size_t row = outer * 64 + inner;
-			const size_t bit_index = inner;
-#define INNER_LOOP                                                                                 \
-	const int16 index = indices[row];                                                              \
-	const bool valid = arrow_row_is_valid(dict_result, index);                                     \
-	word |= ((uint64) valid) << bit_index;
-
-			INNER_LOOP
-
-			//			fprintf(stderr, "dict-coded row %ld: index %d, valid %d\n", row, index,
-			// valid);
-		}
-		final_result[outer] &= word;
-	}
-
-	if (n % 64)
-	{
-		uint64 word = 0;
-		for (size_t row = (n / 64) * 64; row < n; row++)
-		{
-			const size_t bit_index = row % 64;
-
-			INNER_LOOP
-		}
-		final_result[n / 64] &= word;
-	}
-#undef INNER_LOOP
-}
-
-static int
-get_max_text_datum_size(ArrowArray *text_array)
-{
-	int maxbytes = 0;
-	uint32 *offsets = (uint32 *) text_array->buffers[1];
-	for (int i = 0; i < text_array->length; i++)
-	{
-		const int curbytes = offsets[i + 1] - offsets[i];
-		if (curbytes > maxbytes)
-		{
-			maxbytes = curbytes;
-		}
-	}
-
-	return maxbytes;
-}
-
-static void
 decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i)
 {
 	CompressionColumnDescription *column_description = &dcontext->template_columns[i];
@@ -302,6 +242,49 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 			column_values->buffers[3] = arrow->buffers[1];
 		}
 	}
+}
+
+static void
+translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
+						  uint64 *restrict final_result)
+{
+	Assert(arrow->dictionary != NULL);
+
+	/* Translate dictionary results to per-value results. */
+	const size_t n = arrow->length;
+	int16 *restrict indices = (int16 *) arrow->buffers[1];
+	for (size_t outer = 0; outer < n / 64; outer++)
+	{
+		uint64 word = 0;
+		for (size_t inner = 0; inner < 64; inner++)
+		{
+			const size_t row = outer * 64 + inner;
+			const size_t bit_index = inner;
+#define INNER_LOOP                                                                                 \
+	const int16 index = indices[row];                                                              \
+	const bool valid = arrow_row_is_valid(dict_result, index);                                     \
+	word |= ((uint64) valid) << bit_index;
+
+			INNER_LOOP
+
+			//			fprintf(stderr, "dict-coded row %ld: index %d, valid %d\n", row, index,
+			// valid);
+		}
+		final_result[outer] &= word;
+	}
+
+	if (n % 64)
+	{
+		uint64 word = 0;
+		for (size_t row = (n / 64) * 64; row < n; row++)
+		{
+			const size_t bit_index = row % 64;
+
+			INNER_LOOP
+		}
+		final_result[n / 64] &= word;
+	}
+#undef INNER_LOOP
 }
 
 static void
