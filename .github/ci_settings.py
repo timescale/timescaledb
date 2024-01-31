@@ -9,6 +9,9 @@
 # EARLIEST is the minimum postgres version required when building from source
 # LATEST is the maximum postgres version that is supported
 # ABI_MIN is the minimum postgres version required when the extension was build against LATEST
+#
+# TODO: Enable tests uploading in linux-build-and-test.yaml for macos once we
+# move to a new minor version below
 
 PG13_EARLIEST = "13.2"
 PG13_LATEST = "13.13"
