@@ -378,7 +378,7 @@ extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
  */
 #ifndef TS_COMPRESSION_FUZZING
 #define CORRUPT_DATA_MESSAGE(X)                                                                    \
-	(errmsg("the compressed data is corrupt"), errdetail(X), errcode(ERRCODE_DATA_CORRUPTED))
+	(errmsg("the compressed data is corrupt"), errdetail("%s", X), errcode(ERRCODE_DATA_CORRUPTED))
 #else
 #define CORRUPT_DATA_MESSAGE(X) (errcode(ERRCODE_DATA_CORRUPTED))
 #endif
@@ -386,6 +386,8 @@ extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 #define CheckCompressedData(X)                                                                     \
 	if (unlikely(!(X)))                                                                            \
 	ereport(ERROR, CORRUPT_DATA_MESSAGE(#X))
+
+//#define CheckCompressedData(X) Assert(X)
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)

@@ -1080,7 +1080,7 @@ select * from date_table where ts <  CURRENT_DATE;
  01-01-2021
 (3 rows)
 
--- Vectorized comparison for text
+-- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
 NOTICE:  adding not-null constraint to column "ts"
@@ -1105,6 +1105,27 @@ insert into text_table select x, 4, case when x % 2 = 0 then null else 'same-wit
 insert into text_table select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
 insert into text_table select x, 6, 'одинаковый' from generate_series(1, 1000) x;
 insert into text_table select x, 7, '異なる' || x from generate_series(1, 1000) x;
+-- Some text values with varying lengths in a single batch. They are all different
+-- to prevent dictionary compression, because we want to test particular orders
+-- here as well.
+insert into text_table select x,       8, repeat(        x::text || 'a',         x) from generate_series(1, 100) x;
+insert into text_table select x + 100, 8, repeat((101 - x)::text || 'b', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 200, 8, repeat((101 - x)::text || 'c', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 300, 8, repeat(        x::text || 'd',         x) from generate_series(1, 100) x;
+-- Use uncompressed table as reference.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select sum(length(a)) from text_table;
+  sum   
+--------
+ 118551
+(1 row)
+
+select count(distinct a) from text_table;
+ count 
+-------
+  2905
+(1 row)
+
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
 NOTICE:  chunk "_hyper_9_17_chunk" is already compressed
  count 
@@ -1114,6 +1135,22 @@ NOTICE:  chunk "_hyper_9_17_chunk" is already compressed
 
 select format('call recompress_chunk(''%s'')', x) from show_chunks('text_table') x \gexec
 call recompress_chunk('_timescaledb_internal._hyper_9_17_chunk')
+-- Check result with decompression.
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'forbid';
+select sum(length(a)) from text_table;
+  sum   
+--------
+ 118551
+(1 row)
+
+select count(distinct a) from text_table;
+ count 
+-------
+  2905
+(1 row)
+
+-- Test vectorized predicates.
 set timescaledb.debug_require_vector_qual to 'only';
 -- -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
@@ -1139,7 +1176,7 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'sam
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a != 'same';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  6000 |   1 | 1000 |   0 |   7
+  6400 |   1 | 1000 |   0 |   8
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'одинаковый';
@@ -1217,7 +1254,7 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is nul
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is not null;
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  7000 |   1 | 1000 |   0 |   7
+  7400 |   1 | 1000 |   0 |   8
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%same%';
@@ -1271,7 +1308,7 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  7000 |   1 | 1000 |   0 |   7
+  7400 |   1 | 1000 |   0 |   8
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1%';
@@ -1379,7 +1416,7 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a not like '%different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
-  6888 |   1 | 1000 |   0 |   7
+  7288 |   1 | 1000 |   0 |   8
 (1 row)
 
 \set ON_ERROR_STOP 0
@@ -1392,7 +1429,7 @@ reset timescaledb.debug_require_vector_qual;
 select count(distinct a) from text_table;
  count 
 -------
-  2505
+  2905
 (1 row)
 
 reset timescaledb.debug_require_vector_qual;

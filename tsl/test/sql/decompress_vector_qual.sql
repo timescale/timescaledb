@@ -372,8 +372,7 @@ select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
 select * from date_table where ts <  CURRENT_DATE;
 
-
--- Vectorized comparison for text
+-- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
@@ -390,9 +389,31 @@ insert into text_table select x, 5, case when x % 2 = 0 then null else 'differen
 insert into text_table select x, 6, 'одинаковый' from generate_series(1, 1000) x;
 insert into text_table select x, 7, '異なる' || x from generate_series(1, 1000) x;
 
+-- Some text values with varying lengths in a single batch. They are all different
+-- to prevent dictionary compression, because we want to test particular orders
+-- here as well.
+insert into text_table select x,       8, repeat(        x::text || 'a',         x) from generate_series(1, 100) x;
+insert into text_table select x + 100, 8, repeat((101 - x)::text || 'b', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 200, 8, repeat((101 - x)::text || 'c', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 300, 8, repeat(        x::text || 'd',         x) from generate_series(1, 100) x;
+
+-- Use uncompressed table as reference.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select sum(length(a)) from text_table;
+select count(distinct a) from text_table;
+
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
 select format('call recompress_chunk(''%s'')', x) from show_chunks('text_table') x \gexec
 
+-- Check result with decompression.
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'forbid';
+
+select sum(length(a)) from text_table;
+select count(distinct a) from text_table;
+
+
+-- Test vectorized predicates.
 set timescaledb.debug_require_vector_qual to 'only';
 -- -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;
@@ -456,3 +477,4 @@ select count(distinct a) from text_table;
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;
+
