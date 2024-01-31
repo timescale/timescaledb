@@ -217,7 +217,7 @@ SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::reg
  foo   |           | {a,b}   | {f,f}        | {f,f}
 (1 row)
 
-SELECT decompress_chunk(ch) FROM show_chunks('foo') ch limit 1;
+SELECT decompress_chunk(ch, false) FROM show_chunks('foo') ch limit 1;
 ERROR:  chunk "_hyper_10_2_chunk" is not compressed
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
@@ -225,9 +225,9 @@ SELECT format('%I.%I',chunk_schema,chunk_name) AS "CHUNK_NAME"
 FROM timescaledb_information.chunks
 WHERE hypertable_name = 'foo'
 ORDER BY chunk_name LIMIT 1\gset
-select decompress_chunk(:'CHUNK_NAME');
+select decompress_chunk(:'CHUNK_NAME', if_compressed=>false);
 ERROR:  chunk "_hyper_10_2_chunk" is not compressed
-select decompress_chunk(:'CHUNK_NAME', if_compressed=>true);
+select decompress_chunk(:'CHUNK_NAME');
 NOTICE:  chunk "_hyper_10_2_chunk" is not compressed
  decompress_chunk 
 ------------------
@@ -241,9 +241,9 @@ select compress_chunk(:'CHUNK_NAME');
  _timescaledb_internal._hyper_10_2_chunk
 (1 row)
 
-select compress_chunk(:'CHUNK_NAME');
+select compress_chunk(:'CHUNK_NAME', if_not_compressed=>false);
 ERROR:  chunk "_hyper_10_2_chunk" is already compressed
-select compress_chunk(:'CHUNK_NAME', if_not_compressed=>true);
+select compress_chunk(:'CHUNK_NAME');
 NOTICE:  chunk "_hyper_10_2_chunk" is already compressed
              compress_chunk              
 -----------------------------------------
