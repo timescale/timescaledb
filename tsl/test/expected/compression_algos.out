@@ -1595,9 +1595,9 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    15 | XX001       | XX001
-     9 | true        | true
-     6 | 08P01       | 08P01
+    17 | XX001       | XX001
+    15 | true        | true
+     7 | 08P01       | 08P01
      2 | 3F000       | 3F000
      1 | 22021       | 22021
      1 | false       | false
@@ -1613,11 +1613,11 @@ group by 2, 3 order by 1 desc
 ;
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
-    51 | XX001       | XX001
-     4 | 08P01       | 08P01
-     3 | true        | true
-     3 | XX001       | true
-     2 | 22021       | 22021
+    78 | XX001       | XX001
+     5 | 08P01       | 08P01
+     4 | true        | true
+     4 | XX001       | true
+     3 | 22021       | 22021
      1 | 3F000       | 3F000
      1 | false       | false
 (7 rows)
