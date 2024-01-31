@@ -206,7 +206,7 @@ jobs:
 
     - name: Show sanitizer logs
       if: always()
-      run: tail -vn +1 sanitizer*
+      run: tail -vn +1 sanitizer* ||:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
