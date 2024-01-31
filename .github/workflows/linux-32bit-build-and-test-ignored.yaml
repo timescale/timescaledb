@@ -25,7 +25,7 @@ jobs:
       pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py

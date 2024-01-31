@@ -72,7 +72,7 @@ jobs:
       run: |
         rpm -ql timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Read versions
       id: versions
