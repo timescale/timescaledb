@@ -245,8 +245,8 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 }
 
 static void
-translate_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
-						  uint64 *restrict final_result)
+translate_bitmap_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
+								 uint64 *restrict final_result)
 {
 	Assert(arrow->dictionary != NULL);
 
@@ -455,7 +455,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 */
 		if (vector->dictionary)
 		{
-			translate_from_dictionary(vector, predicate_result_nodict, predicate_result);
+			translate_bitmap_from_dictionary(vector, predicate_result_nodict, predicate_result);
 		}
 
 		/*

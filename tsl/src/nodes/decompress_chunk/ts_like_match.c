@@ -10,9 +10,7 @@
  * PostgreSQL License. Please see the NOTICE at the top level
  * directory for a copy of the PostgreSQL License.
  *
- * These function were copied from the PostgreSQL core planner, since
- * they were declared static in the core planner, but we need them for
- * our manipulations.
+ * This is a copy of backend/utils/adt/like_match.c.
  */
 
 /*--------------------

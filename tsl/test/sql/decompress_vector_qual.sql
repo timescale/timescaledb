@@ -397,7 +397,11 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a is not null;
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одинаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одилаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одимаковый%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異なる%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異オる%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異にる%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%same';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%same%';

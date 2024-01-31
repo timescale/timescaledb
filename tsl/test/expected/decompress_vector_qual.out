@@ -1197,10 +1197,34 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%один
   1000 |   1 | 1000 |   6 |   6
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одилаковый%';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     0 |     |     |     |    
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одимаковый%';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     0 |     |     |     |    
+(1 row)
+
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異なる%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
   1000 |   1 | 1000 |   7 |   7
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異オる%';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     0 |     |     |     |    
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異にる%';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     0 |     |     |     |    
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same%';

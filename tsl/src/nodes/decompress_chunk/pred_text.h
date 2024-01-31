@@ -12,18 +12,6 @@
 extern void vector_const_texteq(const ArrowArray *arrow, const Datum constdatum,
 								uint64 *restrict result);
 
-extern void vector_const_textlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-											 uint64 *restrict result);
-
-extern void vector_const_textnlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-											  uint64 *restrict result);
-
-extern void vector_const_texticlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-											   uint64 *restrict result);
-
-extern void vector_const_texticnlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-												uint64 *restrict result);
-
 extern void vector_const_textlike_utf8(const ArrowArray *arrow, const Datum constdatum,
 									   uint64 *restrict result);
 

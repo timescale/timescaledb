@@ -63,31 +63,17 @@ vector_const_texteq(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 #undef INNER_LOOP
 }
 
+/*
+ * Generate specializations for LIKE functions based on database encoding. This
+ * follows the Postgres code from backend/utils/adt/like.c.
+ */
+
 #define LIKE_TRUE 1
 #define LIKE_FALSE 0
 #define LIKE_ABORT (-1)
 
-#define NextByte(p, plen) ((p)++, (plen)--)
-
-/* Set up to compile like_match.c for single-byte characters */
-#define CHAREQ(p1, p2) (*(p1) == *(p2))
-#define NextChar(p, plen) NextByte((p), (plen))
-#define CopyAdvChar(dst, src, srclen) (*(dst)++ = *(src)++, (srclen)--)
-
-#define MatchText SB_MatchText
-#define do_like_escape SB_do_like_escape
-
-#include "ts_like_match.c"
-
-/* setup to compile like_match.c for single byte case insensitive matches */
-#define MATCH_LOWER(t) (((t) >= 'A' && (t) <= 'Z') ? ((t) + 'a' - 'A') : (t))
-#define NextChar(p, plen) NextByte((p), (plen))
-#define MatchText SB_IMatchText
-
-#include "ts_like_match.c"
-
 /* setup to compile like_match.c for UTF8 encoding, using fast NextChar */
-
+#define NextByte(p, plen) ((p)++, (plen)--)
 #define NextChar(p, plen)                                                                          \
 	do                                                                                             \
 	{                                                                                              \
@@ -144,34 +130,6 @@ vector_const_like_impl(const ArrowArray *arrow, const Datum constdatum, uint64 *
 	}
 
 #undef INNER_LOOP
-}
-
-void
-vector_const_textlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-								 uint64 *restrict result)
-{
-	return vector_const_like_impl(arrow, constdatum, result, SB_MatchText, true);
-}
-
-void
-vector_const_textnlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-								  uint64 *restrict result)
-{
-	return vector_const_like_impl(arrow, constdatum, result, SB_MatchText, false);
-}
-
-void
-vector_const_texticlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-								   uint64 *restrict result)
-{
-	return vector_const_like_impl(arrow, constdatum, result, SB_IMatchText, true);
-}
-
-void
-vector_const_texticnlike_singlebyte(const ArrowArray *arrow, const Datum constdatum,
-									uint64 *restrict result)
-{
-	return vector_const_like_impl(arrow, constdatum, result, SB_IMatchText, false);
 }
 
 void
