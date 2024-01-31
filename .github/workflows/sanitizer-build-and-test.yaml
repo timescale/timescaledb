@@ -216,7 +216,9 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: ${{ github.workspace }}/sanitizer
+        # The log_path sanitizer option means "Write logs to "log_path.pid".
+        # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
+        path: ${{ github.workspace }}/sanitizer*
 
     - name: Upload test results to the database
       if: always()
