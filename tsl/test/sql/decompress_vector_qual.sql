@@ -288,6 +288,23 @@ select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and me
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
 
+
+-- The Postgres planner chooses to build a hash table for large arrays, we currently
+-- don't vectorize in this case.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from singlebatch where metric2 = any(array[
+ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+]::int8[]);
+
 reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;
 
