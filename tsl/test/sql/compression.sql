@@ -56,8 +56,8 @@ _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2
 where ch1.compressed_chunk_id = ch2.id;
 
 \set ON_ERROR_STOP 0
---cannot recompress the chunk the second time around
-select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
+--cannot compress the chunk the second time around
+select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk', false);
 
 --TEST2a try DML on a compressed chunk
 BEGIN;
