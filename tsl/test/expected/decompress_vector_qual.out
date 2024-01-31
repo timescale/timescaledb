@@ -1085,6 +1085,8 @@ NOTICE:  chunk "_hyper_9_17_chunk" is already compressed
      1
 (1 row)
 
+select format('call recompress_chunk(''%s'')', x) from show_chunks('t') x \gexec
+call recompress_chunk('_timescaledb_internal._hyper_9_17_chunk')
 set timescaledb.debug_require_vector_qual to 'only';
 -- -- Uncomment to generate the test reference w/o the vector optimizations.
 -- set timescaledb.enable_bulk_decompression to off;

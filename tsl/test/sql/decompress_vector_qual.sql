@@ -371,6 +371,7 @@ insert into t select x, 6, 'одинаковый' from generate_series(1, 1000) 
 insert into t select x, 7, '異なる' || x from generate_series(1, 1000) x;
 
 select count(compress_chunk(x, true)) from show_chunks('t') x;
+select format('call recompress_chunk(''%s'')', x) from show_chunks('t') x \gexec
 
 set timescaledb.debug_require_vector_qual to 'only';
 -- -- Uncomment to generate the test reference w/o the vector optimizations.
