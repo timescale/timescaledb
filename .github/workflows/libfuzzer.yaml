@@ -31,7 +31,7 @@ jobs:
           libtest-most-perl tree
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Read configuration
       id: config
@@ -75,7 +75,7 @@ jobs:
 
     - name: Upload config.log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: config.log for PostgreSQL
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -104,7 +104,7 @@ jobs:
       run: 7z a install.7z $HOME/$PG_INSTALL_DIR
 
     - name: Save the installation directory
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: fuzzing-install-dir
         path: install.7z
@@ -142,7 +142,7 @@ jobs:
         sudo apt install 7zip systemd-coredump gdb
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Download the installation directory
       uses: actions/download-artifact@v3
@@ -283,7 +283,7 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log for ${{ steps.config.outputs.name }}
         path: postgres.log
@@ -298,7 +298,7 @@ jobs:
 
     - name: Save interesting cases
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Interesting cases for ${{ steps.config.outputs.name }}
         path: interesting/
@@ -356,7 +356,7 @@ jobs:
 
     - name: Upload core dumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Coredumps for ${{ steps.config.outputs.name }}
         path: coredumps
