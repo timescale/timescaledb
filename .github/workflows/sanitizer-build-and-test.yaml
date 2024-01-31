@@ -71,7 +71,7 @@ jobs:
       fail-fast: false
       matrix:
         # "os" has to be in the matrix due to a bug in "env": https://github.community/t/how-to-use-env-context/16975
-        os: ubuntu-latest
+        os: [ubuntu-latest]
         pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
     steps:
     - name: Install Linux Dependencies
