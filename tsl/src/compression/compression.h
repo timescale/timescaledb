@@ -404,3 +404,5 @@ consumeCompressedData(StringInfo si, int bytes)
  * We use this limit for sanity checks in case the compressed data is corrupt.
  */
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
+
+const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);

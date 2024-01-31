@@ -11,10 +11,9 @@
 #include <funcapi.h>
 #include <utils/builtins.h>
 
-#include "compression_test.h"
+#include "compression_sql_test.h"
 
-#include "compression.h"
-#include "arrow_c_data_interface.h"
+#include "compression/arrow_c_data_interface.h"
 
 #if !defined(NDEBUG) || defined(TS_COMPRESSION_FUZZING)
 
@@ -75,7 +74,9 @@ get_compression_algorithm(char *name)
 	X(DELTADELTA, INT8, true)                                                                      \
 	X(DELTADELTA, INT8, false)                                                                     \
 	X(ARRAY, TEXT, false)                                                                          \
-	X(DICTIONARY, TEXT, false)
+	X(ARRAY, TEXT, true)                                                                           \
+	X(DICTIONARY, TEXT, false)                                                                     \
+	X(DICTIONARY, TEXT, true)
 
 static int (*get_decompress_fn(int algo, Oid type))(const uint8 *Data, size_t Size, bool bulk)
 {

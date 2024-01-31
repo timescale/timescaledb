@@ -1588,34 +1588,37 @@ group by 2, 3 order by 1 desc
 \set algo array
 \set type text
 select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
     , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
-from :fn false) rowbyrow
-group by 2 order by 1 desc
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
 ;
- count | rowbyrow_result 
--------+-----------------
-    13 | XX001
-     4 | 08P01
-     3 | true
-     1 | false
-     1 | 22021
-     1 | 3F000
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+    21 | XX001       | XX001
+     6 | 08P01       | 08P01
+     2 | 3F000       | 3F000
+     2 | true        | true
+     1 | 22021       | 22021
+     1 | false       | false
 (6 rows)
 
 \set algo dictionary
 \set type text
 select count(*)
+    , coalesce((bulk.rows >= 0)::text, bulk.sqlstate) bulk_result
     , coalesce((rowbyrow.rows >= 0)::text, rowbyrow.sqlstate) rowbyrow_result
-from :fn false) rowbyrow
-group by 2 order by 1 desc
+from :fn true) bulk join :fn false) rowbyrow using (path)
+group by 2, 3 order by 1 desc
 ;
- count | rowbyrow_result 
--------+-----------------
-    22 | XX001
-     4 | 08P01
-     2 | true
-     1 | false
-     1 | 22021
-     1 | 3F000
-(6 rows)
+ count | bulk_result | rowbyrow_result 
+-------+-------------+-----------------
+    51 | XX001       | XX001
+     4 | 08P01       | 08P01
+     4 | XX001       | true
+     2 | true        | true
+     2 | 22021       | 22021
+     1 | 3F000       | 3F000
+     1 | false       | false
+(7 rows)
 
