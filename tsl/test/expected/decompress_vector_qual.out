@@ -906,9 +906,16 @@ select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and me
      1
 (1 row)
 
--- The Postgres planner chooses to build a hash table for large arrays, we currently
--- don't vectorize in this case.
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- On versions >= 14, the Postgres planner chooses to build a hash table for
+-- large arrays. We currently don't vectorize in this case.
+select 1 from set_config('timescaledb.debug_require_vector_qual',
+    case when current_setting('server_version_num')::int >= 140000 then 'forbid' else 'only' end,
+    false);
+ ?column? 
+----------
+        1
+(1 row)
+
 select count(*) from singlebatch where metric2 = any(array[
  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
@@ -1249,16 +1256,46 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異に�
      0 |     |     |     |    
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '異_る_';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+     9 |   1 |   9 |   7 |   7
+(1 row)
+
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
  count | min | max  | min | max 
 -------+-----+------+-----+-----
    112 |   1 | 1000 |   3 |   3
 (1 row)
 
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1500 |   1 | 1000 |   3 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  1500 |   1 | 1000 |   3 |   5
+(1 row)
+
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
  count | min | max | min | max 
 -------+-----+-----+-----+-----
      1 |   1 |   1 |   3 |   3
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+   199 |   1 | 991 |   3 |   5
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%1';
+ count | min | max | min | max 
+-------+-----+-----+-----+-----
+   200 |   1 | 991 |   3 |   5
 (1 row)
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
@@ -1317,6 +1354,8 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different
 
 \set ON_ERROR_STOP 0
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\';
+ERROR:  LIKE pattern must not end with escape character
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%\';
 ERROR:  LIKE pattern must not end with escape character
 \set ON_ERROR_STOP 1
 reset timescaledb.debug_require_vector_qual;

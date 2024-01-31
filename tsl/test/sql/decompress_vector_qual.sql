@@ -289,9 +289,12 @@ select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and me
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
 
 
--- The Postgres planner chooses to build a hash table for large arrays, we currently
--- don't vectorize in this case.
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- On versions >= 14, the Postgres planner chooses to build a hash table for
+-- large arrays. We currently don't vectorize in this case.
+select 1 from set_config('timescaledb.debug_require_vector_qual',
+    case when current_setting('server_version_num')::int >= 140000 then 'forbid' else 'only' end,
+    false);
+
 select count(*) from singlebatch where metric2 = any(array[
  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
@@ -420,9 +423,14 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%одим
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異なる%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異オる%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%異にる%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like '異_る_';
 
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%_1';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%%1';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a not like '%different1%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like '%different1%';
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'same_';
@@ -435,6 +443,7 @@ select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different
 
 \set ON_ERROR_STOP 0
 select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different\';
+select count(*), min(ts), max(ts), min(d), max(d) from t where a like 'different%\';
 \set ON_ERROR_STOP 1
 
 reset timescaledb.debug_require_vector_qual;
