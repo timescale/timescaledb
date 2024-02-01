@@ -493,12 +493,18 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 
 	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(si);
 
-	uint32 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION];
+	/*
+	 * We need a quite significant padding of 63 elements, not bytes, after the
+	 * last element, because we work in Simple8B blocks which can contain up to
+	 * 64 elements.
+	 */
+	uint32 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION + 63];
 	const uint16 n_notnull =
 		simple8brle_decompress_all_buf_uint32(sizes_serialized,
 											  sizes,
 											  sizeof(sizes) / sizeof(sizes[0]));
 	const int n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
+	CheckCompressedData(n_total >= n_notnull);
 
 	uint32 *offsets =
 		(uint32 *) MemoryContextAllocZero(dest_mctx,
@@ -509,22 +515,56 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	uint32 offset = 0;
 	for (int i = 0; i < n_notnull; i++)
 	{
-		void *vardata = consumeCompressedData(si, sizes[i]);
+		void *unaligned = consumeCompressedData(si, sizes[i]);
+
+		/*
+		 * We start reading from the end of previous datum, but this pointer
+		 * might be not aligned as required for varlena-4b struct. We have to
+		 * align it here. Note that sizes[i] includes the alignment as well in
+		 * addition to the varlena size.
+		 *
+		 * See the corresponding row-by-row code in bytes_to_datum_and_advance().
+		 */
+		void *vardata = DatumGetPointer(att_align_pointer(unaligned, TYPALIGN_INT, -1, unaligned));
+
 		/*
 		 * Check for potentially corrupt varlena headers since we're reading them
-		 * directly from compressed data. We can only have a plain datum
-		 * with 1-byte or 4-byte header here, no TOAST or compressed data.
+		 * directly from compressed data.
 		 */
-		CheckCompressedData(VARATT_IS_4B_U(vardata) ||
-							(VARATT_IS_1B(vardata) && !VARATT_IS_1B_E(vardata)));
+		if (VARATT_IS_4B_U(vardata))
+		{
+			/*
+			 * Full varsize must be larger or equal than the header size so that
+			 * the calculation of size without header doesn't overflow.
+			 */
+			CheckCompressedData(VARSIZE_4B(vardata) >= VARHDRSZ);
+		}
+		else if (VARATT_IS_1B(vardata))
+		{
+			/* Can't have a TOAST pointer here. */
+			CheckCompressedData(!VARATT_IS_1B_E(vardata));
+
+			/*
+			 * Full varsize must be larger or equal than the header size so that
+			 * the calculation of size without header doesn't overflow.
+			 */
+			CheckCompressedData(VARSIZE_1B(vardata) >= VARHDRSZ_SHORT);
+		}
+		else
+		{
+			/*
+			 * Can only have an uncompressed datum with 1-byte or 4-byte header
+			 * here, no TOAST or compressed data.
+			 */
+			CheckCompressedData(false);
+		}
+
 		/*
-		 * Full varsize must be larger or equal than the header size so that the
-		 * calculation of size without header doesn't overflow.
+		 * Size of varlena plus alignment must match the size stored in the
+		 * sizes array for this element.
 		 */
-		CheckCompressedData((VARATT_IS_1B(vardata) && VARSIZE_1B(vardata) >= VARHDRSZ_SHORT) ||
-							(VARSIZE_4B(vardata) >= VARHDRSZ));
-		/* Varsize must match the size stored in the sizes array for this element. */
-		CheckCompressedData(VARSIZE_ANY(vardata) == sizes[i]);
+		const Datum alignment_bytes = PointerGetDatum(vardata) - PointerGetDatum(unaligned);
+		CheckCompressedData(VARSIZE_ANY(vardata) + alignment_bytes == sizes[i]);
 
 		const uint32 textlen = VARSIZE_ANY_EXHDR(vardata);
 		memcpy(&arrow_bodies[offset], VARDATA_ANY(vardata), textlen);

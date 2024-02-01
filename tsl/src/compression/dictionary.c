@@ -426,6 +426,7 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 
 	const uint16 n_notnull = indices_serialized->num_elements;
 	const uint16 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	CheckCompressedData(n_total >= n_notnull);
 	const uint16 n_padded =
 		n_total + 63; /* This is the padding requirement of simple8brle_decompress_all. */
 	int16 *restrict indices = MemoryContextAlloc(dest_mctx, sizeof(int16) * n_padded);

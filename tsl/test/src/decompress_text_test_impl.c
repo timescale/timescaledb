@@ -220,7 +220,17 @@ decompress_generic_text(const uint8 *Data, size_t Size, bool bulk, int requested
 	 * 3) The bulk decompression must absolutely work on the correct compressed
 	 * data we've just generated.
 	 */
-	arrow = decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
+	PG_TRY();
+	{
+		arrow = decompress_all(compressed_data, TEXTOID, CurrentMemoryContext);
+	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		elog(PANIC, "bulk decompression failed for data that we've just compressed");
+	}
+	PG_END_TRY();
+
 	decompress_generic_text_check_arrow(arrow, PANIC, results, n);
 
 	return n;
