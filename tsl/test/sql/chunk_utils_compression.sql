@@ -32,6 +32,10 @@ SELECT show_chunks('public.table_to_compress', older_than=>'1 day'::interval);
 SELECT show_chunks('public.table_to_compress', newer_than=>'1 day'::interval);
 -- compress all chunks of the table:
 SELECT compress_chunk(show_chunks('public.table_to_compress'));
+-- check that approx size function works. We call VACUUM to ensure all forks exist
+VACUUM public.table_to_compress;
+SELECT * FROM hypertable_approximate_size('public.table_to_compress');
+SELECT * FROM hypertable_size('public.table_to_compress');
 -- and run the queries again to make sure results are the same
 SELECT show_chunks('public.uncompressed_table');
 SELECT show_chunks('public.table_to_compress');

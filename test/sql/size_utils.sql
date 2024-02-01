@@ -232,6 +232,29 @@ SELECT * FROM chunk_compression_stats(NULL) ORDER BY node_name;
 SELECT * FROM hypertable_index_size(NULL);
 SELECT * FROM _timescaledb_functions.relation_size(NULL);
 
+-- Test approximate size functions with invalid input
+SELECT * FROM hypertable_approximate_size(0);
+SELECT * FROM hypertable_approximate_detailed_size(0);
+SELECT * FROM _timescaledb_functions.relation_approximate_size(0);
+SELECT * FROM hypertable_approximate_size(NULL);
+SELECT * FROM hypertable_approximate_detailed_size(NULL);
+SELECT * FROM _timescaledb_functions.relation_approximate_size(NULL);
+
+-- Test size on view, sequence and composite type
+CREATE VIEW view1 as SELECT 1;
+SELECT * FROM _timescaledb_functions.relation_approximate_size('view1');
+SELECT * FROM _timescaledb_functions.relation_size('view1');
+CREATE SEQUENCE test_id_seq
+    INCREMENT 1
+    START 1    MINVALUE 1
+    MAXVALUE 9223372036854775807
+    CACHE 1;
+SELECT * FROM _timescaledb_functions.relation_approximate_size('test_id_seq');
+SELECT * FROM _timescaledb_functions.relation_size('test_id_seq');
+CREATE TYPE test_type AS (time timestamp, temp float);
+SELECT * FROM _timescaledb_functions.relation_approximate_size('test_type');
+SELECT * FROM _timescaledb_functions.relation_size('test_type');
+
 -- Test size functions on regular table
 CREATE TABLE hypersize(time timestamptz, device int);
 CREATE INDEX hypersize_time_idx ON hypersize (time);
@@ -246,6 +269,9 @@ SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
+SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
+SELECT * FROM hypertable_approximate_size('hypersize');
+SELECT * FROM hypertable_approximate_detailed_size('hypersize');
 \set VERBOSITY terse
 \set ON_ERROR_STOP 1
 
@@ -259,6 +285,9 @@ SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
+SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
+SELECT * FROM hypertable_approximate_size('hypersize');
+SELECT * FROM hypertable_approximate_detailed_size('hypersize');
 
 -- Test size functions on non-empty hypertable
 INSERT INTO hypersize VALUES('2021-02-25', 1);
@@ -273,6 +302,26 @@ SELECT * FROM chunks_detailed_size('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM chunk_compression_stats('hypersize') ORDER BY node_name;
 SELECT * FROM hypertable_index_size('hypersize_time_idx');
+SELECT * FROM _timescaledb_functions.relation_approximate_size('hypersize');
+SELECT * FROM hypertable_approximate_size('hypersize');
+SELECT * FROM hypertable_approximate_detailed_size('hypersize');
+-- Test approx size functions with toast entries
+SELECT * FROM _timescaledb_functions.relation_approximate_size('toast_test');
+SELECT * FROM hypertable_approximate_size('toast_test');
+SELECT * FROM hypertable_approximate_detailed_size('toast_test');
+-- Test approx size function against a regular table
+\set ON_ERROR_STOP 0
+CREATE TABLE regular(time TIMESTAMP, value TEXT);
+SELECT * FROM hypertable_approximate_size('regular');
+\set ON_ERROR_STOP 1
+-- Test approx size functions with dropped chunks
+CREATE TABLE drop_chunks_table(time BIGINT NOT NULL, data INTEGER);
+SELECT hypertable_id AS drop_chunks_table_id
+    FROM create_hypertable('drop_chunks_table', 'time', chunk_time_interval => 10) \gset
+INSERT INTO drop_chunks_table SELECT i, i FROM generate_series(0, 29) AS i;
+SELECT * FROM hypertable_approximate_size('drop_chunks_table');
+SELECT drop_chunks('drop_chunks_table', older_than => 19);
+SELECT * FROM hypertable_approximate_size('drop_chunks_table');
 
 -- github issue #4857
 -- below procedure should not crash
