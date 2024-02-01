@@ -73,8 +73,8 @@ select * from :chunk where ctid = :'ctid';
  Tid Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
    TID Cond: (ctid = '(0,1)'::tid)
  Decompression Cache Hits: 0
- Decompression Cache Misses: 1
- Decompress Count: 4
+ Decompression Cache Misses: 0
+ Decompress Count: 0
 (5 rows)
 
 select * from :chunk where ctid = :'ctid';
