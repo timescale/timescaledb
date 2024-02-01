@@ -193,13 +193,15 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int attnum)
 		entry->nvalid = 0;
 		entry->arrow_columns =
 			MemoryContextAllocZero(acache->mcxt, sizeof(ArrowArray *) * compressed_tupdesc->natts);
-		decompress_cache_misses++;
+		if (decompress_cache_print)
+			decompress_cache_misses++;
 	}
 	else
 	{
 		/* Move the entry found to the front of the LRU list */
 		dlist_move_tail(&acache->arrow_column_cache_lru, &entry->node);
-		decompress_cache_hits++;
+		if (decompress_cache_print)
+			decompress_cache_hits++;
 	}
 
 	const int16 *attrs_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
@@ -259,7 +261,8 @@ arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum d
 		   header->compression_algorithm);
 	MemoryContext oldcxt = MemoryContextSwitchTo(acache->decompression_mcxt);
 	ArrowArray *arrow_column = decompress_all(PointerGetDatum(header), typid, acache->mcxt);
-	decompress_cache_decompress_count++;
+	if (decompress_cache_print)
+		decompress_cache_decompress_count++;
 
 	/*
 	 * Not sure how necessary this reset is, but keeping it for now.
