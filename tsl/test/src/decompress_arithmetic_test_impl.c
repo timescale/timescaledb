@@ -200,7 +200,17 @@ FUNCTION_NAME3(decompress, ALGO, PG_TYPE_PREFIX)(const uint8 *Data, size_t Size,
 	 * 3) The bulk decompression must absolutely work on the correct compressed
 	 * data we've just generated.
 	 */
-	arrow = decompress_all(compressed_data, PG_TYPE_OID, CurrentMemoryContext);
+	PG_TRY();
+	{
+		arrow = decompress_all(compressed_data, PG_TYPE_OID, CurrentMemoryContext);
+	}
+	PG_CATCH();
+	{
+		EmitErrorReport();
+		elog(PANIC, "bulk decompression failed for data that we've just compressed");
+	}
+	PG_END_TRY();
+
 	FUNCTION_NAME2(check_arrow, CTYPE)(arrow, PANIC, results, n);
 
 	return n;
