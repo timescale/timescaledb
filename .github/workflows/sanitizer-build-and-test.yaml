@@ -221,7 +221,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        # The log_path sanitizer option means "Write logs to "log_path.pid".
+        # The log_path sanitizer option means "Write logs to 'log_path.pid'".
         # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
         path: ${{ github.workspace }}/sanitizer*
 

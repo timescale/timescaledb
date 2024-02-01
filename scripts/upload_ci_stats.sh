@@ -150,7 +150,7 @@ do
 done
 
 # Upload the logs.
-# Note that the sanitizer setting log_path means "write logs to "log_path.pid".
+# Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".
 for x in sanitizer* sanitizer/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff
 do
     if ! [ -e "$x" ]; then continue ; fi

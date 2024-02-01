@@ -386,8 +386,6 @@ extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 	if (unlikely(!(X)))                                                                            \
 	ereport(ERROR, CORRUPT_DATA_MESSAGE(#X))
 
-//#define CheckCompressedData(X) Assert(X)
-
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)
 {
