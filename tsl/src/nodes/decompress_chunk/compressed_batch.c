@@ -19,7 +19,7 @@
 #include "nodes/decompress_chunk/vector_predicates.h"
 
 static ArrowArray *
-make_single_value_arrow_pod(Oid pgtype, Datum datum, bool isnull)
+make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull)
 {
 	struct ArrowWithBuffers
 	{
@@ -55,7 +55,7 @@ make_single_value_arrow_pod(Oid pgtype, Datum datum, bool isnull)
 		*((CTYPE *) arrow->buffers[1]) = FROMDATUM(datum);                                         \
 		break
 
-	switch (pgtype)
+	switch (arithmetic_type)
 	{
 		FOR_TYPE(INT8OID, int64, DatumGetInt64);
 		FOR_TYPE(INT4OID, int32, DatumGetInt32);
@@ -66,7 +66,7 @@ make_single_value_arrow_pod(Oid pgtype, Datum datum, bool isnull)
 		FOR_TYPE(TIMESTAMPOID, Timestamp, DatumGetTimestamp);
 		FOR_TYPE(DATEOID, DateADT, DatumGetDateADT);
 		default:
-			elog(ERROR, "unexpected column type '%s'", format_type_be(pgtype));
+			elog(ERROR, "unexpected column type '%s'", format_type_be(arithmetic_type));
 			pg_unreachable();
 	}
 
@@ -125,7 +125,7 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 		return make_single_value_arrow_text(datum, isnull);
 	}
 
-	return make_single_value_arrow_pod(pgtype, datum, isnull);
+	return make_single_value_arrow_arithmetic(pgtype, datum, isnull);
 }
 
 static int
@@ -272,13 +272,17 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	}
 }
 
+/*
+ * When we have a dictionary-encoded Arrow Array, and have run a predicate on
+ * the dictionary, this function is used to translate the dictionary predicate
+ * result to the final predicate result.
+ */
 static void
 translate_bitmap_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
 								 uint64 *restrict final_result)
 {
 	Assert(arrow->dictionary != NULL);
 
-	/* Translate dictionary results to per-value results. */
 	const size_t n = arrow->length;
 	int16 *restrict indices = (int16 *) arrow->buffers[1];
 	for (size_t outer = 0; outer < n / 64; outer++)
@@ -294,9 +298,6 @@ translate_bitmap_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_
 	word |= ((uint64) valid) << bit_index;
 
 			INNER_LOOP
-
-			//			fprintf(stderr, "dict-coded row %ld: index %d, valid %d\n", row, index,
-			// valid);
 		}
 		final_result[outer] &= word;
 	}
