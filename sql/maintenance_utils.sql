@@ -52,6 +52,7 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk_segmentwise(
 CREATE OR REPLACE FUNCTION _timescaledb_functions.get_compressed_chunk_index_for_recompression(
     uncompressed_chunk REGCLASS
 ) RETURNS REGCLASS AS '@MODULE_PATHNAME@', 'ts_get_compressed_chunk_index_for_recompression' LANGUAGE C STRICT VOLATILE;
+
 -- Recompress a chunk
 --
 -- Will give an error if the chunk was not already compressed. In this
@@ -62,18 +63,20 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.get_compressed_chunk_index_for
 -- Parameters:
 --   chunk: Chunk to recompress.
 --   if_not_compressed: Print notice instead of error if chunk is already compressed.
-CREATE OR REPLACE PROCEDURE @extschema@.recompress_chunk(chunk REGCLASS,
-                                             if_not_compressed BOOLEAN = true)
+CREATE OR REPLACE FUNCTION _timescaledb_functions.recompress_chunk(
+  chunk REGCLASS,
+  if_not_compressed BOOLEAN = true
+) RETURNS REGCLASS
 AS $$
 DECLARE
   status INT;
   chunk_name TEXT[];
   compressed_chunk_index REGCLASS;
+  _compressed BOOLEAN;
+  _unordered BOOLEAN;
+  _frozen BOOLEAN;
+  _partial BOOLEAN;
 BEGIN
-
-    -- procedures with SET clause cannot execute transaction
-    -- control so we adjust search_path in procedure body
-    SET LOCAL search_path TO pg_catalog, pg_temp;
 
     status := _timescaledb_functions.chunk_status(chunk);
 
@@ -85,18 +88,19 @@ BEGIN
     -- 4: frozen
     -- 8: compressed partial
 
-    chunk_name := parse_ident(chunk::text);
+    _compressed := (status & 1) = 1;
+    _unordered := (status & 2) = 2;
+    _frozen := (status & 4) = 4;
+    _partial := (status & 8 ) = 8;
+
+    IF _frozen THEN
+        RETURN NULL;
+    END IF;
+
     CASE
-    WHEN status = 0 THEN
-        RAISE EXCEPTION 'call compress_chunk instead of recompress_chunk';
-    WHEN status = 1 THEN
-        IF if_not_compressed THEN
-            RAISE NOTICE 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
-            RETURN;
-        ELSE
-            RAISE EXCEPTION 'nothing to recompress in chunk "%"', chunk_name[array_upper(chunk_name,1)];
-        END IF;
-    WHEN status = 3 OR status = 9 OR status = 11 THEN
+    WHEN NOT _compressed THEN
+        PERFORM @extschema@.compress_chunk(chunk);
+    WHEN _unordered OR _partial THEN
         -- first check if there's an index. Might have to use a heuristic to determine if index usage would be efficient,
         -- or if we'd better fall back to decompressing & recompressing entire chunk
         SELECT _timescaledb_functions.get_compressed_chunk_index_for_recompression(chunk) INTO STRICT compressed_chunk_index;
@@ -104,19 +108,12 @@ BEGIN
             PERFORM _timescaledb_functions.recompress_chunk_segmentwise(chunk, if_not_compressed);
         ELSE
             PERFORM @extschema@.decompress_chunk(chunk);
-            COMMIT;
-            -- SET LOCAL is only active until end of transaction.
-            -- While we could use SET at the start of the function we do not
-            -- want to bleed out search_path to caller, so we do SET LOCAL
-            -- again after COMMIT
-            SET LOCAL search_path TO pg_catalog, pg_temp;
-            PERFORM @extschema@.compress_chunk(chunk, if_not_compressed);
+            PERFORM @extschema@.compress_chunk(chunk);
         END IF;
-    ELSE
-        RAISE EXCEPTION 'unexpected chunk status % in chunk "%"', status, chunk_name[array_upper(chunk_name,1)];
     END CASE;
+    RETURN chunk;
 END
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path TO pg_catalog, pg_temp;
 
 -- A version of makeaclitem that accepts a comma-separated list of
 -- privileges rather than just a single privilege. This is copied from

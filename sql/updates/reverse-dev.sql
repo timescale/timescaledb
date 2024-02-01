@@ -788,6 +788,14 @@ ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog.hypertable;
 ALTER EXTENSION timescaledb ADD TABLE _timescaledb_catalog.hypertable;
 -- include this now in the config
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', '');
+<<<<<<< HEAD
 DROP FUNCTION IF EXISTS _timescaledb_functions.relation_approximate_size(relation REGCLASS);
 DROP FUNCTION IF EXISTS @extschema@.hypertable_approximate_detailed_size(relation REGCLASS);
 DROP FUNCTION IF EXISTS @extschema@.hypertable_approximate_size(hypertable REGCLASS);
+=======
+
+DROP FUNCTION _timescaledb_functions.recompress_chunk;
+-- create stub for recompress_chunk
+CREATE PROCEDURE @@extschema@@.recompress_chunk(chunk REGCLASS, if_not_compressed BOOLEAN) LANGUAGE PLPGSQL AS $$BEGIN END$$ SET search_path TO pg_catalog, pg_temp;
+
+>>>>>>> 47bc8d73c (Remove public recompress_chunk procedure)
