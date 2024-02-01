@@ -380,8 +380,17 @@ find_path(
   PATH_SUFFIXES postgres postgresql pgsql
   DOC "The path to the PostgreSQL source tree")
 
+option(PG_SOURCE_INCLUDES "Add PG source to include directories" OFF)
+
 if(PG_SOURCE_DIR)
   message(STATUS "Found PostgreSQL source in ${PG_SOURCE_DIR}")
+  if(PG_SOURCE_INCLUDES)
+    # Add the PostgreSQL source dir include directories to the build system
+    # includes BEFORE the installed PG include files. This will allow the LSP
+    # (e.g., clangd) to navigate to the PostgreSQL source instead of the install
+    # path directory that only has the headers.
+    include_directories(BEFORE SYSTEM ${PG_SOURCE_DIR}/src/include)
+  endif(PG_SOURCE_INCLUDES)
 endif(PG_SOURCE_DIR)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)
