@@ -307,15 +307,16 @@ select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - in
 select count(*) from vectorqual where ts > case when '2021-01-01'::timestamp < '2022-01-01'::timestamptz then null else '2021-01-01 00:00:00'::timestamp end;
 select count(*) from vectorqual where ts < LOCALTIMESTAMP + '3 years'::interval;
 
--- This filter is not vectorized because the 'timestamp > timestamptz'
--- operator is stable, not immutable, because it uses the current session
--- timezone. We could transform it to something like
--- 'timestamp > timestamptz::timestamp' to allow our stable function evaluation
--- to handle this case, but we don't do it at the moment.
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- These filters are not vectorizable as written, because the 'timestamp > timestamptz'
+-- operator is stable, not immutable. We will try to cast the constant to the
+-- same type in this case.
+set timescaledb.debug_require_vector_qual to 'only';
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz;
+select count(*) from vectorqual where ts < LOCALTIMESTAMP at time zone 'UTC' + '3 years'::interval;
+
 
 -- Can't vectorize comparison with a volatile function.
+set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric3 > random()::int - 100;
 select count(*) from vectorqual where ts > case when random() < 10 then null else '2021-01-01 00:00:00'::timestamp end;
 
