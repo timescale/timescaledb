@@ -455,10 +455,10 @@ compressionam_multi_insert(Relation relation, TupleTableSlot **slots, int ntuple
 	/* Inserts only supported in non-compressed relation, so simply forward to the heap AM */
 	heapam->multi_insert(relation, slots, ntuples, cid, options, bistate);
 
-	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
-	partially_compressed_relids =
-		list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
-	MemoryContextSwitchTo(oldmcxt);
+	TS_WITH_MEMORY_CONTEXT(CurTransactionContext, {
+		partially_compressed_relids =
+			list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
+	});
 }
 
 typedef struct IndexFetchComprData
@@ -933,10 +933,10 @@ compressionam_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId ci
 
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	heapam->tuple_insert(relation, slot, cid, options, bistate);
-	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
-	partially_compressed_relids =
-		list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
-	MemoryContextSwitchTo(oldmcxt);
+	TS_WITH_MEMORY_CONTEXT(CurTransactionContext, {
+		partially_compressed_relids =
+			list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
+	});
 }
 
 static void
@@ -1766,9 +1766,8 @@ convert_from_compressionam(Oid relid)
 	ts_compression_chunk_size_delete(chunk_id);
 
 	/* Need to truncate the compressed relation after converting from compression TAM */
-	MemoryContext oldmcxt = MemoryContextSwitchTo(CurTransactionContext);
-	cleanup_relids = lappend_oid(cleanup_relids, relid);
-	MemoryContextSwitchTo(oldmcxt);
+	TS_WITH_MEMORY_CONTEXT(CurTransactionContext,
+						   { cleanup_relids = lappend_oid(cleanup_relids, relid); });
 }
 
 void
