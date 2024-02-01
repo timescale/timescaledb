@@ -173,7 +173,7 @@ jobs:
 
     - name: Restore the cached fuzzing corpus (bulk)
       id: restore-corpus-cache-bulk
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: db/corpus-bulk
         key: "${{ steps.config.outputs.cache_prefix }}-bulk"
@@ -182,7 +182,7 @@ jobs:
     # they don't overwrite each other. Now we are going to combine them.
     - name: Restore the cached fuzzing corpus (rowbyrow)
       id: restore-corpus-cache-rowbyrow
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: db/corpus-rowbyrow
         key: "${{ steps.config.outputs.cache_prefix }}-rowbyrow"
@@ -325,7 +325,7 @@ jobs:
 
     - name: Save fuzzer corpus
       if: always()
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: db/corpus-${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
         key: "${{ format('{0}-{1}-{2}-{3}',
