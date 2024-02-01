@@ -14,8 +14,6 @@
 #include <utils/syscache.h>
 #include <funcapi.h>
 
-#include <stdalign.h>
-
 #include "compression/array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
