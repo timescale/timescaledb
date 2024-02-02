@@ -172,3 +172,65 @@ $$;
 -- Repair relations that have relacl entries for users that do not
 -- exist in pg_authid
 CALL _timescaledb_functions.repair_relation_acls();
+
+-- Cleanup metadata for deleted chunks
+DO $$
+DECLARE
+  ts_major INTEGER;
+  ts_minor INTEGER;
+BEGIN
+  SELECT ((string_to_array(extversion,'.'))[1])::int, ((string_to_array(extversion,'.'))[2])::int
+  INTO ts_major, ts_minor
+  FROM pg_extension WHERE extname = 'timescaledb';
+
+  IF ts_major >= 2 AND ts_minor >= 14 THEN
+    CREATE UNLOGGED TABLE _timescaledb_catalog._chunks_remove AS
+    SELECT id FROM _timescaledb_catalog.chunk
+    WHERE dropped IS TRUE
+    AND NOT EXISTS (
+      SELECT FROM information_schema.tables
+      WHERE tables.table_schema = chunk.schema_name
+      AND tables.table_name = chunk.table_name
+    )
+    AND NOT EXISTS (
+      SELECT FROM _timescaledb_catalog.hypertable
+        JOIN _timescaledb_catalog.continuous_agg ON continuous_agg.raw_hypertable_id = hypertable.id
+      WHERE hypertable.id = chunk.hypertable_id
+      -- for the old caggs format we need to keep chunk metadata for dropped chunks
+      AND continuous_agg.finalized IS FALSE
+    );
+
+    WITH _dimension_slice_remove AS (
+      DELETE FROM _timescaledb_catalog.dimension_slice
+      USING _timescaledb_catalog.chunk_constraint, _timescaledb_catalog._chunks_remove
+      WHERE dimension_slice.id = chunk_constraint.dimension_slice_id
+      AND chunk_constraint.chunk_id = _chunks_remove.id
+      RETURNING _timescaledb_catalog.dimension_slice.id
+    )
+    DELETE FROM _timescaledb_catalog.chunk_constraint
+    USING _dimension_slice_remove
+    WHERE chunk_constraint.dimension_slice_id = _dimension_slice_remove.id;
+
+    DELETE FROM _timescaledb_internal.bgw_policy_chunk_stats
+    USING _timescaledb_catalog._chunks_remove
+    WHERE bgw_policy_chunk_stats.chunk_id = _chunks_remove.id;
+
+    DELETE FROM _timescaledb_catalog.chunk_index
+    USING _timescaledb_catalog._chunks_remove
+    WHERE chunk_index.chunk_id = _chunks_remove.id;
+
+    DELETE FROM _timescaledb_catalog.compression_chunk_size
+    USING _timescaledb_catalog._chunks_remove
+    WHERE compression_chunk_size.chunk_id = _chunks_remove.id
+    OR compression_chunk_size.compressed_chunk_id = _chunks_remove.id;
+
+    DELETE FROM _timescaledb_catalog.chunk
+    USING _timescaledb_catalog._chunks_remove
+    WHERE chunk.id = _chunks_remove.id
+    OR chunk.compressed_chunk_id = _chunks_remove.id;
+
+    ALTER EXTENSION timescaledb DROP TABLE _timescaledb_catalog._chunks_remove;
+    DROP TABLE _timescaledb_catalog._chunks_remove;
+  END IF;
+END;
+$$;
