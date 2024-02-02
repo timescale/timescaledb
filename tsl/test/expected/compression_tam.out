@@ -251,7 +251,6 @@ SELECT * FROM readings WHERE time = '2022-06-01 00:00:07';
 
 INSERT INTO readings VALUES ('2022-06-01', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO NOTHING;
 SET enable_indexscan = false;
-SET enable_bitmapscan = false; -- currently doesn't work on compression TAM
 -- Columnar scan with qual on segmentby where filtering should be
 -- turned into scankeys
 EXPLAIN (costs off, timing off, summary off)
