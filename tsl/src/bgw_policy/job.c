@@ -509,8 +509,10 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		StartTransactionCommand();
 		int32 chunkid = lfirst_int(lc);
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
-		if (!chunk || !ts_chunk_is_unordered(chunk))
+		Assert(chunk);
+		if (!ts_chunk_is_unordered(chunk) && !ts_chunk_is_partial(chunk))
 			continue;
+
 		tsl_recompress_chunk_wrapper(chunk);
 
 		elog(LOG,
