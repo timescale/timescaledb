@@ -1651,21 +1651,6 @@ compressionam_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize, 
  */
 
 static bool
-compressionam_scan_bitmap_next_block(TableScanDesc scan, TBMIterateResult *tbmres)
-{
-	FEATURE_NOT_SUPPORTED;
-	return false;
-}
-
-static bool
-compressionam_scan_bitmap_next_tuple(TableScanDesc scan, TBMIterateResult *tbmres,
-									 TupleTableSlot *slot)
-{
-	FEATURE_NOT_SUPPORTED;
-	return false;
-}
-
-static bool
 compressionam_scan_sample_next_block(TableScanDesc scan, SampleScanState *scanstate)
 {
 	FEATURE_NOT_SUPPORTED;
@@ -2053,8 +2038,11 @@ static const TableAmRoutine compressionam_methods = {
 	 * Executor related functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.scan_bitmap_next_block = compressionam_scan_bitmap_next_block,
-	.scan_bitmap_next_tuple = compressionam_scan_bitmap_next_tuple,
+
+	/* We do not support bitmap heap scan at this point. */
+	.scan_bitmap_next_block = NULL,
+	.scan_bitmap_next_tuple = NULL,
+
 	.scan_sample_next_block = compressionam_scan_sample_next_block,
 	.scan_sample_next_tuple = compressionam_scan_sample_next_tuple,
 };
