@@ -568,17 +568,15 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	return result_chunk_id;
 }
 
-static bool
-decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid,
-					  bool if_compressed)
+static void
+decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 {
 	Cache *hcache;
 	Hypertable *uncompressed_hypertable =
-		ts_hypertable_cache_get_cache_and_entry(uncompressed_hypertable_relid,
+		ts_hypertable_cache_get_cache_and_entry(uncompressed_chunk->hypertable_relid,
 												CACHE_FLAG_NONE,
 												&hcache);
 	Hypertable *compressed_hypertable;
-	Chunk *uncompressed_chunk;
 	Chunk *compressed_chunk;
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
@@ -593,12 +591,6 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	if (compressed_hypertable == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
 
-	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
-	if (uncompressed_chunk == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("table \"%s\" is not a chunk", get_rel_name(uncompressed_chunk_relid))));
-
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
 		elog(ERROR, "hypertable and chunk do not match");
 
@@ -607,8 +599,9 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 		ts_cache_release(hcache);
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_relid))));
-		return false;
+				 errmsg("chunk \"%s\" is not compressed",
+						get_rel_name(uncompressed_chunk->table_id))));
+		return;
 	}
 
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
@@ -646,7 +639,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	 * already performed the decompression while we were waiting for the locks to be
 	 * acquired.
 	 */
-	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
+	Chunk *chunk_state_after_lock = ts_chunk_get_by_id(uncompressed_chunk->fd.id, true);
 
 	/* Throw error if chunk has invalid status for operation */
 	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_DECOMPRESS, true);
@@ -673,7 +666,6 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 	ts_cache_release(hcache);
-	return true;
 }
 
 /*
@@ -794,20 +786,29 @@ Datum
 tsl_decompress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	bool if_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-	if (NULL == uncompressed_chunk)
-		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
-	if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
-							   uncompressed_chunk_id,
-							   if_compressed))
+	if (!ht->fd.compressed_hypertable_id)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
+
+	if (!ts_chunk_is_compressed(uncompressed_chunk))
+	{
+		ereport((if_compressed ? NOTICE : ERROR),
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_id))));
+
 		PG_RETURN_NULL();
+	}
+
+	decompress_chunk_impl(uncompressed_chunk, if_compressed);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -817,13 +818,17 @@ tsl_recompress_chunk_wrapper(Chunk *uncompressed_chunk)
 {
 	Oid uncompressed_chunk_relid = uncompressed_chunk->table_id;
 
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
+
+	if (!ht->fd.compressed_hypertable_id)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
+
 	if (ts_chunk_is_compressed(uncompressed_chunk))
 	{
-		if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
-								   uncompressed_chunk_relid,
-								   false))
-			return false;
+		decompress_chunk_impl(uncompressed_chunk, false);
 	}
+
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
 	Assert(!ts_chunk_is_compressed(chunk));
 	tsl_compress_chunk_wrapper(chunk, false);
