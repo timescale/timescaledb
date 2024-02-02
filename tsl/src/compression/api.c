@@ -817,7 +817,7 @@ tsl_recompress_chunk_wrapper(Chunk *uncompressed_chunk)
 {
 	Oid uncompressed_chunk_relid = uncompressed_chunk->table_id;
 
-	if (ts_chunk_is_unordered(uncompressed_chunk))
+	if (ts_chunk_is_compressed(uncompressed_chunk))
 	{
 		if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
 								   uncompressed_chunk_relid,

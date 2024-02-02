@@ -1,0 +1,1 @@
+Fixes: #6592 Fix recompression policy ignoring partially compressed chunks
