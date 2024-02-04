@@ -1099,7 +1099,6 @@ select count(distinct a) from text_table;
 (1 row)
 
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
-NOTICE:  chunk "_hyper_9_17_chunk" is already compressed
  count 
 -------
      1
@@ -1107,6 +1106,7 @@ NOTICE:  chunk "_hyper_9_17_chunk" is already compressed
 
 select format('call recompress_chunk(''%s'')', x) from show_chunks('text_table') x \gexec
 call recompress_chunk('_timescaledb_internal._hyper_9_17_chunk')
+NOTICE:  nothing to recompress in chunk "_hyper_9_17_chunk"
 set timescaledb.enable_bulk_decompression to on;
 set timescaledb.debug_require_vector_qual to 'forbid';
 select sum(length(a)) from text_table;

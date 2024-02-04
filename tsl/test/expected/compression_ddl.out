@@ -2178,7 +2178,6 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 
 -- compress them
 SELECT compress_chunk(c, if_not_compressed=>true) FROM show_chunks('space_part') c;
-NOTICE:  chunk "_hyper_35_133_chunk" is already compressed
 NOTICE:  chunk "_hyper_35_134_chunk" is already compressed
               compress_chunk               
 -------------------------------------------
@@ -2194,15 +2193,10 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 --------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
-   ->  Merge Append
-         Sort Key: _hyper_35_133_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_36_135_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: _hyper_35_133_chunk."time"
-               ->  Seq Scan on _hyper_35_133_chunk
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
@@ -2211,13 +2205,13 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_36_139_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
-               ->  Sort
                      Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
                      ->  Seq Scan on compress_hyper_36_140_chunk
-(25 rows)
+         ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_36_141_chunk
+(20 rows)
 
 -- make second one of them partial
 insert into space_part values
@@ -2228,15 +2222,10 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 --------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
-   ->  Merge Append
-         Sort Key: _hyper_35_133_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_36_135_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: _hyper_35_133_chunk."time"
-               ->  Seq Scan on _hyper_35_133_chunk
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
@@ -2245,18 +2234,18 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_36_139_chunk
-         ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
-               ->  Sort
                      Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
                      ->  Seq Scan on compress_hyper_36_140_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
                ->  Sort
                      Sort Key: _hyper_35_138_chunk."time"
                      ->  Seq Scan on _hyper_35_138_chunk
-(30 rows)
+(25 rows)
 
 -- make other one partial too
 INSERT INTO space_part VALUES
@@ -2266,15 +2255,10 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
 --------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on space_part
    Order: space_part."time"
-   ->  Merge Append
-         Sort Key: _hyper_35_133_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_36_135_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_36_135_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_35_133_chunk
          ->  Sort
-               Sort Key: _hyper_35_133_chunk."time"
-               ->  Seq Scan on _hyper_35_133_chunk
+               Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_139_chunk
    ->  Custom Scan (DecompressChunk) on _hyper_35_134_chunk
          ->  Sort
                Sort Key: compress_hyper_36_136_chunk._ts_meta_sequence_num DESC
@@ -2283,8 +2267,8 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
          Sort Key: _hyper_35_137_chunk."time"
          ->  Custom Scan (DecompressChunk) on _hyper_35_137_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_139_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_36_139_chunk
+                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Sort
                Sort Key: _hyper_35_137_chunk."time"
                ->  Sort
@@ -2292,14 +2276,14 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
                      ->  Seq Scan on _hyper_35_137_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
-                     Sort Key: compress_hyper_36_140_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_36_140_chunk
+                     Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
                ->  Sort
                      Sort Key: _hyper_35_138_chunk."time"
                      ->  Seq Scan on _hyper_35_138_chunk
-(35 rows)
+(30 rows)
 
 -- test creation of unique expression index does not interfere with enabling compression
 -- github issue 6205
@@ -2327,14 +2311,14 @@ values ('meter1', 1, 2.3, '2022-01-01'::timestamptz, '2022-01-01'::timestamptz),
 select compress_chunk(show_chunks('mytab'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_37_141_chunk
+ _timescaledb_internal._hyper_37_142_chunk
 (1 row)
 
 REINDEX TABLE mytab; -- should update index
 select decompress_chunk(show_chunks('mytab'));
              decompress_chunk              
 -------------------------------------------
- _timescaledb_internal._hyper_37_141_chunk
+ _timescaledb_internal._hyper_37_142_chunk
 (1 row)
 
 \set EXPLAIN 'EXPLAIN (costs off,timing off,summary off)'
@@ -2345,7 +2329,7 @@ set enable_indexscan = on;
 :EXPLAIN_ANALYZE select * from mytab where lower(col1::text) = 'meter1';
                                             QUERY PLAN                                            
 --------------------------------------------------------------------------------------------------
- Index Scan using _hyper_37_141_chunk_myidx_unique on _hyper_37_141_chunk (actual rows=3 loops=1)
+ Index Scan using _hyper_37_142_chunk_myidx_unique on _hyper_37_142_chunk (actual rows=3 loops=1)
    Index Cond: (lower((col1)::text) = 'meter1'::text)
 (2 rows)
 
@@ -2363,19 +2347,19 @@ WHERE (value > 2.4 AND value < 3);
 select compress_chunk(show_chunks('mytab'));
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_37_141_chunk
+ _timescaledb_internal._hyper_37_142_chunk
 (1 row)
 
 select decompress_chunk(show_chunks('mytab'));
              decompress_chunk              
 -------------------------------------------
- _timescaledb_internal._hyper_37_141_chunk
+ _timescaledb_internal._hyper_37_142_chunk
 (1 row)
 
 :EXPLAIN_ANALYZE SELECT * FROM mytab WHERE value BETWEEN 2.4 AND 2.8;
                                       QUERY PLAN                                       
 ---------------------------------------------------------------------------------------
- Seq Scan on _hyper_37_141_chunk (actual rows=1 loops=1)
+ Seq Scan on _hyper_37_142_chunk (actual rows=1 loops=1)
    Filter: ((value >= '2.4'::double precision) AND (value <= '2.8'::double precision))
    Rows Removed by Filter: 2
 (3 rows)
@@ -2422,14 +2406,14 @@ alter table hyper_unique_deferred set (timescaledb.compress);
 select compress_chunk(show_chunks('hyper_unique_deferred')); -- also worked fine before 2.11.0
               compress_chunk               
 -------------------------------------------
- _timescaledb_internal._hyper_40_145_chunk
+ _timescaledb_internal._hyper_40_146_chunk
 (1 row)
 
 select decompress_chunk(show_chunks('hyper_unique_deferred'));
              decompress_chunk              
 -------------------------------------------
- _timescaledb_internal._hyper_40_145_chunk
+ _timescaledb_internal._hyper_40_146_chunk
 (1 row)
 
 begin; insert INTO hyper_unique_deferred values (1257987700000000000, 'dev1', 1); abort;
-ERROR:  new row for relation "_hyper_40_145_chunk" violates check constraint "hyper_unique_deferred_sensor_1_check"
+ERROR:  new row for relation "_hyper_40_146_chunk" violates check constraint "hyper_unique_deferred_sensor_1_check"
