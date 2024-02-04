@@ -12,7 +12,6 @@ extern Datum tsl_create_compressed_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_compress_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_decompress_chunk(PG_FUNCTION_ARGS);
 extern Datum tsl_recompress_chunk(PG_FUNCTION_ARGS);
-extern Oid tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed);
 extern bool tsl_recompress_chunk_wrapper(Chunk *chunk);
 extern Datum tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS);
 

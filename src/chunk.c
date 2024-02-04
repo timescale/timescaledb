@@ -4339,6 +4339,13 @@ ts_chunk_is_compressed(const Chunk *chunk)
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
 }
 
+bool
+ts_chunk_needs_recompression(const Chunk *chunk)
+{
+	Assert(ts_chunk_is_compressed(chunk));
+	return ts_chunk_is_partial(chunk) || ts_chunk_is_unordered(chunk);
+}
+
 /* Note that only a compressed chunk can have partial flag set */
 bool
 ts_chunk_is_partial(const Chunk *chunk)
