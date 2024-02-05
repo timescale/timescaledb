@@ -1037,17 +1037,15 @@ ts_relation_size_impl(Oid relid)
 static int64
 ts_try_relation_cached_size(Relation rel, bool verbose)
 {
-	BlockNumber result = 0, nblocks = 0;
+	BlockNumber result = InvalidBlockNumber, nblocks = 0;
 	ForkNumber forkNum;
 	bool cached = true;
 
 	/* Get heap size, including FSM and VM */
 	for (forkNum = 0; forkNum <= MAX_FORKNUM; forkNum++)
 	{
-#if PG14_LT
+#if PG14_GE
 		/* PG13 does not have smgr_cached_nblocks */
-		result = InvalidBlockNumber;
-#else
 		result = RelationGetSmgr(rel)->smgr_cached_nblocks[forkNum];
 #endif
 
