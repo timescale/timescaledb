@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
+create function stable_identity(x anyelement) returns anyelement as $$ select x $$ language sql stable;
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
 select create_hypertable('vectorqual', 'ts');
 WARNING:  column type "timestamp without time zone" used for "ts" does not follow best practices
@@ -201,7 +202,6 @@ execute p(33);
 
 deallocate p;
 -- Also try query parameter in combination with a stable function.
-create function stable_identity(x anyelement) returns anyelement as $$ select x $$ language sql stable;
 prepare p(int4) as select count(*) from vectorqual where metric3 = stable_identity($1);
 execute p(33);
  count 
@@ -304,6 +304,14 @@ select count(*) from vectorqual where metric2 < 0 or metric3  < -1;
      0
 (1 row)
 
+-- expression evaluated to null at run time
+select count(*) from vectorqual where metric3 = 777
+    or metric3 > case when now() > now() - interval '1s' then null else 1 end;
+ count 
+-------
+     2
+(1 row)
+
 reset timescaledb.enable_bulk_decompression;
 -- Test with unary operator.
 set timescaledb.debug_require_vector_qual to 'forbid';
@@ -348,11 +356,89 @@ select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
      2
 (1 row)
 
--- It also doesn't have a commutator.
+-- Custom operator that can be vectorized but doesn't have a negator.
+create operator !!! (function = 'int4ne', rightarg = int4, leftarg = int4);
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where metric3 !!! 777;
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from vectorqual where metric3 !!! any(array[777, 888]);
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric3 !!! 777 or metric3 !!! 888;
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! 888);
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! stable_identity(888));
+ count 
+-------
+     5
+(1 row)
+
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where not metric3 !!! 777;
+ count 
+-------
+     2
+(1 row)
+
+select count(*) from vectorqual where metric3 !!! 666 or (metric3 !!! 777 and not metric3 !!! 888);
+ count 
+-------
+     5
+(1 row)
+
+select count(*) from vectorqual where metric3 !!! 666 or not (metric3 !!! 777 and not metric3 !!! 888);
+ count 
+-------
+     5
+(1 row)
+
+set timescaledb.debug_require_vector_qual to 'allow';
+select count(*) from vectorqual where metric3 !!! 777 or not metric3 !!! 888;
+ count 
+-------
+     3
+(1 row)
+
+select count(*) from vectorqual where metric3 !!! 777 and not metric3 !!! 888;
+ count 
+-------
+     0
+(1 row)
+
+select count(*) from vectorqual where not(metric3 !!! 666 or not (metric3 !!! 777 and not metric3 !!! 888));
+ count 
+-------
+     0
+(1 row)
+
+-- These operators don't have a commutator.
+set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where 777 === metric3;
  count 
 -------
      2
+(1 row)
+
+select count(*) from vectorqual where 777 !!! metric3;
+ count 
+-------
+     3
 (1 row)
 
 -- NullTest is vectorized.
@@ -367,6 +453,18 @@ select count(*) from vectorqual where metric4 is not null;
  count 
 -------
      2
+(1 row)
+
+select count(*) from vectorqual where metric3 = 777 or metric4 is not null;
+ count 
+-------
+     4
+(1 row)
+
+select count(*) from vectorqual where metric3 = stable_identity(777) or metric4 is null;
+ count 
+-------
+     3
 (1 row)
 
 -- Can't vectorize conditions on system columns. Have to check this on a single
