@@ -19,7 +19,7 @@ jobs:
     name: Assign PR to author
     runs-on: ubuntu-latest
     steps:
-      - uses: toshimaru/auto-author-assign@v2.1
+      - uses: toshimaru/auto-author-assign@v2.1.0
 
   ask-review:
     name: Run pull-review

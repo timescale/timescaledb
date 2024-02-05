@@ -48,7 +48,6 @@ compression_status
 Compressed        
 (1 row)
 
-s1: NOTICE:  chunk "_hyper_X_X_chunk" is already compressed
 count
 -----
     1

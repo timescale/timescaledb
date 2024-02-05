@@ -46,7 +46,6 @@ typedef struct DecompressChunkState
 	 * evaluate to constant false, hence the flag.
 	 */
 	List *vectorized_quals_original;
-	bool have_constant_false_vectorized_qual;
 } DecompressChunkState;
 
 extern Node *decompress_chunk_state_create(CustomScan *cscan);

@@ -1072,7 +1072,7 @@ ts_try_relation_cached_size(Relation rel, bool verbose)
 						RelationGetRelationName(rel))));
 
 	/* convert the size into bytes and return */
-	return nblocks * BLCKSZ;
+	return (int64) nblocks * BLCKSZ;
 }
 
 static RelationSize

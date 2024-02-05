@@ -104,7 +104,7 @@ skip_scan_plan_create(PlannerInfo *root, RelOptInfo *relopt, CustomPath *best_pa
 			sort_indexquals(index_path->indexinfo, lcons(op, idx_plan->indexqual));
 	}
 	else
-		elog(ERROR, "bad subplan type for SkipScan: %d", plan->type);
+		elog(ERROR, "unsupported subplan type for SkipScan: %s", ts_get_node_name((Node *) plan));
 
 	skip_plan->scan.plan.targetlist = tlist;
 	skip_plan->custom_scan_tlist = list_copy(tlist);
