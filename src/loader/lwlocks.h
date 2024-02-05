@@ -6,6 +6,7 @@
 #pragma once
 
 #define RENDEZVOUS_CHUNK_APPEND_LWLOCK "ts_chunk_append_lwlock"
+#define RENDEZVOUS_OSM_PARALLEL_LWLOCK "ts_osm_parallel_lwlock"
 
 void ts_lwlocks_shmem_startup(void);
 void ts_lwlocks_shmem_alloc(void);
