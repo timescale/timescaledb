@@ -325,4 +325,9 @@ WHERE
 			   'MEMBER') IS TRUE
     OR pg_catalog.pg_has_role(current_user, owner, 'MEMBER') IS TRUE;
 
+-- View for viewing non-superuser passwords
+CREATE OR REPLACE VIEW timescaledb_information.pg_authid
+WITH (security_barrier = true) AS
+SELECT * FROM pg_catalog.pg_authid WHERE rolsuper = 'false';
+
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
