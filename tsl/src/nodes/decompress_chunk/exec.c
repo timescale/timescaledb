@@ -421,7 +421,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	/* Constify stable expressions in vectorized predicates. */
-	chunk_state->have_constant_false_vectorized_qual = false;
 	PlannerGlobal glob = {
 		.boundParams = node->ss.ps.state->es_param_list_info,
 	};
@@ -432,31 +431,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	foreach (lc, chunk_state->vectorized_quals_original)
 	{
 		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
-
-		/*
-		 * Note that some expressions are evaluated to a null Const, like a
-		 * strict comparison with stable expression that evaluates to null. If
-		 * we have such filter, no rows can pass, so we set a special flag to
-		 * return early.
-		 */
-		if (IsA(constified, Const))
-		{
-			Const *c = castNode(Const, constified);
-			if (c->constisnull || !DatumGetBool(c->constvalue))
-			{
-				chunk_state->have_constant_false_vectorized_qual = true;
-				break;
-			}
-			else
-			{
-				/*
-				 * This is a constant true qual, every row passes and we can
-				 * just ignore it. No idea how it can happen though.
-				 */
-				Assert(false);
-				continue;
-			}
-		}
 
 		dcontext->vectorized_quals_constified =
 			lappend(dcontext->vectorized_quals_constified, constified);
@@ -736,11 +710,6 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 	if (chunk_state->perform_vectorized_aggregation)
 	{
 		return perform_vectorized_aggregation(chunk_state);
-	}
-
-	if (chunk_state->have_constant_false_vectorized_qual)
-	{
-		return NULL;
 	}
 
 	bqfuncs->pop(bq, dcontext);

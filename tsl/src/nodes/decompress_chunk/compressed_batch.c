@@ -226,6 +226,36 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 				   uint64 *restrict result)
 {
 	/*
+	 * Some predicates can be evaluated to a Const at run time.
+	 */
+	if (IsA(qual, Const))
+	{
+		Const *c = castNode(Const, qual);
+		if (c->constisnull || !DatumGetBool(c->constvalue))
+		{
+			/*
+			 * Some predicates are evaluated to a null Const, like a
+			 * strict comparison with stable expression that evaluates to null.
+			 * No rows pass.
+			 */
+			const size_t n_batch_result_words = (batch_state->total_batch_rows + 63) / 64;
+			for (size_t i = 0; i < n_batch_result_words; i++)
+			{
+				result[i] = 0;
+			}
+		}
+		else
+		{
+			/*
+			 * This is a constant true qual, every row passes and we can
+			 * just ignore it. No idea how it can happen though.
+			 */
+			Assert(false);
+		}
+		return;
+	}
+
+	/*
 	 * For now, we support NullTest, "Var ? Const" predicates and
 	 * ScalarArrayOperations.
 	 */
@@ -247,6 +277,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	}
 	else
 	{
+		Ensure(IsA(qual, OpExpr), "expected OpExpr");
 		opexpr = castNode(OpExpr, qual);
 		args = opexpr->args;
 		vector_const_opcode = get_opcode(opexpr->opno);
@@ -368,6 +399,8 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 * rows in the batch, if the column has a default value in this batch.
 		 */
 		const size_t n_vector_result_words = (vector->length + 63) / 64;
+		Assert((predicate_result != &default_value_predicate_result) ||
+			   n_vector_result_words == 1); /* to placate Coverity. */
 		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
 		for (size_t i = 0; i < n_vector_result_words; i++)
 		{
@@ -480,7 +513,7 @@ compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
 	 * Postgres removes NOT for operators we can vectorize, so we don't support
 	 * NOT and consider it non-vectorizable at planning time. So only OR is left.
 	 */
-	Assert(boolexpr->boolop == OR_EXPR);
+	Ensure(boolexpr->boolop == OR_EXPR, "expected OR");
 	compute_qual_disjunction(dcontext, batch_state, boolexpr->args, result);
 }
 
