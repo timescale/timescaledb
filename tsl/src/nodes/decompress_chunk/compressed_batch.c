@@ -326,7 +326,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	 * default values in a special way because they don't produce the usual
 	 * decompressed ArrowArrays.
 	 */
-	uint64 default_value_predicate_result;
+	uint64 default_value_predicate_result[1];
 	uint64 *predicate_result = result;
 	const ArrowArray *vector = column_values->arrow;
 	if (column_values->arrow == NULL)
@@ -351,8 +351,8 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 * We start from an all-valid bitmap, because the predicate is
 		 * AND-ed to it.
 		 */
-		default_value_predicate_result = 1;
-		predicate_result = &default_value_predicate_result;
+		default_value_predicate_result[0] = 1;
+		predicate_result = default_value_predicate_result;
 	}
 
 	if (nulltest)
@@ -399,7 +399,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 * rows in the batch, if the column has a default value in this batch.
 		 */
 		const size_t n_vector_result_words = (vector->length + 63) / 64;
-		Assert((predicate_result != &default_value_predicate_result) ||
+		Assert((predicate_result != default_value_predicate_result) ||
 			   n_vector_result_words == 1); /* to placate Coverity. */
 		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
 		for (size_t i = 0; i < n_vector_result_words; i++)
@@ -412,7 +412,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	if (column_values->arrow == NULL)
 	{
 		Assert(column_values->decompression_type == DT_Default);
-		if (!(default_value_predicate_result & 1))
+		if (!(default_value_predicate_result[0] & 1))
 		{
 			/*
 			 * We had a default value for the compressed column, and it
