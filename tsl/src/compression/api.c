@@ -11,6 +11,7 @@
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
+#include <catalog/index.h>
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
@@ -1435,6 +1436,22 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
+
+	/* Need to rebuild indexes if the relation is using compression TAM */
+	if (uncompressed_chunk_rel->rd_tableam == compressionam_routine())
+	{
+#if PG14_GE
+		ReindexParams params = {
+			.options = 0,
+			.tablespaceOid = InvalidOid,
+		};
+
+		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, &params);
+#else
+		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, 0);
+#endif
+	}
+
 	table_close(uncompressed_chunk_rel, NoLock);
 	table_close(compressed_chunk_rel, NoLock);
 
