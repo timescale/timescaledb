@@ -410,7 +410,7 @@ select sum(length(a)) from text_table;
 select count(distinct a) from text_table;
 
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
-select format('call recompress_chunk(''%s'')', x) from show_chunks('text_table') x \gexec
+select compress_chunk(x) from show_chunks('text_table') x;
 
 set timescaledb.enable_bulk_decompression to on;
 set timescaledb.debug_require_vector_qual to 'forbid';

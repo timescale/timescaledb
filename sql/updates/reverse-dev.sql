@@ -791,3 +791,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.hypertable', ''
 DROP FUNCTION IF EXISTS _timescaledb_functions.relation_approximate_size(relation REGCLASS);
 DROP FUNCTION IF EXISTS @extschema@.hypertable_approximate_detailed_size(relation REGCLASS);
 DROP FUNCTION IF EXISTS @extschema@.hypertable_approximate_size(hypertable REGCLASS);
+
+DROP FUNCTION IF EXISTS @extschema@.compress_chunk;
+CREATE FUNCTION @extschema@.compress_chunk(uncompressed_chunk REGCLASS, if_not_compressed BOOLEAN = true) RETURNS REGCLASS AS '' LANGUAGE SQL SET search_path TO pg_catalog,pg_temp;
+

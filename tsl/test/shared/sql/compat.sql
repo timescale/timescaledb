@@ -83,6 +83,7 @@ CALL _timescaledb_internal.policy_recompression(0,NULL);
 CALL _timescaledb_internal.policy_refresh_continuous_aggregate(0,NULL);
 CALL _timescaledb_internal.policy_reorder(0,NULL);
 CALL _timescaledb_internal.policy_retention(0,NULL);
+CALL public.recompress_chunk(0);
 \set ON_ERROR_STOP 1
 
 -- tests for the cagg invalidation trigger on the deprecated schema

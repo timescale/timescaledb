@@ -445,3 +445,7 @@ $BODY$
    SELECT sum(total_bytes)::bigint
    FROM @extschema@.hypertable_approximate_detailed_size(hypertable);
 $BODY$ SET search_path TO pg_catalog, pg_temp;
+
+DROP FUNCTION IF EXISTS @extschema@.compress_chunk;
+CREATE FUNCTION @extschema@.compress_chunk(uncompressed_chunk REGCLASS, if_not_compressed BOOLEAN = true, recompress BOOLEAN = false) RETURNS REGCLASS AS '' LANGUAGE SQL SET search_path TO pg_catalog, pg_temp;
+
