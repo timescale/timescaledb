@@ -82,8 +82,6 @@ jobs:
         fi
 
     - name: Test Downgrade
-      # TSB 2.13.0 is the first version with PG 16 support, so no downgrades are supported at the moment
-      if: matrix.pg != '16'
       run: |
         # Since this runs nightly on main we have to get the previous version
         # from the last released version and not current branch.
