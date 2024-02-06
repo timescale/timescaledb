@@ -195,8 +195,17 @@ SET timescaledb.enable_transparent_decompression TO false;
 -- Test that filtering is not removed on ColumnarScan when it includes
 -- columns that cannot be scankeys.
 DROP INDEX readings_location_idx;
-EXPLAIN (analyze, costs off, timing off, summary off)
+EXPLAIN (analyze, costs off, timing off, summary off, decompress_cache_stats)
 SELECT * FROM :chunk WHERE device < 4 AND location = 2 LIMIT 5;
+
+-- Test vectorized filters on compressed column. Use a filter that
+-- filters all rows in order to test that the scan does not decompress
+-- more than necessary to filter data. The decompress count should be
+-- equal to the number cache hits (i.e., we only decompress one column
+-- per segment).
+EXPLAIN (analyze, costs off, timing off, summary off, decompress_cache_stats)
+SELECT count(*) FROM :chunk WHERE humidity > 110;
+SELECT count(*) FROM :chunk WHERE humidity > 110;
 
 -- Test that columnar scan can be turned off
 SET timescaledb.enable_columnarscan = false;
