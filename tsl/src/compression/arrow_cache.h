@@ -47,14 +47,6 @@
 
 #include "arrow_c_data_interface.h"
 
-/* Number of arrow decompression cache LRU entries  */
-#define ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES 100
-
-typedef struct ArrowColumnKey
-{
-	ItemPointerData ctid; /* Compressed TID for the compressed tuple. */
-} ArrowColumnKey;
-
 typedef struct ArrowColumnCache
 {
 	MemoryContext mcxt;
@@ -65,27 +57,11 @@ typedef struct ArrowColumnCache
 	uint16 maxsize;
 } ArrowColumnCache;
 
-/*
- * Cache entry for an arrow tuple.
- *
- * We just cache the column data right now. We could potentially cache more
- * data such as the segmentby column and similar, but this does not pose a big
- * problem right now.
- *
- * ArrowArray
- */
-typedef struct ArrowColumnCacheEntry
-{
-	ArrowColumnKey key;
-	int nvalid;		 /* Valid columns from the compressed tuple. */
-	dlist_node node; /* List link in LRU list. */
-	ArrowArray **arrow_columns;
-} ArrowColumnCacheEntry;
-
 typedef struct ArrowTupleTableSlot ArrowTupleTableSlot;
 
 extern void arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt);
 extern void arrow_column_cache_release(ArrowColumnCache *acache);
-extern ArrowColumnCacheEntry *arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts);
+extern ArrowArray **arrow_column_cache_read_many(ArrowTupleTableSlot *aslot, unsigned int natts);
+extern ArrowArray **arrow_column_cache_read_one(ArrowTupleTableSlot *aslot, AttrNumber attno);
 
 #endif /* COMPRESSION_ARROW_CACHE_H_ */
