@@ -355,9 +355,21 @@ INSERT INTO :chunk (time, location, device, temp, humidity)
 SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
 FROM generate_series('2022-06-01 00:06:14'::timestamptz, '2022-06-01 16:59', '5s') t;
 
+-- Check that new data is returned
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+
+-- Want to check that index scans work after recompression, so the
+-- query should be an index scan.
+EXPLAIN (verbose, costs off)
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+
 -- Show counts in compressed chunk prior to recompression
 SELECT sum(_ts_meta_count) FROM :cchunk;
 CALL recompress_chunk(:'chunk');
+
+-- Data should be returned even after recompress, but now from the
+-- compressed relation
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
 
 \set ON_ERROR_STOP 0
 -- Can't recompress twice without new non-compressed rows
