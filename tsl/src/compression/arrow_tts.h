@@ -60,11 +60,10 @@ typedef struct ArrowTupleTableSlot
 	/* compressed slot: used when reading from the compressed child relation */
 	TupleTableSlot *compressed_slot;
 	AttrNumber count_attnum; /* Attribute number of the count metadata in compressed slot */
-	ArrowArray **arrow_columns;
-	uint16 tuple_index; /* Index of this particular tuple in the compressed
-						 * (columnar data) child tuple. Note that the first
-						 * value has index 1. If the index is 0 it means the
-						 * child slot points to a non-compressed tuple. */
+	uint16 tuple_index;		 /* Index of this particular tuple in the compressed
+							  * (columnar data) child tuple. Note that the first
+							  * value has index 1. If the index is 0 it means the
+							  * child slot points to a non-compressed tuple. */
 	uint16 total_row_count;
 	ArrowColumnCache arrow_cache;
 

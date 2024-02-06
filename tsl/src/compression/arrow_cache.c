@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include <access/attnum.h>
 #include <access/tupdesc.h>
 #include <catalog/pg_attribute.h>
 #include <nodes/bitmapset.h>
@@ -20,6 +21,28 @@
 #include "compression.h"
 #include "debug_assert.h"
 #include <utils/palloc.h>
+
+#define ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES 100
+
+typedef struct ArrowColumnKey
+{
+	ItemPointerData ctid; /* Compressed TID for the compressed tuple. */
+} ArrowColumnKey;
+
+/*
+ * Cache entry for an arrow tuple.
+ *
+ * We just cache the column data right now. We could potentially cache more
+ * data such as the segmentby column and similar, but this does not pose a big
+ * problem right now.
+ */
+typedef struct ArrowColumnCacheEntry
+{
+	ArrowColumnKey key;
+	dlist_node node; /* List link in LRU list. */
+	ArrowArray **arrow_arrays;
+	int16 num_arrays; /* Number of entries in arrow_arrays */
+} ArrowColumnCacheEntry;
 
 static ArrowArray *arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid,
 												 Datum datum);
@@ -116,15 +139,57 @@ arrow_column_cache_release(ArrowColumnCache *acache)
 	MemoryContextDelete(acache->mcxt);
 }
 
-ArrowColumnCacheEntry *
-arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts)
+static void
+decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *entry,
+					AttrNumber attno, AttrNumber cattno)
 {
-	ArrowColumnCache *acache = &aslot->arrow_cache;
-	const ItemPointer compressed_tid = &aslot->compressed_slot->tts_tid;
+	const ArrowColumnCache *acache = &aslot->arrow_cache;
 	const TupleDesc tupdesc = aslot->base.base.tts_tupleDescriptor;
 	const TupleDesc compressed_tupdesc = aslot->compressed_slot->tts_tupleDescriptor;
+	const int16 attoff = AttrNumberGetAttrOffset(attno);
+
+	if (TupleDescAttr(tupdesc, attoff)->attisdropped)
+		return;
+
+	Assert(namestrcmp(&TupleDescAttr(tupdesc, attoff)->attname,
+					  NameStr(TupleDescAttr(compressed_tupdesc, AttrNumberGetAttrOffset(cattno))
+								  ->attname)) == 0);
+
+	/*
+	 * Only decompress columns that are actually needed, but only if the
+	 * node is marked for decompression.
+	 *
+	 * There are other cases (in particular in ATRewriteTable) where the
+	 * decompression columns are not set up at all and in these cases we
+	 * should read all columns up to the attribute number.
+	 */
+	if (entry->arrow_arrays[attoff] == NULL && is_compressed_col(compressed_tupdesc, cattno) &&
+		(!aslot->referenced_attrs || bms_is_member(attno, aslot->referenced_attrs)))
+	{
+		bool isnull;
+		Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
+
+		if (!isnull)
+		{
+			const Form_pg_attribute attr = TupleDescAttr(tupdesc, attoff);
+			entry->arrow_arrays[attoff] =
+				arrow_column_cache_decompress(acache, attr->atttypid, value);
+		}
+	}
+}
+
+/*
+ * Lookup the Arrow cache entry for the tuple.
+ *
+ * If the entry does not exist, a new entry is created via LRU eviction.
+ */
+static ArrowColumnCacheEntry *
+arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
+{
+	ArrowColumnCache *acache = &aslot->arrow_cache;
+	const TupleDesc tupdesc = aslot->base.base.tts_tupleDescriptor;
+	const ItemPointer compressed_tid = &aslot->compressed_slot->tts_tid;
 	const ArrowColumnKey key = { .ctid = *compressed_tid };
-	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
 	bool found;
 
 	ArrowColumnCacheEntry *restrict entry = hash_search(acache->htab, &key, HASH_FIND, &found);
@@ -147,16 +212,16 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts)
 			/* Free allocated memory in the entry. The entry itself is managed
 			 * by the hash table and might be recycled so should not be freed
 			 * here. */
-			for (int i = 0; i < entry->nvalid; ++i)
+			for (int i = 0; i < entry->num_arrays; ++i)
 			{
-				if (entry->arrow_columns[i])
+				if (entry->arrow_arrays[i])
 				{
 					/* TODO: instead of all these pfrees the entry should
 					 * either use its own MemoryContext or implement the
 					 * release function in the ArrowArray. That's the only way
 					 * to know for sure which buffers are actually separately
 					 * palloc'd. */
-					ArrowArray *arr = entry->arrow_columns[i];
+					ArrowArray *arr = entry->arrow_arrays[i];
 
 					for (int64 j = 0; j < arr->n_buffers; j++)
 					{
@@ -165,12 +230,13 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts)
 						if (arr->buffers[j])
 							pfree((void *) arr->buffers[j]);
 					}
-					pfree(entry->arrow_columns[i]);
-					entry->arrow_columns[i] = NULL;
+					pfree(entry->arrow_arrays[i]);
+					entry->arrow_arrays[i] = NULL;
 				}
 			}
-			pfree((void *) entry->arrow_columns);
-			entry->arrow_columns = NULL;
+
+			pfree((void *) entry->arrow_arrays);
+			entry->arrow_arrays = NULL;
 		}
 
 		/* Allocate a new entry in the hash table. */
@@ -194,10 +260,10 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts)
 	 */
 	if (!found)
 	{
-		entry->nvalid = 0;
-		entry->arrow_columns =
+		entry->num_arrays = tupdesc->natts;
+		entry->arrow_arrays =
 			(ArrowArray **) MemoryContextAllocZero(acache->mcxt,
-												   sizeof(ArrowArray *) * tupdesc->natts);
+												   sizeof(ArrowArray *) * entry->num_arrays);
 		if (decompress_cache_print)
 			decompress_cache_misses++;
 	}
@@ -209,50 +275,60 @@ arrow_column_cache_read(ArrowTupleTableSlot *aslot, int natts)
 			decompress_cache_hits++;
 	}
 
+	return entry;
+}
+
+/*
+ * Fetch and decompress data into arrow arrays for the first N attributes.
+ *
+ * Note that only "referenced attributes" are decompressed (i.e., those that
+ * are actually referenced in a query), so some of the "natts" returned arrays
+ * may be NULL for this reason.
+ */
+ArrowArray **
+arrow_column_cache_read_many(ArrowTupleTableSlot *aslot, unsigned int natts)
+{
+	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
+	ArrowColumnCacheEntry *restrict entry = arrow_cache_get_entry(aslot);
+
+	Assert(natts > 0);
+
 	/*
-	 * Fill in missing columns in the cache entry.
+	 * Decompress any missing columns in the cache entry.
 	 *
 	 * Note that this will skip columns that are already dealt with before
 	 * and stored in the cache.
 	 */
-	for (int i = entry->nvalid; i < natts; i++)
+	for (unsigned int i = 0; i < natts; i++)
 	{
-		if (TupleDescAttr(tupdesc, i)->attisdropped)
-			continue;
-
 		const int16 cattoff = attrs_offset_map[i];
 		const AttrNumber attno = AttrOffsetGetAttrNumber(i);
 		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
-
-		Assert(namestrcmp(&TupleDescAttr(tupdesc, i)->attname,
-						  NameStr(TupleDescAttr(compressed_tupdesc, cattoff)->attname)) == 0);
-
-		/*
-		 * Only decompress columns that are actually needed, but only if the
-		 * node is marked for decompression.
-		 *
-		 * There are other cases (in particular in ATRewriteTable) where the
-		 * decompression columns are not set up at all and in these cases we
-		 * should read all columns up to the attribute number.
-		 */
-		if (entry->arrow_columns[i] == NULL && is_compressed_col(compressed_tupdesc, cattno) &&
-			(!aslot->referenced_attrs || bms_is_member(attno, aslot->referenced_attrs)))
-		{
-			bool isnull;
-			Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
-
-			if (!isnull)
-			{
-				const Form_pg_attribute attr = TupleDescAttr(tupdesc, i);
-				entry->arrow_columns[i] =
-					arrow_column_cache_decompress(acache, attr->atttypid, value);
-			}
-		}
+		decompress_one_attr(aslot, entry, attno, cattno);
 	}
 
-	entry->nvalid = natts;
+	return entry->arrow_arrays;
+}
 
-	return entry;
+/*
+ * Fetch and decompress data into an arrow array for the given
+ * attribute. Arrays for other attributes are returned too, and these may be
+ * valid if decompressed via a previous call.
+ *
+ * Note that only "referenced attributes" are decompressed (i.e., those that
+ * are actually referenced in a query), so some returned arrays may be NULL
+ * for this reason.
+ */
+ArrowArray **
+arrow_column_cache_read_one(ArrowTupleTableSlot *aslot, AttrNumber attno)
+{
+	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
+	ArrowColumnCacheEntry *restrict entry = arrow_cache_get_entry(aslot);
+	const AttrNumber cattno =
+		AttrOffsetGetAttrNumber(attrs_offset_map[AttrNumberGetAttrOffset(attno)]);
+
+	decompress_one_attr(aslot, entry, attno, cattno);
+	return entry->arrow_arrays;
 }
 
 /*
