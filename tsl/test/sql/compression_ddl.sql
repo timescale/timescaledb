@@ -634,7 +634,7 @@ SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-01 0:00:00+0'
@@ -675,7 +675,7 @@ SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-07 0:00:00+0'
@@ -715,7 +715,7 @@ SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-15 0:00:00+0'
@@ -756,7 +756,7 @@ SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-22 0:00:00+0'
@@ -795,7 +795,7 @@ SELECT device_id, count(*)
 FROM compression_insert
 GROUP BY device_id
 ORDER BY device_id;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
 SELECT count(*), sum(v0), sum(v1), sum(v2), sum(v3)
 FROM compression_insert
 WHERE time >= '2000-01-28 0:00:00+0'

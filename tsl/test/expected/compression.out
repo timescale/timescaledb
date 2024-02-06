@@ -2667,3 +2667,109 @@ SELECT approximate_row_count('stattest');
 (1 row)
 
 DROP TABLE stattest;
+-- test that all variants of compress_chunk produce a fully compressed chunk
+CREATE TABLE compress_chunk_test(time TIMESTAMPTZ NOT NULL, device text, value float);
+SELECT create_hypertable('compress_chunk_test', 'time');
+         create_hypertable         
+-----------------------------------
+ (47,public,compress_chunk_test,t)
+(1 row)
+
+INSERT INTO compress_chunk_test SELECT '2020-01-01', 'r2d2', 3.14;
+ALTER TABLE compress_chunk_test SET (timescaledb.compress);
+SELECT show_chunks('compress_chunk_test') AS "CHUNK" \gset
+-- initial call will compress the chunk
+SELECT compress_chunk(:'CHUNK');
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_47_100_chunk
+(1 row)
+
+-- subsequent calls will be noop
+SELECT compress_chunk(:'CHUNK');
+NOTICE:  chunk "_hyper_47_100_chunk" is already compressed
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_47_100_chunk
+(1 row)
+
+-- unless if_not_compressed is set to false
+\set ON_ERROR_STOP 0
+SELECT compress_chunk(:'CHUNK', false);
+ERROR:  chunk "_hyper_47_100_chunk" is already compressed
+\set ON_ERROR_STOP 1
+ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='device');
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+ compressed_chunk_id 
+---------------------
+                 101
+(1 row)
+
+-- changing compression settings will not recompress the chunk by default
+SELECT compress_chunk(:'CHUNK');
+NOTICE:  chunk "_hyper_47_100_chunk" is already compressed
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_47_100_chunk
+(1 row)
+
+-- unless we specify recompress := true
+SELECT compress_chunk(:'CHUNK', recompress := true);
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_47_100_chunk
+(1 row)
+
+-- compressed_chunk_id should be different now
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+ compressed_chunk_id 
+---------------------
+                 102
+(1 row)
+
+--test partial handling
+INSERT INTO compress_chunk_test SELECT '2020-01-01', 'c3po', 3.14;
+-- should result in merging uncompressed data into compressed chunk
+SELECT compress_chunk(:'CHUNK');
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_47_100_chunk
+(1 row)
+
+-- compressed_chunk_id should not have changed
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+ compressed_chunk_id 
+---------------------
+                 102
+(1 row)
+
+-- should return no rows
+SELECT * FROM ONLY :CHUNK;
+ time | device | value 
+------+--------+-------
+(0 rows)
+
+ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='');
+-- create another chunk
+INSERT INTO compress_chunk_test SELECT '2021-01-01', 'c3po', 3.14;
+SELECT show_chunks('compress_chunk_test') AS "CHUNK2" LIMIT 1 OFFSET 1 \gset
+SELECT compress_chunk(:'CHUNK2');
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_47_103_chunk
+(1 row)
+
+-- make it partial and compress again
+INSERT INTO compress_chunk_test SELECT '2021-01-01', 'r2d2', 3.14;
+SELECT compress_chunk(:'CHUNK2');
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_47_103_chunk
+(1 row)
+
+-- should return no rows
+SELECT * FROM ONLY :CHUNK2;
+ time | device | value 
+------+--------+-------
+(0 rows)
+

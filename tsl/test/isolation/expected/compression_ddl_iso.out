@@ -524,7 +524,7 @@ step RC1:
       SELECT ch FROM show_chunks('ts_device_table') ch
       LIMIT 1
      LOOP
-         CALL recompress_chunk(chunk_name);
+         PERFORM compress_chunk(chunk_name);
      END LOOP;
   END;
   $$;
@@ -632,7 +632,7 @@ step RC1:
       SELECT ch FROM show_chunks('ts_device_table') ch
       LIMIT 1
      LOOP
-         CALL recompress_chunk(chunk_name);
+         PERFORM compress_chunk(chunk_name);
      END LOOP;
   END;
   $$;
@@ -646,7 +646,7 @@ step RC2:
       SELECT ch FROM show_chunks('ts_device_table') ch
        ORDER BY ch::text LIMIT 1
      LOOP
-         CALL recompress_chunk(chunk_name, false);
+         PERFORM compress_chunk(chunk_name, false);
      END LOOP;
   END;
   $$;
@@ -654,7 +654,6 @@ step RC2:
 step UnlockChunk: ROLLBACK;
 step RC1: <... completed>
 step RC2: <... completed>
-ERROR:  nothing to recompress in chunk _timescaledb_internal._hyper_X_X_chunk
 step SH: SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table');
 total_chunks|number_compressed_chunks
 ------------+------------------------

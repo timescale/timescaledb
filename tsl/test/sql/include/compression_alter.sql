@@ -133,7 +133,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 -- try insert into compressed and recompress
 INSERT INTO test_defaults SELECT '2000-01-01', 2;
 SELECT * FROM test_defaults ORDER BY 1,2;
-CALL recompress_all_chunks('test_defaults', 1, false);
+SELECT compress_chunk(ch) FROM show_chunks('test_defaults') ch LIMIT 1;
 SELECT * FROM test_defaults ORDER BY 1,2;
 
 -- timescale/timescaledb#5412

@@ -1071,3 +1071,52 @@ SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_CHUNK2_NAME');
 SELECT approximate_row_count('stattest');
 
 DROP TABLE stattest;
+
+-- test that all variants of compress_chunk produce a fully compressed chunk
+CREATE TABLE compress_chunk_test(time TIMESTAMPTZ NOT NULL, device text, value float);
+SELECT create_hypertable('compress_chunk_test', 'time');
+
+INSERT INTO compress_chunk_test SELECT '2020-01-01', 'r2d2', 3.14;
+ALTER TABLE compress_chunk_test SET (timescaledb.compress);
+
+SELECT show_chunks('compress_chunk_test') AS "CHUNK" \gset
+
+-- initial call will compress the chunk
+SELECT compress_chunk(:'CHUNK');
+-- subsequent calls will be noop
+SELECT compress_chunk(:'CHUNK');
+-- unless if_not_compressed is set to false
+\set ON_ERROR_STOP 0
+SELECT compress_chunk(:'CHUNK', false);
+\set ON_ERROR_STOP 1
+
+ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='device');
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+-- changing compression settings will not recompress the chunk by default
+SELECT compress_chunk(:'CHUNK');
+-- unless we specify recompress := true
+SELECT compress_chunk(:'CHUNK', recompress := true);
+-- compressed_chunk_id should be different now
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+
+--test partial handling
+INSERT INTO compress_chunk_test SELECT '2020-01-01', 'c3po', 3.14;
+-- should result in merging uncompressed data into compressed chunk
+SELECT compress_chunk(:'CHUNK');
+-- compressed_chunk_id should not have changed
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+-- should return no rows
+SELECT * FROM ONLY :CHUNK;
+
+ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='');
+-- create another chunk
+INSERT INTO compress_chunk_test SELECT '2021-01-01', 'c3po', 3.14;
+SELECT show_chunks('compress_chunk_test') AS "CHUNK2" LIMIT 1 OFFSET 1 \gset
+SELECT compress_chunk(:'CHUNK2');
+
+-- make it partial and compress again
+INSERT INTO compress_chunk_test SELECT '2021-01-01', 'r2d2', 3.14;
+SELECT compress_chunk(:'CHUNK2');
+-- should return no rows
+SELECT * FROM ONLY :CHUNK2;
+

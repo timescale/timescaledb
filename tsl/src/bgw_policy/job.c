@@ -513,7 +513,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		if (!ts_chunk_needs_recompression(chunk))
 			continue;
 
-		tsl_recompress_chunk_wrapper(chunk);
+		tsl_compress_chunk_wrapper(chunk, true, false);
 
 		elog(LOG,
 			 "completed recompressing chunk \"%s.%s\"",
