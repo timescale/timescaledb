@@ -132,10 +132,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
-	.invalidation_cagg_log_add_entry = tsl_invalidation_cagg_log_add_entry,
-	.invalidation_hyper_log_add_entry = tsl_invalidation_hyper_log_add_entry,
-	.invalidation_process_hypertable_log = tsl_invalidation_process_hypertable_log,
-	.invalidation_process_cagg_log = tsl_invalidation_process_cagg_log,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */

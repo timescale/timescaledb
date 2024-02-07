@@ -109,10 +109,6 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
-	PGFunction invalidation_cagg_log_add_entry;
-	PGFunction invalidation_hyper_log_add_entry;
-	PGFunction invalidation_process_hypertable_log;
-	PGFunction invalidation_process_cagg_log;
 	PGFunction cagg_try_repair;
 
 	PGFunction compressed_data_send;
