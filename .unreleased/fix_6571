@@ -1,1 +1,0 @@
-Fixes: #6571 Fix pathtarget adjustment for MergeAppend paths in aggregation pushdown code 

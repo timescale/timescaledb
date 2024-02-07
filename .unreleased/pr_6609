@@ -1,2 +1,0 @@
-Implements: #6609 Deprecate recompress_chunk
-Implements: #6609 Add optional recompress argument to compress_chunk
