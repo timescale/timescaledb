@@ -1,2 +1,0 @@
-Implements: #6325 Add plan-time chunk exclusion for real-time CAggs
-Thanks: @raymalt and @martinhale for reporting very slow query plans on realtime CAggs queries
