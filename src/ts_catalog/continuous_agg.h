@@ -70,20 +70,6 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 
 /*
  * Information about the bucketing function.
- *
- * Note that this structure should be serializable and it should be possible
- * to transfer it over the network to the data nodes. The following procedures
- * are responsible for serializing and deserializing respectively:
- *
- * - bucket_function_serialize()
- * - bucket_function_deserialize()
- *
- * Serialized data is used as an input of the following procedures:
- *
- * - _timescaledb_internal.invalidation_process_hypertable_log()
- * - _timescaledb_internal.invalidation_process_cagg_log()
- *
- * See bucket_functions[] argument.
  */
 typedef struct ContinuousAggsBucketFunction
 {
@@ -172,11 +158,6 @@ typedef struct CaggPolicyOffset
 extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 
 extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
-extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
-														   ArrayType *bucket_widths,
-														   ArrayType *bucket_functions,
-														   CaggsInfo *all_caggs);
-
 extern TSDLLEXPORT ContinuousAgg *
 ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
 

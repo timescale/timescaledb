@@ -282,24 +282,6 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 	}
 }
 
-TS_FUNCTION_INFO_V1(ts_hypertable_invalidation_log_delete);
-/**
- * Delete hypertable invalidation log entries for all the CAGGs that belong to the
- * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
- *
- * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
- *                            Access Node.
- */
-Datum
-ts_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
-{
-	int32 raw_hypertable_id = PG_GETARG_INT32(0);
-
-	elog(DEBUG1, "invalidation log delete for hypertable %d", raw_hypertable_id);
-	hypertable_invalidation_log_delete(raw_hypertable_id);
-	PG_RETURN_VOID();
-}
-
 void
 ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 {
@@ -316,22 +298,6 @@ ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
-}
-
-TS_FUNCTION_INFO_V1(ts_materialization_invalidation_log_delete);
-/**
- * Delete materialization invalidation log entries for the CAGG that belong to the
- * materialized hypertable with ID 'mat_hypertable_id' in the Access Node.
- *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
- *                          Node.
- */
-Datum
-ts_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
-{
-	int32 mat_hypertable_id = PG_GETARG_INT32(0);
-	ts_materialization_invalidation_log_delete_inner(mat_hypertable_id);
-	PG_RETURN_VOID();
 }
 
 static HeapTuple
@@ -569,117 +535,6 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 			lappend_int(all_caggs_info.mat_hypertable_ids, cagg->data.mat_hypertable_id);
 	}
 	return all_caggs_info;
-}
-
-/*
- * Deserielizes a string into a palloc'ated ContinuousAggsBucketFunction*. Note
- * that NULL is also a valid return value.
- *
- * See bucket_function_serialize() for more details.
- */
-static const ContinuousAggsBucketFunction *
-bucket_function_deserialize(const char *str)
-{
-	char *begin, *end, *strings[4];
-	ContinuousAggsBucketFunction *bf;
-
-	/* empty string stands for serialized NULL */
-	if (*str == '\0')
-		return NULL;
-
-	begin = pstrdup(str);
-	for (size_t i = 0; i < lengthof(strings); i++)
-	{
-		end = strstr(begin, ";");
-		if (end == NULL)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("failed to deserialize \"%s\" into a bucketing function", str),
-					 errdetail("separator not found")));
-		}
-
-		*end = '\0';
-		strings[i] = begin;
-		begin = end + 1;
-	}
-
-	/* end of string was reached */
-	Assert(*begin == '\0');
-
-	if (atoi(strings[0]) != 1)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("failed to deserialize \"%s\" into a bucketing function", str),
-				 errdetail("unsupported format version")));
-	}
-
-	bf = palloc(sizeof(ContinuousAggsBucketFunction));
-	bf->experimental = true;
-	bf->name = "time_bucket_ng";
-	Assert(strlen(strings[1]) > 0);
-	bf->bucket_width = DatumGetIntervalP(
-		DirectFunctionCall3(interval_in, CStringGetDatum(strings[1]), InvalidOid, -1));
-
-	if (strlen(strings[2]) == 0)
-		TIMESTAMP_NOBEGIN(bf->origin);
-	else
-		bf->origin = DatumGetTimestamp(DirectFunctionCall3(timestamp_in,
-														   CStringGetDatum(strings[2]),
-														   ObjectIdGetDatum(InvalidOid),
-														   Int32GetDatum(-1)));
-
-	bf->timezone = strings[3];
-	return bf;
-}
-
-/*
- * Does not do deep copy of Datums For performance reasons. Make sure the arrays are not deallocated
- * before CaggsInfo.
- */
-TSDLLEXPORT void
-ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
-								   ArrayType *bucket_functions, CaggsInfo *all_caggs)
-{
-	all_caggs->mat_hypertable_ids = NIL;
-	all_caggs->bucket_widths = NIL;
-	all_caggs->bucket_functions = NIL;
-
-	Assert(ARR_NDIM(mat_hypertable_ids) > 0 && ARR_NDIM(bucket_widths) > 0 &&
-		   ARR_NDIM(bucket_functions) > 0);
-	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
-		   ARR_NDIM(bucket_functions) == ARR_NDIM(bucket_widths));
-
-	ArrayIterator it_htids, it_widths, it_bfs;
-	Datum array_datum1, array_datum2, array_datum3;
-	bool isnull1, isnull2, isnull3;
-
-	it_htids = array_create_iterator(mat_hypertable_ids, 0, NULL);
-	it_widths = array_create_iterator(bucket_widths, 0, NULL);
-	it_bfs = array_create_iterator(bucket_functions, 0, NULL);
-	while (array_iterate(it_htids, &array_datum1, &isnull1) &&
-		   array_iterate(it_widths, &array_datum2, &isnull2) &&
-		   array_iterate(it_bfs, &array_datum3, &isnull3))
-	{
-		Assert(!isnull1 && !isnull2 && !isnull3);
-		int32 mat_hypertable_id = DatumGetInt32(array_datum1);
-		all_caggs->mat_hypertable_ids =
-			lappend_int(all_caggs->mat_hypertable_ids, mat_hypertable_id);
-
-		Datum bucket_width;
-		bucket_width = array_datum2;
-		all_caggs->bucket_widths = lappend(all_caggs->bucket_widths, DatumGetPointer(bucket_width));
-
-		const ContinuousAggsBucketFunction *bucket_function =
-			bucket_function_deserialize(TextDatumGetCString(array_datum3));
-		/* bucket_function is cast to non-const type to make Visual Studio happy */
-		all_caggs->bucket_functions =
-			lappend(all_caggs->bucket_functions, (ContinuousAggsBucketFunction *) bucket_function);
-	}
-	array_free_iterator(it_htids);
-	array_free_iterator(it_widths);
-	array_free_iterator(it_bfs);
 }
 
 TSDLLEXPORT ContinuousAggHypertableStatus
