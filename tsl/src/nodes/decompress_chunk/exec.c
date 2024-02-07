@@ -173,6 +173,27 @@ decompress_chunk_exec_heap(CustomScanState *node)
 	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
 
+static int
+compressed_column_cmp(const void *_left, const void *_right)
+{
+	const CompressionColumnDescription *left = (const CompressionColumnDescription *) _left;
+	const CompressionColumnDescription *right = (const CompressionColumnDescription *) _right;
+
+	Assert(left->type == COMPRESSED_COLUMN);
+	Assert(right->type == COMPRESSED_COLUMN);
+
+	if (left->output_attno < right->output_attno)
+	{
+		return -1;
+	}
+
+	if (left->output_attno > right->output_attno)
+	{
+		return 1;
+	}
+
+	return 0;
+}
 /*
  * Complete initialization of the supplied CustomScanState.
  *
@@ -345,6 +366,10 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	Assert(current_compressed == num_compressed);
 	Assert(current_not_compressed == num_total);
 
+	qsort(dcontext->template_columns,
+		  num_compressed,
+		  sizeof(*dcontext->template_columns),
+		  compressed_column_cmp);
 	/*
 	 * Calculate the desired size of the batch memory context. Especially if we
 	 * use bulk decompression, the results should fit into the first page of the
