@@ -4,6 +4,80 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.14.0 (2024-02-08)
+
+This release contains performance improvements and bug fixes since 
+the 2.13.1 release. We recommend that you upgrade at the next
+available opportunity.
+ 
+In addition, it includes these noteworthy features:
+
+* Ability to change compression settings on existing compressed hypertables at any time. 
+New compression settings take effect on any new chunks that are compressed after the change.
+* Reduced locking requirements during chunk recompression
+* Limiting tuple decompression during DML operations to avoid decompressing a lot of tuples and causing storage issues (100k limit, configurable)
+* Helper functions for determining compression settings
+
+**For this release only**, you will need to restart the database before running `ALTER EXTENSION`
+
+**Multi-node support removal announcement**
+Following the deprecation announcement for Multi-node in TimescaleDB 2.13,
+Multi-node is no longer supported starting with TimescaleDB 2.14.
+
+TimescaleDB 2.13 is the last version that includes multi-node support. Learn more about it [here](docs/MultiNodeDeprecation.md).
+
+If you want to migrate from multi-node TimescaleDB to single-node TimescaleDB, read the
+[migration documentation](https://docs.timescale.com/migrate/latest/multi-node-to-timescale-service/).
+
+**Deprecation notice: recompress_chunk procedure**
+TimescaleDB 2.14 is the last version that will include the recompress_chunk procedure. Its
+functionality will be replaced by the compress_chunk function, which, starting on TimescaleDB 2.14, 
+works on both uncompressed and partially compressed chunks. 
+The compress_chunk function should be used going forward to fully compress all types of chunks or even recompress 
+old fully compressed chunks using new compression settings (through the newly introduced recompress optional parameter).
+
+**Features**
+* #6325 Add plan-time chunk exclusion for real-time CAggs
+* #6360 Remove support for creating Continuous Aggregates with old format
+* #6386 Add functions for determining compression defaults
+* #6410 Remove multinode public API
+* #6440 Allow SQLValueFunction pushdown into compressed scan
+* #6463 Support approximate hypertable size
+* #6513 Make compression settings per chunk
+* #6529 Remove reindex_relation from recompression
+* #6531 Fix if_not_exists behavior for CAgg policy with NULL offsets
+* #6545 Remove restrictions for changing compression settings
+* #6566 Limit tuple decompression during DML operations
+* #6579 Change compress_chunk and decompress_chunk to idempotent version by default
+* #6608 Add LWLock for OSM usage in loader 
+* #6609 Deprecate recompress_chunk
+* #6609 Add optional recompress argument to compress_chunk
+
+**Bugfixes**
+* #6541 Inefficient join plans on compressed hypertables.
+* #6491 Enable now() plantime constification with BETWEEN
+* #6494 Fix create_hypertable referenced by fk succeeds
+* #6498 Suboptimal query plans when using time_bucket with query parameters
+* #6507 time_bucket_gapfill with timezones doesn't handle daylight savings 
+* #6509 Make extension state available through function
+* #6512 Log extension state changes
+* #6522 Disallow triggers on CAggs
+* #6523 Reduce locking level on compressed chunk index during segmentwise recompression
+* #6531 Fix if_not_exists behavior for CAgg policy with NULL offsets
+* #6571 Fix pathtarget adjustment for MergeAppend paths in aggregation pushdown code 
+* #6575 Fix compressed chunk not found during upserts
+* #6592 Fix recompression policy ignoring partially compressed chunks
+* #6610 Ensure qsort comparison function is transitive
+
+**Thanks**
+* @coney21 and @GStechschulte for reporting the problem with inefficient join plans on compressed hypertables.
+* @HollowMan6 for reporting triggers not working on materialized views of
+CAggs
+* @jbx1 for reporting suboptimal query plans when using time_bucket with query parameters
+* @JerkoNikolic for reporting the issue with gapfill and DST
+* @pdipesh02 for working on removing the old Continuous Aggregate format
+* @raymalt and @martinhale for reporting very slow query plans on realtime CAggs queries
+
 ## 2.13.1 (2024-01-09)
 
 This release contains bug fixes since the 2.13.0 release.

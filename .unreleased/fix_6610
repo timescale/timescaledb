@@ -1,1 +1,0 @@
-Fixes: #6610 Ensure qsort comparison function is transitive
