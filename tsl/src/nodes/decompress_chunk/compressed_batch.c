@@ -555,6 +555,75 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	return get_vector_qual_summary(batch_state->vector_qual_result, n_rows);
 }
 
+void
+compressed_batch_discard_tuples(DecompressBatchState *batch_state)
+{
+	batch_state->next_batch_row = batch_state->total_batch_rows;
+	batch_state->vector_qual_result = NULL;
+
+	if (batch_state->per_batch_context != NULL)
+	{
+		ExecClearTuple(batch_state->compressed_slot);
+		ExecClearTuple(batch_state->decompressed_scan_slot);
+		MemoryContextReset(batch_state->per_batch_context);
+	}
+}
+
+static pg_noinline void
+compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *batch_state,
+						   TupleTableSlot *compressed_slot)
+{
+	/* Init memory context */
+	batch_state->per_batch_context = create_per_batch_mctx(dcontext->batch_memory_context_bytes);
+	Assert(batch_state->per_batch_context != NULL);
+
+	Assert(batch_state->compressed_slot == NULL);
+
+	/* Create a non ref-counted copy of the compressed tuple descriptor */
+	if (dcontext->compressed_slot_tdesc == NULL)
+		dcontext->compressed_slot_tdesc =
+			CreateTupleDescCopyConstr(compressed_slot->tts_tupleDescriptor);
+	Assert(dcontext->compressed_slot_tdesc->tdrefcount == -1);
+
+	batch_state->compressed_slot =
+		MakeSingleTupleTableSlot(dcontext->compressed_slot_tdesc, compressed_slot->tts_ops);
+
+	Assert(batch_state->decompressed_scan_slot == NULL);
+
+	/* Get a reference the the output TupleTableSlot */
+	TupleTableSlot *decompressed_slot = dcontext->decompressed_slot;
+
+	/*
+	 * This code follows Postgres' MakeTupleTableSlot().
+	 */
+	TupleTableSlot *slot = palloc0(TTSOpsVirtual.base_slot_size);
+	slot->type = T_TupleTableSlot;
+	slot->tts_flags = TTS_FLAG_EMPTY | TTS_FLAG_FIXED;
+
+	/*
+	 * The decompressed slot and the respective tuple descriptor are owned by
+	 * DecompressContext and live throughout the entire decompression process,
+	 * so here we can reuse a plain pointer to the tuple descriptor without
+	 * additional reference counting.
+	 */
+	slot->tts_tupleDescriptor = decompressed_slot->tts_tupleDescriptor;
+
+	slot->tts_mcxt = CurrentMemoryContext;
+	slot->tts_nvalid = 0;
+	slot->tts_values = palloc(MAXALIGN(slot->tts_tupleDescriptor->natts * sizeof(Datum)) +
+							  MAXALIGN(slot->tts_tupleDescriptor->natts * sizeof(bool)));
+	slot->tts_isnull = (bool *) ((char *) slot->tts_values) +
+					   MAXALIGN(slot->tts_tupleDescriptor->natts * sizeof(Datum));
+
+	/*
+	 * DecompressChunk produces virtual tuple slots.
+	 */
+	*((const TupleTableSlotOps **) &slot->tts_ops) = &TTSOpsVirtual;
+	slot->tts_ops->init(slot);
+
+	batch_state->decompressed_scan_slot = slot;
+}
+
 /*
  * Initialize the batch decompression state with the new compressed  tuple.
  */
@@ -570,35 +639,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	 */
 	if (batch_state->per_batch_context == NULL)
 	{
-		/* Init memory context */
-		batch_state->per_batch_context =
-			create_per_batch_mctx(dcontext->batch_memory_context_bytes);
-		Assert(batch_state->per_batch_context != NULL);
-
-		Assert(batch_state->compressed_slot == NULL);
-
-		/* Create a non ref-counted copy of the tuple descriptor */
-		if (dcontext->compressed_slot_tdesc == NULL)
-			dcontext->compressed_slot_tdesc =
-				CreateTupleDescCopyConstr(subslot->tts_tupleDescriptor);
-		Assert(dcontext->compressed_slot_tdesc->tdrefcount == -1);
-
-		batch_state->compressed_slot =
-			MakeSingleTupleTableSlot(dcontext->compressed_slot_tdesc, subslot->tts_ops);
-
-		Assert(batch_state->decompressed_scan_slot == NULL);
-
-		/* Get a reference the the output TupleTableSlot */
-		TupleTableSlot *slot = dcontext->decompressed_slot;
-
-		/* Create a non ref-counted copy of the tuple descriptor */
-		if (dcontext->decompressed_slot_scan_tdesc == NULL)
-			dcontext->decompressed_slot_scan_tdesc =
-				CreateTupleDescCopyConstr(slot->tts_tupleDescriptor);
-		Assert(dcontext->decompressed_slot_scan_tdesc->tdrefcount == -1);
-
-		batch_state->decompressed_scan_slot =
-			MakeSingleTupleTableSlot(dcontext->decompressed_slot_scan_tdesc, slot->tts_ops);
+		compressed_batch_lazy_init(dcontext, batch_state, subslot);
 	}
 	else
 	{
@@ -700,7 +741,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		 * columns. This can be improved by only decompressing the columns
 		 * needed for sorting.
 		 */
-		batch_state->next_batch_row = batch_state->total_batch_rows;
+		compressed_batch_discard_tuples(batch_state);
 
 		InstrCountTuples2(dcontext->ps, 1);
 		InstrCountFiltered1(dcontext->ps, batch_state->total_batch_rows);
@@ -1008,5 +1049,21 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	{
 		InstrCountFiltered1(dcontext->ps, 1);
 		compressed_batch_advance(dcontext, batch_state);
+	}
+}
+
+void
+compressed_batch_destroy(DecompressBatchState *batch_state)
+{
+	Assert(batch_state != NULL);
+
+	if (batch_state->compressed_slot != NULL)
+		ExecDropSingleTupleTableSlot(batch_state->compressed_slot);
+
+	if (batch_state->decompressed_scan_slot != NULL)
+	{
+		TupleTableSlot *slot = batch_state->decompressed_scan_slot;
+		pfree(slot->tts_values);
+		pfree(slot);
 	}
 }

@@ -35,13 +35,7 @@ batch_array_destroy(BatchArray *array)
 	for (int i = 0; i < array->n_batch_states; i++)
 	{
 		DecompressBatchState *batch_state = batch_array_get_at(array, i);
-		Assert(batch_state != NULL);
-
-		if (batch_state->compressed_slot != NULL)
-			ExecDropSingleTupleTableSlot(batch_state->compressed_slot);
-
-		if (batch_state->decompressed_scan_slot != NULL)
-			ExecDropSingleTupleTableSlot(batch_state->decompressed_scan_slot);
+		compressed_batch_destroy(batch_state);
 	}
 
 	pfree(array->batch_states);
@@ -86,16 +80,7 @@ batch_array_clear_at(BatchArray *array, int batch_index)
 	DecompressBatchState *batch_state = batch_array_get_at(array, batch_index);
 
 	/* Reset batch state */
-	batch_state->total_batch_rows = 0;
-	batch_state->next_batch_row = 0;
-	batch_state->vector_qual_result = NULL;
-
-	if (batch_state->per_batch_context != NULL)
-	{
-		ExecClearTuple(batch_state->compressed_slot);
-		ExecClearTuple(batch_state->decompressed_scan_slot);
-		MemoryContextReset(batch_state->per_batch_context);
-	}
+	compressed_batch_discard_tuples(batch_state);
 
 	array->unused_batch_states = bms_add_member(array->unused_batch_states, batch_index);
 }

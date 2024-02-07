@@ -56,7 +56,8 @@ typedef struct CompressedColumnValues
  */
 typedef struct DecompressBatchState
 {
-	TupleTableSlot *decompressed_scan_slot; /* A slot for the decompressed data */
+	TupleTableSlot *decompressed_scan_slot;
+	// TupleTableSlot decompressed_scan_slot_data; /* A slot for the decompressed data */
 	/*
 	 * Compressed target slot. We have to keep a local copy when doing batch
 	 * sorted merge, because the segmentby column values might reference the
@@ -91,7 +92,7 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 
 #define create_bulk_decompression_mctx(parent_mctx)                                                \
 	AllocSetContextCreate(parent_mctx,                                                             \
-						  "Bulk decompression",                                                    \
+						  "DecompressBatchState bulk decompression",                                                    \
 						  /* minContextSize = */ 0,                                                \
 						  /* initBlockSize = */ 64 * 1024,                                         \
 						  /* maxBlockSize = */ 64 * 1024);
@@ -106,7 +107,11 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
  */
 #define create_per_batch_mctx(block_size_bytes)                                                    \
 	AllocSetContextCreate(CurrentMemoryContext,                                                    \
-						  "Per-batch decompression",                                               \
+						  "DecompressBatchState per-batch",                                               \
 						  0,                                                                       \
 						  block_size_bytes,                                                        \
 						  block_size_bytes);
+
+extern void compressed_batch_destroy(DecompressBatchState *batch_state);
+
+extern void compressed_batch_discard_tuples(DecompressBatchState *batch_state);
