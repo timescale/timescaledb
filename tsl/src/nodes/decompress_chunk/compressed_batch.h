@@ -56,8 +56,7 @@ typedef struct CompressedColumnValues
  */
 typedef struct DecompressBatchState
 {
-	TupleTableSlot *decompressed_scan_slot;
-	// TupleTableSlot decompressed_scan_slot_data; /* A slot for the decompressed data */
+	TupleTableSlot decompressed_scan_slot_data; /* A slot for the decompressed data */
 	/*
 	 * Compressed target slot. We have to keep a local copy when doing batch
 	 * sorted merge, because the segmentby column values might reference the
@@ -92,7 +91,7 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 
 #define create_bulk_decompression_mctx(parent_mctx)                                                \
 	AllocSetContextCreate(parent_mctx,                                                             \
-						  "DecompressBatchState bulk decompression",                                                    \
+						  "DecompressBatchState bulk decompression",                               \
 						  /* minContextSize = */ 0,                                                \
 						  /* initBlockSize = */ 64 * 1024,                                         \
 						  /* maxBlockSize = */ 64 * 1024);
@@ -107,7 +106,7 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
  */
 #define create_per_batch_mctx(block_size_bytes)                                                    \
 	AllocSetContextCreate(CurrentMemoryContext,                                                    \
-						  "DecompressBatchState per-batch",                                               \
+						  "DecompressBatchState per-batch",                                        \
 						  0,                                                                       \
 						  block_size_bytes,                                                        \
 						  block_size_bytes);
@@ -115,3 +114,22 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 
 extern void compressed_batch_discard_tuples(DecompressBatchState *batch_state);
+
+inline static TupleTableSlot *
+compressed_batch_get_current_tuple(DecompressBatchState *batch_state)
+{
+	if (IsA(&batch_state->decompressed_scan_slot_data, Invalid))
+	{
+		/*
+		 * For convenience, we want a zero-initialized batch to be a valid
+		 * "empty" state, but unfortunately a zero-initialized TupleTableSlotData
+		 * is not a valid tuple slot, so here we have to work around this mismatch.
+		 */
+		Assert(batch_state->decompressed_scan_slot_data.tts_ops == NULL);
+		Assert(batch_state->per_batch_context == NULL);
+		return NULL;
+	}
+
+	Assert(batch_state->per_batch_context != NULL);
+	return &batch_state->decompressed_scan_slot_data;
+}
