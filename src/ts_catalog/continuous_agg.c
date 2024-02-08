@@ -711,6 +711,33 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 	return status;
 }
 
+TSDLLEXPORT bool
+ts_continuous_agg_hypertable_all_finalized(int32 raw_hypertable_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	bool all_finalized = true;
+
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg data;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		continuous_agg_formdata_fill(&data, ti);
+
+		if (!data.finalized)
+		{
+			all_finalized = false;
+			break;
+		}
+	}
+
+	ts_scan_iterator_close(&iterator);
+
+	return all_finalized;
+}
+
 TSDLLEXPORT List *
 ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 {

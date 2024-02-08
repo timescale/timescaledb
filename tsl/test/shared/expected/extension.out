@@ -118,6 +118,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.recompress_chunk_segmentwise(regclass,boolean)
  _timescaledb_functions.relation_approximate_size(regclass)
  _timescaledb_functions.relation_size(regclass)
+ _timescaledb_functions.remove_dropped_chunk_metadata(integer)
  _timescaledb_functions.repair_relation_acls()
  _timescaledb_functions.restart_background_workers()
  _timescaledb_functions.show_chunk(regclass)
