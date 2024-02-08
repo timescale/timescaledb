@@ -862,14 +862,6 @@ SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
  _timescaledb_internal._hyper_5_22_chunk | 
 (2 rows)
 
--- "created_before/after" can be used with time partitioning in show chunks
-SELECT show_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
-               show_chunks               
------------------------------------------
- _timescaledb_internal._hyper_5_21_chunk
- _timescaledb_internal._hyper_5_22_chunk
-(2 rows)
-
 BEGIN;
     SELECT show_chunks('drop_chunk_test_ts');
                show_chunks               
@@ -1528,11 +1520,39 @@ ORDER BY chunk_name ;
  _timescaledb_internal | _hyper_12_41_chunk
 (1 row)
 
--- "created_before/after" can be used with time partitioning in drop chunks
+-- "created_before/after" can be used with time partitioning in drop/show chunks
+SELECT show_chunks('drop_chunk_test_tstz', created_before => now() - INTERVAL '1 hour');
+ show_chunks 
+-------------
+(0 rows)
+
 SELECT drop_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
                drop_chunks               
 -----------------------------------------
  _timescaledb_internal._hyper_5_21_chunk
  _timescaledb_internal._hyper_5_22_chunk
+(2 rows)
+
+SELECT show_chunks('drop_chunk_test_ts');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_4_19_chunk
+ _timescaledb_internal._hyper_4_20_chunk
+(2 rows)
+
+-- "created_before/after" accept timestamptz even though partitioning col is just
+-- timestamp
+SELECT show_chunks('drop_chunk_test_ts', created_after => now() - INTERVAL '1 hour', created_before => now());
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_4_19_chunk
+ _timescaledb_internal._hyper_4_20_chunk
+(2 rows)
+
+SELECT drop_chunks('drop_chunk_test_ts', created_after => INTERVAL '1 hour', created_before => now());
+               drop_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_4_19_chunk
+ _timescaledb_internal._hyper_4_20_chunk
 (2 rows)
 
