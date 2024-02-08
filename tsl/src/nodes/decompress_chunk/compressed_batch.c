@@ -103,6 +103,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
 	column_values->output_value = &batch_state->decompressed_scan_slot_data.tts_values[attr];
 	column_values->output_isnull = &batch_state->decompressed_scan_slot_data.tts_isnull[attr];
+	column_values->output_attoffset = attr;
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
@@ -575,6 +576,82 @@ compressed_batch_discard_tuples(DecompressBatchState *batch_state)
 	}
 }
 
+static void make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row,
+							int num_compressed_columns, int natts);
+
+static void
+tts_getsomeattrs(TupleTableSlot *slot, int natts)
+{
+	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
+
+	//	mybt();
+	//	fprintf(stderr,
+	//			"row %d getsomeattrs %d nvalid %d\n",
+	//			batch_state->next_batch_row,
+	//			natts,
+	//			slot->tts_nvalid);
+
+	if (natts <= slot->tts_nvalid)
+	{
+		return;
+	}
+
+	DecompressContext *dcontext = batch_state->dcontext;
+	const bool reverse = dcontext->reverse;
+	const int num_compressed_columns = dcontext->num_compressed_columns;
+	const uint16 output_row = batch_state->next_batch_row;
+	const uint16 arrow_row =
+		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
+	make_next_tuple(batch_state, arrow_row, num_compressed_columns, natts);
+
+	// Assert(slot->tts_nvalid == slot->tts_tupleDescriptor->natts);
+}
+
+static void
+tts_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
+{
+	// mybt();
+
+	tts_getsomeattrs(srcslot, srcslot->tts_tupleDescriptor->natts);
+	TTSOpsVirtual.copyslot(dstslot, srcslot);
+}
+
+static void
+tts_materialize(TupleTableSlot *slot)
+{
+	// mybt();
+
+	//	elog(ERROR, "this is not allowed actually");
+
+	tts_getsomeattrs(slot, slot->tts_tupleDescriptor->natts);
+	// TTSOpsVirtual.materialize(slot);
+
+	/*
+	 * Not sure what to do, we can't actually materialize in place. This is called
+	 * almost never, I only saw it in "create table as select from compressed".
+	 * Just ignore it???
+	 * Called from ExecFetchSlotHeapTuple.
+	 */
+}
+
+static HeapTuple
+tts_copy_heap_tuple(TupleTableSlot *slot)
+{
+	// mybt();
+
+	tts_getsomeattrs(slot, slot->tts_tupleDescriptor->natts);
+	return TTSOpsVirtual.copy_heap_tuple(slot);
+}
+
+static MinimalTuple
+tts_copy_minimal_tuple(TupleTableSlot *slot)
+{
+	// mybt();
+
+	tts_getsomeattrs(slot, slot->tts_tupleDescriptor->natts);
+	return TTSOpsVirtual.copy_minimal_tuple(slot);
+}
+
 static pg_noinline void
 compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *batch_state,
 						   TupleTableSlot *compressed_slot)
@@ -596,6 +673,19 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 
 	/* Get a reference the the output TupleTableSlot */
 	TupleTableSlot *decompressed_slot = dcontext->decompressed_slot;
+
+	if (dcontext->tts_ops.base_slot_size == 0)
+	{
+		dcontext->tts_ops = TTSOpsVirtual;
+		dcontext->tts_ops.base_slot_size = -1;
+		dcontext->tts_ops.getsomeattrs = tts_getsomeattrs;
+		dcontext->tts_ops.copyslot = tts_copyslot;
+		dcontext->tts_ops.materialize = tts_materialize;
+		dcontext->tts_ops.copy_heap_tuple = tts_copy_heap_tuple;
+		dcontext->tts_ops.copy_minimal_tuple = tts_copy_minimal_tuple;
+	}
+
+	batch_state->dcontext = dcontext;
 
 	/*
 	 * This code follows Postgres' MakeTupleTableSlot().
@@ -625,7 +715,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	/*
 	 * DecompressChunk produces virtual tuple slots.
 	 */
-	*((const TupleTableSlotOps **) &slot->tts_ops) = &TTSOpsVirtual;
+	*((const TupleTableSlotOps **) &slot->tts_ops) = &dcontext->tts_ops;
 	slot->tts_ops->init(slot);
 }
 
@@ -661,7 +751,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	Assert(!TupIsNull(batch_state->compressed_slot));
 
 	batch_state->total_batch_rows = 0;
-	batch_state->next_batch_row = 0;
+	batch_state->next_batch_row = -1;
 
 	MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
 	MemoryContextReset(batch_state->per_batch_context);
@@ -753,21 +843,6 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	else
 	{
 		/*
-		 * We have some rows in the batch that pass the vectorized filters, so
-		 * we have to decompress the rest of the compressed columns.
-		 */
-		const int num_compressed_columns = dcontext->num_compressed_columns;
-		for (int i = 0; i < num_compressed_columns; i++)
-		{
-			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-			if (column_values->decompression_type == DT_Invalid)
-			{
-				decompress_column(dcontext, batch_state, i);
-				Assert(column_values->decompression_type != DT_Invalid);
-			}
-		}
-
-		/*
 		 * If all rows pass, no need to test the vector qual for each row. This
 		 * is a common case for time range conditions.
 		 */
@@ -800,16 +875,85 @@ store_text_datum(CompressedColumnValues *column_values, int arrow_row)
  * Doesn't check the quals.
  */
 static void
-make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_compressed_columns)
+make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_compressed_columns,
+				int new_natts)
 {
 	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data;
 
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
+	Assert(new_natts > decompressed_scan_slot->tts_nvalid);
+
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		if (column_values->decompression_type != DT_Invalid)
+		{
+			/*
+			 * Might have been decompressed earlier out-of-order by vectorized
+			 * quals, or for previous rows
+			 */
+			continue;
+		}
+
+		if (column_values->output_attoffset >= new_natts)
+		{
+			/* No need to decompress the following columns yet. */
+			break;
+		}
+
+		/* OK, have to decompress this column. */
+		MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
+		decompress_column(batch_state->dcontext, batch_state, i);
+		MemoryContextSwitchTo(old_context);
+
+		Assert(column_values->decompression_type != DT_Invalid);
+
+		if (column_values->decompression_type == DT_Iterator)
+		{
+			/*
+			 * Have to scroll the iterator column if we're materializing it not
+			 * at the first row.
+			 */
+			//			fprintf(stderr,
+			//					"late materialize iterator column %d at row %d\n",
+			//					i,
+			//					batch_state->next_batch_row);
+			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
+			for (int row = 0; row < batch_state->next_batch_row; row++)
+			{
+				DecompressResult result = iterator->try_next(iterator);
+
+				if (result.is_done)
+				{
+					elog(ERROR, "compressed column out of sync with batch counter");
+				}
+			}
+		}
+	}
+
+	/* Actually materialize the tuple for the current row. */
+	for (int i = 0; i < num_compressed_columns; i++)
+	{
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+
+		if (column_values->output_attoffset < decompressed_scan_slot->tts_nvalid)
+		{
+			/*
+			 * Materialized already, careful not to scroll the iterator the second
+			 * time.
+			 */
+			Assert(column_values->decompression_type != DT_Invalid);
+			continue;
+		}
+
+		if (column_values->output_attoffset >= new_natts)
+		{
+			/* No need to materialize the following columns yet. */
+			break;
+		}
+
 		if (column_values->decompression_type == DT_Iterator)
 		{
 			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
@@ -874,20 +1018,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		}
 	}
 
-	/*
-	 * It's a virtual tuple slot, so no point in clearing/storing it
-	 * per each row, we can just update the values in-place. This saves
-	 * some CPU. We have to store it after ExecQual returns false (the tuple
-	 * didn't pass the filter), or after a new batch. The standard protocol
-	 * is to clear and set the tuple slot for each row, but our output tuple
-	 * slots are read-only, and the memory is owned by this node, so it is
-	 * safe to violate this protocol.
-	 */
-	Assert(TTS_IS_VIRTUAL(decompressed_scan_slot));
-	if (TTS_EMPTY(decompressed_scan_slot))
-	{
-		ExecStoreVirtualTuple(decompressed_scan_slot);
-	}
+	decompressed_scan_slot->tts_nvalid = new_natts;
 }
 
 static bool
@@ -931,12 +1062,43 @@ postgres_qual(DecompressContext *dcontext, DecompressBatchState *batch_state)
 void
 compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batch_state)
 {
+	// mybt();
+
 	Assert(batch_state->total_batch_rows > 0);
 
 	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data;
 
 	const bool reverse = dcontext->reverse;
 	const int num_compressed_columns = dcontext->num_compressed_columns;
+
+	if (batch_state->next_batch_row == batch_state->total_batch_rows)
+	{
+		/*
+		 * Reached end of batch. Check that the columns that we're decompressing
+		 * row-by-row have also ended.
+		 */
+		for (int i = 0; i < num_compressed_columns; i++)
+		{
+			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+			if (column_values->decompression_type == DT_Iterator)
+			{
+				DecompressionIterator *iterator =
+					(DecompressionIterator *) column_values->buffers[0];
+				DecompressResult result = iterator->try_next(iterator);
+				if (!result.is_done)
+				{
+					elog(ERROR, "compressed column out of sync with batch counter");
+				}
+			}
+		}
+
+		/* Clear old slot state */
+		ExecClearTuple(decompressed_scan_slot);
+		return;
+	}
+
+	batch_state->next_batch_row++;
+	Assert(batch_state->next_batch_row <= batch_state->total_batch_rows);
 
 	for (; batch_state->next_batch_row < batch_state->total_batch_rows;
 		 batch_state->next_batch_row++)
@@ -966,7 +1128,8 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 			continue;
 		}
 
-		make_next_tuple(batch_state, arrow_row, num_compressed_columns);
+		decompressed_scan_slot->tts_flags &= ~TTS_FLAG_EMPTY;
+		decompressed_scan_slot->tts_nvalid = 0;
 
 		if (!postgres_qual(dcontext, batch_state))
 		{
@@ -979,27 +1142,7 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 		}
 
 		/* The tuple passed the qual. */
-		batch_state->next_batch_row++;
 		return;
-	}
-
-	/*
-	 * Reached end of batch. Check that the columns that we're decompressing
-	 * row-by-row have also ended.
-	 */
-	Assert(batch_state->next_batch_row == batch_state->total_batch_rows);
-	for (int i = 0; i < num_compressed_columns; i++)
-	{
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-		if (column_values->decompression_type == DT_Iterator)
-		{
-			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
-			DecompressResult result = iterator->try_next(iterator);
-			if (!result.is_done)
-			{
-				elog(ERROR, "compressed column out of sync with batch counter");
-			}
-		}
 	}
 
 	/* Clear old slot state */
@@ -1015,29 +1158,17 @@ void
 compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchState *batch_state,
 								  TupleTableSlot *first_tuple_slot)
 {
-	Assert(batch_state->next_batch_row == 0);
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(TupIsNull(compressed_batch_get_current_tuple(batch_state)));
 
-	/*
-	 * Check that we have decompressed all columns even if the vector quals
-	 * didn't pass for the entire batch. We need them because we're asked
-	 * to save the first tuple. This doesn't actually happen yet, because the
-	 * vectorized decompression is disabled with sorted merge.
-	 */
-#ifdef USE_ASSERT_CHECKING
-	const int num_compressed_columns = dcontext->num_compressed_columns;
-	for (int i = 0; i < num_compressed_columns; i++)
-	{
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-		Assert(column_values->decompression_type != DT_Invalid);
-	}
-#endif
-
 	/* Make the first tuple and save it. */
-	Assert(batch_state->next_batch_row == 0);
+	Assert(batch_state->next_batch_row == -1);
+	batch_state->next_batch_row = 0;
 	const uint16 arrow_row = dcontext->reverse ? batch_state->total_batch_rows - 1 : 0;
-	make_next_tuple(batch_state, arrow_row, dcontext->num_compressed_columns);
+
+	batch_state->decompressed_scan_slot_data.tts_flags &= ~TTS_FLAG_EMPTY;
+	batch_state->decompressed_scan_slot_data.tts_nvalid = 0;
+
 	ExecCopySlot(first_tuple_slot, &batch_state->decompressed_scan_slot_data);
 
 	/*
@@ -1046,7 +1177,6 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	 */
 	const bool qual_passed =
 		vector_qual(batch_state, arrow_row) && postgres_qual(dcontext, batch_state);
-	batch_state->next_batch_row++;
 
 	if (!qual_passed)
 	{

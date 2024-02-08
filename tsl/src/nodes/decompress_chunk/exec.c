@@ -209,7 +209,16 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	Plan *compressed_scan = linitial(cscan->custom_plans);
 	Assert(list_length(cscan->custom_plans) == 1);
 
+	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
+
 	PlanState *ps = &node->ss.ps;
+
+	ps->scanopsfixed = false;
+	ps->resultopsfixed = false;
+
+	/* initialize child expressions */
+	ps->qual = ExecInitQual(cscan->scan.plan.qual, ps);
+
 	if (ps->ps_ProjInfo)
 	{
 		/*
@@ -225,15 +234,11 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		List *modified_tlist =
 			constify_tableoid(tlist, cscan->scan.scanrelid, chunk_state->chunk_relid);
 
-		if (modified_tlist != tlist)
-		{
-			ps->ps_ProjInfo =
-				ExecBuildProjectionInfo(modified_tlist,
-										ps->ps_ExprContext,
-										ps->ps_ResultTupleSlot,
-										ps,
-										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
-		}
+		ps->ps_ProjInfo = ExecBuildProjectionInfo(modified_tlist,
+												  ps->ps_ExprContext,
+												  ps->ps_ResultTupleSlot,
+												  ps,
+												  node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 	}
 	/* Sort keys should only be present when sorted_merge_append is used */
 	Assert(dcontext->batch_sorted_merge == true || list_length(chunk_state->sortinfo) == 0);
@@ -283,7 +288,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	dcontext->num_compressed_columns = num_compressed;
 	dcontext->num_total_columns = num_total;
 	dcontext->template_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
-	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
 	dcontext->ps = &node->ss.ps;
 
 	TupleDesc desc = dcontext->decompressed_slot->tts_tupleDescriptor;

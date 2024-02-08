@@ -33,6 +33,8 @@ typedef struct CompressedColumnValues
 	Datum *output_value;
 	bool *output_isnull;
 
+	int output_attoffset;
+
 	/*
 	 * The flattened source buffers for getting the decompressed datum.
 	 * Depending on decompression type, they are as follows:
@@ -63,8 +65,8 @@ typedef struct DecompressBatchState
 	 * original tuple, and a batch outlives its source tuple.
 	 */
 	TupleTableSlot *compressed_slot;
-	uint16 total_batch_rows;
-	uint16 next_batch_row;
+	int16 total_batch_rows;
+	int16 next_batch_row;
 	Size block_size_bytes; /* Block size to use for memory context */
 	MemoryContext per_batch_context;
 
@@ -74,6 +76,8 @@ typedef struct DecompressBatchState
 	 * direction. Initialized to all ones, i.e. all rows pass.
 	 */
 	uint64 *restrict vector_qual_result;
+
+	DecompressContext *dcontext;
 
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;

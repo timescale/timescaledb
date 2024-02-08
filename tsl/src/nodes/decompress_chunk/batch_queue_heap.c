@@ -202,15 +202,10 @@ batch_queue_heap_pop(BatchQueue *bq, DecompressContext *dcontext)
 		for (int key = 0; key < queue->nkeys; key++)
 		{
 			SortSupport sortKey = &queue->sortkeys[key];
-			const AttrNumber attr = AttrNumberGetAttrOffset(sortKey->ssup_attno);
-			/*
-			 * We're working with virtual tuple slots so no need for slot_getattr().
-			 */
-			Assert(TTS_IS_VIRTUAL(&top_batch->decompressed_scan_slot_data));
 			queue->heap_entries[top_batch_index * queue->nkeys + key].value =
-				top_tuple->tts_values[attr];
-			queue->heap_entries[top_batch_index * queue->nkeys + key].null =
-				top_tuple->tts_isnull[attr];
+				slot_getattr(top_tuple,
+							 sortKey->ssup_attno,
+							 &queue->heap_entries[top_batch_index * queue->nkeys + key].null);
 		}
 
 		/* Place this batch on the heap according to its new decompressed tuple. */
@@ -277,15 +272,10 @@ batch_queue_heap_push_batch(BatchQueue *_queue, DecompressContext *dcontext,
 	for (int key = 0; key < queue->nkeys; key++)
 	{
 		SortSupport sortKey = &queue->sortkeys[key];
-		const AttrNumber attr = AttrNumberGetAttrOffset(sortKey->ssup_attno);
-		/*
-		 * We're working with virtual tuple slots so no need for slot_getattr().
-		 */
-		Assert(TTS_IS_VIRTUAL(queue->last_batch_first_tuple_slot));
 		queue->last_batch_first_tuple_entry[key].value =
-			queue->last_batch_first_tuple_slot->tts_values[attr];
-		queue->last_batch_first_tuple_entry[key].null =
-			queue->last_batch_first_tuple_slot->tts_isnull[attr];
+			slot_getattr(queue->last_batch_first_tuple_slot,
+						 sortKey->ssup_attno,
+						 &queue->last_batch_first_tuple_entry[key].null);
 	}
 
 	TupleTableSlot *current_tuple = compressed_batch_get_current_tuple(batch_state);
@@ -303,15 +293,10 @@ batch_queue_heap_push_batch(BatchQueue *_queue, DecompressContext *dcontext,
 	for (int key = 0; key < queue->nkeys; key++)
 	{
 		SortSupport sortKey = &queue->sortkeys[key];
-		const AttrNumber attr = AttrNumberGetAttrOffset(sortKey->ssup_attno);
-		/*
-		 * We're working with virtual tuple slots so no need for slot_getattr().
-		 */
-		Assert(TTS_IS_VIRTUAL(&batch_state->decompressed_scan_slot_data));
 		queue->heap_entries[new_batch_index * queue->nkeys + key].value =
-			current_tuple->tts_values[attr];
-		queue->heap_entries[new_batch_index * queue->nkeys + key].null =
-			current_tuple->tts_isnull[attr];
+			slot_getattr(current_tuple,
+						 sortKey->ssup_attno,
+						 &queue->heap_entries[new_batch_index * queue->nkeys + key].null);
 	}
 
 	/*
