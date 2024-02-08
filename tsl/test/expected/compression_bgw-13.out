@@ -307,16 +307,6 @@ SELECT COUNT(*) AS dropped_chunks_count
                    14
 (1 row)
 
--- We need to have some chunks that are marked as dropped, otherwise
--- we will not have a problem below.
-SELECT COUNT(*) AS dropped_chunks_count
-  FROM _timescaledb_catalog.chunk
- WHERE dropped = TRUE;
- dropped_chunks_count 
-----------------------
-                   14
-(1 row)
-
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
  count 

@@ -3946,6 +3946,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		}
 	}
 
+	bool all_caggs_finalized = ts_continuous_agg_hypertable_all_finalized(hypertable_id);
 	List *dropped_chunk_names = NIL;
 	for (uint64 i = 0; i < num_chunks; i++)
 	{
@@ -3968,7 +3969,7 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 		chunk_name = psprintf("%s.%s", schema_name, table_name);
 		dropped_chunk_names = lappend(dropped_chunk_names, chunk_name);
 
-		if (has_continuous_aggs)
+		if (has_continuous_aggs && !all_caggs_finalized)
 			ts_chunk_drop_preserve_catalog_row(chunks + i, DROP_RESTRICT, log_level);
 		else
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
