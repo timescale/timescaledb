@@ -2081,7 +2081,8 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 
 		/*
 		 * We cannot have a mix of [older_than/newer_than] and [created_before/created_after].
-		 * So, check that first.
+		 * So, check that first. Note that created_before/created_after have a type of
+		 * TIMESTAMPTZOID regardless of the partitioning type.
 		 */
 
 		if (!PG_ARGISNULL(3))
@@ -2094,7 +2095,11 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 								"or \"created_after\"")));
 
 			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 3);
-			created_before = ts_time_value_from_arg(PG_GETARG_DATUM(3), arg_type, time_type, false);
+			/* We use the existing function for various type/conversion checks */
+			created_before =
+				ts_time_value_from_arg(PG_GETARG_DATUM(3), arg_type, TIMESTAMPTZOID, false);
+			/* convert into int64 format for comparisons */
+			created_before = ts_internal_to_time_int64(created_before, TIMESTAMPTZOID);
 			before_after = true;
 		}
 
@@ -2108,7 +2113,11 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 								"or \"created_after\"")));
 
 			arg_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
-			created_after = ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, time_type, false);
+			/* We use the existing function for various type/conversion checks */
+			created_after =
+				ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, TIMESTAMPTZOID, false);
+			/* convert into int64 format for comparisons */
+			created_after = ts_internal_to_time_int64(created_after, TIMESTAMPTZOID);
 			before_after = true;
 		}
 
@@ -4152,7 +4161,8 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 
 	/*
 	 * We cannot have a mix of [older_than/newer_than] and [created_before/created_after].
-	 * So, check that first.
+	 * So, check that first. Note that created_before/created_after have a type of
+	 * TIMESTAMPTZOID regardless of the partitioning type.
 	 */
 
 	if (!PG_ARGISNULL(4))
@@ -4170,7 +4180,11 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 							 " partitioning.")));
 
 		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 4);
-		created_before = ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, time_type, false);
+		/* We use the existing function for various type/conversion checks */
+		created_before =
+			ts_time_value_from_arg(PG_GETARG_DATUM(4), arg_type, TIMESTAMPTZOID, false);
+		/* convert into int64 format for comparisons */
+		created_before = ts_internal_to_time_int64(created_before, TIMESTAMPTZOID);
 		before_after = true;
 		older_than = created_before;
 	}
@@ -4189,7 +4203,10 @@ ts_chunk_drop_chunks(PG_FUNCTION_ARGS)
 							 "with \"integer\"-like"
 							 " partitioning.")));
 		arg_type = get_fn_expr_argtype(fcinfo->flinfo, 5);
-		created_after = ts_time_value_from_arg(PG_GETARG_DATUM(5), arg_type, time_type, false);
+		/* We use the existing function for various type/conversion checks */
+		created_after = ts_time_value_from_arg(PG_GETARG_DATUM(5), arg_type, TIMESTAMPTZOID, false);
+		/* convert into int64 format for comparisons */
+		created_after = ts_internal_to_time_int64(created_after, TIMESTAMPTZOID);
 		before_after = true;
 		newer_than = created_after;
 	}
