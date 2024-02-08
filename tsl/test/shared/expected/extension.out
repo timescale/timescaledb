@@ -57,6 +57,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.create_chunk(regclass,jsonb,name,name,regclass)
  _timescaledb_functions.create_chunk_table(regclass,jsonb,name,name)
  _timescaledb_functions.create_compressed_chunk(regclass,regclass,bigint,bigint,bigint,bigint,bigint,bigint,bigint,bigint)
+ _timescaledb_functions.create_playground(regclass,boolean)
  _timescaledb_functions.dimension_info_in(cstring)
  _timescaledb_functions.dimension_info_out(_timescaledb_internal.dimension_info)
  _timescaledb_functions.drop_chunk(regclass)

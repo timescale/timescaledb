@@ -1,0 +1,95 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+-- attempt to create playground without creating the schema first
+DROP SCHEMA IF EXISTS tsdb_playground;
+NOTICE:  schema "tsdb_playground" does not exist, skipping
+DROP SCHEMA
+
+SELECT _timescaledb_functions.create_playground('public.conditions_1');
+ERROR:  "tsdb_playground" schema must be created before running this
+CONTEXT:  PL/pgSQL function _timescaledb_functions.create_playground(regclass,boolean) line 18 at RAISE
+
+CREATE SCHEMA IF NOT EXISTS tsdb_playground;
+CREATE SCHEMA
+
+CREATE TABLE public.conditions_1 (
+                time TIMESTAMPTZ NOT NULL,
+                temperature NUMERIC
+                );
+CREATE TABLE
+
+-- test creating playground on raw table
+SELECT _timescaledb_functions.create_playground('public.conditions_1');
+ERROR:  public.conditions_1 is not a hypertable
+CONTEXT:  PL/pgSQL function _timescaledb_functions.create_playground(regclass,boolean) line 29 at RAISE
+
+
+SELECT table_name FROM public.create_hypertable('public.conditions_1', 'time');
+  table_name  
+--------------
+ conditions_1
+(1 row)
+
+-- Attempt to create playground on empty hypertable
+SELECT _timescaledb_functions.create_playground('public.conditions_1');
+ERROR:  public.conditions_1 has no chunks for playground testing
+CONTEXT:  PL/pgSQL function _timescaledb_functions.create_playground(regclass,boolean) line 35 at RAISE
+
+INSERT INTO public.conditions_1
+        SELECT generate_series('2021-01-01 00:00'::timestamp, '2021-01-2 23:59:59'::timestamp, '1 hour'), random()*100;
+INSERT 0 48
+
+SELECT _timescaledb_functions.create_playground('public.conditions_1');
+       create_playground        
+--------------------------------
+ tsdb_playground.conditions_1_1
+(1 row)
+
+SELECT count(*) FROM tsdb_playground.conditions_1_1;
+ count 
+-------
+    48
+(1 row)
+
+SELECT _timescaledb_functions.create_playground('public.conditions_1');
+NOTICE:  relation "conditions_1_seq" already exists, skipping
+       create_playground        
+--------------------------------
+ tsdb_playground.conditions_1_2
+(1 row)
+
+SELECT count(*) FROM tsdb_playground.conditions_1_2;
+ count 
+-------
+    48
+(1 row)
+
+-- use table names with space characters
+CREATE TABLE public."bar foo" (
+                time TIMESTAMPTZ NOT NULL,                                                                             
+                temperature NUMERIC
+                );
+CREATE TABLE
+SELECT table_name FROM public.create_hypertable('public."bar foo"', 'time');
+ table_name 
+------------
+ bar foo
+(1 row)
+
+INSERT INTO public."bar foo"
+        SELECT generate_series('2021-01-01 00:00'::timestamp, '2021-01-2 23:59:59'::timestamp, '1 hour'), random()*100;
+INSERT 0 48
+SELECT _timescaledb_functions.create_playground('public."bar foo"');
+      create_playground      
+-----------------------------
+ tsdb_playground."bar foo_1"
+(1 row)
+
+SELECT _timescaledb_functions.create_playground('public."bar foo"');
+NOTICE:  relation "bar foo_seq" already exists, skipping
+      create_playground      
+-----------------------------
+ tsdb_playground."bar foo_2"
+(1 row)

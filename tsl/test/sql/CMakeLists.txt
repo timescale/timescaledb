@@ -25,6 +25,7 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_columns.sql
+    create_playground.sql
     decompress_index.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql

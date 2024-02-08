@@ -55,7 +55,8 @@ set(SOURCE_FILES
     cagg_migrate.sql
     job_error_log_retention.sql
     osm_api.sql
-    compression_defaults.sql)
+    compression_defaults.sql
+    playground.sql)
 
 if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND SOURCE_FILES debug_build_utils.sql)
