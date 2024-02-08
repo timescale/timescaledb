@@ -1,0 +1,2 @@
+Fixes: #6617 Fix error in show_chunks
+Thanks: @kevcenteno for reporting an issue with the show_chunks API showing incorrect output when 'created_before/created_after' was used with time-partitioned columns.
