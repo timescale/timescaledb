@@ -122,7 +122,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 
 		batch_state->decompressed_scan_slot->tts_values[column_description->scan_column_index] =
 			getmissingattr(dcontext->uncompressed_chunk_tupdesc,
-						   column_description->uncompressed_chunk_attno, // fixme
+						   column_description->uncompressed_chunk_attno,
 						   &batch_state->decompressed_scan_slot
 								->tts_isnull[column_description->scan_column_index]);
 		return;
@@ -294,8 +294,13 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	for (; column_index < dcontext->num_total_columns; column_index++)
 	{
 		column_description = &dcontext->template_columns[column_index];
-		// if (column_description->uncompressed_chunk_attno == var->varattno)
-		if (column_description->scan_column_index + 1 == var->varattno)
+//		fprintf(stderr, "column %d type %d scan index %d ucattno %d\n",
+//			column_index,
+//			column_description->type,
+//			column_description->scan_column_index,
+//			column_description->uncompressed_chunk_attno);
+		if (column_description->uncompressed_chunk_attno == var->varattno)
+		// if (column_description->scan_column_index + 1 == var->varattno)
 		{
 			break;
 		}

@@ -119,8 +119,8 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *comp
 				(path->info->chunk_rel->max_attr + 1));
 
 	/*
-	 * Go over the scan targetlist and determine to which output column each
-	 * scan column goes, saving other additional info as we do that.
+	 * Go over the compressed scan targetlist and determine to which output column each
+	 * compressed column goes, saving other additional info as we do that.
 	 */
 	path->have_bulk_decompression_columns = false;
 	path->decompression_map = NIL;
@@ -214,73 +214,69 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *comp
 
 		if (destination_attno_in_uncompressed_chunk > 0)
 		{
-			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, chunk_attrs_needed))
-			{
-				/*
-				 * We have a whole-row var...
-				 */
-				path->decompression_map =
-					lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
-			}
-			else
-			{
-				path->decompression_map =
-					lappend_int(path->decompression_map, list_length(*decompressed_scan_tlist) + 1);
+			// int scan_targetlist_attno = list_length(*decompressed_scan_tlist) + 1; /* using custom scan tlist */
+			 int scan_targetlist_attno = destination_attno_in_uncompressed_chunk; /* using physical scan tlist, incorrect for dropped, has to skip them */
+			path->decompression_map =
+					lappend_int(path->decompression_map, scan_targetlist_attno);
 
-				Oid vartype;
-				int32 vartypmod;
-				Oid varcollid;
-				get_atttypetypmodcoll(path->info->chunk_rte->relid,
-									  destination_attno_in_uncompressed_chunk,
-									  &vartype,
-									  &vartypmod,
-									  &varcollid);
-				Var *tlist_var = makeVar(path->info->chunk_rel->relid,
-										 destination_attno_in_uncompressed_chunk,
-										 vartype,
-										 vartypmod,
-										 varcollid,
-										 /* varlevelsup = */ 0);
-				TargetEntry *tentry =
+			Oid vartype;
+			int32 vartypmod;
+			Oid varcollid;
+			get_atttypetypmodcoll(path->info->chunk_rte->relid,
+								  destination_attno_in_uncompressed_chunk,
+								  &vartype,
+								  &vartypmod,
+								  &varcollid);
+			Var *tlist_var = makeVar(path->info->chunk_rel->relid,
+									 destination_attno_in_uncompressed_chunk,
+									 vartype,
+									 vartypmod,
+									 varcollid,
+									 /* varlevelsup = */ 0);
+			TargetEntry *tentry =
 					makeTargetEntry(&tlist_var->xpr,
 									/* resno = */ list_length(*decompressed_scan_tlist) + 1,
 									/* resname = */ NULL,
 									/* resjunk = */ false);
 
-				*decompressed_scan_tlist = lappend(*decompressed_scan_tlist, tentry);
+			*decompressed_scan_tlist = lappend(*decompressed_scan_tlist, tentry);
+
+			/*
+			 * Determine if we can use bulk decompression for this column.
+			 */
+			const bool bulk_decompression_possible =
+				!is_segment && destination_attno_in_uncompressed_chunk > 0 &&
+				tsl_get_decompress_all_function(compression_get_default_algorithm(vartype), vartype) !=
+					NULL;
+			path->have_bulk_decompression_columns |= bulk_decompression_possible;
+			path->bulk_decompression_column =
+				lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
+
+			/*
+				 * Save information about decompressed columns in uncompressed chunk
+				 * for planning of vectorized filters.
+				 */
+			if (destination_attno_in_uncompressed_chunk > 0)
+			{
+				Assert(list_length(*decompressed_scan_tlist) > 0);
+				path->uncompressed_chunk_attno_to_compression_info
+						[destination_attno_in_uncompressed_chunk] =
+						(DecompressChunkColumnCompression){ .bulk_decompression_possible =
+						bulk_decompression_possible,
+						.scan_targetlist_index = scan_targetlist_attno - 1 };
 			}
 		}
 		else
 		{
 			path->decompression_map =
 				lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
+			path->bulk_decompression_column =
+				lappend_int(path->bulk_decompression_column, false);
 		}
 
 		path->is_segmentby_column = lappend_int(path->is_segmentby_column, is_segment);
 
-		/*
-		 * Determine if we can use bulk decompression for this column.
-		 */
-		Oid typoid = get_atttype(path->info->chunk_rte->relid, chunk_attno);
-		const bool bulk_decompression_possible =
-			!is_segment && destination_attno_in_uncompressed_chunk > 0 &&
-			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
-				NULL;
-		path->have_bulk_decompression_columns |= bulk_decompression_possible;
-		path->bulk_decompression_column =
-			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
 
-		/*
-		 * Save information about decompressed columns in uncompressed chunk
-		 * for planning of vectorized filters.
-		 */
-		if (destination_attno_in_uncompressed_chunk > 0)
-		{
-			path->uncompressed_chunk_attno_to_compression_info
-				[destination_attno_in_uncompressed_chunk] =
-				(DecompressChunkColumnCompression){ .bulk_decompression_possible =
-														bulk_decompression_possible };
-		}
 
 		if (path->perform_vectorized_aggregation)
 		{
@@ -293,6 +289,27 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *comp
 			else
 				path->aggregated_column_type = lappend_int(path->aggregated_column_type, -1);
 		}
+	}
+
+	if (false && bms_is_member(InvalidAttrNumber - FirstLowInvalidHeapAttributeNumber, chunk_attrs_needed))
+	{
+		/*
+		 * The whole row var has to be in the scan targetlist as well.
+		 */
+		Oid vartype = get_rel_type_id(path->info->chunk_rte->relid);
+		Var *tlist_var = makeVar(path->info->chunk_rel->relid,
+								 InvalidAttrNumber,
+								 vartype,
+								 /* vartypmod = */ -1,
+								 /* varcollid = */ 0,
+								 /* varlevelsup = */ 0);
+		TargetEntry *tentry =
+			makeTargetEntry(&tlist_var->xpr,
+							/* resno = */ list_length(*decompressed_scan_tlist) + 1,
+							/* resname = */ NULL,
+							/* resjunk = */ false);
+
+		*decompressed_scan_tlist = lappend(*decompressed_scan_tlist, tentry);
 	}
 
 	/*
@@ -858,11 +875,15 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * Determine which compressed column goes to which output column.
 	 */
+	List *native_tlist = NIL;
 	build_decompression_map(root,
 							dcpath,
 							compressed_scan->plan.targetlist,
 							chunk_attrs_needed,
-							&decompress_plan->custom_scan_tlist);
+							&native_tlist);
+//	fprintf(stderr, "native tlist:\n");
+//	my_print(native_tlist);
+	//decompress_plan->scan.plan.targetlist = native_tlist;
 
 	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
 	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
@@ -874,16 +895,14 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	if (dcpath->perform_vectorized_aggregation)
 	{
 		Assert(list_length(decompress_plan->custom_scan_tlist) == 1);
-		decompress_plan->custom_scan_tlist = decompressed_result_tlist;
+		decompress_plan->custom_scan_tlist = decompress_plan->scan.plan.targetlist;
 	}
-	//	else
-	//	{
-	//		decompress_plan->custom_scan_tlist
-	//			= build_physical_tlist(root, dcpath->info->chunk_rel);
-	//	}
-
-//	fprintf(stderr, "custom scan targetlist is:\n");
-//	my_print(decompress_plan->custom_scan_tlist);
+	else
+	{
+		//decompress_plan->scan.plan.targetlist = decompress
+//		decompress_plan->custom_scan_tlist
+//			= build_physical_tlist(root, dcpath->info->chunk_rel);
+	}
 
 	/* Build heap sort info for sorted_merge_append */
 	List *sort_options = NIL;
@@ -967,7 +986,13 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 						 var->vartype,
 						 pk->pk_opfamily);
 
-				sort_col_idx = lappend_oid(sort_col_idx, var->varattno);
+				/*
+				 * Note that the batch sorted merge works over the scan tuples,
+				 * not the result tuples like a separate Sort node.
+				 */
+				DecompressChunkColumnCompression *column_info
+					= &dcpath->uncompressed_chunk_attno_to_compression_info[var->varattno];
+				sort_col_idx = lappend_oid(sort_col_idx, AttrOffsetGetAttrNumber(column_info->scan_targetlist_index));
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
 				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
 				sort_ops = lappend_oid(sort_ops, sortop);
@@ -1130,6 +1155,13 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 												 dcpath->bulk_decompression_column,
 												 dcpath->aggregated_column_type,
 												 sort_options);
+
+	// fprintf(stderr, "result targetlist:\n");
+	// my_print(decompress_plan->scan.plan.targetlist);
+
+	// fprintf(stderr, "at planning time, custom scan targetlist is:\n");
+	// my_print(decompress_plan->custom_scan_tlist);
+
 
 	return &decompress_plan->scan.plan;
 }

@@ -49,6 +49,7 @@ typedef struct CompressionInfo
 typedef struct ColumnCompressionInfo
 {
 	bool bulk_decompression_possible;
+	int scan_targetlist_index;
 } DecompressChunkColumnCompression;
 
 typedef struct DecompressChunkPath
