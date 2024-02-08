@@ -71,8 +71,8 @@ check_for_system_columns(Bitmapset *attrs_used)
  * attnos.
  */
 static void
-build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan_tlist,
-						Bitmapset *chunk_attrs_needed)
+build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *compressed_scan_tlist,
+						Bitmapset *chunk_attrs_needed, List **decompressed_scan_tlist)
 {
 	/*
 	 * Track which normal and metadata columns we were able to find in the
@@ -124,7 +124,7 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 	 */
 	path->have_bulk_decompression_columns = false;
 	path->decompression_map = NIL;
-	foreach (lc, scan_tlist)
+	foreach (lc, compressed_scan_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
@@ -209,8 +209,53 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 
 		bool is_segment = ts_array_is_member(path->info->settings->fd.segmentby, column_name);
 
-		path->decompression_map =
-			lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
+		//		path->decompression_map = lappend_int(path->decompression_map,
+		// destination_attno_in_uncompressed_chunk);
+
+		if (destination_attno_in_uncompressed_chunk > 0)
+		{
+			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, chunk_attrs_needed))
+			{
+				/*
+				 * We have a whole-row var...
+				 */
+				path->decompression_map =
+					lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
+			}
+			else
+			{
+				path->decompression_map =
+					lappend_int(path->decompression_map, list_length(*decompressed_scan_tlist) + 1);
+
+				Oid vartype;
+				int32 vartypmod;
+				Oid varcollid;
+				get_atttypetypmodcoll(path->info->chunk_rte->relid,
+									  destination_attno_in_uncompressed_chunk,
+									  &vartype,
+									  &vartypmod,
+									  &varcollid);
+				Var *tlist_var = makeVar(path->info->chunk_rel->relid,
+										 destination_attno_in_uncompressed_chunk,
+										 vartype,
+										 vartypmod,
+										 varcollid,
+										 /* varlevelsup = */ 0);
+				TargetEntry *tentry =
+					makeTargetEntry(&tlist_var->xpr,
+									/* resno = */ list_length(*decompressed_scan_tlist) + 1,
+									/* resname = */ NULL,
+									/* resjunk = */ false);
+
+				*decompressed_scan_tlist = lappend(*decompressed_scan_tlist, tentry);
+			}
+		}
+		else
+		{
+			path->decompression_map =
+				lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
+		}
+
 		path->is_segmentby_column = lappend_int(path->is_segmentby_column, is_segment);
 
 		/*
@@ -693,7 +738,7 @@ ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
 
 Plan *
 decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path,
-							 List *decompressed_tlist, List *clauses, List *custom_plans)
+							 List *decompressed_result_tlist, List *clauses, List *custom_plans)
 {
 	DecompressChunkPath *dcpath = (DecompressChunkPath *) path;
 	CustomScan *decompress_plan = makeNode(CustomScan);
@@ -710,19 +755,10 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	decompress_plan->scan.scanrelid = dcpath->info->chunk_rel->relid;
 
 	/* output target list */
-	decompress_plan->scan.plan.targetlist = decompressed_tlist;
+	decompress_plan->scan.plan.targetlist = decompressed_result_tlist;
+
 	/* input target list */
 	decompress_plan->custom_scan_tlist = NIL;
-
-	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
-	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
-	 *
-	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
-	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
-	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
-	 */
-	if (dcpath->perform_vectorized_aggregation)
-		decompress_plan->custom_scan_tlist = decompressed_tlist;
 
 	if (IsA(compressed_path, IndexPath))
 	{
@@ -804,7 +840,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	/*
 	 * Determine which columns we have to decompress.
-	 * decompressed_tlist is sometimes empty, e.g. for a direct select from
+	 * decompressed_result_tlist is sometimes empty, e.g. for a direct select from
 	 * chunk. We have a ProjectionPath above DecompressChunk in this case, and
 	 * the targetlist for this path is not built by the planner
 	 * (CP_IGNORE_TLIST). This is why we have to examine rel pathtarget.
@@ -822,7 +858,32 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * Determine which compressed column goes to which output column.
 	 */
-	build_decompression_map(root, dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
+	build_decompression_map(root,
+							dcpath,
+							compressed_scan->plan.targetlist,
+							chunk_attrs_needed,
+							&decompress_plan->custom_scan_tlist);
+
+	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
+	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
+	 *
+	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
+	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
+	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
+	 */
+	if (dcpath->perform_vectorized_aggregation)
+	{
+		Assert(list_length(decompress_plan->custom_scan_tlist) == 1);
+		decompress_plan->custom_scan_tlist = decompressed_result_tlist;
+	}
+	//	else
+	//	{
+	//		decompress_plan->custom_scan_tlist
+	//			= build_physical_tlist(root, dcpath->info->chunk_rel);
+	//	}
+
+//	fprintf(stderr, "custom scan targetlist is:\n");
+//	my_print(decompress_plan->custom_scan_tlist);
 
 	/* Build heap sort info for sorted_merge_append */
 	List *sort_options = NIL;

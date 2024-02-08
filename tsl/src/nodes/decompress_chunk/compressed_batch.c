@@ -100,9 +100,10 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->template_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
-	column_values->output_value = &batch_state->decompressed_scan_slot->tts_values[attr];
-	column_values->output_isnull = &batch_state->decompressed_scan_slot->tts_isnull[attr];
+	column_values->output_value =
+		&batch_state->decompressed_scan_slot->tts_values[column_description->scan_column_index];
+	column_values->output_isnull =
+		&batch_state->decompressed_scan_slot->tts_isnull[column_description->scan_column_index];
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
@@ -119,10 +120,11 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 */
 		column_values->decompression_type = DT_Default;
 
-		batch_state->decompressed_scan_slot->tts_values[attr] =
-			getmissingattr(batch_state->decompressed_scan_slot->tts_tupleDescriptor,
-						   column_description->output_attno,
-						   &batch_state->decompressed_scan_slot->tts_isnull[attr]);
+		batch_state->decompressed_scan_slot->tts_values[column_description->scan_column_index] =
+			getmissingattr(dcontext->uncompressed_chunk_tupdesc,
+						   column_description->uncompressed_chunk_attno, // fixme
+						   &batch_state->decompressed_scan_slot
+								->tts_isnull[column_description->scan_column_index]);
 		return;
 	}
 
@@ -292,11 +294,17 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	for (; column_index < dcontext->num_total_columns; column_index++)
 	{
 		column_description = &dcontext->template_columns[column_index];
-		if (column_description->output_attno == var->varattno)
+		// if (column_description->uncompressed_chunk_attno == var->varattno)
+		if (column_description->scan_column_index + 1 == var->varattno)
 		{
 			break;
 		}
 	}
+//	if (column_index == dcontext->num_total_columns)
+//	{
+//		fprintf(stderr, "%d total columns\n", dcontext->num_total_columns);
+//		my_print(var);
+//	}
 	Ensure(column_index < dcontext->num_total_columns,
 		   "decompressed column %d not found in batch",
 		   var->varattno);
@@ -647,11 +655,12 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				 * and our output tuples are read-only, so it's enough to only
 				 * save it once per batch, which we do here.
 				 */
-				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
-				batch_state->decompressed_scan_slot->tts_values[attr] =
+				batch_state->decompressed_scan_slot
+					->tts_values[column_description->scan_column_index] =
 					slot_getattr(batch_state->compressed_slot,
 								 column_description->compressed_scan_attno,
-								 &batch_state->decompressed_scan_slot->tts_isnull[attr]);
+								 &batch_state->decompressed_scan_slot
+									  ->tts_isnull[column_description->scan_column_index]);
 				break;
 			}
 			case COUNT_COLUMN:

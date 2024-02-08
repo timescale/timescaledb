@@ -264,8 +264,9 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	dcontext->template_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
 	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
 	dcontext->ps = &node->ss.ps;
+	dcontext->uncompressed_chunk_tupdesc = node->ss.ss_currentRelation->rd_att;
 
-	TupleDesc desc = dcontext->decompressed_slot->tts_tupleDescriptor;
+	TupleDesc decompressed_scan_slot_desc = dcontext->decompressed_slot->tts_tupleDescriptor;
 
 	/*
 	 * Compressed columns go in front, and the rest go to the back, so we have
@@ -276,21 +277,38 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	for (int compressed_index = 0; compressed_index < list_length(chunk_state->decompression_map);
 		 compressed_index++)
 	{
+		const AttrNumber scan_attno =
+			list_nth_int(chunk_state->decompression_map, compressed_index);
+
 		CompressionColumnDescription column = {
 			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
-			.output_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
+			.uncompressed_chunk_attno = 0,
+			.scan_column_index = -1,
 			.bulk_decompression_supported =
 				list_nth_int(chunk_state->bulk_decompression_column, compressed_index)
 		};
 
-		if (column.output_attno == 0)
+		if (scan_attno == 0)
 		{
 			/* We are asked not to decompress this column, skip it. */
 			continue;
 		}
 
-		if (column.output_attno > 0)
+		if (scan_attno > 0)
 		{
+			column.scan_column_index = AttrNumberGetAttrOffset(scan_attno);
+			if (chunk_state->custom_scan_tlist)
+			{
+				const TargetEntry *tentry =
+					list_nth(chunk_state->custom_scan_tlist, column.scan_column_index);
+				column.uncompressed_chunk_attno = castNode(Var, tentry->expr)->varattno;
+			}
+			else
+			{
+				/* I have no idea what I'm doing lol */
+				column.uncompressed_chunk_attno = scan_attno;
+			}
+
 			if (chunk_state->perform_vectorized_aggregation &&
 				lfirst_int(list_nth_cell(chunk_state->aggregated_column_type, compressed_index)) !=
 					-1)
@@ -302,7 +320,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			{
 				/* normal column that is also present in decompressed chunk */
 				Form_pg_attribute attribute =
-					TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
+					TupleDescAttr(decompressed_scan_slot_desc, column.scan_column_index);
 
 				column.typid = attribute->atttypid;
 				column.value_bytes = get_typlen(column.typid);
@@ -316,7 +334,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		else
 		{
 			/* metadata columns */
-			switch (column.output_attno)
+			switch (scan_attno)
 			{
 				case DECOMPRESS_CHUNK_COUNT_ID:
 					column.type = COUNT_COLUMN;
@@ -325,7 +343,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 					column.type = SEQUENCE_NUM_COLUMN;
 					break;
 				default:
-					elog(ERROR, "Invalid column attno \"%d\"", column.output_attno);
+					elog(ERROR, "Invalid column attno \"%d\"", scan_attno);
 					break;
 			}
 		}

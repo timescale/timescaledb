@@ -30,12 +30,14 @@ typedef struct CompressionColumnDescription
 	int value_bytes;
 
 	/*
-	 * Attno of the decompressed column in the output of DecompressChunk node.
+	 * Index of the decompressed column in the scan targetlist of DecompressChunk node.
 	 * Negative values are special columns that do not have a representation in
 	 * the decompressed chunk, but are still used for decompression. They should
 	 * have the respective `type` field.
 	 */
-	AttrNumber output_attno;
+	int scan_column_index;
+
+	AttrNumber uncompressed_chunk_attno;
 
 	/*
 	 * Attno of the compressed column in the input compressed chunk scan.
@@ -73,6 +75,8 @@ typedef struct DecompressContext
 	 */
 	TupleDesc decompressed_slot_scan_tdesc;
 	TupleDesc compressed_slot_tdesc;
+
+	TupleDesc uncompressed_chunk_tupdesc;
 
 	PlanState *ps; /* Set for filtering and instrumentation */
 
