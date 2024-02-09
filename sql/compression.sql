@@ -5,5 +5,5 @@
 CREATE FUNCTION ts_compressionam_handler(internal) RETURNS table_am_handler
 AS '@MODULE_PATHNAME@', 'ts_compressionam_handler' LANGUAGE C;
 
-CREATE ACCESS METHOD tscompression TYPE TABLE HANDLER ts_compressionam_handler;
-COMMENT ON ACCESS METHOD tscompression IS 'TimescaleDB columnar compression';
+CREATE ACCESS METHOD hyperstore TYPE TABLE HANDLER ts_compressionam_handler;
+COMMENT ON ACCESS METHOD hyperstore IS 'TimescaleDB columnar compression';
