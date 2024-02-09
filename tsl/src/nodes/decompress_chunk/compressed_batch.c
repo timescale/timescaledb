@@ -102,8 +102,11 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	column_values->arrow = NULL;
 	const AttrNumber offs = AttrNumberGetAttrOffset(column_description->output_attno);
 	column_values->output_attoffset = offs;
-	Datum *output_value = &compressed_batch_current_tuple(batch_state)->tts_values[offs];
-	bool *output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[offs];
+	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[offs];
+	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[offs];
+	Datum *output_value = column_values->output_value;
+	bool *output_isnull = column_values->output_isnull;
+
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
@@ -943,8 +946,12 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		CompressedColumnValues *column_values =
 			&batch_state->compressed_columns[last_materialized_column];
 		const int offs = column_values->output_attoffset;
+		/*
 		bool *output_isnull = &decompressed_scan_slot->tts_isnull[offs];
 		Datum *output_value = &decompressed_scan_slot->tts_values[offs];
+		*/
+		bool *output_isnull = column_values->output_isnull;
+		Datum *output_value = column_values->output_value;
 
 		if (offs < decompressed_scan_slot->tts_nvalid)
 		{
@@ -971,12 +978,11 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			break;
 		}
 
-		decompressed_scan_slot->tts_nvalid = offs + 1;
-
 		if (column_values->decompression_type == DT_Iterator)
 		{
 			//			fprintf(stderr, "scrolled #%d (-> %d) at row %d batch %p\n",
-			//last_materialized_column, 				offs, batch_state->next_batch_row, batch_state);
+			// last_materialized_column, 				offs, batch_state->next_batch_row,
+			// batch_state);
 
 			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
 			DecompressResult result = iterator->try_next(iterator);
@@ -1043,6 +1049,11 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		 * per row, so the entire tuple is valid now.
 		 */
 		decompressed_scan_slot->tts_nvalid = decompressed_scan_slot->tts_tupleDescriptor->natts;
+	}
+	else
+	{
+		decompressed_scan_slot->tts_nvalid =
+			batch_state->compressed_columns[last_materialized_column].output_attoffset + 1;
 	}
 }
 
