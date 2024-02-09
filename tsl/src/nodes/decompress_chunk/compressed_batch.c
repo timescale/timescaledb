@@ -1060,13 +1060,22 @@ compressed_batch_destroy(DecompressBatchState *batch_state)
 {
 	Assert(batch_state != NULL);
 
-	if (batch_state->per_batch_context == NULL)
+	if (batch_state->per_batch_context != NULL)
 	{
-		return;
+		MemoryContextDelete(batch_state->per_batch_context);
+		batch_state->per_batch_context = NULL;
 	}
 
-	ExecDropSingleTupleTableSlot(batch_state->compressed_slot);
-	pfree(batch_state->decompressed_scan_slot_data.tts_values);
+	if (batch_state->compressed_slot != NULL)
+	{
+		/*
+		 * Can be separately NULL in the current simplified prototype for
+		 * vectorized aggregation, but ideally it should change together with
+		 * per-batch context.
+		 */
+		ExecDropSingleTupleTableSlot(batch_state->compressed_slot);
+		batch_state->compressed_slot = NULL;
 
-	MemoryContextDelete(batch_state->per_batch_context);
+		pfree(batch_state->decompressed_scan_slot_data.tts_values);
+	}
 }
