@@ -52,7 +52,7 @@ WHERE location = 1;
 
 -- We should be able to set the table access method for a chunk, which
 -- will automatically compress the chunk.
-ALTER TABLE :chunk SET ACCESS METHOD tscompression;
+ALTER TABLE :chunk SET ACCESS METHOD hyperstore;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Show access method used on chunk
@@ -256,7 +256,7 @@ SELECT * FROM chunk_data_attrstats;
 
 -- ANALYZE also via hypertable root and show that it will
 -- recurse to another chunk
-ALTER TABLE :chunk2 SET ACCESS METHOD tscompression;
+ALTER TABLE :chunk2 SET ACCESS METHOD hyperstore;
 SELECT relname, reltuples, relpages
 FROM pg_class
 WHERE oid = :'chunk2'::regclass;
@@ -334,9 +334,9 @@ SELECT device, count(*) INTO decomp FROM readings GROUP BY device;
 SELECT device, orig.count AS orig_count, decomp.count AS decomp_count, (decomp.count - orig.count) AS diff
 FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
 
--- Convert back to tscompression to check that metadata was cleaned up
--- from last time this table used tscompression
-ALTER TABLE :chunk SET ACCESS METHOD tscompression;
+-- Convert back to hyperstore to check that metadata was cleaned up
+-- from last time this table used hyperstore
+ALTER TABLE :chunk SET ACCESS METHOD hyperstore;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Get the chunk's corresponding compressed chunk
