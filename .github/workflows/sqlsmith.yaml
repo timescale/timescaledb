@@ -34,7 +34,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install gnupg systemd-coredump gdb postgresql-common \
             libkrb5-dev build-essential autoconf autoconf-archive \
-            libboost-regex-dev libsqlite3-dev
+            libboost-regex-dev libsqlite3-dev jq
 
         yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
         sudo apt-get purge postgresql*
@@ -75,7 +75,9 @@ jobs:
         /usr/lib/postgresql/${{ matrix.pg }}/bin/pg_ctl -D ~/pgdata start \
             -o "-cshared_preload_libraries=timescaledb" -o "-cmax_connections=200" \
             -o "-cmax_prepared_transactions=100" -o "-cunix_socket_directories=/tmp" \
-            -o "-clog_statement=all" -l postgres.log
+            -o "-clog_statement=all" -o "-clogging_collector=true" \
+            -o "-clog_destination=jsonlog,stderr" -o "-clog_directory=$(readlink -f .)" \
+            -o "-clog_error_verbosity=verbose" -o "-clog_filename=postmaster.log"
         psql -h /tmp postgres -c 'CREATE DATABASE smith;'
         psql -h /tmp smith -c 'CREATE EXTENSION timescaledb;'
         psql -h /tmp smith -c '\i ${{ github.workspace }}/tsl/test/shared/sql/include/shared_setup.sql'
@@ -100,8 +102,6 @@ jobs:
             2>&1 | tee -a sqlsmith.log
 
             psql "host=/tmp dbname=smith" -c "select 1"
-
-            truncate --size=0 postgres.log
         done
 
     - name: Check for coredumps
@@ -146,7 +146,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log for PG${{ matrix.pg }}
-        path: postgres.log
+        path: postgres.*
 
     - name: Upload test results to the database
       if: always()

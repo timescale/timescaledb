@@ -134,8 +134,8 @@ jobs:
       id: collectlogs
       run: |
         sudo chmod a+rw .
-        sudo find . -name regression.diffs -exec cat {} + > regression.log
-        sudo find . -name postmaster.log -exec cat {} + > postgres.log
+        sudo find build_abi -name regression.diffs -exec cat {} + > regression.log
+        sudo find build_abi -name postmaster.log -exec cat {} + > postmaster.log
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
@@ -152,5 +152,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ABI Breakage ${{ matrix.dir }} PG${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.log
 

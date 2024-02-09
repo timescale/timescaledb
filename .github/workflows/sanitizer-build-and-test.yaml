@@ -140,7 +140,8 @@ jobs:
     - name: Build TimescaleDB
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
-          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON -DTEST_GROUP_SIZE=5
+          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON \
+          -DTEST_GROUP_SIZE=5 -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j$(nproc) -C build
         make -C build install
 
@@ -157,7 +158,6 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name postmaster.log -exec cat {} + > postgres.log
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
@@ -183,7 +183,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.*
 
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -202,7 +202,6 @@ jobs:
           bt full
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
 
     - name: Show sanitizer logs
       if: always()
