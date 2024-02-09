@@ -184,10 +184,14 @@ function(generate_downgrade_script)
 
   # Save the current PROJECT_VERSION_MOD
   set(SAVED_PROJECT_VERSION_MOD ${PROJECT_VERSION_MOD})
+#  set(SAVED_DEBUG_UTILS ${ENABLE_DEBUG_UTILS})
+#  set(SAVED_BUILD_TYPE ${CMAKE_BUILD_TYPE})
   # To use PROJECT_VERSION_MOD variable as a target version in downgrade scripts
   # we should set it as the DOWNGRADE_TO_VERSION because it means the target version
   # when executing the downgrade scripts
   set(PROJECT_VERSION_MOD ${DOWNGRADE_TO_VERSION})
+#  set(ENABLE_DEBUG_UTILS ON)
+#  set(CMAKE_BUILD_TYPE RELEASE)
   generate_script(
     VERSION
     ${_downgrade_TARGET_VERSION}
@@ -199,4 +203,6 @@ function(generate_downgrade_script)
     ${_files})
   # Restore the original PROJECT_VERSION_MOD
   set(PROJECT_VERSION_MOD ${SAVED_PROJECT_VERSION_MOD})
+#  set(ENABLE_DEBUG_UTILS ${SAVED_DEBUG_UTILS})
+#  set(CMAKE_BUILD_TYPE ${SAVED_BUILD_TYPE})
 endfunction()
