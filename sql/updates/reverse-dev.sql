@@ -119,5 +119,5 @@ DROP INDEX _timescaledb_catalog.compression_chunk_size_idx;
 DROP FUNCTION IF EXISTS _timescaledb_functions.drop_osm_chunk(REGCLASS);
 
 -- Hyperstore AM
-DROP ACCESS METHOD IF EXISTS tscompression;
+DROP ACCESS METHOD IF EXISTS hyperstore;
 DROP FUNCTION IF EXISTS ts_compressionam_handler;

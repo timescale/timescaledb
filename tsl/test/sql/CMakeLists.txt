@@ -115,7 +115,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     merge_compress.sql
     cagg_query_using_merge.sql
     cagg_refresh_using_merge.sql
-    compression_tam.sql
+    hyperstore.sql
     hyperstore_scans.sql)
 endif()
 
