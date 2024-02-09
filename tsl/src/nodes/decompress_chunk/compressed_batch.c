@@ -100,10 +100,10 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->template_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
-	column_values->output_attoffset = attr;
-	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[attr];
-	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
+	const AttrNumber offs = AttrNumberGetAttrOffset(column_description->output_attno);
+	column_values->output_attoffset = offs;
+	Datum *output_value = &compressed_batch_current_tuple(batch_state)->tts_values[offs];
+	bool *output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[offs];
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
@@ -120,10 +120,9 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 */
 		column_values->decompression_type = DT_Default;
 
-		*column_values->output_value =
-			getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
-						   column_description->output_attno,
-						   column_values->output_isnull);
+		*output_value = getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
+									   column_description->output_attno,
+									   output_isnull);
 		return;
 	}
 
@@ -198,7 +197,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 			VARHDRSZ + (arrow->dictionary ? get_max_text_datum_size(arrow->dictionary) :
 											get_max_text_datum_size(arrow));
 
-		*column_values->output_value =
+		*output_value =
 			PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 
 		/*
@@ -344,9 +343,10 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 * We saved the actual default value into the decompressed scan slot
 		 * above, so pull it from there.
 		 */
-		vector = make_single_value_arrow(column_description->typid,
-										 *column_values->output_value,
-										 *column_values->output_isnull);
+		const int offs = column_values->output_attoffset;
+		bool *output_isnull = &batch_state->decompressed_scan_slot_data.base.tts_isnull[offs];
+		Datum *output_value = &batch_state->decompressed_scan_slot_data.base.tts_values[offs];
+		vector = make_single_value_arrow(column_description->typid, *output_value, *output_isnull);
 
 		/*
 		 * We start from an all-valid bitmap, because the predicate is
@@ -607,7 +607,7 @@ tts_getsomeattrs(TupleTableSlot *slot, int natts)
 		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
 	make_next_tuple(batch_state, arrow_row, num_compressed_columns, natts);
 
-	// Assert(slot->tts_nvalid == slot->tts_tupleDescriptor->natts);
+	Assert(slot->tts_nvalid >= natts);
 }
 
 static void
@@ -861,18 +861,15 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 }
 
 static void
-store_text_datum(CompressedColumnValues *column_values, int arrow_row)
+store_text_datum(CompressedColumnValues *column_values, int arrow_row, Datum *output_value)
 {
 	const uint32 start = ((uint32 *) column_values->buffers[1])[arrow_row];
 	const int32 value_bytes = ((uint32 *) column_values->buffers[1])[arrow_row + 1] - start;
 	Assert(value_bytes >= 0);
 
 	const int total_bytes = value_bytes + VARHDRSZ;
-	Assert(DatumGetPointer(*column_values->output_value) != NULL);
-	SET_VARSIZE(*column_values->output_value, total_bytes);
-	memcpy(VARDATA(*column_values->output_value),
-		   &((uint8 *) column_values->buffers[2])[start],
-		   value_bytes);
+	SET_VARSIZE(*output_value, total_bytes);
+	memcpy(VARDATA(*output_value), &((uint8 *) column_values->buffers[2])[start], value_bytes);
 }
 
 /*
@@ -890,6 +887,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 
 	Assert(new_natts > decompressed_scan_slot->tts_nvalid);
 
+	/* Decompress the columns if needed. */
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
@@ -939,28 +937,47 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 	}
 
 	/* Actually materialize the tuple for the current row. */
-	for (int i = 0; i < num_compressed_columns; i++)
+	int last_materialized_column = 0;
+	for (; last_materialized_column < num_compressed_columns; last_materialized_column++)
 	{
-		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
+		CompressedColumnValues *column_values =
+			&batch_state->compressed_columns[last_materialized_column];
+		const int offs = column_values->output_attoffset;
+		bool *output_isnull = &decompressed_scan_slot->tts_isnull[offs];
+		Datum *output_value = &decompressed_scan_slot->tts_values[offs];
 
-		if (column_values->output_attoffset < decompressed_scan_slot->tts_nvalid)
+		if (offs < decompressed_scan_slot->tts_nvalid)
 		{
 			/*
-			 * Materialized already, careful not to scroll the iterator the second
-			 * time.
+			 * Materialized for this row already, careful not to scroll the
+			 * iterator the second time.
 			 */
 			Assert(column_values->decompression_type != DT_Invalid);
 			continue;
 		}
 
-		if (column_values->output_attoffset >= new_natts)
+		if (column_values->decompression_type == DT_Invalid)
 		{
-			/* No need to materialize the following columns yet. */
+			/*
+			 * The following columns were not materialized yet.
+			 * Note that for every row we still have to scroll all the iterator
+			 * columns that are already decompressed, even if for this particular
+			 * row we were not yet asked to materialize this attribute. Only
+			 * the decompression is lazy, the actual per-row materialization is
+			 * eager. This is a necessity because we work with iterator columns
+			 * that only support sequential access, not random.
+			 */
+			Assert(offs >= new_natts);
 			break;
 		}
 
+		decompressed_scan_slot->tts_nvalid = offs + 1;
+
 		if (column_values->decompression_type == DT_Iterator)
 		{
+			//			fprintf(stderr, "scrolled #%d (-> %d) at row %d batch %p\n",
+			//last_materialized_column, 				offs, batch_state->next_batch_row, batch_state);
+
 			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
 			DecompressResult result = iterator->try_next(iterator);
 
@@ -969,8 +986,8 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 				elog(ERROR, "compressed column out of sync with batch counter");
 			}
 
-			*column_values->output_isnull = result.is_null;
-			*column_values->output_value = result.val;
+			*output_isnull = result.is_null;
+			*output_value = result.val;
 		}
 		else if (column_values->decompression_type > SIZEOF_DATUM)
 		{
@@ -982,9 +999,8 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 */
 			const uint8 value_bytes = column_values->decompression_type;
 			const char *restrict src = column_values->buffers[1];
-			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
-			*column_values->output_isnull =
-				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+			*output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
+			*output_isnull = !arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}
 		else if (column_values->decompression_type > 0)
 		{
@@ -999,22 +1015,19 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			const uint8 value_bytes = column_values->decompression_type;
 			Assert(value_bytes <= SIZEOF_DATUM);
 			const char *restrict src = column_values->buffers[1];
-			memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
-			*column_values->output_isnull =
-				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+			memcpy(output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
+			*output_isnull = !arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}
 		else if (column_values->decompression_type == DT_ArrowText)
 		{
-			store_text_datum(column_values, arrow_row);
-			*column_values->output_isnull =
-				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+			store_text_datum(column_values, arrow_row, output_value);
+			*output_isnull = !arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}
 		else if (column_values->decompression_type == DT_ArrowTextDict)
 		{
 			const int16 index = ((int16 *) column_values->buffers[3])[arrow_row];
-			store_text_datum(column_values, index);
-			*column_values->output_isnull =
-				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
+			store_text_datum(column_values, index, output_value);
+			*output_isnull = !arrow_row_is_valid(column_values->buffers[0], arrow_row);
 		}
 		else
 		{
@@ -1023,7 +1036,14 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		}
 	}
 
-	decompressed_scan_slot->tts_nvalid = new_natts;
+	if (last_materialized_column == num_compressed_columns)
+	{
+		/*
+		 * All compressed columns were materialized, and the rest don't change
+		 * per row, so the entire tuple is valid now.
+		 */
+		decompressed_scan_slot->tts_nvalid = decompressed_scan_slot->tts_tupleDescriptor->natts;
+	}
 }
 
 static bool

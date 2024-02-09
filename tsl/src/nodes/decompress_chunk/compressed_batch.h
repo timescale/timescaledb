@@ -29,10 +29,6 @@ typedef struct CompressedColumnValues
 	/* How to obtain the decompressed datum for individual row. */
 	DecompressionType decompression_type;
 
-	/* Where to put the decompressed datum. */
-	Datum *output_value;
-	bool *output_isnull;
-
 	int output_attoffset;
 
 	/*
