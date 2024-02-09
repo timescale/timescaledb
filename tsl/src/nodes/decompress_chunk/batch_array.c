@@ -110,8 +110,7 @@ batch_array_get_unused_slot(BatchArray *array)
 	Assert(next_unused_batch >= 0);
 	Assert(next_unused_batch < array->n_batch_states);
 
-	Assert(TupIsNull(
-		compressed_batch_get_current_tuple(batch_array_get_at(array, next_unused_batch))));
+	Assert(TupIsNull(compressed_batch_current_tuple(batch_array_get_at(array, next_unused_batch))));
 
 	array->unused_batch_states = bms_del_member(array->unused_batch_states, next_unused_batch);
 

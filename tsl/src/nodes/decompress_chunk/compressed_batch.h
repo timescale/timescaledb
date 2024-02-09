@@ -58,7 +58,7 @@ typedef struct CompressedColumnValues
  */
 typedef struct DecompressBatchState
 {
-	TupleTableSlot decompressed_scan_slot_data; /* A slot for the decompressed data */
+	VirtualTupleTableSlot decompressed_scan_slot_data; /* A slot for the decompressed data */
 	/*
 	 * Compressed target slot. We have to keep a local copy when doing batch
 	 * sorted merge, because the segmentby column values might reference the
@@ -120,7 +120,7 @@ extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 extern void compressed_batch_discard_tuples(DecompressBatchState *batch_state);
 
 inline static TupleTableSlot *
-compressed_batch_get_current_tuple(DecompressBatchState *batch_state)
+compressed_batch_current_tuple(DecompressBatchState *batch_state)
 {
 	if (IsA(&batch_state->decompressed_scan_slot_data, Invalid))
 	{
@@ -129,11 +129,11 @@ compressed_batch_get_current_tuple(DecompressBatchState *batch_state)
 		 * "empty" state, but unfortunately a zero-initialized TupleTableSlotData
 		 * is not a valid tuple slot, so here we have to work around this mismatch.
 		 */
-		Assert(batch_state->decompressed_scan_slot_data.tts_ops == NULL);
+		Assert(batch_state->decompressed_scan_slot_data.base.tts_ops == NULL);
 		Assert(batch_state->per_batch_context == NULL);
 		return NULL;
 	}
 
 	Assert(batch_state->per_batch_context != NULL);
-	return &batch_state->decompressed_scan_slot_data;
+	return &batch_state->decompressed_scan_slot_data.base;
 }
