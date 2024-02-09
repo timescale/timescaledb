@@ -9,6 +9,7 @@ CREATE USER dump_unprivileged CREATEDB;
 \c template1 dump_unprivileged
 CREATE database dump_unprivileged;
 \! utils/pg_dump_unprivileged.sh
+Database dumped successfully
 \c dump_unprivileged :ROLE_SUPERUSER
 DROP EXTENSION timescaledb;
 GRANT ALL ON DATABASE dump_unprivileged TO dump_unprivileged;
@@ -18,6 +19,7 @@ CREATE EXTENSION timescaledb;
 CREATE TABLE t1 (a int);
 -- pg_dump currently fails when dumped
 \! utils/pg_dump_unprivileged.sh
+Database dumped successfully
 \c template1 :ROLE_SUPERUSER
 DROP EXTENSION timescaledb;
 DROP DATABASE dump_unprivileged WITH (FORCE);
