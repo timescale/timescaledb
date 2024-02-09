@@ -186,7 +186,7 @@ batch_queue_heap_pop(BatchQueue *bq, DecompressContext *dcontext)
 
 	compressed_batch_advance(dcontext, top_batch);
 
-	TupleTableSlot *top_tuple = compressed_batch_get_current_tuple(top_batch);
+	TupleTableSlot *top_tuple = compressed_batch_current_tuple(top_batch);
 	if (TupIsNull(top_tuple))
 	{
 		/* Batch is exhausted, recycle batch_state */
@@ -206,7 +206,7 @@ batch_queue_heap_pop(BatchQueue *bq, DecompressContext *dcontext)
 			/*
 			 * We're working with virtual tuple slots so no need for slot_getattr().
 			 */
-			Assert(TTS_IS_VIRTUAL(&top_batch->decompressed_scan_slot_data));
+			Assert(TTS_IS_VIRTUAL(top_tuple));
 			queue->heap_entries[top_batch_index * queue->nkeys + key].value =
 				top_tuple->tts_values[attr];
 			queue->heap_entries[top_batch_index * queue->nkeys + key].null =
@@ -288,7 +288,7 @@ batch_queue_heap_push_batch(BatchQueue *_queue, DecompressContext *dcontext,
 			queue->last_batch_first_tuple_slot->tts_isnull[attr];
 	}
 
-	TupleTableSlot *current_tuple = compressed_batch_get_current_tuple(batch_state);
+	TupleTableSlot *current_tuple = compressed_batch_current_tuple(batch_state);
 	if (TupIsNull(current_tuple))
 	{
 		/* Might happen if there are no tuples in the batch that pass the quals. */
@@ -307,7 +307,7 @@ batch_queue_heap_push_batch(BatchQueue *_queue, DecompressContext *dcontext,
 		/*
 		 * We're working with virtual tuple slots so no need for slot_getattr().
 		 */
-		Assert(TTS_IS_VIRTUAL(&batch_state->decompressed_scan_slot_data));
+		Assert(TTS_IS_VIRTUAL(current_tuple));
 		queue->heap_entries[new_batch_index * queue->nkeys + key].value =
 			current_tuple->tts_values[attr];
 		queue->heap_entries[new_batch_index * queue->nkeys + key].null =
@@ -333,7 +333,7 @@ batch_queue_heap_top_tuple(BatchQueue *bq)
 
 	const int top_batch_index = DatumGetInt32(binaryheap_first(bqh->merge_heap));
 	DecompressBatchState *top_batch = batch_array_get_at(batch_array, top_batch_index);
-	TupleTableSlot *top_tuple = compressed_batch_get_current_tuple(top_batch);
+	TupleTableSlot *top_tuple = compressed_batch_current_tuple(top_batch);
 	Assert(!TupIsNull(top_tuple));
 	return top_tuple;
 }

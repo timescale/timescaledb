@@ -101,8 +101,8 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
 	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
-	column_values->output_value = &batch_state->decompressed_scan_slot_data.tts_values[attr];
-	column_values->output_isnull = &batch_state->decompressed_scan_slot_data.tts_isnull[attr];
+	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[attr];
+	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
@@ -564,13 +564,16 @@ compressed_batch_discard_tuples(DecompressBatchState *batch_state)
 	if (batch_state->per_batch_context != NULL)
 	{
 		ExecClearTuple(batch_state->compressed_slot);
-		ExecClearTuple(&batch_state->decompressed_scan_slot_data);
+		ExecClearTuple(&batch_state->decompressed_scan_slot_data.base);
 		MemoryContextReset(batch_state->per_batch_context);
 	}
 	else
 	{
+		/*
+		 * Check that we have a valid zero-initialized batch here.
+		 */
 		Assert(IsA(&batch_state->decompressed_scan_slot_data, Invalid));
-		Assert(batch_state->decompressed_scan_slot_data.tts_ops == NULL);
+		Assert(batch_state->decompressed_scan_slot_data.base.tts_ops == NULL);
 		Assert(batch_state->compressed_slot == NULL);
 	}
 }
@@ -600,7 +603,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	/*
 	 * This code follows Postgres' MakeTupleTableSlot().
 	 */
-	TupleTableSlot *slot = &batch_state->decompressed_scan_slot_data;
+	TupleTableSlot *slot = &batch_state->decompressed_scan_slot_data.base;
 	Assert(IsA(slot, Invalid));
 	Assert(slot->tts_ops == NULL);
 
@@ -636,7 +639,7 @@ void
 compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 									  DecompressBatchState *batch_state, TupleTableSlot *subslot)
 {
-	Assert(TupIsNull(compressed_batch_get_current_tuple(batch_state)));
+	Assert(TupIsNull(compressed_batch_current_tuple(batch_state)));
 
 	/*
 	 * The batch states are initialized on demand, because creating the memory
@@ -654,8 +657,10 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	/* Ensure that all fields are empty. Calling ExecClearTuple is not enough
 	 * because some attributes might not be populated (e.g., due to a dropped
 	 * column) and these attributes need to be set to null. */
-	ExecStoreAllNullTuple(&batch_state->decompressed_scan_slot_data);
-	ExecClearTuple(&batch_state->decompressed_scan_slot_data);
+	TupleTableSlot *decompressed_tuple = compressed_batch_current_tuple(batch_state);
+	Assert(decompressed_tuple != NULL);
+	ExecStoreAllNullTuple(decompressed_tuple);
+	ExecClearTuple(decompressed_tuple);
 
 	ExecCopySlot(batch_state->compressed_slot, subslot);
 	Assert(!TupIsNull(batch_state->compressed_slot));
@@ -693,10 +698,10 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				 * save it once per batch, which we do here.
 				 */
 				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
-				batch_state->decompressed_scan_slot_data.tts_values[attr] =
+				decompressed_tuple->tts_values[attr] =
 					slot_getattr(batch_state->compressed_slot,
 								 column_description->compressed_scan_attno,
-								 &batch_state->decompressed_scan_slot_data.tts_isnull[attr]);
+								 &decompressed_tuple->tts_isnull[attr]);
 				break;
 			}
 			case COUNT_COLUMN:
@@ -802,7 +807,7 @@ store_text_datum(CompressedColumnValues *column_values, int arrow_row)
 static void
 make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_compressed_columns)
 {
-	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data;
+	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
 
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
@@ -907,7 +912,7 @@ vector_qual(DecompressBatchState *batch_state, uint16 arrow_row)
 static bool
 postgres_qual(DecompressContext *dcontext, DecompressBatchState *batch_state)
 {
-	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data;
+	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
 	Assert(IsA(decompressed_scan_slot, TupleTableSlot));
 	Assert(!TupIsNull(decompressed_scan_slot));
 
@@ -933,7 +938,7 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 {
 	Assert(batch_state->total_batch_rows > 0);
 
-	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data;
+	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
 
 	const bool reverse = dcontext->reverse;
 	const int num_compressed_columns = dcontext->num_compressed_columns;
@@ -1017,7 +1022,7 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 {
 	Assert(batch_state->next_batch_row == 0);
 	Assert(batch_state->total_batch_rows > 0);
-	Assert(TupIsNull(compressed_batch_get_current_tuple(batch_state)));
+	Assert(TupIsNull(compressed_batch_current_tuple(batch_state)));
 
 	/*
 	 * Check that we have decompressed all columns even if the vector quals
@@ -1038,7 +1043,7 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	Assert(batch_state->next_batch_row == 0);
 	const uint16 arrow_row = dcontext->reverse ? batch_state->total_batch_rows - 1 : 0;
 	make_next_tuple(batch_state, arrow_row, dcontext->num_compressed_columns);
-	ExecCopySlot(first_tuple_slot, &batch_state->decompressed_scan_slot_data);
+	ExecCopySlot(first_tuple_slot, &batch_state->decompressed_scan_slot_data.base);
 
 	/*
 	 * Check the quals and advance, so that the batch is in the correct state
@@ -1076,6 +1081,6 @@ compressed_batch_destroy(DecompressBatchState *batch_state)
 		ExecDropSingleTupleTableSlot(batch_state->compressed_slot);
 		batch_state->compressed_slot = NULL;
 
-		pfree(batch_state->decompressed_scan_slot_data.tts_values);
+		pfree(batch_state->decompressed_scan_slot_data.base.tts_values);
 	}
 }
