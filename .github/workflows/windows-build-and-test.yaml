@@ -149,7 +149,7 @@ jobs:
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postgres.log
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
         echo "PG version:"
@@ -191,7 +191,7 @@ jobs:
         ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postgres.log"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
@@ -237,7 +237,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
-        path: postgres.log
+        path: postmaster.log
 
     - name: Upload test results to the database
       if: always()

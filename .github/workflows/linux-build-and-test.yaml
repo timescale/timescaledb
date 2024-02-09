@@ -144,7 +144,8 @@ jobs:
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
@@ -153,7 +154,8 @@ jobs:
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }}
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C build
         make -C build install
 
@@ -195,7 +197,7 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name postmaster.log -exec cat {} + > postgres.log
+
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
@@ -223,7 +225,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.*
 
     - name: Stack trace Linux
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'Linux'
@@ -248,7 +250,6 @@ jobs:
           info locals
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
 
     - name: Stack trace macOS
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
@@ -275,7 +276,7 @@ jobs:
       # Don't upload the results of the flaky check, because the db schema only
       # supports running one test once per job. Also disable uploading of the
       # tests on macOS till the next MINOR release of PG
-      if: always() && (! contains(matrix.name, 'Flaky')) && (! runner.os == 'macOS')
+      if: always() && (! contains(matrix.name, 'Flaky')) && ( runner.os != 'macOS' )
       env:
         # GitHub Actions allow you neither to use the env context for the job name,
         # nor to access the job name from the step context, so we have to
