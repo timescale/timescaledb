@@ -40,7 +40,7 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_compressionam = (strcmp(cmd->name, "tscompression") == 0);
+						bool to_compressionam = (strcmp(cmd->name, "hyperstore") == 0);
 
 						if (to_compressionam)
 							compressionam_alter_access_method_begin(relid, false);
@@ -204,7 +204,7 @@ tsl_ddl_command_end(EventTriggerData *command)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_compressionam = (strcmp(cmd->name, "tscompression") == 0);
+						bool to_compressionam = (strcmp(cmd->name, "hyperstore") == 0);
 						compressionam_alter_access_method_finish(relid, !to_compressionam);
 						break;
 					}
