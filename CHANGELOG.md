@@ -4,7 +4,7 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 2.14.0 (2023-02-08)
+## 2.14.0 (2024-02-08)
 
 This release contains performance improvements and bug fixes since 
 the 2.13.1 release. We recommend that you upgrade at the next
@@ -17,6 +17,7 @@ New compression settings take effect on any new chunks that are compressed after
 * Reduced locking requirements during chunk recompression
 * Limiting tuple decompression during DML operations to avoid decompressing a lot of tuples and causing storage issues (100k limit, configurable)
 * Helper functions for determining compression settings
+* Plan-time chunk exclusion for real-time Continuous Aggregate by constify the cagg_watermark function call, leading to faster queries using real-time continuous aggregates
 
 **For this release only**, you will need to restart the database before running `ALTER EXTENSION`
 
