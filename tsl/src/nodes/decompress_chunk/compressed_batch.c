@@ -582,36 +582,7 @@ compressed_batch_discard_tuples(DecompressBatchState *batch_state)
 	}
 }
 
-static void make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row,
-							int num_compressed_columns, int natts);
-
-static void
-tts_getsomeattrs(TupleTableSlot *slot, int natts)
-{
-	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
-
-	//	mybt();
-	//	fprintf(stderr,
-	//			"row %d getsomeattrs %d nvalid %d\n",
-	//			batch_state->next_batch_row,
-	//			natts,
-	//			slot->tts_nvalid);
-
-	if (natts <= slot->tts_nvalid)
-	{
-		return;
-	}
-
-	DecompressContext *dcontext = batch_state->dcontext;
-	const bool reverse = dcontext->reverse;
-	const int num_compressed_columns = dcontext->num_compressed_columns;
-	const uint16 output_row = batch_state->next_batch_row;
-	const uint16 arrow_row =
-		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
-	make_next_tuple(batch_state, arrow_row, num_compressed_columns, natts);
-
-	Assert(slot->tts_nvalid >= natts);
-}
+static void tts_getsomeattrs(TupleTableSlot *slot, int natts);
 
 static void
 tts_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
@@ -876,18 +847,17 @@ store_text_datum(CompressedColumnValues *column_values, int arrow_row, Datum *ou
 }
 
 /*
- * Construct the next tuple in the decompressed scan slot.
- * Doesn't check the quals.
+ * Decompress the columns that are required to materialize the slot up to new_natts.
  */
 static void
-make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_compressed_columns,
-				int new_natts)
+decompress_more_columns(DecompressBatchState *batch_state, int num_compressed_columns,
+						int new_natts)
 {
-	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
-
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
+	PG_USED_FOR_ASSERTS_ONLY TupleTableSlot *decompressed_scan_slot =
+		&batch_state->decompressed_scan_slot_data.base;
 	Assert(new_natts > decompressed_scan_slot->tts_nvalid);
 
 	/* Decompress the columns if needed. */
@@ -939,12 +909,27 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		}
 	}
 
+	// fprintf(stderr, "decompressed up to %d\n", new_natts);
+}
+
+/*
+ * Materialize the tail of the current tuple in the decompressed scan slot from
+ * 'from' up to tts_nvalid.
+ */
+static void
+materialize_decompressed_columns(DecompressBatchState *batch_state, uint16 arrow_row,
+								 int num_compressed_columns, int from)
+{
+	TupleTableSlot *decompressed_scan_slot = &batch_state->decompressed_scan_slot_data.base;
+
+	Assert(batch_state->total_batch_rows > 0);
+	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
+
 	/* Actually materialize the tuple for the current row. */
-	int last_materialized_column = 0;
-	for (; last_materialized_column < num_compressed_columns; last_materialized_column++)
+	int not_materialized = 0;
+	for (; not_materialized < num_compressed_columns; not_materialized++)
 	{
-		CompressedColumnValues *column_values =
-			&batch_state->compressed_columns[last_materialized_column];
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[not_materialized];
 		const int offs = column_values->output_attoffset;
 		/*
 		bool *output_isnull = &decompressed_scan_slot->tts_isnull[offs];
@@ -953,12 +938,13 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		bool *output_isnull = column_values->output_isnull;
 		Datum *output_value = column_values->output_value;
 
-		if (offs < decompressed_scan_slot->tts_nvalid)
+		if (offs < from)
 		{
 			/*
 			 * Materialized for this row already, careful not to scroll the
 			 * iterator the second time.
 			 */
+			// fprintf(stderr, "offs %d materialized already\n", offs);
 			Assert(column_values->decompression_type != DT_Invalid);
 			continue;
 		}
@@ -974,14 +960,20 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 * eager. This is a necessity because we work with iterator columns
 			 * that only support sequential access, not random.
 			 */
-			Assert(offs >= new_natts);
+			// fprintf(stderr, "offs %d not decompressed yet\n", offs);
+			Assert(offs >= decompressed_scan_slot->tts_nvalid);
 			break;
 		}
+
+		// fprintf(stderr,
+		//		"something else at offs %d type %d\n",
+		//		offs,
+		//		column_values->decompression_type);
 
 		if (column_values->decompression_type == DT_Iterator)
 		{
 			//			fprintf(stderr, "scrolled #%d (-> %d) at row %d batch %p\n",
-			// last_materialized_column, 				offs, batch_state->next_batch_row,
+			// not_materialized, 				offs, batch_state->next_batch_row,
 			// batch_state);
 
 			DecompressionIterator *iterator = (DecompressionIterator *) column_values->buffers[0];
@@ -1042,7 +1034,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 		}
 	}
 
-	if (last_materialized_column == num_compressed_columns)
+	if (not_materialized == num_compressed_columns)
 	{
 		/*
 		 * All compressed columns were materialized, and the rest don't change
@@ -1052,9 +1044,47 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 	}
 	else
 	{
-		decompressed_scan_slot->tts_nvalid =
-			batch_state->compressed_columns[last_materialized_column].output_attoffset + 1;
+		CompressedColumnValues *column_values = &batch_state->compressed_columns[not_materialized];
+		Assert(column_values->decompression_type == DT_Invalid);
+		decompressed_scan_slot->tts_nvalid = column_values->output_attoffset;
 	}
+
+	// fprintf(stderr,
+	//		"materialized up to %d for arrow row %d\n",
+	//		decompressed_scan_slot->tts_nvalid,
+	//		arrow_row);
+}
+
+static void
+tts_getsomeattrs(TupleTableSlot *slot, int natts)
+{
+	DecompressBatchState *batch_state = (DecompressBatchState *) slot;
+
+	// mybt();
+	// fprintf(stderr,
+	//		"row %d getsomeattrs %d nvalid %d\n",
+	//		batch_state->next_batch_row,
+	//		natts,
+	//		slot->tts_nvalid);
+
+	if (natts <= slot->tts_nvalid)
+	{
+		return;
+	}
+
+	DecompressContext *dcontext = batch_state->dcontext;
+	const bool reverse = dcontext->reverse;
+	const int num_compressed_columns = dcontext->num_compressed_columns;
+	const uint16 output_row = batch_state->next_batch_row;
+	const uint16 arrow_row =
+		unlikely(reverse) ? batch_state->total_batch_rows - 1 - output_row : output_row;
+	decompress_more_columns(batch_state, num_compressed_columns, natts);
+	materialize_decompressed_columns(batch_state,
+									 arrow_row,
+									 num_compressed_columns,
+									 /* from = */ slot->tts_nvalid);
+
+	Assert(slot->tts_nvalid >= natts);
 }
 
 static bool
@@ -1165,7 +1195,19 @@ compressed_batch_advance(DecompressContext *dcontext, DecompressBatchState *batc
 		}
 
 		decompressed_scan_slot->tts_flags &= ~TTS_FLAG_EMPTY;
-		decompressed_scan_slot->tts_nvalid = 0;
+		// decompressed_scan_slot->tts_nvalid = 0;
+		// fprintf(stderr,
+		//		"when setting nonempty for row %d, tts_nvalid is %d\n",
+		//		output_row,
+		//		decompressed_scan_slot->tts_nvalid);
+		/*
+		 * The columns before the currently set tts_nvalid are decompressed already,
+		 * so we can cheaply materialize them right away.
+		 */
+		materialize_decompressed_columns(batch_state,
+										 arrow_row,
+										 num_compressed_columns,
+										 /* from = */ 0);
 
 		if (!postgres_qual(dcontext, batch_state))
 		{
@@ -1203,7 +1245,14 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	const uint16 arrow_row = dcontext->reverse ? batch_state->total_batch_rows - 1 : 0;
 
 	batch_state->decompressed_scan_slot_data.base.tts_flags &= ~TTS_FLAG_EMPTY;
-	batch_state->decompressed_scan_slot_data.base.tts_nvalid = 0;
+	/*
+	 * The columns before the currently set tts_nvalid are decompressed already,
+	 * so we can cheaply materialize them right away.
+	 */
+	materialize_decompressed_columns(batch_state,
+									 arrow_row,
+									 dcontext->num_compressed_columns,
+									 /* from = */ 0);
 
 	ExecCopySlot(first_tuple_slot, &batch_state->decompressed_scan_slot_data.base);
 
