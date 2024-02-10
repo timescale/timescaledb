@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
+#include <commands/defrem.h>
 #include <funcapi.h>
 #include <hypertable_cache.h>
 #include <nodes/makefuncs.h>
