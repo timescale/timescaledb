@@ -1225,17 +1225,6 @@ ts_continuous_agg_rename_view(const char *old_schema, const char *old_name, cons
 	ts_scanner_scan(&scanctx);
 }
 
-TSDLLEXPORT int32
-ts_number_of_continuous_aggs()
-{
-	int32 count = 0;
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ts_scanner_foreach(&iterator) { count++; }
-
-	return count;
-}
-
 static int32
 find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
 {

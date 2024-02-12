@@ -184,8 +184,6 @@ extern TSDLLEXPORT void ts_continuous_agg_rename_view(const char *old_schema, co
 													  const char *new_schema, const char *new_name,
 													  ObjectType *object_type);
 
-extern TSDLLEXPORT int32 ts_number_of_continuous_aggs(void);
-
 extern TSDLLEXPORT const Dimension *
 ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid);
 extern ContinuousAgg *ts_continuous_agg_find_userview_name(const char *schema, const char *name);
