@@ -73,7 +73,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v2
+      uses: Vampire/setup-wsl@v3
       with:
         additional-packages:
           cmake
@@ -115,7 +115,7 @@ jobs:
       # --extract-only and launch our own test instance, which is
       # probably better anyway since it gives us more control.
     - name: Cache PostgreSQL installation
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       id: cache-postgresql
       with:
         path: ~\PostgreSQL\${{ matrix.pg }}
