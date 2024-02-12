@@ -430,13 +430,26 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	RowCompressor row_compressor;
+	/* Reset sequence is used for resetting the sequence without
+	 * having to fetch the existing sequence for an individual
+	 * sequence group. If we are rolling up an uncompressed chunk
+	 * into an existing compressed chunk, we have to fetch
+	 * sequence numbers for each batch of the segment using
+	 * the respective index. In normal compression, this is
+	 * not necessary because we start segment numbers from zero.
+	 * We distinguish these cases by insert_options being zero for rollups.
+	 *
+	 * Sequence numbers are planned to be removed in the near future,
+	 * which will render this flag obsolete.
+	 */
+	bool reset_sequence = insert_options > 0;
 	row_compressor_init(settings,
 						&row_compressor,
 						in_desc,
 						out_rel,
 						out_desc->natts,
 						true /*need_bistate*/,
-						false /*reset_sequence*/,
+						reset_sequence,
 						insert_options);
 
 	if (matched_index_rel != NULL)
