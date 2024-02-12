@@ -798,7 +798,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			if (status == HypertableIsMaterialization ||
 				status == HypertableIsMaterializationAndRaw)
 			{
-				const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+				const ContinuousAgg *cagg =
+					ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
 				Assert(cagg != NULL);
 
 				ts_cache_release(hcache);

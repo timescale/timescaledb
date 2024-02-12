@@ -273,7 +273,7 @@ get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 		namestrcpy(objname, NameStr(ht->fd.table_name));
 	else if (status == HypertableIsMaterialization)
 	{
-		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
 		namestrcpy(objname, NameStr(cagg->data.user_view_name));
 	}
 	else

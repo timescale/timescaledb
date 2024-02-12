@@ -848,7 +848,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
 
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);

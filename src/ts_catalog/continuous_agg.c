@@ -595,7 +595,7 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 
 /* Find a continuous aggregate by the materialized hypertable id */
 ContinuousAgg *
-ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)
+ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id, bool missing_ok)
 {
 	ContinuousAgg *ca = NULL;
 	ScanIterator iterator =
@@ -618,6 +618,13 @@ ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)
 		Assert(ca && ca->data.mat_hypertable_id == mat_hypertable_id);
 	}
 	ts_scan_iterator_close(&iterator);
+
+	if (ca == NULL && !missing_ok)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid materialized hypertable ID: %d", mat_hypertable_id)));
+	}
 
 	return ca;
 }
