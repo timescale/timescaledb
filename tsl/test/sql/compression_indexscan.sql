@@ -35,6 +35,8 @@ generate_series(1, 100, 1 ) AS g2(id)
 ORDER BY
 time;
 
+--Test with indexscan enabled
+SET timescaledb.enable_compression_indexscan = 'ON';
 --Test Set 1.1 [ Index(ASC, Null_First), Compression(ASC, Null_First) ]
 CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
@@ -163,10 +165,12 @@ SELECT decompress_chunk(show_chunks('tab1'));
 DROP INDEX idx_desc_null_last;
 
 --Test Set 5 GUC SET timescaledb.enable_compression_indexscan
--- Default this flag will be true.
-SET timescaledb.enable_compression_indexscan = 'OFF';
+-- Default this flag will be false.
+RESET timescaledb.enable_compression_indexscan;
+SHOW timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
 SELECT decompress_chunk(show_chunks('tab1'));
+--Test with this guc enabled
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab1'));
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -177,7 +181,7 @@ CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 CREATE INDEX idx2_asc_null_first ON tab2(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 ALTER TABLE tab2 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
-SET timescaledb.enable_compression_indexscan = 'OFF';
+RESET timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab2'));
