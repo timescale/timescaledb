@@ -1,0 +1,1 @@
+Implements: #6600 Add timescaledb_information.pg_authid to access non-superuser passwords
