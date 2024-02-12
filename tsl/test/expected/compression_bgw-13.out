@@ -347,7 +347,7 @@ LOG:  statement: CALL run_job(1004);
 LOG:  acquiring locks for compressing "_timescaledb_internal._hyper_11_40_chunk"
 LOG:  locks acquired for compressing "_timescaledb_internal._hyper_11_40_chunk"
 LOG:  new compressed chunk "_timescaledb_internal.compress_hyper_13_61_chunk" created
-LOG:  using index "_hyper_11_40_chunk_conditions_time_idx" to scan rows for compression
+LOG:  using tuplesort to scan rows from "_hyper_11_40_chunk" for compression
 LOG:  finished compressing 144 rows from "_hyper_11_40_chunk"
 LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_40_chunk
 set client_min_messages TO NOTICE;
