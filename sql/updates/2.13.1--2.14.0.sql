@@ -376,7 +376,7 @@ BEGIN
 
     -- remove columns from the compressed hypertable (but not chunks)
     FOR column_name IN
-      SELECT attname FROM pg_attribute WHERE attrelid = hypertable AND attnum > 0
+      SELECT attname FROM pg_attribute WHERE attrelid = hypertable AND attnum > 0 AND NOT attisdropped
     LOOP
       cmd := format('ALTER TABLE %s DROP COLUMN %I', hypertable, column_name);
       EXECUTE cmd;

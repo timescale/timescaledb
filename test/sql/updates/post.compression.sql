@@ -4,7 +4,7 @@
 
 SELECT * FROM compress ORDER BY time DESC, small_cardinality, large_cardinality, some_double, some_int, some_custom, some_bool;
 
-INSERT INTO compress
+INSERT INTO compress(time, small_cardinality, large_cardinality, some_double, some_int, some_custom, some_bool)
 SELECT g, 'QW', g::text, 2, 0, (100,4)::custom_type_for_compression, false
 FROM generate_series('2019-11-01 00:00'::timestamp, '2019-12-15 00:00'::timestamp, '1 day') g;
 
