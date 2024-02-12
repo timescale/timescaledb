@@ -101,7 +101,7 @@ jobs:
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
       if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
@@ -181,7 +181,7 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./build/codecov/timescaledb-codecov.info
 

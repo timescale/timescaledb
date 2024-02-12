@@ -84,7 +84,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
