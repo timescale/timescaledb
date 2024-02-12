@@ -87,7 +87,6 @@ char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
-TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
 
@@ -449,23 +448,6 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
-
-	DefineCustomIntVariable("timescaledb.max_insert_batch_size",
-							"The max number of tuples to batch before sending to a data node",
-							"When acting as a access node, TimescaleDB splits batches of "
-							"inserted tuples across multiple data nodes. It will batch up to the "
-							"configured batch size tuples per data node before flushing. "
-							"Setting this to 0 disables batching, reverting to tuple-by-tuple "
-							"inserts",
-							&ts_guc_max_insert_batch_size,
-							1000,
-							0,
-							65536,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
 
 	DefineCustomBoolVariable("timescaledb.enable_async_append",
 							 "Enable async query execution on data nodes",
