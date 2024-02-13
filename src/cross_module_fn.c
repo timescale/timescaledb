@@ -88,8 +88,6 @@ CROSSMODULE_WRAPPER(cagg_try_repair);
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 
-CROSSMODULE_WRAPPER(chunk_get_relstats);
-CROSSMODULE_WRAPPER(chunk_get_colstats);
 CROSSMODULE_WRAPPER(chunk_create_empty_table);
 
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
@@ -364,8 +362,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
-	.chunk_get_relstats = error_no_default_fn_pg_community,
-	.chunk_get_colstats = error_no_default_fn_pg_community,
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
