@@ -112,4 +112,11 @@ SELECT * FROM ht_settings;
 ALTER TABLE metrics2 SET (timescaledb.compress_orderby='d1 DESC NULLS LAST, d2 ASC NULLS FIRST, value DESC, time ASC NULLS FIRST');
 SELECT * FROM ht_settings;
 
+-- test decompression uses the correct settings
+ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
+SELECT compress_chunk(show_chunks('metrics'), recompress:=true);
+ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1,d2');
+SELECT * FROM chunk_settings;
+
+SELECT * FROM metrics WHERE d1 = 'foo';
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+PG_VERSION=${PG_VERSION:-16.2}
+
+export PG_VERSION
+
 set -e
 
 SCRIPT_DIR=$(dirname $0)
