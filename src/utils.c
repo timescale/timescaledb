@@ -12,6 +12,7 @@
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
@@ -37,6 +38,7 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"
@@ -1747,4 +1749,29 @@ ts_update_placeholder(PG_FUNCTION_ARGS)
 {
 	elog(ERROR, "this stub function is used only as placeholder during extension updates");
 	PG_RETURN_NULL();
+}
+
+/*
+ * Check if a relation is using hyperstore AM.
+ *
+ * Assumes that the relation already has appropriate locks.
+ */
+bool
+ts_relation_uses_hyperstore(Oid relid)
+{
+	HeapTuple tup;
+	Oid clamoid = InvalidOid;
+	Oid amoid = get_am_oid("hyperstore", false);
+
+	tup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (HeapTupleIsValid(tup))
+	{
+		Form_pg_class clform = (Form_pg_class) GETSTRUCT(tup);
+
+		clamoid = clform->relam;
+		ReleaseSysCache(tup);
+	}
+
+	return amoid == clamoid;
 }

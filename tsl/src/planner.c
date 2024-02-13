@@ -101,6 +101,8 @@ void
 tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						   Hypertable *ht)
 {
+	bool ishyperstore = ts_relation_uses_hyperstore(rte->relid);
+
 	/* We can get here via query on hypertable in that case reloptkind
 	 * will be RELOPT_OTHER_MEMBER_REL or via direct query on chunk
 	 * in that case reloptkind will be RELOPT_BASEREL.
@@ -113,7 +115,8 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	if (ts_guc_enable_transparent_decompression && ht &&
 		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
 		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
-		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) &&
+		(!ishyperstore || ts_guc_enable_transparent_decompression == 2))
 	{
 		if (fdw_private->cached_chunk_struct == NULL)
 		{
@@ -134,15 +137,8 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		}
 	}
 
-	Relation relation = table_open(rte->relid, AccessShareLock);
-
-	if (relation->rd_tableam == compressionam_routine())
-	{
-		if (!ts_guc_enable_transparent_decompression && ts_guc_enable_columnarscan)
-			columnar_scan_set_rel_pathlist(root, rel, ht);
-	}
-
-	table_close(relation, AccessShareLock);
+	if (ishyperstore && ts_guc_enable_transparent_decompression != 2 && ts_guc_enable_columnarscan)
+		columnar_scan_set_rel_pathlist(root, rel, ht);
 }
 
 void
