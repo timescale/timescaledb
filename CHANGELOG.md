@@ -4,6 +4,23 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.14.1 (2024-02-14)
+
+This release contains bug fixes since the 2.14.0 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Features**
+* #6630 Add views for per chunk compression settings
+
+**Bugfixes**
+* #6636 Fixes extension update of compressed hypertables with dropped columns
+* #6637 Reset sequence numbers on non-rollup compression
+* #6639 Disable default indexscan for compression
+* #6651 Fix DecompressChunk path generation with per chunk settings
+
+**Thanks**
+* @anajavi for reporting an issue with extension update of compressed hypertables
+
 ## 2.14.0 (2024-02-08)
 
 This release contains performance improvements and bug fixes since 
@@ -106,7 +123,7 @@ We recommend that you upgrade at the next available opportunity.
 This release contains performance improvements, an improved hypertable DDL API
 and bug fixes since the 2.12.2 release. We recommend that you upgrade at the next
 available opportunity.
- 
+
 In addition, it includes these noteworthy features:
 
 * Full PostgreSQL 16 support for all existing features
