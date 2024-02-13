@@ -344,3 +344,25 @@ SELECT * FROM ht_settings;
  metrics2   |           | d1 DESC NULLS LAST,d2 NULLS FIRST,value DESC,"time" NULLS FIRST | 
 (2 rows)
 
+-- test decompression uses the correct settings
+ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
+SELECT compress_chunk(show_chunks('metrics'), recompress:=true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_6_chunk
+ _timescaledb_internal._hyper_3_8_chunk
+(2 rows)
+
+ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1,d2');
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_3_6_chunk |           | "time" DESC
+ metrics    | _timescaledb_internal._hyper_3_8_chunk |           | "time" DESC
+(2 rows)
+
+SELECT * FROM metrics WHERE d1 = 'foo';
+ time | d1 | d2 | value 
+------+----+----+-------
+(0 rows)
+

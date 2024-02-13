@@ -2,6 +2,9 @@
 
 set -e
 
+PG_VERSION=${PG_VERSION:-13.14}
+export PG_VERSION
+
 SCRIPT_DIR=$(dirname $0)
 
 # shellcheck source=scripts/test_functions.inc
