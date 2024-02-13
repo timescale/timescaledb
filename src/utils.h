@@ -320,3 +320,5 @@ ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid v
 	else
 		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
 }
+
+TSDLLEXPORT bool ts_relation_uses_hyperstore(Oid relid);

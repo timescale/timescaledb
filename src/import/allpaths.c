@@ -33,9 +33,9 @@
 
 #include <math.h>
 
-#include "compat/compat.h"
 #include "allpaths.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
@@ -192,6 +192,8 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(child_ht))
 		{
 			TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) child_rel->fdw_private;
+			const RangeTblEntry *rte = planner_rt_fetch(appinfo->child_relid, root);
+			bool ishyperstore = ts_relation_uses_hyperstore(rte->relid);
 
 			/*
 			 * This function is called only in tandem with our own hypertable
@@ -200,7 +202,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 			Assert(fdw_private->cached_chunk_struct != NULL);
 
 			const bool use_transparent_decompression =
-				TS_HYPERTABLE_HAS_COMPRESSION_TABLE(parent_ht) &&
+				!ishyperstore && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(parent_ht) &&
 				ts_guc_enable_transparent_decompression;
 
 			/*
