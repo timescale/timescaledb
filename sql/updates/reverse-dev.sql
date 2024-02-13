@@ -60,3 +60,14 @@ ANALYZE _timescaledb_catalog.continuous_aggs_bucket_function;
 UPDATE _timescaledb_catalog.continuous_aggs_bucket_function
    SET origin = origin::timestamptz::timestamp::text
    WHERE length(origin) > 1;
+
+-- only create stub
+CREATE FUNCTION _timescaledb_functions.get_chunk_relstats(relid REGCLASS)
+RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, num_pages INTEGER, num_tuples REAL, num_allvisible INTEGER)
+AS $$BEGIN END$$ LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp;
+
+CREATE FUNCTION _timescaledb_functions.get_chunk_colstats(relid REGCLASS)
+RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, att_num INTEGER, nullfrac REAL, width INTEGER, distinctval REAL, slotkind INTEGER[], slotopstrings CSTRING[], slotcollations OID[], slot1numbers FLOAT4[], slot2numbers FLOAT4[], slot3numbers FLOAT4[], slot4numbers FLOAT4[], slot5numbers FLOAT4[], slotvaluetypetrings CSTRING[], slot1values CSTRING[], slot2values CSTRING[], slot3values CSTRING[], slot4values CSTRING[], slot5values CSTRING[])
+AS $$BEGIN END$$ LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp;
+
+

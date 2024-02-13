@@ -25,8 +25,6 @@ SELECT _timescaledb_internal.drop_chunk(0);
 SELECT _timescaledb_internal.freeze_chunk(0);
 SELECT FROM _timescaledb_internal.generate_uuid();
 SELECT _timescaledb_internal.get_approx_row_count(0);
-SELECT _timescaledb_internal.get_chunk_colstats(0);
-SELECT _timescaledb_internal.get_chunk_relstats(0);
 SELECT _timescaledb_internal.get_compressed_chunk_index_for_recompression(0);
 SELECT _timescaledb_internal.get_create_command(NULL);
 SELECT pg_typeof(_timescaledb_internal.get_git_commit());
