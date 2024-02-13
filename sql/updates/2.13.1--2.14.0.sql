@@ -105,6 +105,13 @@ INSERT INTO _timescaledb_catalog.compression_settings(relid, segmentby, orderby,
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = hc.hypertable_id
   GROUP BY hypertable_id, ht.schema_name, ht.table_name;
 
+INSERT INTO _timescaledb_catalog.compression_settings
+SELECT format('%I.%I',ch.schema_name,ch.table_name)::regclass,s.segmentby,s.orderby,s.orderby_desc,s.orderby_nullsfirst
+FROM _timescaledb_catalog.hypertable ht1
+INNER JOIN _timescaledb_catalog.hypertable ht2 ON ht2.id = ht1.compressed_hypertable_id
+INNER JOIN _timescaledb_catalog.compression_settings s ON s.relid = format('%I.%I',ht1.schema_name,ht1.table_name)::regclass
+INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht2.id ON CONFLICT DO NOTHING;
+
 GRANT SELECT ON _timescaledb_catalog.compression_settings TO PUBLIC;
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
 
