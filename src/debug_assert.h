@@ -29,7 +29,7 @@
 #define Ensure(COND, FMT, ...)                                                                     \
 	do                                                                                             \
 	{                                                                                              \
-		if (!(COND))                                                                               \
+		if (!unlikely(COND))                                                                       \
 			ereport(ERROR,                                                                         \
 					(errcode(ERRCODE_INTERNAL_ERROR),                                              \
 					 errdetail("Assertion '" #COND "' failed."),                                   \
