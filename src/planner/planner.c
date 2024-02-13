@@ -1417,11 +1417,13 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 											 !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
+
 			if (use_transparent_decompression && (is_standalone_chunk || is_child_chunk_in_update))
 			{
 				const Chunk *chunk = ts_planner_chunk_fetch(root, rel);
 
-				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk))
+				if (!ts_chunk_is_partial(chunk) && ts_chunk_is_compressed(chunk) &&
+					!ts_is_hypercore_am(chunk->amoid))
 				{
 					rel->indexlist = NIL;
 				}
