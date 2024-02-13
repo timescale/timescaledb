@@ -53,6 +53,11 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "log", LOG, false },		 { NULL, 0, false }
 };
 
+static const struct config_enum_entry transparent_decompression_options[] = {
+	{ "on", 1, false },	   { "true", 1, false },	   { "off", 0, false },
+	{ "false", 0, false }, { "hyperstore", 2, false }, { NULL, 0, false }
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -73,7 +78,7 @@ TSDLLEXPORT bool ts_guc_enable_compressed_direct_batch_delete = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
-TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
+TSDLLEXPORT int ts_guc_enable_transparent_decompression = 1;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
@@ -496,11 +501,12 @@ _guc_init(void)
 							NULL,
 							NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
+	DefineCustomEnumVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
 							 "Enable transparent decompression",
 							 "Enable transparent decompression when querying hypertable",
 							 &ts_guc_enable_transparent_decompression,
-							 true,
+							 1,
+							 transparent_decompression_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,

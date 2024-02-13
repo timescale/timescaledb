@@ -302,7 +302,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = false;
 -- Compare the output to transparent decompression. Heap output is
 -- shown further down.
-SET timescaledb.enable_transparent_decompression TO true;
+SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
                                  QUERY PLAN                                  
@@ -379,7 +379,7 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 
 SET enable_indexscan = false;
 -- With transparent decompression
-SET timescaledb.enable_transparent_decompression TO true;
+SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
@@ -412,7 +412,7 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 (5 rows)
 
 -- Show with transparent decompression
-SET timescaledb.enable_transparent_decompression TO true;
+SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
@@ -594,7 +594,7 @@ ON (c1.compressed_chunk_id = c2.id);
 (1 row)
 
 ALTER TABLE :chunk SET ACCESS METHOD heap;
-SET timescaledb.enable_transparent_decompression TO true;
+SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 -- The compressed chunk should no longer exist
 SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
 FROM _timescaledb_catalog.chunk c1
