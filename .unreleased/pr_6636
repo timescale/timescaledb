@@ -1,2 +1,0 @@
-Fixes: #6636 Fixes extension update of compressed hypertables with dropped columns
-Thanks: @anajavi for reporting an issue with extension update of compressed hypertables
