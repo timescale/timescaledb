@@ -312,6 +312,8 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 	}
 }
 
+struct Hypertable;
+
 void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);
 
 extern TSDLLEXPORT HeapTuple ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums);
