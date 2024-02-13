@@ -12,6 +12,7 @@
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
@@ -37,6 +38,7 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"

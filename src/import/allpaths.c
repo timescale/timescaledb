@@ -32,9 +32,9 @@
 
 #include <math.h>
 
-#include "compat/compat.h"
 #include "allpaths.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
