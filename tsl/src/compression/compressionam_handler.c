@@ -341,8 +341,8 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	 * Transparent decompression reads compressed data itself, directly from
 	 * the compressed chunk, so avoid reading it again here.
 	 */
-	scan->compressed_read_done =
-		ts_guc_enable_transparent_decompression || (keys && keys->sk_flags & SK_NO_COMPRESSED);
+	scan->compressed_read_done = (ts_guc_enable_transparent_decompression == 2) ||
+								 (keys && keys->sk_flags & SK_NO_COMPRESSED);
 
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
@@ -562,7 +562,7 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 	/* Compressed tuples not visible through this TAM when scanned by
 	 * transparent decompression enabled since DecompressChunk already scanned
 	 * that data. */
-	if (ts_guc_enable_transparent_decompression)
+	if (ts_guc_enable_transparent_decompression == 2)
 		return false;
 
 	/* Recreate the original TID for the compressed table */
@@ -1512,7 +1512,6 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 													  callback_state,
 													  scan);
 	relation->rd_tableam = oldam;
-
 	return icstate.ntuples;
 }
 
