@@ -102,3 +102,84 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time", timezo
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 day', bucket) AS bucket, sum(count) AS count FROM metrics_by_hour GROUP BY 1 $$);
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 month', bucket) AS bucket, sum(count) AS count FROM metrics_by_hour GROUP BY 1 $$);
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 year', bucket) AS bucket, sum(count) AS count FROM metrics_by_month GROUP BY 1 $$);
+
+--
+-- Test bucket Oid recovery
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION cagg_get_bucket_function(
+    mat_hypertable_id INTEGER
+) RETURNS regprocedure AS :MODULE_PATHNAME, 'ts_continuous_agg_get_bucket_function' LANGUAGE C STRICT VOLATILE;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+CREATE TABLE timestamp_ht (
+  time timestamp NOT NULL,
+  value float
+);
+
+SELECT create_hypertable('timestamp_ht', 'time');
+
+INSERT INTO timestamp_ht
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,
+                         '2000-01-01 23:59:59+0','1m') time;
+
+CREATE MATERIALIZED VIEW temperature_4h
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE TABLE timestamptz_ht (
+  time timestamptz NOT NULL,
+  value float
+);
+
+SELECT create_hypertable('timestamptz_ht', 'time');
+
+INSERT INTO timestamptz_ht
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,
+                         '2000-01-01 23:59:59+0','1m') time;
+
+CREATE MATERIALIZED VIEW temperature_tz_4h
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, 'Europe/Berlin'), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts_ng
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('4 hour', time, 'Asia/Shanghai'), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE TABLE integer_ht(a integer, b integer, c integer);
+SELECT table_name FROM create_hypertable('integer_ht', 'a', chunk_time_interval=> 10);
+
+CREATE OR REPLACE FUNCTION integer_now_integer_ht() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM integer_ht $$;
+SELECT set_integer_now_func('integer_ht', 'integer_now_integer_ht');
+
+CREATE MATERIALIZED VIEW integer_ht_cagg
+  WITH (timescaledb.continuous) AS
+  SELECT a, count(b)
+     FROM integer_ht
+     GROUP BY time_bucket(1, a), a;
+
+--- Get the bucket Oids
+SELECT user_view_name,
+       cagg_get_bucket_function(mat_hypertable_id)
+       FROM _timescaledb_catalog.continuous_agg
+       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_ng', 'integer_ht_cagg')
+       ORDER BY user_view_name;
+
+--- Cleanup
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP FUNCTION IF EXISTS cagg_get_bucket_function(INTEGER);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
