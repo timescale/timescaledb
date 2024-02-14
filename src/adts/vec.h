@@ -110,8 +110,11 @@ VEC_RESERVE(VEC_TYPE *vec, uint32 additional)
 	if (num_new_elements == 0 || vec->num_elements + num_new_elements <= vec->max_elements)
 		return;
 
-	if (num_new_elements < vec->num_elements / 2)
-		num_new_elements = vec->num_elements / 2;
+	if (num_new_elements < vec->num_elements)
+	{
+		/* Follow the usual doubling progression of allocation sizes. */
+		num_new_elements = vec->num_elements;
+	}
 
 	num_elements = vec->num_elements + num_new_elements;
 	Assert(num_elements > vec->num_elements);

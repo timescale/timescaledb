@@ -304,8 +304,20 @@ simple8brle_compressor_init(Simple8bRleCompressor *compressor)
 		.num_elements = 0,
 		.num_uncompressed_elements = 0,
 	};
-	uint64_vec_init(&compressor->compressed_data, CurrentMemoryContext, 0);
-	bit_array_init(&compressor->selectors);
+	/*
+	 * It is good to have some estimate of the resulting size of compressed
+	 * data, because it helps to allocate memory in advance to avoid frequent
+	 * reallocations. Here we use a completely arbitrary but pretty realistic
+	 * ratio of 10.
+	 */
+	const int expected_compression_ratio = 10;
+	uint64_vec_init(&compressor->compressed_data,
+					CurrentMemoryContext,
+					GLOBAL_MAX_ROWS_PER_COMPRESSION / expected_compression_ratio);
+	bit_array_init(&compressor->selectors,
+				   /* expected_bits = */ (GLOBAL_MAX_ROWS_PER_COMPRESSION *
+										  SIMPLE8B_BITS_PER_SELECTOR) /
+					   expected_compression_ratio);
 }
 
 static void
