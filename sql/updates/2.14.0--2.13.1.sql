@@ -88,7 +88,7 @@ BEGIN
 
     -- restore columns from the compressed hypertable
     FOR column_name, column_type IN
-      SELECT attname, atttypid::regtype FROM pg_attribute WHERE attrelid = chunk AND attnum > 0
+      SELECT attname, atttypid::regtype FROM pg_attribute WHERE attrelid = chunk AND attnum > 0 AND NOT attisdropped
     LOOP
       cmd := format('ALTER TABLE %s ADD COLUMN %I %s', hypertable, column_name, column_type);
       EXECUTE cmd;
