@@ -6,6 +6,11 @@
 
 #include "repair.h"
 
+#include <funcapi.h>
+#include <utils/snapmgr.h>
+
+#include "func_cache.h"
+
 static void cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht,
 										 bool force_rebuild);
 
@@ -240,4 +245,155 @@ tsl_cagg_try_repair(PG_FUNCTION_ARGS)
 	ts_cache_release(hcache);
 
 	PG_RETURN_VOID();
+}
+
+typedef struct
+{
+	/* Input parameter */
+	int32 mat_hypertable_id;
+
+	/* Output parameter */
+	Oid bucket_fuction;
+} CaggQueryWalkerContext;
+
+/* Process the CAgg query and find all used (usually one) time_bucket functions. It returns
+ * InvalidOid is no or more than one bucket function is found. */
+static bool
+cagg_query_walker(Node *node, CaggQueryWalkerContext *context)
+{
+	if (node == NULL)
+		return false;
+
+	if (IsA(node, FuncExpr))
+	{
+		FuncExpr *func_expr = castNode(FuncExpr, node);
+
+		/* Is the used function a bucket function?
+		 * We can not call ts_func_cache_get_bucketing_func at this point, since
+		 */
+		FuncInfo *func_info = ts_func_cache_get_bucketing_func(func_expr->funcid);
+		if (func_info != NULL)
+		{
+			/* First bucket function found */
+			if (!OidIsValid(context->bucket_fuction))
+			{
+				context->bucket_fuction = func_expr->funcid;
+			}
+			else
+			{
+				/* Got multiple bucket functions. Should never happen because this is checked during
+				 * CAgg query validation.
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("found multiple time_bucket functions in CAgg definition for "
+								"mat_ht_id: %d",
+								context->mat_hypertable_id)));
+				pg_unreachable();
+			}
+		}
+	}
+	else if (IsA(node, Query))
+	{
+		Query *query = castNode(Query, node);
+		return query_tree_walker(query, cagg_query_walker, context, 0);
+	}
+
+	return expression_tree_walker(node, cagg_query_walker, context);
+}
+
+/* Get the Oid of the direct view of the CAgg. We cannot use the TimescaleDB internal
+ * functions such as ts_continuous_agg_find_by_mat_hypertable_id() at this point since this
+ * function can be called during an extension upgrade and ts_catalog_get() does not work.
+ */
+static Oid
+get_direct_view_oid(int32 mat_hypertable_id)
+{
+	RangeVar *ts_cagg = makeRangeVar(CATALOG_SCHEMA_NAME,
+									 CONTINUOUS_AGG_TABLE_NAME,
+									 -1 /* taken location unknown */);
+	Relation cagg_rel = relation_openrv_extended(ts_cagg, AccessShareLock, /* missing ok */ true);
+
+	RangeVar *ts_cagg_idx =
+		makeRangeVar(CATALOG_SCHEMA_NAME, TS_CAGG_CATALOG_IDX, -1 /* taken location unknown */);
+	Relation cagg_idx_rel =
+		relation_openrv_extended(ts_cagg_idx, AccessShareLock, /* missing ok */ true);
+
+	/* Prepare relation scan */
+	TupleTableSlot *slot = table_slot_create(cagg_rel, NULL);
+	ScanKeyData scankeys[1];
+	ScanKeyEntryInitialize(&scankeys[0],
+						   0,
+						   1,
+						   BTEqualStrategyNumber,
+						   InvalidOid,
+						   InvalidOid,
+						   F_INT4EQ,
+						   Int32GetDatum(mat_hypertable_id));
+
+	/* Prepare index scan */
+	IndexScanDesc indexscan =
+		index_beginscan(cagg_rel, cagg_idx_rel, GetTransactionSnapshot(), 1, 0);
+	index_rescan(indexscan, scankeys, 1, NULL, 0);
+
+	/* Read tuple from relation */
+	bool got_next_slot = index_getnext_slot(indexscan, ForwardScanDirection, slot);
+	Ensure(got_next_slot, "unable to find CAgg definition for mat_ht %d", mat_hypertable_id);
+
+	bool is_null = false;
+
+	char *view_schema =
+		DatumGetCString(slot_getattr(slot, Anum_continuous_agg_direct_view_schema, &is_null));
+	Ensure(!is_null, "unable to get view schema for oid %d", mat_hypertable_id);
+	Assert(view_schema != NULL);
+
+	char *view_name =
+		DatumGetCString(slot_getattr(slot, Anum_continuous_agg_direct_view_name, &is_null));
+	Ensure(!is_null, "unable to get view name for oid %d", mat_hypertable_id);
+	Assert(view_name != NULL);
+
+	got_next_slot = index_getnext_slot(indexscan, ForwardScanDirection, slot);
+	Ensure(!got_next_slot, "found duplicate definitions for CAgg mat_ht %d", mat_hypertable_id);
+
+	/* End relation scan */
+	index_endscan(indexscan);
+	ExecDropSingleTupleTableSlot(slot);
+	relation_close(cagg_rel, AccessShareLock);
+	relation_close(cagg_idx_rel, AccessShareLock);
+
+	/* Get Oid of user view */
+	Oid direct_view_oid = ts_get_relation_relid(view_schema, view_name, false);
+	Assert(OidIsValid(direct_view_oid));
+	return direct_view_oid;
+}
+
+/*
+ * In older TimescaleDB versions, information about the Timezone and the Oid of the time_bucket
+ * function are not stored in the catalog table. This function gets the data from the used
+ * view definition and return it.
+ */
+Datum
+continuous_agg_get_bucket_function(PG_FUNCTION_ARGS)
+{
+	const int32 mat_hypertable_id = PG_GETARG_INT32(0);
+
+	/* Get the user view query of the user defined CAGG.  */
+	Oid direct_view_oid = get_direct_view_oid(mat_hypertable_id);
+	Assert(OidIsValid(direct_view_oid));
+
+	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
+	Query *direct_query = copyObject(get_view_query(direct_view_rel));
+	relation_close(direct_view_rel, NoLock);
+
+	Assert(direct_query != NULL);
+	Assert(direct_query->commandType == CMD_SELECT);
+
+	/* Process the query and collect function information */
+	CaggQueryWalkerContext context = { 0 };
+	context.mat_hypertable_id = mat_hypertable_id;
+	context.bucket_fuction = InvalidOid;
+
+	cagg_query_walker((Node *) direct_query, &context);
+
+	PG_RETURN_DATUM(ObjectIdGetDatum(context.bucket_fuction));
 }
