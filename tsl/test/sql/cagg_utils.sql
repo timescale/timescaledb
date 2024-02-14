@@ -38,6 +38,11 @@ WITH NO DATA;
 -- return NULL
 SELECT * FROM cagg_validate_query(NULL);
 
+-- nothing to parse
+SELECT * FROM cagg_validate_query('');
+SELECT * FROM cagg_validate_query('--');
+SELECT * FROM cagg_validate_query(';');
+
 -- syntax error
 SELECT * FROM cagg_validate_query('blahh');
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket(blahh "time") FROM metrics GROUP BY 1 $$);
