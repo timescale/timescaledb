@@ -473,12 +473,11 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 		.result_mctx = NULL,
 	};
 
-	/* if we don't find any watermark, then we've never done any materialization
-	 * we'll treat this as if the invalidation timestamp is at min value, since
-	 * the first materialization needs to scan the entire table anyway; the
-	 * invalidations are redundant.
+	/* If we don't find any invalidation threshold watermark, then we've never done any
+	 * materialization we'll treat this as if the invalidation timestamp is at min value, since the
+	 * first materialization needs to scan the entire table anyway; the invalidations are redundant.
 	 */
-	if (!ts_scanner_scan_one(&scanctx, false, "invalidation watermark"))
+	if (!ts_scanner_scan_one(&scanctx, false, "invalidation threshold watermark"))
 		return INVAL_NEG_INFINITY;
 
 	return min_val;
