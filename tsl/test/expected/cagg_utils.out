@@ -39,6 +39,25 @@ SELECT * FROM cagg_validate_query(NULL);
           |             |            |               |              | 
 (1 row)
 
+-- nothing to parse
+SELECT * FROM cagg_validate_query('');
+ is_valid | error_level | error_code |     error_message     | error_detail | error_hint 
+----------+-------------+------------+-----------------------+--------------+------------
+ f        | ERROR       | XX000      | failed to parse query |              | 
+(1 row)
+
+SELECT * FROM cagg_validate_query('--');
+ is_valid | error_level | error_code |     error_message     | error_detail | error_hint 
+----------+-------------+------------+-----------------------+--------------+------------
+ f        | ERROR       | XX000      | failed to parse query |              | 
+(1 row)
+
+SELECT * FROM cagg_validate_query(';');
+ is_valid | error_level | error_code |     error_message     | error_detail | error_hint 
+----------+-------------+------------+-----------------------+--------------+------------
+ f        | ERROR       | XX000      | failed to parse query |              | 
+(1 row)
+
 -- syntax error
 SELECT * FROM cagg_validate_query('blahh');
  is_valid | error_level | error_code |          error_message          | error_detail | error_hint 

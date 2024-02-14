@@ -1,0 +1,2 @@
+Fixes: #6655 Fix segfault in cagg_validate_query
+Thanks: @kav23alex for reporting a segfault in cagg_validate_query
