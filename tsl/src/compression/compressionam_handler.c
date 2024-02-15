@@ -217,6 +217,13 @@ compressionam_slot_callbacks(Relation relation)
 
 #define pgstat_count_compression_getnext(rel) pgstat_count_heap_getnext(rel)
 
+typedef struct CompressionParallelScanDescData
+{
+	ParallelBlockTableScanDescData pscandesc[2];
+} CompressionParallelScanDescData;
+
+typedef struct CompressionParallelScanDescData *CompressionParallelScanDesc;
+
 typedef struct CompressionScanDescData
 {
 	TableScanDescData rs_base;
@@ -313,13 +320,20 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	CompressionScanDesc scan;
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) parallel_scan;
 
 	RelationIncrementReferenceCount(relation);
 
 	elog(DEBUG2,
-		 "starting %s scan of relation %s",
+		 "%d starting %s scan of relation %s parallel_scan=%p",
+#if PG17_GE
+		 MyProcNumber,
+#else
+		 MyBackendId,
+#endif
 		 get_scan_type(flags),
-		 RelationGetRelationName(relation));
+		 RelationGetRelationName(relation),
+		 parallel_scan);
 
 	scan = palloc0(sizeof(CompressionScanDescData));
 	scan->rs_base.rs_rd = relation;
@@ -344,21 +358,34 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->compressed_read_done = (ts_guc_enable_transparent_decompression == 2) ||
 								 (keys && keys->sk_flags & SK_NO_COMPRESSED);
 
-	TupleDesc tupdesc = RelationGetDescr(relation);
-	TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
-
-	scan->attrs_map = build_attribute_offset_map(tupdesc, c_tupdesc, &scan->count_colattno);
 	initscan(scan, keys, nkeys);
 
-	if (flags & SO_TYPE_ANALYZE)
-		scan->cscan_desc = table_beginscan_analyze(scan->compressed_rel);
-	else
-		scan->cscan_desc = table_beginscan(scan->compressed_rel,
-										   snapshot,
-										   scan->rs_base.rs_nkeys,
-										   scan->rs_base.rs_key);
+	ParallelTableScanDesc pts =
+		parallel_scan ? (ParallelTableScanDesc) &cpscan->pscandesc[0] : NULL;
+	scan->uscan_desc = heapam->scan_begin(relation, snapshot, nkeys, keys, pts, flags);
 
-	scan->uscan_desc = heapam->scan_begin(relation, snapshot, nkeys, keys, parallel_scan, flags);
+	if (parallel_scan)
+	{
+		/* Parallel workers use a serialized snapshot that they get from the
+		 * coordinator. The snapshot will be marked as a temp snapshot so that
+		 * endscan() knows to deregister it. However, if we pass the snapshot
+		 * to both sub-scans marked as a temp snapshot it will be deregistered
+		 * twice. Therefore remove the temp flag for the second scan. */
+		flags &= ~SO_TEMP_SNAPSHOT;
+	}
+
+	const TupleDesc tupdesc = RelationGetDescr(relation);
+	const TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
+	ParallelTableScanDesc cpts =
+		parallel_scan ? (ParallelTableScanDesc) &cpscan->pscandesc[1] : NULL;
+
+	scan->attrs_map = build_attribute_offset_map(tupdesc, c_tupdesc, &scan->count_colattno);
+	scan->cscan_desc = heapam->scan_begin(scan->compressed_rel,
+										  snapshot,
+										  scan->rs_base.rs_nkeys,
+										  scan->rs_base.rs_key,
+										  cpts,
+										  flags);
 
 	return &scan->rs_base;
 }
@@ -454,6 +481,49 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 	pgstat_count_compression_getnext(sscan->rs_rd);
 
 	return true;
+}
+
+static Size
+compressionam_parallelscan_estimate(Relation rel)
+{
+	return sizeof(CompressionParallelScanDescData);
+}
+
+/*
+ * Initialize ParallelTableScanDesc for a parallel scan of this relation.
+ * `pscan` will be sized according to parallelscan_estimate() for the same
+ * relation.
+ */
+static Size
+compressionam_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
+{
+	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+
+	table_block_parallelscan_initialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc[0]);
+
+	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	table_block_parallelscan_initialize(crel, (ParallelTableScanDesc) &cpscan->pscandesc[1]);
+	table_close(crel, NoLock);
+
+	return sizeof(CompressionParallelScanDescData);
+}
+
+/*
+ * Reinitialize `pscan` for a new scan. `rel` will be the same relation as
+ * when `pscan` was initialized by parallelscan_initialize.
+ */
+static void
+compressionam_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
+{
+	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+
+	table_block_parallelscan_reinitialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc[0]);
+
+	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	table_block_parallelscan_reinitialize(crel, (ParallelTableScanDesc) &cpscan->pscandesc[1]);
+	table_close(crel, NoLock);
 }
 
 static void
@@ -1971,9 +2041,9 @@ static const TableAmRoutine compressionam_methods = {
 	 * Parallel table scan related functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.parallelscan_estimate = table_block_parallelscan_estimate,
-	.parallelscan_initialize = table_block_parallelscan_initialize,
-	.parallelscan_reinitialize = table_block_parallelscan_reinitialize,
+	.parallelscan_estimate = compressionam_parallelscan_estimate,
+	.parallelscan_initialize = compressionam_parallelscan_initialize,
+	.parallelscan_reinitialize = compressionam_parallelscan_reinitialize,
 
 	/* ------------------------------------------------------------------------
 	 * Index Scan Callbacks
