@@ -18,9 +18,11 @@ jobs:
       pg13_earliest: ${{ steps.config.outputs.pg13_abi_min }}
       pg14_earliest: ${{ steps.config.outputs.pg14_abi_min }}
       pg15_earliest: ${{ steps.config.outputs.pg15_abi_min }}
+      pg16_earliest: ${{ steps.config.outputs.pg16_abi_min }}
       pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
+      pg16_latest: ${{ steps.config.outputs.pg16_latest }}
 
     steps:
     - name: Checkout source code
@@ -37,26 +39,32 @@ jobs:
       fail-fast: false
       matrix:
         os: [ windows-2019 ]
-        test: [ "13min", "13max", "14min", "14max", "15min", "15max" ]
+        test: [ "13min", "13max", "14min", "14max", "15min", "15max", "16min", "16max" ]
         include:
           - test: 13min
             pg: 13
             pkg_version: ${{ fromJson(needs.config.outputs.pg13_earliest) }}.1
           - test: 13max
             pg: 13
-            pkg_version: 13.12 # hardcoded since 13.13 is not available on chocolatey
+            pkg_version: 13.13.0 # hardcoded since 13.14 is not available on chocolatey
           - test: 14min
             pg: 14
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_earliest) }}.1
           - test: 14max
             pg: 14
-            pkg_version: 14.5.1 # hardcoded due to issues with PG14.7 on chocolatey
+            pkg_version: 14.10.0 # hardcoded since 14.11 is not available yet
           - test: 15min
             pg: 15
             pkg_version: ${{ fromJson(needs.config.outputs.pg15_earliest) }}.1
           - test: 15max
             pg: 15
-            pkg_version: 15.0.1 # hardcoded due to issues with PG15.2 on chocolatey
+            pkg_version: 15.5.0 # hardcoded since 15.6 is not available yet
+          - test: 16min
+            pg: 16
+            pkg_version: ${{ fromJson(needs.config.outputs.pg16_earliest) }}.0
+          - test: 16max
+            pg: 16
+            pkg_version: 16.1.0 # hardcoded since 16.2 is not available yet
     env:
       # PostgreSQL configuration
       PGPORT: 6543
