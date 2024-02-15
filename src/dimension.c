@@ -192,8 +192,8 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_column_name)]),
 		   NAMEDATALEN);
 
-	if (!isnull[Anum_dimension_partitioning_func_schema - 1] &&
-		!isnull[Anum_dimension_partitioning_func - 1])
+	if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] &&
+		!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)])
 	{
 		MemoryContext old;
 
@@ -218,8 +218,8 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		MemoryContextSwitchTo(old);
 	}
 
-	if (!isnull[Anum_dimension_integer_now_func_schema - 1] &&
-		!isnull[Anum_dimension_integer_now_func - 1])
+	if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] &&
+		!isnull[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)])
 	{
 		namestrcpy(&d->fd.integer_now_func_schema,
 				   DatumGetCString(
@@ -230,12 +230,13 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	}
 
 	if (IS_CLOSED_DIMENSION(d))
-		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
+		d->fd.num_slices =
+			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 	else
 	{
 		d->fd.interval_length =
 			DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
-		if (!isnull[Anum_dimension_compress_interval_length - 1])
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)])
 			d->fd.compress_interval_length = DatumGetInt64(
 				values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)]);
 	}

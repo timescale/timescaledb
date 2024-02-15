@@ -426,27 +426,29 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 		 */
 		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, isnull);
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_experimental - 1]);
-		bf->experimental =
-			DatumGetBool(values[Anum_continuous_aggs_bucket_function_experimental - 1]);
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_experimental)]);
+		bf->experimental = DatumGetBool(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_experimental)]);
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_name - 1]);
-		bf->name = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_name - 1]);
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_name)]);
+		bf->name = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_name)]);
 
 		/*
 		 * So far bucket_width is stored as TEXT for flexibility, but it's type
 		 * most likely is going to change to Interval when the variable-sized
 		 * buckets feature will stabilize.
 		 */
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
-		bucket_width_str =
-			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
+		bucket_width_str = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
 		Assert(strlen(bucket_width_str) > 0);
 		bf->bucket_width = DatumGetIntervalP(
 			DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_origin - 1]);
-		origin_str = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_origin - 1]);
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_origin)]);
+		origin_str = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_origin)]);
 		if (strlen(origin_str) == 0)
 			TIMESTAMP_NOBEGIN(bf->origin);
 		else
@@ -455,9 +457,9 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 															   ObjectIdGetDatum(InvalidOid),
 															   Int32GetDatum(-1)));
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_timezone - 1]);
-		bf->timezone =
-			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_timezone - 1]);
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_timezone)]);
+		bf->timezone = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_timezone)]);
 
 		count++;
 
