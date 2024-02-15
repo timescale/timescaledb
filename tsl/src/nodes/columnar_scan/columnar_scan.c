@@ -654,12 +654,53 @@ columnar_scan_explain(CustomScanState *state, List *ancestors, ExplainState *es)
 	}
 }
 
+/* ----------------------------------------------------------------
+ *						Parallel Scan Support
+ * ----------------------------------------------------------------
+ */
+static Size
+columnar_scan_estimate_dsm(CustomScanState *node, ParallelContext *pcxt)
+{
+	EState *estate = node->ss.ps.state;
+	return table_parallelscan_estimate(node->ss.ss_currentRelation, estate->es_snapshot);
+}
+
+static void
+columnar_scan_initialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *arg)
+{
+	EState *estate = node->ss.ps.state;
+	ParallelTableScanDesc pscan = (ParallelTableScanDesc) arg;
+
+	table_parallelscan_initialize(node->ss.ss_currentRelation, pscan, estate->es_snapshot);
+	node->ss.ss_currentScanDesc = table_beginscan_parallel(node->ss.ss_currentRelation, pscan);
+}
+
+static void
+columnar_scan_reinitialize_dsm(CustomScanState *node, ParallelContext *pcxt, void *arg)
+{
+	ParallelTableScanDesc pscan = (ParallelTableScanDesc) arg;
+
+	table_parallelscan_reinitialize(node->ss.ss_currentRelation, pscan);
+}
+
+static void
+columnar_scan_initialize_worker(CustomScanState *node, shm_toc *toc, void *arg)
+{
+	ParallelTableScanDesc pscan = (ParallelTableScanDesc) arg;
+
+	node->ss.ss_currentScanDesc = table_beginscan_parallel(node->ss.ss_currentRelation, pscan);
+}
+
 static CustomExecMethods columnar_scan_state_methods = {
 	.BeginCustomScan = columnar_scan_begin,
-	.ExecCustomScan = columnar_scan_exec, /* To be determined later. */
+	.ExecCustomScan = columnar_scan_exec,
 	.EndCustomScan = columnar_scan_end,
 	.ReScanCustomScan = columnar_scan_rescan,
 	.ExplainCustomScan = columnar_scan_explain,
+	.EstimateDSMCustomScan = columnar_scan_estimate_dsm,
+	.InitializeDSMCustomScan = columnar_scan_initialize_dsm,
+	.ReInitializeDSMCustomScan = columnar_scan_reinitialize_dsm,
+	.InitializeWorkerCustomScan = columnar_scan_initialize_worker,
 };
 
 static Node *
@@ -923,8 +964,7 @@ columnar_scan_path_create(PlannerInfo *root, RelOptInfo *rel, Relids required_ou
 	path->parent = rel;
 	path->pathtarget = rel->reltarget;
 	path->param_info = get_baserel_parampathinfo(root, rel, required_outer);
-	path->parallel_aware = false; // TODO: Implement parallel support
-								  // (parallel_workers > 0);
+	path->parallel_aware = (parallel_workers > 0);
 	path->parallel_safe = rel->consider_parallel;
 	path->parallel_workers = parallel_workers;
 	path->pathkeys = NIL; /* currently has unordered result, but if pathkeys
@@ -953,6 +993,22 @@ columnar_scan_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *h
 	required_outer = rel->lateral_relids;
 	cspath = columnar_scan_path_create(root, rel, required_outer, 0);
 	add_path(rel, &cspath->custom_path.path);
+
+	if (rel->consider_parallel && required_outer == NULL)
+	{
+		int parallel_workers;
+
+		parallel_workers =
+			compute_parallel_worker(rel, rel->pages, -1, max_parallel_workers_per_gather);
+
+		/* If any limit was set to zero, the user doesn't want a parallel scan. */
+		if (parallel_workers > 0)
+		{
+			/* Add an unordered partial path based on a parallel sequential scan. */
+			cspath = columnar_scan_path_create(root, rel, required_outer, parallel_workers);
+			add_partial_path(rel, &cspath->custom_path.path);
+		}
+	}
 }
 
 void
