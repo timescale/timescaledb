@@ -80,7 +80,7 @@ typedef struct CAggTimebucketInfo
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.
 	 */
-	Timestamp origin;
+	TimestampTz origin;
 } CAggTimebucketInfo;
 
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \

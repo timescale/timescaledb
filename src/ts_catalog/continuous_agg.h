@@ -90,7 +90,7 @@ typedef struct ContinuousAggsBucketFunction
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.
 	 */
-	Timestamp bucket_origin;
+	TimestampTz bucket_origin;
 
 	/* `bucket_offset` argument of the function. */
 	Interval *bucket_offest;

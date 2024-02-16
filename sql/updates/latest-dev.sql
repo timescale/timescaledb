@@ -141,3 +141,8 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_bucket_function(INTEGER)
 --
 -- End rebuild the catalog table `_timescaledb_catalog.continuous_aggs_bucket_function`
 --
+
+-- Convert _timescaledb_catalog.continuous_aggs_bucket_function.bucket_origin to TimestampTZ
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function
+   SET bucket_origin = bucket_origin::timestamp::timestamptz::text
+   WHERE length(bucket_origin) > 1;
