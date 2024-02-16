@@ -196,28 +196,26 @@ ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti)
 	Assert(!nulls[AttrNumberGetAttrOffset(Anum_hypertable_status)]);
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_hypertable_id)]);
-	memcpy(&fd->schema_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)]),
-		   NAMEDATALEN);
-	memcpy(&fd->table_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)]),
-		   NAMEDATALEN);
-	memcpy(&fd->associated_schema_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)]),
-		   NAMEDATALEN);
-	memcpy(&fd->associated_table_prefix,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->schema_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_hypertable_schema_name)]));
+	namestrcpy(&fd->table_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_hypertable_table_name)]));
+	namestrcpy(&fd->associated_schema_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_hypertable_associated_schema_name)]));
+	namestrcpy(&fd->associated_table_prefix,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_hypertable_associated_table_prefix)]));
 
 	fd->num_dimensions =
 		DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_hypertable_num_dimensions)]);
 
-	memcpy(&fd->chunk_sizing_func_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->chunk_sizing_func_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->chunk_sizing_func_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_schema)]));
+	namestrcpy(&fd->chunk_sizing_func_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_sizing_func_name)]));
 
 	fd->chunk_target_size =
 		DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_hypertable_chunk_target_size)]);
