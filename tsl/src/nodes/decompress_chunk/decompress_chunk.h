@@ -80,9 +80,9 @@ typedef struct DecompressChunkPath
 	List *bulk_decompression_column;
 
 	/*
-	 * If we produce at least some columns that support bulk decompression.
+	 * Whether the bulk decompression is enabled.
 	 */
-	bool have_bulk_decompression_columns;
+	bool enable_bulk_decompression;
 
 	/*
 	 * Maps the uncompressed chunk attno to the respective column compression
