@@ -15,7 +15,7 @@ Datum [] datum;
 @@
 
 - datum[attrno - 1]
-+ /* use AttrNumberGetAttrOffset() for acessing Datum array members */
++ /* use AttrNumberGetAttrOffset() for accessing Datum array members */
 + datum[AttrNumberGetAttrOffset(attrno)]
 
 @@
@@ -25,6 +25,6 @@ bool [] isnull;
 @@
 
 - isnull[attrno - 1]
-+ /* use AttrNumberGetAttrOffset() for acessing bool array members */
++ /* use AttrNumberGetAttrOffset() for accessing bool array members */
 + isnull[AttrNumberGetAttrOffset(attrno)]
 
