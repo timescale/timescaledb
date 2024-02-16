@@ -111,28 +111,6 @@ make_segment_meta_opexpr(QualPushdownContext *context, Oid opno, AttrNumber meta
 									uncompressed_var->varcollid);
 }
 
-static AttrNumber
-get_segment_meta_min_attr_number(int16 orderby_column_index, Oid compressed_relid)
-{
-	char *meta_col_name = column_segment_min_name(orderby_column_index);
-
-	if (meta_col_name == NULL)
-		elog(ERROR, "could not find meta column");
-
-	return get_attnum(compressed_relid, meta_col_name);
-}
-
-static AttrNumber
-get_segment_meta_max_attr_number(int16 orderby_column_index, Oid compressed_relid)
-{
-	char *meta_col_name = column_segment_max_name(orderby_column_index);
-
-	if (meta_col_name == NULL)
-		elog(ERROR, "could not find meta column");
-
-	return get_attnum(compressed_relid, meta_col_name);
-}
-
 static Expr *
 get_pushdownsafe_expr(const QualPushdownContext *input_context, Expr *input)
 {
@@ -148,43 +126,46 @@ get_pushdownsafe_expr(const QualPushdownContext *input_context, Expr *input)
 	return NULL;
 }
 
-static bool
-expr_has_metadata(QualPushdownContext *context, Expr *expr, int16 *index)
+static void
+expr_fetch_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *min_attno,
+					AttrNumber *max_attno)
 {
+	*min_attno = InvalidAttrNumber;
+	*max_attno = InvalidAttrNumber;
+
 	if (!IsA(expr, Var))
-		return false;
+		return;
 
 	Var *var = castNode(Var, expr);
 
 	/* Not on the chunk we expect */
 	if ((Index) var->varno != context->chunk_rel->relid)
-		return false;
+		return;
 
 	/* ignore system attributes or whole row references */
 	if (var->varattno <= 0)
-		return false;
+		return;
 
-	char *attname = get_attname(context->chunk_rte->relid, var->varattno, false);
-	int16 pos = ts_array_position(context->settings->fd.orderby, attname);
-
-	if (pos > 0)
-	{
-		*index = pos;
-	}
-
-	return pos > 0;
+	*min_attno = compressed_column_metadata_attno(context->settings,
+												  context->chunk_rte->relid,
+												  var->varattno,
+												  context->compressed_rte->relid,
+												  "min");
+	*max_attno = compressed_column_metadata_attno(context->settings,
+												  context->chunk_rte->relid,
+												  var->varattno,
+												  context->compressed_rte->relid,
+												  "max");
 }
 
 static Expr *
 pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_args, Oid op_oid,
 									Oid op_collation)
 {
-	Expr *leftop, *rightop, *expr;
-	Var *var_with_segment_meta;
+	Expr *leftop, *rightop;
 	TypeCacheEntry *tce;
 	int strategy;
 	Oid expr_type_id;
-	int16 index = 0;
 
 	if (list_length(expr_args) != 2)
 		return NULL;
@@ -198,21 +179,25 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 		rightop = ((RelabelType *) rightop)->arg;
 
 	/* Find the side that has var with segment meta set expr to the other side */
-	if (expr_has_metadata(context, leftop, &index))
+	AttrNumber min_attno;
+	AttrNumber max_attno;
+	expr_fetch_metadata(context, leftop, &min_attno, &max_attno);
+	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 	{
-		var_with_segment_meta = (Var *) leftop;
-		expr = rightop;
-	}
-	else if (expr_has_metadata(context, rightop, &index))
-	{
-		var_with_segment_meta = (Var *) rightop;
-		expr = leftop;
 		op_oid = get_commutator(op_oid);
+		Expr *tmp = leftop;
+		leftop = rightop;
+		rightop = tmp;
+
+		expr_fetch_metadata(context, leftop, &min_attno, &max_attno);
+		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+		{
+			return NULL;
+		}
 	}
-	else
-	{
-		return NULL;
-	}
+
+	Var *var_with_segment_meta = castNode(Var, leftop);
+	Expr *expr = rightop;
 
 	/* May be able to allow non-strict operations as well.
 	 * Next steps: Think through edge cases, either allow and write tests or figure out why we must
@@ -236,7 +221,14 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 
 	if (expr == NULL)
 		return NULL;
+
 	expr_type_id = exprType((Node *) expr);
+
+	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+	{
+		return NULL;
+	}
+
 	switch (strategy)
 	{
 		case BTEqualStrategyNumber:
@@ -254,23 +246,19 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 			if (!OidIsValid(opno_le) || !OidIsValid(opno_ge))
 				return NULL;
 
-			return make_andclause(list_make2(
-				make_segment_meta_opexpr(context,
-										 opno_le,
-										 get_segment_meta_min_attr_number(index,
-																		  context->compressed_rte
-																			  ->relid),
-										 var_with_segment_meta,
-										 expr,
-										 BTLessEqualStrategyNumber),
-				make_segment_meta_opexpr(context,
-										 opno_ge,
-										 get_segment_meta_max_attr_number(index,
-																		  context->compressed_rte
-																			  ->relid),
-										 var_with_segment_meta,
-										 expr,
-										 BTGreaterEqualStrategyNumber)));
+			return make_andclause(
+				list_make2(make_segment_meta_opexpr(context,
+													opno_le,
+													min_attno,
+													var_with_segment_meta,
+													expr,
+													BTLessEqualStrategyNumber),
+						   make_segment_meta_opexpr(context,
+													opno_ge,
+													max_attno,
+													var_with_segment_meta,
+													expr,
+													BTGreaterEqualStrategyNumber)));
 		}
 		case BTLessStrategyNumber:
 		case BTLessEqualStrategyNumber:
@@ -282,16 +270,12 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 				if (!OidIsValid(opno))
 					return NULL;
 
-				return (Expr *)
-					make_segment_meta_opexpr(context,
-											 opno,
-											 get_segment_meta_min_attr_number(index,
-																			  context
-																				  ->compressed_rte
-																				  ->relid),
-											 var_with_segment_meta,
-											 expr,
-											 strategy);
+				return (Expr *) make_segment_meta_opexpr(context,
+														 opno,
+														 min_attno,
+														 var_with_segment_meta,
+														 expr,
+														 strategy);
 			}
 
 		case BTGreaterStrategyNumber:
@@ -304,16 +288,12 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 				if (!OidIsValid(opno))
 					return NULL;
 
-				return (Expr *)
-					make_segment_meta_opexpr(context,
-											 opno,
-											 get_segment_meta_max_attr_number(index,
-																			  context
-																				  ->compressed_rte
-																				  ->relid),
-											 var_with_segment_meta,
-											 expr,
-											 strategy);
+				return (Expr *) make_segment_meta_opexpr(context,
+														 opno,
+														 max_attno,
+														 var_with_segment_meta,
+														 expr,
+														 strategy);
 			}
 		default:
 			return NULL;
