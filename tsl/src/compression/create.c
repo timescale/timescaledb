@@ -98,7 +98,8 @@ compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid
 		return get_attnum(compressed_reloid, metadata_name);
 	}
 
-	return InvalidAttrNumber;
+	char* metadata_name = psprintf("_ts_meta_v2_%d_%s", chunk_attno, metadata_type);
+	return get_attnum(compressed_reloid, metadata_name);
 }
 
 /*
@@ -180,6 +181,26 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 														   attr->atttypid,
 														   attr->atttypmod,
 														   attr->attcollation));
+		}
+		else if (!is_segmentby)
+		{
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
+
+			if (OidIsValid(type->lt_opr))
+			{
+				char * name = psprintf("_ts_meta_v2_%d_min", attr->attnum);
+				compressed_column_defs = lappend(compressed_column_defs,
+												 makeColumnDef(name,
+															   attr->atttypid,
+															   attr->atttypmod,
+															   attr->attcollation));
+				name = psprintf("_ts_meta_v2_%d_max", attr->attnum);
+				compressed_column_defs = lappend(compressed_column_defs,
+												 makeColumnDef(name,
+															   attr->atttypid,
+															   attr->atttypmod,
+															   attr->attcollation));
+			}
 		}
 
 		if (is_segmentby)
