@@ -182,7 +182,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 														   attr->atttypmod,
 														   attr->attcollation));
 		}
-		else if (!is_segmentby)
+		else if (!is_segmentby && attr->attbyval && attr->attlen < 8 && attr->atttypid != BOOLOID)
 		{
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
