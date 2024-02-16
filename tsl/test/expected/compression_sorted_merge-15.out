@@ -1416,17 +1416,16 @@ SELECT count(*) FROM (SELECT segment_by from test_costs group by segment_by) AS 
 SELECT time, segment_by, x1 FROM test_costs ORDER BY time DESC;
                                                                                                                                                                                                QUERY PLAN                                                                                                                                                                                               
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=1001 loops=1)
+ Sort (actual rows=1001 loops=1)
    Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
-   Batch Sorted Merge: true
-   Bulk Decompression: false
-   ->  Sort (actual rows=1000 loops=1)
-         Output: compress_hyper_10_22_chunk._ts_meta_count, compress_hyper_10_22_chunk._ts_meta_sequence_num, compress_hyper_10_22_chunk.segment_by, compress_hyper_10_22_chunk._ts_meta_min_1, compress_hyper_10_22_chunk._ts_meta_max_1, compress_hyper_10_22_chunk."time", compress_hyper_10_22_chunk._ts_meta_min_2, compress_hyper_10_22_chunk._ts_meta_max_2, compress_hyper_10_22_chunk.x1
-         Sort Key: compress_hyper_10_22_chunk._ts_meta_max_1 DESC
-         Sort Method: quicksort 
+   Sort Key: _hyper_9_20_chunk."time" DESC
+   Sort Method: quicksort 
+   ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_9_20_chunk (actual rows=1001 loops=1)
+         Output: _hyper_9_20_chunk."time", _hyper_9_20_chunk.segment_by, _hyper_9_20_chunk.x1
+         Bulk Decompression: true
          ->  Seq Scan on _timescaledb_internal.compress_hyper_10_22_chunk (actual rows=1000 loops=1)
                Output: compress_hyper_10_22_chunk._ts_meta_count, compress_hyper_10_22_chunk._ts_meta_sequence_num, compress_hyper_10_22_chunk.segment_by, compress_hyper_10_22_chunk._ts_meta_min_1, compress_hyper_10_22_chunk._ts_meta_max_1, compress_hyper_10_22_chunk."time", compress_hyper_10_22_chunk._ts_meta_min_2, compress_hyper_10_22_chunk._ts_meta_max_2, compress_hyper_10_22_chunk.x1
-(10 rows)
+(9 rows)
 
 -- Test query plan with predicate (query should be optimized due to ~100 segments)
 :PREFIX
