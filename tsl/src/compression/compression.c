@@ -64,6 +64,8 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/compression_chunk_size.h"
 
+StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= MAX_ROWS_PER_COMPRESSION, "max row numbers must be harmonized");
+
 static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORITHMS] = {
 	[COMPRESSION_ALGORITHM_ARRAY] = ARRAY_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DICTIONARY] = DICTIONARY_ALGORITHM_DEFINITION,

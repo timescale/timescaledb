@@ -32,7 +32,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 	char vl_len_[4];                                                                               \
 	uint8 compression_algorithm
 
-#define MAX_ROWS_PER_COMPRESSION 1000
+#define MAX_ROWS_PER_COMPRESSION 4096
 /* gap in sequence id between rows, potential for adding rows in gap later */
 #define SEQUENCE_NUM_GAP 10
 
@@ -403,6 +403,6 @@ consumeCompressedData(StringInfo si, int bytes)
  * Normal compression uses 1k rows, but the regression tests use up to 1015.
  * We use this limit for sanity checks in case the compressed data is corrupt.
  */
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION 4096
 
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
