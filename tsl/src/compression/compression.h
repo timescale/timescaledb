@@ -355,7 +355,7 @@ extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *se
 														 Oid *sort_operator, Oid *collation,
 														 bool *nulls_first);
 extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
-								TupleDesc uncompressed_tuple_desc, Relation compressed_table,
+								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								bool reset_sequence, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);

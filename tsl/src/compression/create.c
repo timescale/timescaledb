@@ -60,8 +60,7 @@ compression_column_segment_metadata_name(int16 column_index, const char *type)
 	int ret;
 
 	Assert(column_index > 0);
-	ret =
-		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PREFIX "%s_%d", type, column_index);
+	ret = snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
@@ -82,6 +81,24 @@ column_segment_max_name(int16 column_index)
 {
 	return compression_column_segment_metadata_name(column_index,
 													COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME);
+}
+
+int
+compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
+								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
+{
+	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
+
+	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
+	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
+
+	if (orderby_pos != 0)
+	{
+		char *metadata_name = compression_column_segment_metadata_name(orderby_pos, metadata_type);
+		return get_attnum(compressed_reloid, metadata_name);
+	}
+
+	return InvalidAttrNumber;
 }
 
 /*
