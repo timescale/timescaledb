@@ -188,9 +188,8 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	d->fd.aligned = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_dimension_aligned)]);
 	d->fd.column_type =
 		DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_dimension_column_type)]);
-	memcpy(&d->fd.column_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_column_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&d->fd.column_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_dimension_column_name)]));
 
 	if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] &&
 		!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)])
@@ -200,13 +199,12 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		d->fd.num_slices =
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 
-		memcpy(&d->fd.partitioning_func_schema,
-			   DatumGetName(
-				   values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)]),
-			   NAMEDATALEN);
-		memcpy(&d->fd.partitioning_func,
-			   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)]),
-			   NAMEDATALEN);
+		namestrcpy(&d->fd.partitioning_func_schema,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)]));
+		namestrcpy(&d->fd.partitioning_func,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)]));
 
 		old = MemoryContextSwitchTo(ti->mctx);
 		d->partitioning = ts_partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
@@ -1680,7 +1678,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!PG_ARGISNULL(1))
-		memcpy(&info.colname, PG_GETARG_NAME(1), NAMEDATALEN);
+		namestrcpy(&info.colname, NameStr(*PG_GETARG_NAME(1)));
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,

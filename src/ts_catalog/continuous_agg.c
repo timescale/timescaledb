@@ -369,29 +369,29 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		fd->parent_mat_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)]);
 
-	memcpy(&fd->user_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->user_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->user_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)]));
+	namestrcpy(&fd->user_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)]));
 
-	memcpy(&fd->partial_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->partial_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->partial_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_schema)]));
+	namestrcpy(&fd->partial_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)]));
 
 	fd->bucket_width =
 		DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)]);
 
-	memcpy(&fd->direct_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->direct_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->direct_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)]));
+	namestrcpy(&fd->direct_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)]));
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);

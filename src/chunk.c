@@ -192,12 +192,10 @@ ts_chunk_formdata_fill(FormData_chunk *fd, const TupleInfo *ti)
 
 	fd->id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_id)]);
 	fd->hypertable_id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_chunk_hypertable_id)]);
-	memcpy(&fd->schema_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]),
-		   NAMEDATALEN);
-	memcpy(&fd->table_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->schema_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_schema_name)]));
+	namestrcpy(&fd->table_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_chunk_table_name)]));
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_chunk_compressed_chunk_id)])
 		fd->compressed_chunk_id = INVALID_CHUNK_ID;
