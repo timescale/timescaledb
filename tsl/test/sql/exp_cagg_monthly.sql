@@ -70,7 +70,7 @@ SELECT bucket_width
 FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
 
-SELECT experimental, name, bucket_width, origin, timezone
+SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
 

@@ -1543,8 +1543,8 @@ ts_copy_relation_acl(const Oid source_relid, const Oid target_relid, const Oid o
 		bool new_repl[Natts_pg_class] = { false };
 		Acl *acl = DatumGetAclP(acl_datum);
 
-		new_repl[Anum_pg_class_relacl - 1] = true;
-		new_val[Anum_pg_class_relacl - 1] = PointerGetDatum(acl);
+		new_repl[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = true;
+		new_val[AttrNumberGetAttrOffset(Anum_pg_class_relacl)] = PointerGetDatum(acl);
 
 		/* Find the tuple for the target in `pg_class` */
 		target_tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(target_relid));

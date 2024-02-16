@@ -255,3 +255,104 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 year', bucket) AS buc
  t        |             |            |               |              | 
 (1 row)
 
+--
+-- Test bucket Oid recovery
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE OR REPLACE FUNCTION cagg_get_bucket_function(
+    mat_hypertable_id INTEGER
+) RETURNS regprocedure AS :MODULE_PATHNAME, 'ts_continuous_agg_get_bucket_function' LANGUAGE C STRICT VOLATILE;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE timestamp_ht (
+  time timestamp NOT NULL,
+  value float
+);
+SELECT create_hypertable('timestamp_ht', 'time');
+WARNING:  column type "timestamp without time zone" used for "time" does not follow best practices
+     create_hypertable     
+---------------------------
+ (4,public,timestamp_ht,t)
+(1 row)
+
+INSERT INTO timestamp_ht
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,
+                         '2000-01-01 23:59:59+0','1m') time;
+CREATE MATERIALIZED VIEW temperature_4h
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  refreshing continuous aggregate "temperature_4h"
+CREATE TABLE timestamptz_ht (
+  time timestamptz NOT NULL,
+  value float
+);
+SELECT create_hypertable('timestamptz_ht', 'time');
+      create_hypertable      
+-----------------------------
+ (6,public,timestamptz_ht,t)
+(1 row)
+
+INSERT INTO timestamptz_ht
+  SELECT time, ceil(random() * 100)::int
+    FROM generate_series('2000-01-01 0:00:00+0'::timestamptz,
+                         '2000-01-01 23:59:59+0','1m') time;
+CREATE MATERIALIZED VIEW temperature_tz_4h
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  refreshing continuous aggregate "temperature_tz_4h"
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, 'Europe/Berlin'), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts"
+CREATE MATERIALIZED VIEW temperature_tz_4h_ts_ng
+  WITH  (timescaledb.continuous) AS
+  SELECT timescaledb_experimental.time_bucket_ng('4 hour', time, 'Asia/Shanghai'), avg(value)
+    FROM timestamptz_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts_ng"
+CREATE TABLE integer_ht(a integer, b integer, c integer);
+SELECT table_name FROM create_hypertable('integer_ht', 'a', chunk_time_interval=> 10);
+NOTICE:  adding not-null constraint to column "a"
+ table_name 
+------------
+ integer_ht
+(1 row)
+
+CREATE OR REPLACE FUNCTION integer_now_integer_ht() returns int LANGUAGE SQL STABLE as $$ SELECT coalesce(max(a), 0) FROM integer_ht $$;
+SELECT set_integer_now_func('integer_ht', 'integer_now_integer_ht');
+ set_integer_now_func 
+----------------------
+ 
+(1 row)
+
+CREATE MATERIALIZED VIEW integer_ht_cagg
+  WITH (timescaledb.continuous) AS
+  SELECT a, count(b)
+     FROM integer_ht
+     GROUP BY time_bucket(1, a), a;
+NOTICE:  continuous aggregate "integer_ht_cagg" is already up-to-date
+--- Get the bucket Oids
+SELECT user_view_name,
+       cagg_get_bucket_function(mat_hypertable_id)
+       FROM _timescaledb_catalog.continuous_agg
+       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_ng', 'integer_ht_cagg')
+       ORDER BY user_view_name;
+     user_view_name      |                               cagg_get_bucket_function                                
+-------------------------+---------------------------------------------------------------------------------------
+ integer_ht_cagg         | time_bucket(integer,integer)
+ temperature_4h          | time_bucket(interval,timestamp without time zone)
+ temperature_tz_4h       | time_bucket(interval,timestamp with time zone)
+ temperature_tz_4h_ts    | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
+ temperature_tz_4h_ts_ng | timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,text)
+(5 rows)
+
+--- Cleanup
+\c :TEST_DBNAME :ROLE_SUPERUSER
+DROP FUNCTION IF EXISTS cagg_get_bucket_function(INTEGER);
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
