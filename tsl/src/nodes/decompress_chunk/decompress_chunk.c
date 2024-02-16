@@ -381,10 +381,18 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 		 segmentby_attno =
 			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
+		char *colname = get_attname(compression_info->chunk_rte->relid,
+									segmentby_attno,
+									/* missing_ok = */ false);
+		AttrNumber compressed_attno = get_attnum(compression_info->compressed_rte->relid, colname);
+		Ensure(compressed_attno != InvalidAttrNumber,
+			   "segmentby column %s not found in compressed chunk %d",
+			   colname,
+			   compression_info->compressed_rte->relid);
 		Var *var = palloc(sizeof(Var));
 		*var = (Var){ .xpr.type = T_Var,
 					  .varno = compression_info->compressed_rel->relid,
-					  .varattno = segmentby_attno };
+					  .varattno = compressed_attno };
 		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
 	const double open_batches_estimated = estimate_num_groups_compat(root,
@@ -851,6 +859,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 				batch_merge_path->reverse = (merge_result != SCAN_FORWARD);
 				batch_merge_path->batch_sorted_merge = true;
+				batch_merge_path->enable_bulk_decompression = false;
 
 				/* The segment by optimization is only enabled if it can deliver the tuples in the
 				 * same order as the query requested it. So, we can just copy the pathkeys of the
@@ -1738,6 +1747,7 @@ decompress_chunk_path_create(PlannerInfo *root, CompressionInfo *info, int paral
 	path->custom_path.flags = 0;
 	path->custom_path.methods = &decompress_chunk_path_methods;
 	path->batch_sorted_merge = false;
+	path->enable_bulk_decompression = ts_guc_enable_bulk_decompression;
 
 	/* To prevent a non-parallel path with this node appearing
 	 * in a parallel plan we only set parallel_safe to true

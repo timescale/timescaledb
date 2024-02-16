@@ -23,6 +23,7 @@
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/gapfill/gapfill.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 
 #include <math.h>
@@ -44,6 +45,126 @@ is_osm_present()
 }
 #endif
 
+/*
+ * Try to disable bulk decompression on DecompressChunkPath, skipping the above
+ * Projection path and also handling Lists.
+ */
+static void
+try_disable_bulk_decompression(PlannerInfo *root, Node *node)
+{
+	if (node == NULL)
+	{
+		return;
+	}
+
+	if (IsA(node, ProjectionPath))
+	{
+		try_disable_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
+		return;
+	}
+
+	if (IsA(node, List))
+	{
+		ListCell *lc;
+		foreach (lc, (List *) node)
+		{
+			try_disable_bulk_decompression(root, (Node *) lfirst(lc));
+		}
+		return;
+	}
+
+	if (!IsA(node, CustomPath))
+	{
+		return;
+	}
+
+	CustomPath *custom_child = castNode(CustomPath, node);
+	if (strcmp(custom_child->methods->CustomName, "DecompressChunk") != 0)
+	{
+		return;
+	}
+
+	DecompressChunkPath *dcpath = (DecompressChunkPath *) custom_child;
+	ListCell *column_cell;
+	foreach (column_cell, dcpath->bulk_decompression_column)
+	{
+		lfirst(column_cell) = false;
+	}
+	dcpath->enable_bulk_decompression = false;
+}
+
+/*
+ * When we have a small limit above chunk decompression, it is more efficient to
+ * use the row-by-row decompression iterators than the bulk decompression. Since
+ * bulk decompression is about 10x faster than row-by-row, this advantage goes
+ * away on limits > 100.
+ * This hook disables bulk decompression under small limits.
+ */
+static void
+check_limit_bulk_decompression(PlannerInfo *root, Node *node)
+{
+	if (node == NULL)
+	{
+		return;
+	}
+
+	ListCell *lc;
+	switch (node->type)
+	{
+		case T_List:
+			foreach (lc, (List *) node)
+			{
+				check_limit_bulk_decompression(root, lfirst(lc));
+			}
+			break;
+		case T_LimitPath:
+		{
+			LimitPath *path = castNode(LimitPath, node);
+			/*
+			 * Theoretically we could handle plain Limit as well, but it is more
+			 * complicated because the limit and offset are specified not by
+			 * plain constants there, but by some expression nodes.
+			 * This matters when we have a single chunk (direct select or due to
+			 * plan-time exclusion).
+			 */
+			check_limit_bulk_decompression(root, (Node *) path->subpath);
+			break;
+		}
+		case T_MemoizePath:
+			check_limit_bulk_decompression(root, (Node *) castNode(MemoizePath, node)->subpath);
+			break;
+		case T_ProjectionPath:
+			check_limit_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
+			break;
+		case T_SubqueryScanPath:
+			check_limit_bulk_decompression(root,
+										   (Node *) castNode(SubqueryScanPath, node)->subpath);
+			break;
+		case T_NestPath:
+		case T_MergePath:
+		case T_HashPath:
+			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->outerjoinpath);
+			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->innerjoinpath);
+			break;
+		case T_CustomPath:
+		{
+			CustomPath *custom_this = castNode(CustomPath, node);
+			if (strcmp(custom_this->methods->CustomName, "ChunkAppend") != 0)
+			{
+				break;
+			}
+			ChunkAppendPath *chunk_append = (ChunkAppendPath *) custom_this;
+			if (chunk_append->limit_tuples > 0 && chunk_append->limit_tuples < 100)
+			{
+				try_disable_bulk_decompression(root, (Node *) chunk_append->cpath.custom_paths);
+			}
+			return;
+		}
+		default:
+			break;
+	}
+}
+
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
@@ -61,6 +182,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			break;
 		case UPPERREL_DISTINCT:
 			tsl_skip_scan_paths_add(root, input_rel, output_rel);
+			break;
+		case UPPERREL_FINAL:
+			check_limit_bulk_decompression(root, (Node *) output_rel->pathlist);
 			break;
 		default:
 			break;

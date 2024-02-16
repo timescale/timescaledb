@@ -198,7 +198,7 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CONTINUOUS_AGG_INDEX,
 		.names = (char *[]) {
 			[CONTINUOUS_AGG_PARTIAL_VIEW_SCHEMA_PARTIAL_VIEW_NAME_KEY] = "continuous_agg_partial_view_schema_partial_view_name_key",
-			[CONTINUOUS_AGG_PKEY] = "continuous_agg_pkey",
+			[CONTINUOUS_AGG_PKEY] = TS_CAGG_CATALOG_IDX,
 			[CONTINUOUS_AGG_USER_VIEW_SCHEMA_USER_VIEW_NAME_KEY] = "continuous_agg_user_view_schema_user_view_name_key",
 			[CONTINUOUS_AGG_RAW_HYPERTABLE_ID_IDX] = "continuous_agg_raw_hypertable_id_idx"
 		},

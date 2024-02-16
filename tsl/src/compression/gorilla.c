@@ -860,16 +860,16 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 	 * We do have to check that the result fits into the maximum number of rows,
 	 * because we get the length from user input.
 	 */
-	const int16 n_bytes_packed = bitarray->buckets.num_elements * sizeof(uint64);
-	const int16 n_lanes = (n_bytes_packed + LANE_INPUTS - 1) / LANE_INPUTS;
-	const int16 n_outputs = n_lanes * LANE_OUTPUTS;
+	const uint16 n_bytes_packed = bitarray->buckets.num_elements * sizeof(uint64);
+	const uint16 n_lanes = (n_bytes_packed + LANE_INPUTS - 1) / LANE_INPUTS;
+	const uint16 n_outputs = n_lanes * LANE_OUTPUTS;
 	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
-	for (int lane = 0; lane < n_lanes; lane++)
+	for (uint16 lane = 0; lane < n_lanes; lane++)
 	{
 		uint8 *restrict lane_dest = &dest[lane * LANE_OUTPUTS];
 		const uint8 *restrict lane_src = &((uint8 *) bitarray->buckets.data)[lane * LANE_INPUTS];
-		for (int output_in_lane = 0; output_in_lane < LANE_OUTPUTS; output_in_lane++)
+		for (uint16 output_in_lane = 0; output_in_lane < LANE_OUTPUTS; output_in_lane++)
 		{
 			const int startbit_abs = output_in_lane * BITS_PER_LEADING_ZEROS;
 			const int startbit_rel = startbit_abs % 8;

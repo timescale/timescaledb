@@ -605,14 +605,17 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			MemoryContextReset(dcontext->bulk_decompression_context);
 			MemoryContextSwitchTo(batch_state->per_batch_context);
 
-			/* A compressed batch consists of 1000 tuples (see MAX_ROWS_PER_COMPRESSION). The
-			 * attribute value is a int32 with a max value of 2^32. Even if all tuples have the max
-			 * value, the max sum is = 1000 * 2^32 < 2^10 * 2^32 = 2^42. This is smaller than 2^64,
-			 * which is the max value of the int64 variable. The same is true for negative values).
-			 * Therefore, we don't need to check for overflows within the loop, which would slow
-			 * down the calculation. */
-			Assert(arrow->length <= MAX_ROWS_PER_COMPRESSION);
-			Assert(MAX_ROWS_PER_COMPRESSION <= 1024);
+			/*
+			 * We accumulate the sum as int64, so we can sum INT_MAX = 2^31 - 1
+			 * at least 2^31 times without incurrint an overflow of the int64
+			 * accumulator. The same is true for negative numbers. The
+			 * compressed batch size is currently capped at 1000 rows, but even
+			 * if it's changed in the future, it's unlikely that we support
+			 * batches larger than 65536 rows, not to mention 2^31. Therefore,
+			 * we don't need to check for overflows within the loop, which would
+			 * slow down the calculation.
+			 */
+			Assert(arrow->length <= INT_MAX);
 
 			int64 batch_sum = 0;
 			for (int i = 0; i < arrow->length; i++)
