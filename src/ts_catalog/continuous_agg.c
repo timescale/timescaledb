@@ -452,7 +452,7 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 		if (strlen(origin_str) == 0)
 			TIMESTAMP_NOBEGIN(bf->bucket_origin);
 		else
-			bf->bucket_origin = DatumGetTimestamp(DirectFunctionCall3(timestamp_in,
+			bf->bucket_origin = DatumGetTimestamp(DirectFunctionCall3(timestamptz_in,
 																	  CStringGetDatum(origin_str),
 																	  ObjectIdGetDatum(InvalidOid),
 																	  Int32GetDatum(-1)));
@@ -1377,7 +1377,7 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 										   IntervalPGetDatum(bf->bucket_width),
 										   timestamp,
 										   CStringGetTextDatum(bf->timezone),
-										   TimestampTzGetDatum((TimestampTz) bf->bucket_origin));
+										   TimestampTzGetDatum(bf->bucket_origin));
 			}
 		}
 
@@ -1394,7 +1394,7 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 			return DirectFunctionCall3(ts_timestamp_bucket,
 									   IntervalPGetDatum(bf->bucket_width),
 									   timestamp,
-									   TimestampGetDatum(bf->bucket_origin));
+									   TimestampTzGetDatum(bf->bucket_origin));
 		}
 	}
 	else
@@ -1415,7 +1415,7 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 				return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
 										   IntervalPGetDatum(bf->bucket_width),
 										   timestamp,
-										   TimestampTzGetDatum((TimestampTz) bf->bucket_origin),
+										   TimestampTzGetDatum(bf->bucket_origin),
 										   CStringGetTextDatum(bf->timezone));
 			}
 		}
@@ -1433,7 +1433,7 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 			return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
 									   IntervalPGetDatum(bf->bucket_width),
 									   timestamp,
-									   TimestampGetDatum(bf->bucket_origin));
+									   TimestampTzGetDatum(bf->bucket_origin));
 		}
 	}
 }

@@ -798,7 +798,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 		if (!TIMESTAMP_NOT_FINITE(bucket_info->origin))
 		{
 			origin = DatumGetCString(
-				DirectFunctionCall1(timestamp_out, TimestampGetDatum(bucket_info->origin)));
+				DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(bucket_info->origin)));
 		}
 
 		create_bucket_function_catalog_entry(materialize_hypertable_id,

@@ -52,3 +52,8 @@ ANALYZE _timescaledb_catalog.continuous_aggs_bucket_function;
 --
 -- End rebuild the catalog table `_timescaledb_catalog.continuous_aggs_bucket_function`
 --
+
+-- Convert _timescaledb_catalog.continuous_aggs_bucket_function.origin back to Timestamp
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function
+   SET origin = origin::timestamptz::timestamp::text
+   WHERE length(origin) > 1;
