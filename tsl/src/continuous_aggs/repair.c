@@ -342,15 +342,23 @@ get_direct_view_oid(int32 mat_hypertable_id)
 
 	bool is_null = false;
 
+	/* We use the view_schema and view_name to get data from the system catalog. Even char pointers
+	 * are passed to the catalog, it calls namehashfast() internally, which assumes that a char of
+	 * NAMEDATALEN is allocated. */
+	NameData view_schema_name;
+	NameData view_name_name;
+
 	char *view_schema =
 		DatumGetCString(slot_getattr(slot, Anum_continuous_agg_direct_view_schema, &is_null));
 	Ensure(!is_null, "unable to get view schema for oid %d", mat_hypertable_id);
 	Assert(view_schema != NULL);
+	namestrcpy(&view_schema_name, view_schema);
 
 	char *view_name =
 		DatumGetCString(slot_getattr(slot, Anum_continuous_agg_direct_view_name, &is_null));
 	Ensure(!is_null, "unable to get view name for oid %d", mat_hypertable_id);
 	Assert(view_name != NULL);
+	namestrcpy(&view_name_name, view_name);
 
 	got_next_slot = index_getnext_slot(indexscan, ForwardScanDirection, slot);
 	Ensure(!got_next_slot, "found duplicate definitions for CAgg mat_ht %d", mat_hypertable_id);
@@ -362,7 +370,8 @@ get_direct_view_oid(int32 mat_hypertable_id)
 	relation_close(cagg_idx_rel, AccessShareLock);
 
 	/* Get Oid of user view */
-	Oid direct_view_oid = ts_get_relation_relid(view_schema, view_name, false);
+	Oid direct_view_oid =
+		ts_get_relation_relid(NameStr(view_schema_name), NameStr(view_name_name), false);
 	Assert(OidIsValid(direct_view_oid));
 	return direct_view_oid;
 }
