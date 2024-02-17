@@ -4382,6 +4382,28 @@ ts_chunk_validate_chunk_status_for_operation(const Chunk *chunk, ChunkOperation 
 	Oid chunk_relid = chunk->table_id;
 	int32 chunk_status = chunk->fd.status;
 
+	/*
+	 * Block everything but DELETE on OSM chunks.
+	 */
+	if (chunk->fd.osm_chunk)
+	{
+		switch (cmd)
+		{
+			case CHUNK_DROP:
+				return true;
+				break;
+
+			default:
+				if (throw_error)
+					elog(ERROR,
+						 "%s not permitted on tiered chunk \"%s\" ",
+						 get_chunk_operation_str(cmd),
+						 get_rel_name(chunk_relid));
+				return false;
+				break;
+		}
+	}
+
 	/* Handle frozen chunks */
 	if (ts_flags_are_set_32(chunk_status, CHUNK_STATUS_FROZEN))
 	{
