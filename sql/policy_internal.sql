@@ -95,7 +95,7 @@ BEGIN
       INNER JOIN pg_namespace pgns ON pgc.relnamespace = pgns.oid
       INNER JOIN _timescaledb_catalog.chunk ch ON ch.table_name = pgc.relname AND ch.schema_name = pgns.nspname AND ch.hypertable_id = htid
     WHERE
-      ch.dropped IS FALSE
+      NOT ch.dropped AND NOT ch.osm_chunk
       AND (
         ch.status = 0 OR
         (
