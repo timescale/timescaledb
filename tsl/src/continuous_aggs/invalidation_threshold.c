@@ -79,9 +79,10 @@ invalidation_threshold_scan_update(TupleInfo *ti, void *const data)
 
 	InvalidationThresholdData *invthresh = (InvalidationThresholdData *) data;
 
-	/* If the tuple was modified concurrently, retry the operation */
+	/* If the tuple was modified concurrently, retry the operation and use a new snapshot
+	 * to see the updated tuple. */
 	if (ti->lockresult == TM_Updated)
-		return SCAN_RESCAN;
+		return SCAN_RESTART_WITH_NEW_SNAPSHOT;
 
 	if (ti->lockresult != TM_Ok)
 	{
@@ -181,13 +182,18 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 		.nkeys = 1,
 		.scankey = scankey,
 		.data = &updatectx,
-		.limit = 1,
 		.tuple_found = invalidation_threshold_scan_update,
 		.lockmode = RowExclusiveLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
 		.tuplock = &scantuplock,
 		.flags = SCANNER_F_KEEPLOCK,
+		/* We update the threshold value using this scanner. Since the scanner uses SnapshotSelf
+		 * per default, the updated tuple would become immediately visible to the scanner (the
+		 * snapshot includes "changes made by the current command") and ts_scanner_scan_one() would
+		 * fail due to the second found tuple. A normal MVCC snapshot is used to prevent the update
+		 * is immediately seen by the scanner. */
+		.snapshot = GetLatestSnapshot(),
 	};
 
 	ScanKeyInit(&scankey[0],
@@ -290,7 +296,6 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 			catalog_get_index(catalog, CONTINUOUS_AGGS_INVALIDATION_THRESHOLD, BGW_JOB_PKEY_IDX),
 		.nkeys = 1,
 		.scankey = scankey,
-		.limit = 1,
 		.lockmode = ShareUpdateExclusiveLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = CurrentMemoryContext,
