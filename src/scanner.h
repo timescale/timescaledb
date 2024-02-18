@@ -50,7 +50,7 @@ typedef enum ScanTupleResult
 {
 	SCAN_DONE,
 	SCAN_CONTINUE,
-	SCAN_RESCAN
+	SCAN_RESTART_WITH_NEW_SNAPSHOT
 } ScanTupleResult;
 
 typedef enum ScanFilterResult
