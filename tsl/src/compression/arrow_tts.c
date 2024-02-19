@@ -103,6 +103,9 @@ tts_arrow_init(TupleTableSlot *slot)
 	ItemPointerSetInvalid(&slot->tts_tid);
 
 	arrow_column_cache_init(&aslot->arrow_cache, slot->tts_mcxt);
+
+	Assert(TTS_EMPTY(slot));
+	Assert(TTS_EMPTY(aslot->noncompressed_slot));
 }
 
 /*
@@ -292,6 +295,7 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 		}
 
 		tid_to_compressed_tid(&slot->tts_tid, &child_slot->tts_tid, tuple_index);
+
 		/* Stored a compressed tuple so clear the non-compressed slot */
 		ExecClearTuple(aslot->noncompressed_slot);
 
@@ -675,6 +679,10 @@ tts_arrow_copy_heap_tuple(TupleTableSlot *slot)
 	tuple = ExecCopySlotHeapTuple(aslot->noncompressed_slot);
 	ItemPointerCopy(&slot->tts_tid, &tuple->t_self);
 
+	/* Clean up if the non-compressed slot was "borrowed" */
+	if (aslot->child_slot == aslot->compressed_slot)
+		ExecClearTuple(aslot->noncompressed_slot);
+
 	return tuple;
 }
 
@@ -688,13 +696,20 @@ static MinimalTuple
 tts_arrow_copy_minimal_tuple(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	MinimalTuple tuple;
 
 	Assert(!TTS_EMPTY(slot));
 	/* Make sure the child slot has the parent's datums or otherwise it won't
 	 * have any data to produce the tuple from */
 	slot_getallattrs(slot);
 	copy_slot_values(slot, aslot->noncompressed_slot, slot->tts_tupleDescriptor->natts);
-	return ExecCopySlotMinimalTuple(aslot->noncompressed_slot);
+	tuple = ExecCopySlotMinimalTuple(aslot->noncompressed_slot);
+
+	/* Clean up if the non-compressed slot was "borrowed" */
+	if (aslot->child_slot == aslot->compressed_slot)
+		ExecClearTuple(aslot->noncompressed_slot);
+
+	return tuple;
 }
 
 const ArrowArray *
