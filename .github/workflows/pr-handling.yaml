@@ -18,7 +18,8 @@ jobs:
   assign-pr:
     name: Assign PR to author
     permissions:
-      contents: write
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - uses: toshimaru/auto-author-assign@v2.1.0
