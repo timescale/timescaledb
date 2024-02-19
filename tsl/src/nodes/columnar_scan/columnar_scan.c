@@ -29,13 +29,6 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/vector_predicates.h"
 
-typedef enum VectorizedQualResult
-{
-	VQualSegmentFiltered,
-	VQualRowFiltered,
-	VQualRowMatch,
-} VectorizedQualResult;
-
 typedef struct VectorizedExprState
 {
 	List *vectorized_quals_constified;
@@ -189,7 +182,283 @@ build_scan_keys(const CompressionAmInfo *caminfo, Index relid, List *clauses, in
 	return NULL;
 }
 
-static bool
+static void
+compute_plain_qual(VectorizedExprState *vexprstate, ExprContext *econtext, Node *qual,
+				   uint64 *restrict result)
+{
+	/*
+	 * Some predicates can be evaluated to a Const at run time.
+	 */
+	if (IsA(qual, Const))
+	{
+		Const *c = castNode(Const, qual);
+		if (c->constisnull || !DatumGetBool(c->constvalue))
+		{
+			/*
+			 * Some predicates are evaluated to a null Const, like a
+			 * strict comparison with stable expression that evaluates to null.
+			 * No rows pass.
+			 */
+			const size_t n_batch_result_words = (vexprstate->num_results + 63) / 64;
+			for (size_t i = 0; i < n_batch_result_words; i++)
+			{
+				result[i] = 0;
+			}
+		}
+		else
+		{
+			/*
+			 * This is a constant true qual, every row passes and we can
+			 * just ignore it. No idea how it can happen though.
+			 */
+			Assert(false);
+		}
+		return;
+	}
+
+	/*
+	 * For now, we support NullTest, "Var ? Const" predicates and
+	 * ScalarArrayOperations.
+	 */
+	List *args = NULL;
+	RegProcedure vector_const_opcode = InvalidOid;
+	ScalarArrayOpExpr *saop = NULL;
+	OpExpr *opexpr = NULL;
+	NullTest *nulltest = NULL;
+	if (IsA(qual, NullTest))
+	{
+		nulltest = castNode(NullTest, qual);
+		args = list_make1(nulltest->arg);
+	}
+	else if (IsA(qual, ScalarArrayOpExpr))
+	{
+		saop = castNode(ScalarArrayOpExpr, qual);
+		args = saop->args;
+		vector_const_opcode = get_opcode(saop->opno);
+	}
+	else
+	{
+		Ensure(IsA(qual, OpExpr), "expected OpExpr");
+		opexpr = castNode(OpExpr, qual);
+		args = opexpr->args;
+		vector_const_opcode = get_opcode(opexpr->opno);
+	}
+
+	/*
+	 * Find the compressed column referred to by the Var.
+	 */
+	Var *var = castNode(Var, linitial(args));
+	TupleTableSlot *slot = econtext->ecxt_scantuple;
+
+	/*
+	 * Prepare to compute the vector predicate. We have to handle the
+	 * default values in a special way because they don't produce the usual
+	 * decompressed ArrowArrays.
+	 */
+	uint64 default_value_predicate_result[1];
+	uint64 *predicate_result = result;
+	int attoff = AttrNumberGetAttrOffset(var->varattno);
+	const ArrowArray *values = arrow_slot_get_array(slot, var->varattno);
+	const ArrowArray *vector = values;
+
+	if (vector == NULL)
+	{
+		Form_pg_attribute attr = &slot->tts_tupleDescriptor->attrs[attoff];
+		/*
+		 * A regular (non-compressed) value or a compressed column with a
+		 * default value. We can't fall back to the non-vectorized quals
+		 * now, so build a single-value ArrowArray with this (default)
+		 * value, check if it passes the predicate, and apply it to the
+		 * entire batch.
+		 */
+		vector = make_single_value_arrow(attr->atttypid,
+										 slot->tts_values[attoff],
+										 slot->tts_isnull[attoff]);
+
+		/*
+		 * We start from an all-valid bitmap, because the predicate is
+		 * AND-ed to it.
+		 */
+		default_value_predicate_result[0] = 1;
+		predicate_result = default_value_predicate_result;
+	}
+
+	if (nulltest)
+	{
+		vector_nulltest(vector, nulltest->nulltesttype, predicate_result);
+	}
+	else
+	{
+		/*
+		 * Find the vector_const predicate.
+		 */
+		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
+		Assert(vector_const_predicate != NULL);
+
+		Ensure(IsA(lsecond(args), Const),
+			   "failed to evaluate runtime constant in vectorized filter");
+
+		/*
+		 * The vectorizable predicates should be STRICT, so we shouldn't see null
+		 * constants here.
+		 */
+		Const *constnode = castNode(Const, lsecond(args));
+		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
+
+		/*
+		 * At last, compute the predicate.
+		 */
+		if (saop)
+		{
+			vector_array_predicate(vector_const_predicate,
+								   saop->useOr,
+								   vector,
+								   constnode->constvalue,
+								   predicate_result);
+		}
+		else
+		{
+			vector_const_predicate(vector, constnode->constvalue, predicate_result);
+		}
+
+		/*
+		 * Account for nulls which shouldn't pass the predicate. Note that the
+		 * vector here might have only one row, in contrast with the number of
+		 * rows in the batch, if the column has a default value in this batch.
+		 */
+		const size_t n_vector_result_words = (vector->length + 63) / 64;
+		Assert((predicate_result != default_value_predicate_result) ||
+			   n_vector_result_words == 1); /* to placate Coverity. */
+		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
+
+		if (validity != NULL)
+		{
+			for (size_t i = 0; i < n_vector_result_words; i++)
+			{
+				predicate_result[i] &= validity[i];
+			}
+		}
+		else
+		{
+			Assert(vector->null_count == 0);
+		}
+	}
+
+	/* Translate the result if the column had a default value. */
+	if (values == NULL)
+	{
+		// Assert(column_values->decompression_type == DT_Default);
+		if (!(default_value_predicate_result[0] & 1))
+		{
+			/*
+			 * We had a default value for the compressed column, and it
+			 * didn't pass the predicate, so the entire batch didn't pass.
+			 */
+			const size_t n_batch_result_words = (vexprstate->num_results + 63) / 64;
+			for (size_t i = 0; i < n_batch_result_words; i++)
+			{
+				result[i] = 0;
+			}
+		}
+	}
+}
+
+static void compute_one_qual(VectorizedExprState *vexprstate, ExprContext *econtext, Node *qual,
+							 uint64 *restrict result);
+
+static void
+compute_qual_conjunction(VectorizedExprState *vexprstate, ExprContext *econtext, List *quals,
+						 uint64 *restrict result)
+{
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		compute_one_qual(vexprstate, econtext, lfirst(lc), result);
+		if (get_vector_qual_summary(result, vexprstate->num_results) == NoRowsPass)
+		{
+			/*
+			 * Exit early if no rows pass already. This might allow us to avoid
+			 * reading the columns required for the subsequent quals.
+			 */
+			return;
+		}
+	}
+}
+
+static void
+compute_qual_disjunction(VectorizedExprState *vexprstate, ExprContext *econtext, List *quals,
+						 uint64 *restrict result)
+{
+	const size_t n_rows = vexprstate->num_results;
+	const size_t n_result_words = (n_rows + 63) / 64;
+	uint64 *or_result = palloc(sizeof(uint64) * n_result_words);
+	for (size_t i = 0; i < n_result_words; i++)
+	{
+		or_result[i] = 0;
+	}
+
+	uint64 *one_qual_result = palloc(sizeof(uint64) * n_result_words);
+
+	ListCell *lc;
+	foreach (lc, quals)
+	{
+		for (size_t i = 0; i < n_result_words; i++)
+		{
+			one_qual_result[i] = (uint64) -1;
+		}
+		compute_one_qual(vexprstate, econtext, lfirst(lc), one_qual_result);
+		for (size_t i = 0; i < n_result_words; i++)
+		{
+			or_result[i] |= one_qual_result[i];
+		}
+
+		if (get_vector_qual_summary(or_result, n_rows) == AllRowsPass)
+		{
+			/*
+			 * We can sometimes avoing reading the columns required for the
+			 * rest of conditions if we break out early here.
+			 */
+			return;
+		}
+	}
+
+	for (size_t i = 0; i < n_result_words; i++)
+	{
+		result[i] &= or_result[i];
+	}
+}
+
+static void
+compute_one_qual(VectorizedExprState *vexprstate, ExprContext *econtext, Node *qual,
+				 uint64 *restrict result)
+{
+	if (!IsA(qual, BoolExpr))
+	{
+		compute_plain_qual(vexprstate, econtext, qual, result);
+		return;
+	}
+
+	BoolExpr *boolexpr = castNode(BoolExpr, qual);
+	if (boolexpr->boolop == AND_EXPR)
+	{
+		compute_qual_conjunction(vexprstate, econtext, boolexpr->args, result);
+		return;
+	}
+
+	/*
+	 * Postgres removes NOT for operators we can vectorize, so we don't support
+	 * NOT and consider it non-vectorizable at planning time. So only OR is left.
+	 */
+	Ensure(boolexpr->boolop == OR_EXPR, "expected OR");
+	compute_qual_disjunction(vexprstate, econtext, boolexpr->args, result);
+}
+
+/*
+ * Compute the vectorized filters. Returns true if we have any passing rows. If not,
+ * it means the entire batch is filtered out, and we use this for further
+ * optimizations.
+ */
+static VectorQualSummary
 compute_vector_quals(VectorizedExprState *vexprstate, ExprContext *econtext)
 {
 	TupleTableSlot *slot = econtext->ecxt_scantuple;
@@ -239,173 +508,60 @@ compute_vector_quals(VectorizedExprState *vexprstate, ExprContext *econtext)
 	/*
 	 * Compute the quals.
 	 */
-	ListCell *lc;
-	foreach (lc, vexprstate->vectorized_quals_constified)
-	{
-		/*
-		 * For now we support "Var ? Const" predicates and
-		 * ScalarArrayOperations.
-		 */
-		List *args = NULL;
-		RegProcedure vector_const_opcode = InvalidOid;
-		ScalarArrayOpExpr *saop = NULL;
-		OpExpr *opexpr = NULL;
-		if (IsA(lfirst(lc), ScalarArrayOpExpr))
-		{
-			saop = castNode(ScalarArrayOpExpr, lfirst(lc));
-			args = saop->args;
-			vector_const_opcode = get_opcode(saop->opno);
-		}
-		else
-		{
-			opexpr = castNode(OpExpr, lfirst(lc));
-			args = opexpr->args;
-			vector_const_opcode = get_opcode(opexpr->opno);
-		}
+	compute_qual_conjunction(vexprstate,
+							 econtext,
+							 vexprstate->vectorized_quals_constified,
+							 vexprstate->vector_qual_result);
 
-		/*
-		 * Find the vector_const predicate.
-		 */
-		VectorPredicate *vector_const_predicate = get_vector_const_predicate(vector_const_opcode);
-		Assert(vector_const_predicate != NULL);
-
-		/*
-		 * Find the compressed column referred to by the Var.
-		 */
-		Var *var = castNode(Var, linitial(args));
-
-		/*
-		 * Prepare to compute the vector predicate. We have to handle the
-		 * default values in a special way because they don't produce the usual
-		 * decompressed ArrowArrays.
-		 */
-		uint64 default_value_predicate_result;
-		uint64 *predicate_result = vexprstate->vector_qual_result;
-		int attoff = AttrNumberGetAttrOffset(var->varattno);
-		const ArrowArray *values = arrow_slot_get_array(slot, var->varattno);
-		const ArrowArray *vector = values;
-
-		if (vector == NULL)
-		{
-			Form_pg_attribute attr = &slot->tts_tupleDescriptor->attrs[attoff];
-			/*
-			 * A regular (non-compressed) value or a compressed column with a
-			 * default value. We can't fall back to the non-vectorized quals
-			 * now, so build a single-value ArrowArray with this (default)
-			 * value, check if it passes the predicate, and apply it to the
-			 * entire batch.
-			 */
-			vector = make_single_value_arrow(attr->atttypid,
-											 slot->tts_values[attoff],
-											 slot->tts_isnull[attoff]);
-
-			/*
-			 * We start from an all-valid bitmap, because the predicate is
-			 * AND-ed to it.
-			 */
-			default_value_predicate_result = 1;
-			predicate_result = &default_value_predicate_result;
-		}
-
-		/*
-		 * The vectorizable predicates should be STRICT, so we shouldn't see null
-		 * constants here.
-		 */
-		Const *constnode = castNode(Const, lsecond(args));
-		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
-
-		/*
-		 * At last, compute the predicate.
-		 */
-		if (saop)
-		{
-			vector_array_predicate(vector_const_predicate,
-								   saop->useOr,
-								   vector,
-								   constnode->constvalue,
-								   predicate_result);
-		}
-		else
-		{
-			vector_const_predicate(vector, constnode->constvalue, predicate_result);
-		}
-
-		/* Account for nulls which shouldn't pass the predicate. */
-		const size_t n = vector->length;
-		const size_t n_words = (n + 63) / 64;
-		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
-
-		if (validity != NULL)
-		{
-			for (size_t i = 0; i < n_words; i++)
-			{
-				predicate_result[i] &= validity[i];
-			}
-		}
-		else
-		{
-			Assert(vector->null_count == 0);
-		}
-
-		/* Process the result */
-		if (values == NULL)
-		{
-			/* The column had a default value. */
-
-			if (!(default_value_predicate_result & 1))
-			{
-				/*
-				 * We had a default value for the compressed column, and it
-				 * didn't pass the predicate, so the entire batch didn't pass.
-				 */
-				for (int i = 0; i < bitmap_bytes / 8; i++)
-				{
-					vexprstate->vector_qual_result[i] = 0;
-				}
-			}
-		}
-
-		/*
-		 * Have to return whether we have any passing rows.
-		 */
-		bool have_passing_rows = false;
-
-		for (int i = 0; i < bitmap_bytes / 8; i++)
-		{
-			if (vexprstate->vector_qual_result[i])
-			{
-				/* At least one row passed the qual, so no need to check rest
-				 * of rows/bitmap */
-				have_passing_rows = true;
-				break;
-			}
-		}
-
-		/* No rows passed the qual so no need to check other quals */
-		if (!have_passing_rows)
-			return false;
-	}
-
-	return true;
+	return get_vector_qual_summary(vexprstate->vector_qual_result, vexprstate->num_results);
 }
 
-static VectorizedQualResult
+static inline uint16
 ExecVectorizedQual(VectorizedExprState *vexprstate, ExprContext *econtext)
 {
 	TupleTableSlot *slot = econtext->ecxt_scantuple;
-	uint16 rowindex = arrow_slot_row_index(slot);
+	const uint16 rowindex = arrow_slot_row_index(slot);
 
 	/* Compute the vector quals over both compressed and non-compressed
 	 * tuples. In case a non-compressed tuple is filtered, return
 	 * VQualRowFiltered since it is only one row */
-	if (rowindex <= 1 && !compute_vector_quals(vexprstate, econtext))
-		return (rowindex == 1) ? VQualSegmentFiltered : VQualRowFiltered;
+	if (rowindex <= 1)
+	{
+		VectorQualSummary vector_qual_summary = vexprstate->vectorized_quals_constified != NIL ?
+													compute_vector_quals(vexprstate, econtext) :
+													AllRowsPass;
 
-	if (vexprstate->vector_qual_result != NULL &&
-		!arrow_row_is_valid(vexprstate->vector_qual_result, arrow_slot_arrow_offset(slot)))
-		return VQualRowFiltered;
+		switch (vector_qual_summary)
+		{
+			case NoRowsPass:
+				return arrow_slot_total_row_count(slot);
+			case AllRowsPass:
+				/*
+				 * If all rows pass, no need to test the vector qual for each row. This
+				 * is a common case for time range conditions.
+				 */
+				vexprstate->vector_qual_result = NULL;
+				return 0;
+			case SomeRowsPass:
+				break;
+		}
+	}
 
-	return VQualRowMatch;
+	if (vexprstate->vector_qual_result == NULL)
+		return 0;
+
+	const uint16 nrows = arrow_slot_total_row_count(slot);
+	const uint16 off = arrow_slot_arrow_offset(slot);
+	uint16 nfiltered = 0;
+
+	for (uint16 i = off; i < nrows; i++)
+	{
+		if (arrow_row_is_valid(vexprstate->vector_qual_result, i))
+			break;
+		nfiltered++;
+	}
+
+	return nfiltered;
 }
 
 static TupleTableSlot *
@@ -491,21 +647,31 @@ columnar_scan_exec(CustomScanState *state)
 
 		if (likely(TTS_IS_ARROWTUPLE(slot)))
 		{
-			switch (ExecVectorizedQual(&cstate->vexprstate, econtext))
+			const uint16 nfiltered = ExecVectorizedQual(&cstate->vexprstate, econtext);
+
+			if (nfiltered > 0)
 			{
-				case VQualSegmentFiltered:
-					arrow_slot_mark_consumed(slot);
+				const uint16 total_nrows = arrow_slot_total_row_count(slot);
+
+				/* Skip ahead with the amount filtered */
+				ExecIncrArrowTuple(slot, nfiltered);
+				InstrCountFiltered1(state, nfiltered);
+
+				if (nfiltered == total_nrows && total_nrows > 1)
+				{
+					/* A complete segment was filtered */
+					Assert(arrow_slot_is_consumed(slot));
 					InstrCountTuples2(state, 1);
-					InstrCountFiltered1(state, arrow_slot_total_row_count(slot));
+				}
+
+				/* If the whole segment was consumed, read next segment */
+				if (arrow_slot_is_consumed(slot))
 					continue;
-				case VQualRowFiltered:
-					InstrCountFiltered1(state, 1);
-					continue;
-				case VQualRowMatch:
-					break;
 			}
 		}
 
+		/* A row passed vectorized filters. Check remaining non-vectorized
+		 * quals, if any, and do projection. */
 		if (qual == NULL || ExecQual(qual, econtext))
 		{
 			if (projinfo)
@@ -513,6 +679,7 @@ columnar_scan_exec(CustomScanState *state)
 			return slot;
 		}
 
+		/* Row was filtered by non-vectorized qual */
 		ResetExprContext(econtext);
 		InstrCountFiltered1(state, 1);
 	}
@@ -609,7 +776,6 @@ static void
 columnar_scan_end(CustomScanState *state)
 {
 	TableScanDesc scandesc = state->ss.ss_currentScanDesc;
-
 	/*
 	 * Free the exprcontext
 	 */

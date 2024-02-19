@@ -237,11 +237,11 @@ typedef struct CompressionScanDescData
 	TableScanDesc uscan_desc; /* scan descriptor for non-compressed relation */
 	Relation compressed_rel;
 	TableScanDesc cscan_desc; /* scan descriptor for compressed relation */
-	uint16 compressed_tuple_index;
 	int64 returned_noncompressed_count;
 	int64 returned_compressed_count;
 	int32 compressed_row_count;
 	bool compressed_read_done;
+	bool reset;
 } CompressionScanDescData;
 
 typedef struct CompressionScanDescData *CompressionScanDesc;
@@ -348,10 +348,10 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
 	scan->compressed_rel = table_open(caminfo->compressed_relid, AccessShareLock);
-	scan->compressed_tuple_index = InvalidTupleIndex;
 	scan->returned_noncompressed_count = 0;
 	scan->returned_compressed_count = 0;
 	scan->compressed_row_count = 0;
+	scan->reset = true;
 
 	/*
 	 * Don't read compressed data if transparent decompression is enabled or
@@ -400,7 +400,8 @@ compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool all
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
-	scan->compressed_tuple_index = InvalidTupleIndex;
+	scan->reset = true;
+	scan->compressed_read_done = false;
 	table_rescan(scan->cscan_desc, key);
 	heapam->scan_rescan(scan->uscan_desc, key, set_params, allow_strat, allow_sync, allow_pagemode);
 }
@@ -456,8 +457,10 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 
 	child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(scan->compressed_rel));
 
-	if (scan->compressed_tuple_index == InvalidTupleIndex || arrow_slot_is_consumed(slot))
+	if (scan->reset || arrow_slot_is_last(slot) || arrow_slot_is_consumed(slot))
 	{
+		scan->reset = false;
+
 		if (!table_scan_getnextslot(scan->cscan_desc, direction, child_slot))
 		{
 			ExecClearTuple(slot);
@@ -466,16 +469,12 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		}
 
 		Assert(ItemPointerIsValid(&child_slot->tts_tid));
-		scan->compressed_tuple_index = 1;
-		ExecStoreArrowTuple(slot, scan->compressed_tuple_index);
+		ExecStoreArrowTuple(slot, 1);
 		scan->compressed_row_count = arrow_slot_total_row_count(slot);
 	}
 	else
 	{
-		Assert(arrow_slot_row_index(slot) == scan->compressed_tuple_index);
-		scan->compressed_tuple_index++;
 		ExecStoreNextArrowTuple(slot);
-		Assert(arrow_slot_row_index(slot) == scan->compressed_tuple_index);
 	}
 
 	scan->returned_compressed_count++;
@@ -1321,9 +1320,9 @@ compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXm
 		{
 			tuple_index = arrow_slot_row_index(slot);
 
-			if (tuple_index != InvalidTupleIndex && !arrow_slot_is_consumed(slot))
+			if (tuple_index != InvalidTupleIndex && !arrow_slot_is_last(slot))
 			{
-				ExecStoreArrowTuple(slot, tuple_index + 1);
+				ExecIncrArrowTuple(slot, 1);
 				*liverows += 1;
 				return true;
 			}
