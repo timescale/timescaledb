@@ -11,14 +11,26 @@ name: Assign PR to author and reviewers
 #       committed code should _NOT_ be touched in any case.
 
 "on":
-  pull_request_target:
-    types: [ opened, reopened, ready_for_review ]
+  pull_request:
+#  pull_request_target:
+#    types: [ opened, reopened, ready_for_review ]
+permissions: write-all
+
+#permissions:
+#  actions: write
+#  checks: write
+#  contents: write
+#  deployments: write
+#  issues: write
+#  packages: write
+#  pull-requests: write
+#  repository-projects: write
+#  security-events: write
+#  statuses: write
 
 jobs:
   assign-pr:
     name: Assign PR to author
-    permissions:
-      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: toshimaru/auto-author-assign@v2.1.0
