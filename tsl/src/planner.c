@@ -97,8 +97,7 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node)
  * When we have a small limit above chunk decompression, it is more efficient to
  * use the row-by-row decompression iterators than the bulk decompression. Since
  * bulk decompression is about 10x faster than row-by-row, this advantage goes
- * away on limits > 100.
- * This hook disables bulk decompression under small limits.
+ * away on limits > 100. This hook disables bulk decompression under small limits.
  */
 static void
 check_limit_bulk_decompression(PlannerInfo *root, Node *node)
@@ -130,9 +129,11 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 			check_limit_bulk_decompression(root, (Node *) path->subpath);
 			break;
 		}
+#if PG14_GE
 		case T_MemoizePath:
 			check_limit_bulk_decompression(root, (Node *) castNode(MemoizePath, node)->subpath);
 			break;
+#endif
 		case T_ProjectionPath:
 			check_limit_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
 			break;
