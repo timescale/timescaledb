@@ -73,22 +73,33 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
  */
 typedef struct ContinuousAggsBucketFunction
 {
-	/*
-	 * Schema of the bucketing function.
-	 * Equals TRUE for "timescaledb_experimental", FALSE otherwise.
-	 */
-	bool experimental;
-	/* Name of the bucketing function, e.g. "time_bucket" or "time_bucket_ng" */
-	char *name;
-	/* `bucket_width` argument of the function */
+	/* Oid of the bucketing function. In the catalog table, the regprocedure is used. This ensures
+	 * that the Oid is mapped to a string when a backup is taken and the string is converted back to
+	 * the Oid when the backup is restored. This way, we can use an Oid in the catalog table even
+	 * when a backup is restored and the Oid may have changed. However, the dependency management in
+	 * PostgreSQL does not track the Oid. If the function is dropped and a new one is created, the
+	 * Oid changes and this value points to a non-existing Oid. This can not happen in real-world
+	 * situations since PostgreSQL protects the bucket_function from deletion until the CAgg is
+	 * defined. */
+	Oid bucket_function;
+
+	/* `bucket_width` argument of the function. */
 	Interval *bucket_width;
+
 	/*
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.
 	 */
-	Timestamp origin;
-	/* `timezone` argument of the function provided by the user */
+	TimestampTz bucket_origin;
+
+	/* `bucket_offset` argument of the function. */
+	Interval *bucket_offest;
+
+	/* `timezone` argument of the function provided by the user. */
 	char *timezone;
+
+	/* Is the interval of the bucket fixed? */
+	bool bucket_fixed_interval;
 } ContinuousAggsBucketFunction;
 
 typedef struct ContinuousAgg
@@ -165,6 +176,7 @@ extern TSDLLEXPORT void ts_materialization_invalidation_log_delete_inner(int32 m
 
 extern TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id);
+extern TSDLLEXPORT bool ts_continuous_agg_hypertable_all_finalized(int32 raw_hypertable_id);
 extern TSDLLEXPORT List *ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
 																	  const char *name,

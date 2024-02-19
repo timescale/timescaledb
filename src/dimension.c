@@ -188,25 +188,23 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	d->fd.aligned = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_dimension_aligned)]);
 	d->fd.column_type =
 		DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_dimension_column_type)]);
-	memcpy(&d->fd.column_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_column_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&d->fd.column_name,
+			   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_dimension_column_name)]));
 
-	if (!isnull[Anum_dimension_partitioning_func_schema - 1] &&
-		!isnull[Anum_dimension_partitioning_func - 1])
+	if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] &&
+		!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)])
 	{
 		MemoryContext old;
 
 		d->fd.num_slices =
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 
-		memcpy(&d->fd.partitioning_func_schema,
-			   DatumGetName(
-				   values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)]),
-			   NAMEDATALEN);
-		memcpy(&d->fd.partitioning_func,
-			   DatumGetName(values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)]),
-			   NAMEDATALEN);
+		namestrcpy(&d->fd.partitioning_func_schema,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)]));
+		namestrcpy(&d->fd.partitioning_func,
+				   DatumGetCString(
+					   values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)]));
 
 		old = MemoryContextSwitchTo(ti->mctx);
 		d->partitioning = ts_partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
@@ -218,8 +216,8 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 		MemoryContextSwitchTo(old);
 	}
 
-	if (!isnull[Anum_dimension_integer_now_func_schema - 1] &&
-		!isnull[Anum_dimension_integer_now_func - 1])
+	if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] &&
+		!isnull[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func)])
 	{
 		namestrcpy(&d->fd.integer_now_func_schema,
 				   DatumGetCString(
@@ -230,12 +228,13 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	}
 
 	if (IS_CLOSED_DIMENSION(d))
-		d->fd.num_slices = DatumGetInt16(values[Anum_dimension_num_slices - 1]);
+		d->fd.num_slices =
+			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 	else
 	{
 		d->fd.interval_length =
 			DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)]);
-		if (!isnull[Anum_dimension_compress_interval_length - 1])
+		if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)])
 			d->fd.compress_interval_length = DatumGetInt64(
 				values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)]);
 	}
@@ -1679,7 +1678,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
 	if (!PG_ARGISNULL(1))
-		memcpy(&info.colname, PG_GETARG_NAME(1), NAMEDATALEN);
+		namestrcpy(&info.colname, NameStr(*PG_GETARG_NAME(1)));
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
