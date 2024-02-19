@@ -8,6 +8,7 @@
 
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/htup_details.h>
 #include <access/tupdesc.h>
 #include <catalog/index.h>
 #include <catalog/pg_attribute.h>
@@ -149,16 +150,18 @@ compressed_tid_to_tid(ItemPointerData *out_tid, const ItemPointerData *in_tid)
 }
 
 static inline void
-compressed_tid_increment_idx(ItemPointerData *tid)
+compressed_tid_increment_idx(ItemPointerData *tid, uint16 increment)
 {
 	const OffsetNumber offsetno = ItemPointerGetOffsetNumber(tid);
 
-	if (offsetno < MaxHeapTuplesPerPage)
-		ItemPointerSetOffsetNumber(tid, offsetno + 1);
+	if ((offsetno + increment) <= MaxHeapTuplesPerPage)
+		ItemPointerSetOffsetNumber(tid, offsetno + increment);
 	else
 	{
 		BlockNumber blockno = ItemPointerGetBlockNumber(tid);
-		ItemPointerSet(tid, blockno + 1, 1);
+		BlockNumber blockincr = (offsetno - 1 + increment) / MaxHeapTuplesPerPage;
+		OffsetNumber offincr = (offsetno - 1 + increment) % MaxHeapTuplesPerPage + 1;
+		ItemPointerSet(tid, blockno + blockincr, offincr);
 	}
 }
 
@@ -234,7 +237,7 @@ arrow_slot_mark_consumed(TupleTableSlot *slot)
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
 	Assert(TTS_IS_ARROWTUPLE(slot));
-	aslot->tuple_index = aslot->total_row_count;
+	aslot->tuple_index = aslot->total_row_count + 1;
 }
 
 static inline bool
@@ -244,15 +247,30 @@ arrow_slot_is_consumed(const TupleTableSlot *slot)
 
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
+	return TTS_EMPTY(slot) || aslot->tuple_index > aslot->total_row_count;
+}
+
+static inline bool
+arrow_slot_is_last(const TupleTableSlot *slot)
+{
+	const ArrowTupleTableSlot *aslot = (const ArrowTupleTableSlot *) slot;
+
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
 	return aslot->tuple_index == aslot->total_row_count;
 }
 
 /*
- * Fast path for storing next tuple when the underlying slot points to a
- * compressed segment.
+ * Increment an arrow slot to point to a subsequent row.
+ *
+ * If the slot points to a non-compressed tuple, the incrementation will
+ * simply clear the slot.
+ *
+ * If the slot points to a compressed tuple, the incrementation will
+ * clear the slot if it reaches the end of the segment.
  */
 static inline TupleTableSlot *
-ExecStoreNextArrowTuple(TupleTableSlot *slot)
+ExecIncrArrowTuple(TupleTableSlot *slot, uint16 increment)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
@@ -262,12 +280,25 @@ ExecStoreNextArrowTuple(TupleTableSlot *slot)
 	if (unlikely(!TTS_IS_ARROWTUPLE(slot)))
 		elog(ERROR, "trying to store an on-disk arrow tuple into wrong type of slot");
 
-	Assert(TTS_EMPTY(aslot->noncompressed_slot));
-	Assert(aslot->tuple_index > 0);
-	Assert(is_compressed_tid(&slot->tts_tid));
-	Assert(aslot->child_slot == aslot->compressed_slot);
-	aslot->tuple_index++;
-	compressed_tid_increment_idx(&slot->tts_tid);
+	if (aslot->tuple_index == InvalidTupleIndex)
+	{
+		Assert(aslot->noncompressed_slot);
+		ExecClearTuple(slot);
+		return slot;
+	}
+
+	aslot->tuple_index += increment;
+
+	if (aslot->tuple_index > aslot->total_row_count)
+	{
+		Assert(aslot->compressed_slot);
+		ExecClearTuple(slot);
+		return slot;
+	}
+
+	if (aslot->tuple_index <= aslot->total_row_count)
+		compressed_tid_increment_idx(&slot->tts_tid, increment);
+
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;
 
@@ -279,6 +310,8 @@ ExecStoreNextArrowTuple(TupleTableSlot *slot)
 
 	return slot;
 }
+
+#define ExecStoreNextArrowTuple(slot) ExecIncrArrowTuple(slot, 1)
 
 extern const int16 *arrow_slot_get_attribute_offset_map(TupleTableSlot *slot);
 extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
