@@ -279,7 +279,6 @@ gorilla_compressor_alloc(void)
 Datum
 tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 {
-	MemoryContext old_context;
 	MemoryContext agg_context;
 	Compressor *compressor = (Compressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
 
@@ -289,21 +288,15 @@ tsl_gorilla_compressor_append(PG_FUNCTION_ARGS)
 		elog(ERROR, "tsl_gorilla_compressor_append called in non-aggregate context");
 	}
 
-	old_context = MemoryContextSwitchTo(agg_context);
+	TS_WITH_MEMORY_CONTEXT(agg_context, {
+		if (compressor == NULL)
+			compressor = gorilla_compressor_for_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
 
-	if (compressor == NULL)
-	{
-		compressor = gorilla_compressor_for_type(get_fn_expr_argtype(fcinfo->flinfo, 1));
-	}
-
-	if (PG_ARGISNULL(1))
-		compressor->append_null(compressor);
-	else
-	{
-		compressor->append_val(compressor, PG_GETARG_DATUM(1));
-	}
-
-	MemoryContextSwitchTo(old_context);
+		if (PG_ARGISNULL(1))
+			compressor->append_null(compressor);
+		else
+			compressor->append_val(compressor, PG_GETARG_DATUM(1));
+	});
 	PG_RETURN_POINTER(compressor);
 }
 

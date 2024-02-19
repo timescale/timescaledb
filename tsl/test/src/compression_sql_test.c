@@ -405,6 +405,8 @@ TS_FUNCTION_INFO_V1(ts_fuzz_compression);
 Datum
 ts_fuzz_compression(PG_FUNCTION_ARGS)
 {
+	int res;
+
 	/*
 	 * We use the memory context size larger than default here, so that all data
 	 * allocated by fuzzing fit into the first chunk. The first chunk is not
@@ -415,28 +417,27 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 	 */
 	MemoryContext fuzzing_context =
 		AllocSetContextCreate(CurrentMemoryContext, "fuzzing", 0, 8 * 1024 * 1024, 8 * 1024 * 1024);
-	MemoryContext old_context = MemoryContextSwitchTo(fuzzing_context);
+	TS_WITH_MEMORY_CONTEXT(fuzzing_context, {
+		char *argvdata[] = { "PostgresFuzzer",
+							 "-timeout=1",
+							 "-report_slow_units=1",
+							 // "-use_value_profile=1",
+							 "-reload=1",
+							 //"-print_coverage=1",
+							 //"-print_full_coverage=1",
+							 //"-print_final_stats=1",
+							 //"-help=1",
+							 psprintf("-runs=%d", PG_GETARG_INT32(3)),
+							 "corpus" /* in the database directory */,
+							 NULL };
+		char **argv = argvdata;
+		int argc = sizeof(argvdata) / sizeof(*argvdata) - 1;
 
-	char *argvdata[] = { "PostgresFuzzer",
-						 "-timeout=1",
-						 "-report_slow_units=1",
-						 // "-use_value_profile=1",
-						 "-reload=1",
-						 //"-print_coverage=1",
-						 //"-print_full_coverage=1",
-						 //"-print_final_stats=1",
-						 //"-help=1",
-						 psprintf("-runs=%d", PG_GETARG_INT32(3)),
-						 "corpus" /* in the database directory */,
-						 NULL };
-	char **argv = argvdata;
-	int argc = sizeof(argvdata) / sizeof(*argvdata) - 1;
+		int algo = get_compression_algorithm(PG_GETARG_CSTRING(0));
+		Oid type = PG_GETARG_OID(1);
+		bool bulk = PG_GETARG_BOOL(2);
 
-	int algo = get_compression_algorithm(PG_GETARG_CSTRING(0));
-	Oid type = PG_GETARG_OID(1);
-	bool bulk = PG_GETARG_BOOL(2);
-
-	int (*target)(const uint8_t *, size_t) = NULL;
+		int (*target)(const uint8_t *, size_t) = NULL;
 
 #define DISPATCH(ALGO, PGTYPE, BULK)                                                               \
 	if (algo == COMPRESSION_ALGORITHM_##ALGO && type == PGTYPE##OID && bulk == BULK)               \
@@ -444,17 +445,16 @@ ts_fuzz_compression(PG_FUNCTION_ARGS)
 		target = target_##ALGO##_##PGTYPE##_##BULK;                                                \
 	}
 
-	APPLY_FOR_TYPES(DISPATCH)
+		APPLY_FOR_TYPES(DISPATCH)
 #undef DISPATCH
 
-	if (target == NULL)
-	{
-		elog(ERROR, "no llvm fuzz target for compression algorithm %d and type %d", algo, type);
-	}
+		if (target == NULL)
+		{
+			elog(ERROR, "no llvm fuzz target for compression algorithm %d and type %d", algo, type);
+		}
 
-	int res = LLVMFuzzerRunDriver(&argc, &argv, target);
-
-	MemoryContextSwitchTo(old_context);
+		res = LLVMFuzzerRunDriver(&argc, &argv, target);
+	});
 
 	PG_RETURN_INT32(res);
 }

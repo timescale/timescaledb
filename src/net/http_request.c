@@ -8,6 +8,7 @@
 #include <utils/memutils.h>
 
 #include "http.h"
+#include "utils.h"
 
 #define SPACE ' '
 #define COLON ':'
@@ -102,14 +103,14 @@ ts_http_request_destroy(HttpRequest *req)
 void
 ts_http_request_set_uri(HttpRequest *req, const char *uri)
 {
-	MemoryContext old = MemoryContextSwitchTo(req->context);
-	int uri_len = strlen(uri);
+	TS_WITH_MEMORY_CONTEXT(req->context, {
+		int uri_len = strlen(uri);
 
-	req->uri = palloc(uri_len + 1);
-	memcpy(req->uri, uri, uri_len);
-	req->uri[uri_len] = '\0';
-	req->uri_len = uri_len;
-	MemoryContextSwitchTo(old);
+		req->uri = palloc(uri_len + 1);
+		memcpy(req->uri, uri, uri_len);
+		req->uri[uri_len] = '\0';
+		req->uri_len = uri_len;
+	});
 }
 
 void
@@ -130,25 +131,23 @@ set_header(HttpRequest *req, const char *name, const char *value)
 void
 ts_http_request_set_header(HttpRequest *req, const char *name, const char *value)
 {
-	MemoryContext old = MemoryContextSwitchTo(req->context);
-	set_header(req, name, value);
-	MemoryContextSwitchTo(old);
+	TS_WITH_MEMORY_CONTEXT(req->context, set_header(req, name, value););
 }
 
 void
 ts_http_request_set_body_jsonb(HttpRequest *req, const Jsonb *json)
 {
-	MemoryContext old = MemoryContextSwitchTo(req->context);
-	StringInfo jtext = makeStringInfo();
-	char content_length[10];
+	TS_WITH_MEMORY_CONTEXT(req->context, {
+		StringInfo jtext = makeStringInfo();
+		char content_length[10];
 
-	JsonbToCString(jtext, (JsonbContainer *) &json->root, VARSIZE(json));
-	req->body = jtext->data;
-	req->body_len = jtext->len;
-	snprintf(content_length, sizeof(content_length), "%d", jtext->len);
-	set_header(req, HTTP_CONTENT_TYPE, "application/json");
-	set_header(req, HTTP_CONTENT_LENGTH, content_length);
-	MemoryContextSwitchTo(old);
+		JsonbToCString(jtext, (JsonbContainer *) &json->root, VARSIZE(json));
+		req->body = jtext->data;
+		req->body_len = jtext->len;
+		snprintf(content_length, sizeof(content_length), "%d", jtext->len);
+		set_header(req, HTTP_CONTENT_TYPE, "application/json");
+		set_header(req, HTTP_CONTENT_LENGTH, content_length);
+	});
 }
 
 static void

@@ -50,38 +50,38 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 	 */
 	if (detoaster->toastrel == NULL)
 	{
-		MemoryContext old_mctx = MemoryContextSwitchTo(detoaster->mctx);
-		detoaster->toastrel = table_open(toast_pointer->va_toastrelid, AccessShareLock);
+		TS_WITH_MEMORY_CONTEXT(detoaster->mctx, {
+			detoaster->toastrel = table_open(toast_pointer->va_toastrelid, AccessShareLock);
 
-		int num_indexes;
-		Relation *toastidxs;
-		/* Look for the valid index of toast relation */
-		const int validIndex =
-			toast_open_indexes(detoaster->toastrel, AccessShareLock, &toastidxs, &num_indexes);
-		detoaster->index = toastidxs[validIndex];
-		for (int i = 0; i < num_indexes; i++)
-		{
-			if (i != validIndex)
+			int num_indexes;
+			Relation *toastidxs;
+			/* Look for the valid index of toast relation */
+			const int validIndex =
+				toast_open_indexes(detoaster->toastrel, AccessShareLock, &toastidxs, &num_indexes);
+			detoaster->index = toastidxs[validIndex];
+			for (int i = 0; i < num_indexes; i++)
 			{
-				index_close(toastidxs[i], AccessShareLock);
+				if (i != validIndex)
+				{
+					index_close(toastidxs[i], AccessShareLock);
+				}
 			}
-		}
 
-		/* Set up a scan key to fetch from the index. */
-		ScanKeyInit(&detoaster->toastkey,
-					(AttrNumber) 1,
-					BTEqualStrategyNumber,
-					F_OIDEQ,
-					ObjectIdGetDatum(valueid));
+			/* Set up a scan key to fetch from the index. */
+			ScanKeyInit(&detoaster->toastkey,
+						(AttrNumber) 1,
+						BTEqualStrategyNumber,
+						F_OIDEQ,
+						ObjectIdGetDatum(valueid));
 
-		/* Prepare for scan */
-		init_toast_snapshot(&detoaster->SnapshotToast);
-		detoaster->toastscan = systable_beginscan_ordered(detoaster->toastrel,
-														  detoaster->index,
-														  &detoaster->SnapshotToast,
-														  1,
-														  &detoaster->toastkey);
-		MemoryContextSwitchTo(old_mctx);
+			/* Prepare for scan */
+			init_toast_snapshot(&detoaster->SnapshotToast);
+			detoaster->toastscan = systable_beginscan_ordered(detoaster->toastrel,
+															  detoaster->index,
+															  &detoaster->SnapshotToast,
+															  1,
+															  &detoaster->toastkey);
+		});
 	}
 	else
 	{

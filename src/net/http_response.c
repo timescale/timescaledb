@@ -8,6 +8,7 @@
 #include <utils/memutils.h>
 
 #include "http.h"
+#include "utils.h"
 
 #define CARRIAGE_RETURN '\r'
 #define NEW_LINE '\n'
@@ -199,12 +200,12 @@ static void
 http_response_state_add_header(HttpResponseState *state, const char *name, size_t name_len,
 							   const char *value, size_t value_len)
 {
-	MemoryContext old = MemoryContextSwitchTo(state->context);
-	HttpHeader *new_header =
-		ts_http_header_create(name, name_len, value, value_len, state->headers);
+	TS_WITH_MEMORY_CONTEXT(state->context, {
+		HttpHeader *new_header =
+			ts_http_header_create(name, name_len, value, value_len, state->headers);
 
-	state->headers = new_header;
-	MemoryContextSwitchTo(old);
+		state->headers = new_header;
+	});
 }
 
 static void

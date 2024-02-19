@@ -16,6 +16,7 @@
 #include "compat/compat.h"
 #include "export.h"
 #include "bgw/scheduler.h"
+#include "utils.h"
 
 TS_FUNCTION_INFO_V1(ts_test_job_refresh);
 
@@ -32,27 +33,25 @@ ts_test_job_refresh(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 	{
-		MemoryContext oldcontext;
 		TupleDesc tupdesc;
 
 		/* Use top-level memory context to preserve the global static list */
 		cur_scheduled_jobs = ts_update_scheduled_jobs_list(cur_scheduled_jobs, TopMemoryContext);
 
 		funcctx = SRF_FIRSTCALL_INIT();
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+		TS_WITH_MEMORY_CONTEXT(funcctx->multi_call_memory_ctx, {
+			funcctx->user_fctx = list_head(cur_scheduled_jobs);
 
-		funcctx->user_fctx = list_head(cur_scheduled_jobs);
+			if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("function returning record called in context "
+								"that cannot accept type record")));
+			}
 
-		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("function returning record called in context "
-							"that cannot accept type record")));
-		}
-
-		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
-		MemoryContextSwitchTo(oldcontext);
+			funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+		});
 	}
 
 	funcctx = SRF_PERCALL_SETUP();

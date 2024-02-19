@@ -84,7 +84,7 @@ static EquivalenceClass *
 append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_info, Var *var,
 					 Oid sortop, bool nulls_first)
 {
-	MemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
+	ExplicitMemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
 
 	Oid opfamily, opcintype, equality_op;
 	int16 strategy;

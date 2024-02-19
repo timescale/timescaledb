@@ -75,16 +75,14 @@ ts_chunk_constraints_copy(ChunkConstraints *chunk_constraints)
 static void
 chunk_constraints_expand(ChunkConstraints *ccs, int16 new_capacity)
 {
-	MemoryContext old;
-
 	if (new_capacity <= ccs->capacity)
 		return;
 
-	old = MemoryContextSwitchTo(ccs->mctx);
-	ccs->capacity = new_capacity;
-	Assert(ccs->constraints); /* repalloc() does not work with NULL argument */
-	ccs->constraints = repalloc(ccs->constraints, CHUNK_CONSTRAINTS_SIZE(new_capacity));
-	MemoryContextSwitchTo(old);
+	TS_WITH_MEMORY_CONTEXT(ccs->mctx, {
+		ccs->capacity = new_capacity;
+		Assert(ccs->constraints); /* repalloc() does not work with NULL argument */
+		ccs->constraints = repalloc(ccs->constraints, CHUNK_CONSTRAINTS_SIZE(new_capacity));
+	});
 }
 
 static void

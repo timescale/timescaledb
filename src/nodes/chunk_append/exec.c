@@ -426,22 +426,24 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
 									  PlannerInfo *root, PlanState *ps)
 {
 	bool can_exclude;
-	ListCell *lc;
-	MemoryContext old = MemoryContextSwitchTo(state->exclusion_ctx);
-	List *restrictinfos = NIL;
 
-	foreach (lc, clauses)
-	{
-		RestrictInfo *ri = makeNode(RestrictInfo);
-		ri->clause = lfirst(lc);
-		restrictinfos = lappend(restrictinfos, ri);
-	}
-	restrictinfos = constify_restrictinfo_params(root, ps->state, restrictinfos);
+	TS_WITH_MEMORY_CONTEXT(state->exclusion_ctx, {
+		ListCell *lc;
+		List *restrictinfos = NIL;
 
-	can_exclude = can_exclude_chunk(constraints, restrictinfos);
+		foreach (lc, clauses)
+		{
+			RestrictInfo *ri = makeNode(RestrictInfo);
+			ri->clause = lfirst(lc);
+			restrictinfos = lappend(restrictinfos, ri);
+		}
+		restrictinfos = constify_restrictinfo_params(root, ps->state, restrictinfos);
 
-	MemoryContextReset(state->exclusion_ctx);
-	MemoryContextSwitchTo(old);
+		can_exclude = can_exclude_chunk(constraints, restrictinfos);
+
+		MemoryContextReset(state->exclusion_ctx);
+	});
+
 	return can_exclude;
 }
 

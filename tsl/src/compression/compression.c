@@ -1056,27 +1056,26 @@ static void
 row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
 									CommandId mycid)
 {
-	MemoryContext old_ctx;
 	slot_getallattrs(slot);
-	old_ctx = MemoryContextSwitchTo(row_compressor->per_row_ctx);
-	if (row_compressor->first_iteration)
-	{
-		row_compressor_update_group(row_compressor, slot);
-		row_compressor->first_iteration = false;
-	}
-	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
-	bool compressed_row_is_full =
-		row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
-	if (compressed_row_is_full || changed_groups)
-	{
-		if (row_compressor->rows_compressed_into_current_value > 0)
-			row_compressor_flush(row_compressor, mycid, changed_groups);
-		if (changed_groups)
+	TS_WITH_MEMORY_CONTEXT(row_compressor->per_row_ctx, {
+		if (row_compressor->first_iteration)
+		{
 			row_compressor_update_group(row_compressor, slot);
-	}
+			row_compressor->first_iteration = false;
+		}
+		bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
+		bool compressed_row_is_full =
+			row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
+		if (compressed_row_is_full || changed_groups)
+		{
+			if (row_compressor->rows_compressed_into_current_value > 0)
+				row_compressor_flush(row_compressor, mycid, changed_groups);
+			if (changed_groups)
+				row_compressor_update_group(row_compressor, slot);
+		}
 
-	row_compressor_append_row(row_compressor, slot);
-	MemoryContextSwitchTo(old_ctx);
+		row_compressor_append_row(row_compressor, slot);
+	});
 	ExecClearTuple(slot);
 }
 

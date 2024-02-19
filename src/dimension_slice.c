@@ -154,7 +154,6 @@ dimension_vec_tuple_found_list(TupleInfo *ti, void *data)
 {
 	List **slices = data;
 	DimensionSlice *slice;
-	MemoryContext old;
 
 	switch (ti->lockresult)
 	{
@@ -171,12 +170,11 @@ dimension_vec_tuple_found_list(TupleInfo *ti, void *data)
 			break;
 	}
 
-	old = MemoryContextSwitchTo(ti->mctx);
-	slice = dimension_slice_from_slot(ti->slot);
-	Assert(NULL != slice);
-	*slices = lappend(*slices, slice);
-	MemoryContextSwitchTo(old);
-
+	TS_WITH_MEMORY_CONTEXT(ti->mctx, {
+		slice = dimension_slice_from_slot(ti->slot);
+		Assert(NULL != slice);
+		*slices = lappend(*slices, slice);
+	});
 	return SCAN_CONTINUE;
 }
 
@@ -452,17 +450,16 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 	{
 		const TupleInfo *ti = ts_scan_iterator_tuple_info(&it);
 		DimensionSlice *slice;
-		MemoryContext old;
 
 		switch (ti->lockresult)
 		{
 			case TM_SelfModified:
 			case TM_Ok:
-				old = MemoryContextSwitchTo(ti->mctx);
-				slice = dimension_slice_from_slot(ti->slot);
-				Assert(NULL != slice);
-				slices = ts_dimension_vec_add_slice(&slices, slice);
-				MemoryContextSwitchTo(old);
+				TS_WITH_MEMORY_CONTEXT(ti->mctx, {
+					slice = dimension_slice_from_slot(ti->slot);
+					Assert(NULL != slice);
+					slices = ts_dimension_vec_add_slice(&slices, slice);
+				});
 				break;
 			case TM_Deleted:
 			case TM_Updated:
@@ -733,13 +730,10 @@ DimensionSlice *
 ts_dimension_slice_from_tuple(TupleInfo *ti)
 {
 	DimensionSlice *slice;
-	MemoryContext old;
-
-	lock_result_ok_or_abort(ti);
-	old = MemoryContextSwitchTo(ti->mctx);
-	slice = dimension_slice_from_slot(ti->slot);
-	MemoryContextSwitchTo(old);
-
+	TS_WITH_MEMORY_CONTEXT(ti->mctx, {
+		lock_result_ok_or_abort(ti);
+		slice = dimension_slice_from_slot(ti->slot);
+	});
 	return slice;
 }
 
@@ -1003,10 +997,7 @@ static ScanTupleResult
 dimension_slice_nth_tuple_found(TupleInfo *ti, void *data)
 {
 	DimensionSlice **slice = data;
-	MemoryContext old = MemoryContextSwitchTo(ti->mctx);
-
-	*slice = dimension_slice_from_slot(ti->slot);
-	MemoryContextSwitchTo(old);
+	TS_WITH_MEMORY_CONTEXT(ti->mctx, { *slice = dimension_slice_from_slot(ti->slot); });
 	return SCAN_CONTINUE;
 }
 

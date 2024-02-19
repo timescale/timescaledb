@@ -48,6 +48,7 @@
 
 #include "guc.h"
 #include "nodes/skip_scan/skip_scan.h"
+#include "utils.h"
 
 typedef enum SkipScanStage
 {
@@ -217,21 +218,20 @@ skip_scan_update_key(SkipScanState *state, TupleTableSlot *slot)
 		pfree(DatumGetPointer(state->prev_datum));
 	}
 
-	MemoryContext old_ctx = MemoryContextSwitchTo(state->ctx);
-	state->prev_datum = slot_getattr(slot, state->distinct_col_attnum, &state->prev_is_null);
-	if (state->prev_is_null)
-	{
-		state->skip_key->sk_flags = SK_ISNULL;
-		state->skip_key->sk_argument = 0;
-	}
-	else
-	{
-		state->prev_datum =
-			datumCopy(state->prev_datum, state->distinct_by_val, state->distinct_typ_len);
-		state->skip_key->sk_argument = state->prev_datum;
-	}
-
-	MemoryContextSwitchTo(old_ctx);
+	TS_WITH_MEMORY_CONTEXT(state->ctx, {
+		state->prev_datum = slot_getattr(slot, state->distinct_col_attnum, &state->prev_is_null);
+		if (state->prev_is_null)
+		{
+			state->skip_key->sk_flags = SK_ISNULL;
+			state->skip_key->sk_argument = 0;
+		}
+		else
+		{
+			state->prev_datum =
+				datumCopy(state->prev_datum, state->distinct_by_val, state->distinct_typ_len);
+			state->skip_key->sk_argument = state->prev_datum;
+		}
+	});
 
 	/* we need to do a rescan whenever we modify the ScanKey */
 	state->needs_rescan = true;

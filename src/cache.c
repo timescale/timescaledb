@@ -9,6 +9,7 @@
 
 #include "cache.h"
 #include "compat/compat.h"
+#include "utils.h"
 
 /* List of pinned caches. A cache occurs once in this list for every pin
  * taken */
@@ -97,14 +98,14 @@ ts_cache_invalidate(Cache *cache)
 Cache *
 ts_cache_pin(Cache *cache)
 {
-	MemoryContext old = MemoryContextSwitchTo(pinned_caches_mctx);
-	CachePin *cp = palloc(sizeof(CachePin));
+	TS_WITH_MEMORY_CONTEXT(pinned_caches_mctx, {
+		CachePin *cp = palloc(sizeof(CachePin));
 
-	cp->cache = cache;
-	cp->subtxnid = GetCurrentSubTransactionId();
-	if (cache->handle_txn_callbacks)
-		pinned_caches = lappend(pinned_caches, cp);
-	MemoryContextSwitchTo(old);
+		cp->cache = cache;
+		cp->subtxnid = GetCurrentSubTransactionId();
+		if (cache->handle_txn_callbacks)
+			pinned_caches = lappend(pinned_caches, cp);
+	});
 	cache->refcount++;
 	return cache;
 }

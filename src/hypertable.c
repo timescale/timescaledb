@@ -936,17 +936,14 @@ hypertable_chunk_store_free(void *entry)
 static Chunk *
 hypertable_chunk_store_add(const Hypertable *h, const Chunk *input_chunk)
 {
-	MemoryContext old_mcxt;
-
-	/* Add the chunk to the subspace store */
-	old_mcxt = MemoryContextSwitchTo(ts_subspace_store_mcxt(h->chunk_cache));
-	Chunk *cached_chunk = ts_chunk_copy(input_chunk);
-	ts_subspace_store_add(h->chunk_cache,
-						  cached_chunk->cube,
-						  cached_chunk,
-						  hypertable_chunk_store_free);
-	MemoryContextSwitchTo(old_mcxt);
-
+	Chunk *cached_chunk;
+	TS_WITH_MEMORY_CONTEXT(ts_subspace_store_mcxt(h->chunk_cache), {
+		cached_chunk = ts_chunk_copy(input_chunk);
+		ts_subspace_store_add(h->chunk_cache,
+							  cached_chunk->cube,
+							  cached_chunk,
+							  hypertable_chunk_store_free);
+	});
 	return cached_chunk;
 }
 

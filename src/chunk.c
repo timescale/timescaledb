@@ -1539,10 +1539,7 @@ ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti, const ChunkS
 	 */
 	if (chunk_stub_is_valid(stub, chunk->constraints->num_dimension_constraints))
 	{
-		MemoryContext oldctx = MemoryContextSwitchTo(ti->mctx);
-
-		chunk->cube = ts_hypercube_copy(stub->cube);
-		MemoryContextSwitchTo(oldctx);
+		TS_WITH_MEMORY_CONTEXT(ti->mctx, { chunk->cube = ts_hypercube_copy(stub->cube); });
 
 		/*
 		 * The hypercube slices were filled in during the scan. Now we need to
@@ -2171,7 +2168,6 @@ static Chunk *
 get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, MemoryContext mctx,
 						 uint64 *num_chunks_returned, ScanTupLock *tuplock)
 {
-	MemoryContext oldcontext;
 	ChunkScanCtx chunk_scan_ctx;
 	Chunk *chunks;
 	ChunkScanCtxAddChunkData data;
@@ -2193,18 +2189,18 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	oldcontext = MemoryContextSwitchTo(mctx);
-	chunks_find_all_in_range_limit(ht,
-								   time_dim,
-								   start_strategy,
-								   newer_than,
-								   end_strategy,
-								   older_than,
-								   -1,
-								   &num_chunks,
-								   tuplock,
-								   &chunk_scan_ctx);
-	MemoryContextSwitchTo(oldcontext);
+	TS_WITH_MEMORY_CONTEXT(mctx, {
+		chunks_find_all_in_range_limit(ht,
+									   time_dim,
+									   start_strategy,
+									   newer_than,
+									   end_strategy,
+									   older_than,
+									   -1,
+									   &num_chunks,
+									   tuplock,
+									   &chunk_scan_ctx);
+	});
 
 	chunks = MemoryContextAllocZero(mctx, sizeof(Chunk) * num_chunks);
 	data = (ChunkScanCtxAddChunkData){
@@ -2343,7 +2339,6 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 		{
 			ChunkConstraint *cc = &ccs->constraints[j];
 			Chunk *chunk = ts_chunk_get_by_id(cc->fd.chunk_id, false);
-			MemoryContext old;
 			ScanIterator it;
 
 			/* Dropped chunks do not contain valid data and must not be returned */
@@ -2356,9 +2351,7 @@ ts_chunk_get_window(int32 dimension_id, int64 point, int count, MemoryContext mc
 			ts_scan_iterator_close(&it);
 
 			/* Allocate the list on the same memory context as the chunks */
-			old = MemoryContextSwitchTo(mctx);
-			chunks = lappend(chunks, chunk);
-			MemoryContextSwitchTo(old);
+			TS_WITH_MEMORY_CONTEXT(mctx, { chunks = lappend(chunks, chunk); });
 		}
 	}
 
@@ -5133,7 +5126,6 @@ get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_
 								  MemoryContext mctx, uint64 *num_chunks_returned,
 								  ScanTupLock *tupLock)
 {
-	MemoryContext oldcontext;
 	Chunk *chunks = NULL;
 	StrategyNumber start_strategy;
 	StrategyNumber end_strategy;
@@ -5148,16 +5140,16 @@ get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 
-	oldcontext = MemoryContextSwitchTo(mctx);
-	chunks = get_chunks_in_creation_time_range_limit(ht,
-													 start_strategy,
-													 newer_than,
-													 end_strategy,
-													 older_than,
-													 -1,
-													 &num_chunks,
-													 tupLock);
-	MemoryContextSwitchTo(oldcontext);
+	TS_WITH_MEMORY_CONTEXT(mctx, {
+		chunks = get_chunks_in_creation_time_range_limit(ht,
+														 start_strategy,
+														 newer_than,
+														 end_strategy,
+														 older_than,
+														 -1,
+														 &num_chunks,
+														 tupLock);
+	});
 	*num_chunks_returned = num_chunks;
 
 	return chunks;

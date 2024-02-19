@@ -146,16 +146,13 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 											column_description->typid);
 		Assert(decompress_all != NULL);
 
-		MemoryContext context_before_decompression =
-			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
+		TS_WITH_MEMORY_CONTEXT(dcontext->bulk_decompression_context, {
+			arrow = decompress_all(PointerGetDatum(header),
+								   column_description->typid,
+								   batch_state->per_batch_context);
 
-		arrow = decompress_all(PointerGetDatum(header),
-							   column_description->typid,
-							   batch_state->per_batch_context);
-
-		MemoryContextReset(dcontext->bulk_decompression_context);
-
-		MemoryContextSwitchTo(context_before_decompression);
+			MemoryContextReset(dcontext->bulk_decompression_context);
+		});
 	}
 
 	if (arrow == NULL)

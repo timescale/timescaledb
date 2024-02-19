@@ -245,7 +245,6 @@ delta_delta_compressor_for_type(Oid element_type)
 Datum
 tsl_deltadelta_compressor_append(PG_FUNCTION_ARGS)
 {
-	MemoryContext old_context;
 	MemoryContext agg_context;
 	DeltaDeltaCompressor *compressor =
 		(DeltaDeltaCompressor *) (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
@@ -256,24 +255,22 @@ tsl_deltadelta_compressor_append(PG_FUNCTION_ARGS)
 		elog(ERROR, "tsl_deltadelta_compressor_append called in non-aggregate context");
 	}
 
-	old_context = MemoryContextSwitchTo(agg_context);
+	TS_WITH_MEMORY_CONTEXT(agg_context, {
+		if (compressor == NULL)
+		{
+			compressor = delta_delta_compressor_alloc();
+			if (PG_NARGS() > 2)
+				elog(ERROR, "append expects two arguments");
+		}
 
-	if (compressor == NULL)
-	{
-		compressor = delta_delta_compressor_alloc();
-		if (PG_NARGS() > 2)
-			elog(ERROR, "append expects two arguments");
-	}
-
-	if (PG_ARGISNULL(1))
-		delta_delta_compressor_append_null(compressor);
-	else
-	{
-		int64 next_val = PG_GETARG_INT64(1);
-		delta_delta_compressor_append_value(compressor, next_val);
-	}
-
-	MemoryContextSwitchTo(old_context);
+		if (PG_ARGISNULL(1))
+			delta_delta_compressor_append_null(compressor);
+		else
+		{
+			int64 next_val = PG_GETARG_INT64(1);
+			delta_delta_compressor_append_value(compressor, next_val);
+		}
+	});
 	PG_RETURN_POINTER(compressor);
 }
 

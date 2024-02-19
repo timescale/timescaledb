@@ -298,7 +298,7 @@ TSCopyMultiInsertInfoIsFull(TSCopyMultiInsertInfo *miinfo)
 static inline int
 TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuffer *buffer)
 {
-	MemoryContext oldcontext;
+	ExplicitMemoryContext oldcontext;
 	int i;
 
 	Assert(miinfo != NULL);

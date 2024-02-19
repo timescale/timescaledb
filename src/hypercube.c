@@ -182,11 +182,9 @@ ts_hypercube_from_constraints(const ChunkConstraints *constraints, ScanIterator 
 {
 	Hypercube *hc;
 	int i;
-	MemoryContext old;
 
-	old = MemoryContextSwitchTo(ts_scan_iterator_get_result_memory_context(slice_it));
-	hc = ts_hypercube_alloc(constraints->num_dimension_constraints);
-	MemoryContextSwitchTo(old);
+	TS_WITH_MEMORY_CONTEXT(ts_scan_iterator_get_result_memory_context(slice_it),
+						   { hc = ts_hypercube_alloc(constraints->num_dimension_constraints); });
 
 	for (i = 0; i < constraints->num_constraints; i++)
 	{

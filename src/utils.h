@@ -19,6 +19,25 @@
 #include "compat/compat.h"
 
 /*
+ * Convenience macro to execute a simple or complex statement inside a memory
+ * context to avoid missing to restore context after being used.
+ */
+#define TS_WITH_MEMORY_CONTEXT(MCXT, STMT)                                                         \
+	do                                                                                             \
+	{                                                                                              \
+		MemoryContext _oldmcxt = MemoryContextSwitchTo((MCXT));                                    \
+		do                                                                                         \
+			STMT while (0);                                                                        \
+		MemoryContextSwitchTo(_oldmcxt);                                                           \
+	} while (0)
+
+/*
+ * Use this typedef if you want to avoid triggering the Coccinelle rule that
+ * will suggest to rewrite code to use the macro above.
+ */
+typedef MemoryContext ExplicitMemoryContext;
+
+/*
  * Get the function name in a PG_FUNCTION.
  *
  * The function name is resolved from the function Oid in the functioncall

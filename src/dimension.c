@@ -194,8 +194,6 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 	if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func_schema)] &&
 		!isnull[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)])
 	{
-		MemoryContext old;
-
 		d->fd.num_slices =
 			DatumGetInt16(values[AttrNumberGetAttrOffset(Anum_dimension_num_slices)]);
 
@@ -206,14 +204,13 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 				   DatumGetCString(
 					   values[AttrNumberGetAttrOffset(Anum_dimension_partitioning_func)]));
 
-		old = MemoryContextSwitchTo(ti->mctx);
-		d->partitioning = ts_partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
-													  NameStr(d->fd.partitioning_func),
-													  NameStr(d->fd.column_name),
-													  d->type,
-													  main_table_relid);
-
-		MemoryContextSwitchTo(old);
+		TS_WITH_MEMORY_CONTEXT(ti->mctx, {
+			d->partitioning = ts_partitioning_info_create(NameStr(d->fd.partitioning_func_schema),
+														  NameStr(d->fd.partitioning_func),
+														  NameStr(d->fd.column_name),
+														  d->type,
+														  main_table_relid);
+		});
 	}
 
 	if (!isnull[AttrNumberGetAttrOffset(Anum_dimension_integer_now_func_schema)] &&

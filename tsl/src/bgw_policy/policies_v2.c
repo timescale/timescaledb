@@ -649,16 +649,12 @@ policies_show(PG_FUNCTION_ARGS)
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	if (SRF_IS_FIRSTCALL())
 	{
-		MemoryContext oldcontext;
-
 		funcctx = SRF_FIRSTCALL_INIT();
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
 		/* Use top-level memory context to preserve the global static list */
-		jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
-
-		funcctx->user_fctx = list_head(jobs);
-		MemoryContextSwitchTo(oldcontext);
+		TS_WITH_MEMORY_CONTEXT(funcctx->multi_call_memory_ctx, {
+			jobs = ts_bgw_job_find_by_hypertable_id(cagg->data.mat_hypertable_id);
+			funcctx->user_fctx = list_head(jobs);
+		});
 	}
 
 	funcctx = SRF_PERCALL_SETUP();

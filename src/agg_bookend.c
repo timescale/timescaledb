@@ -16,6 +16,7 @@
 #include <utils/syscache.h>
 
 #include "export.h"
+#include "utils.h"
 
 /* bookend aggregates first and last:
  *	 first(value, cmp) returns the value for the row with the smallest cmp element.
@@ -330,28 +331,26 @@ static inline Datum
 bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, PolyDatum value, PolyDatum cmp,
 			  char *opname, FunctionCallInfo fcinfo)
 {
-	MemoryContext old_context;
 	TransCache *cache = transcache_get(fcinfo);
 
-	old_context = MemoryContextSwitchTo(aggcontext);
-
-	if (state == NULL)
-	{
-		state = init_store(aggcontext);
-		cmpproc_init(fcinfo, &cache->cmp_proc, cmp.type_oid, opname);
-		typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
-		typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
-	}
-	else if (!cmp.is_null)
-	{
-		/* only do comparison if cmp is not NULL */
-		if (state->cmp.is_null || cmpproc_cmp(&cache->cmp_proc, fcinfo, cmp, state->cmp))
+	TS_WITH_MEMORY_CONTEXT(aggcontext, {
+		if (state == NULL)
 		{
+			state = init_store(aggcontext);
+			cmpproc_init(fcinfo, &cache->cmp_proc, cmp.type_oid, opname);
 			typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 			typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
 		}
-	}
-	MemoryContextSwitchTo(old_context);
+		else if (!cmp.is_null)
+		{
+			/* only do comparison if cmp is not NULL */
+			if (state->cmp.is_null || cmpproc_cmp(&cache->cmp_proc, fcinfo, cmp, state->cmp))
+			{
+				typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
+				typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
+			}
+		}
+	});
 
 	PG_RETURN_POINTER(state);
 }

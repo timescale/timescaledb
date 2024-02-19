@@ -801,11 +801,10 @@ static void
 chunk_api_iterate_relstats_context(FuncCallContext *funcctx)
 {
 	List *chunk_oids = (List *) funcctx->user_fctx;
-	MemoryContext oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
-	chunk_oids = list_delete_first(chunk_oids);
-	funcctx->user_fctx = chunk_oids;
-	MemoryContextSwitchTo(oldcontext);
+	TS_WITH_MEMORY_CONTEXT(funcctx->multi_call_memory_ctx, {
+		chunk_oids = list_delete_first(chunk_oids);
+		funcctx->user_fctx = chunk_oids;
+	});
 }
 
 typedef struct ColStatContext
@@ -850,10 +849,10 @@ chunk_api_fetch_next_colstats_tuple(FuncCallContext *funcctx)
 
 		if (tuple == NULL)
 		{
-			MemoryContext oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-			ctx->chunk_oids = list_delete_first(ctx->chunk_oids);
-			ctx->col_id = 1;
-			MemoryContextSwitchTo(oldcontext);
+			TS_WITH_MEMORY_CONTEXT(funcctx->multi_call_memory_ctx, {
+				ctx->chunk_oids = list_delete_first(ctx->chunk_oids);
+				ctx->col_id = 1;
+			});
 		}
 	}
 
@@ -864,15 +863,14 @@ static void
 chunk_api_iterate_colstats_context(FuncCallContext *funcctx)
 {
 	ColStatContext *ctx = funcctx->user_fctx;
-	MemoryContext oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-
-	++ctx->col_id;
-	if (AttrNumberGetAttrOffset(ctx->col_id) >= ctx->nattrs)
-	{
-		ctx->chunk_oids = list_delete_first(ctx->chunk_oids);
-		ctx->col_id = 1;
-	}
-	MemoryContextSwitchTo(oldcontext);
+	TS_WITH_MEMORY_CONTEXT(funcctx->multi_call_memory_ctx, {
+		++ctx->col_id;
+		if (AttrNumberGetAttrOffset(ctx->col_id) >= ctx->nattrs)
+		{
+			ctx->chunk_oids = list_delete_first(ctx->chunk_oids);
+			ctx->col_id = 1;
+		}
+	});
 }
 
 #define GET_CHUNK_RELSTATS_NAME "get_chunk_relstats"
@@ -894,7 +892,6 @@ chunk_api_get_chunk_stats(FunctionCallInfo fcinfo, bool col_stats)
 	if (SRF_IS_FIRSTCALL())
 	{
 		Oid relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-		MemoryContext oldcontext;
 		TupleDesc tupdesc;
 		Cache *hcache;
 		Hypertable *ht;
@@ -931,21 +928,21 @@ chunk_api_get_chunk_stats(FunctionCallInfo fcinfo, bool col_stats)
 		ts_cache_release(hcache);
 
 		funcctx = SRF_FIRSTCALL_INIT();
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+		TS_WITH_MEMORY_CONTEXT(funcctx->multi_call_memory_ctx, {
+			if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("function returning record called in context "
+								"that cannot accept type record")));
 
-		if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("function returning record called in context "
-							"that cannot accept type record")));
-
-		/* Save the chunk oid list on the multi-call memory context so that it
-		 * survives across multiple calls to this function (until SRF is
-		 * done). */
-		funcctx->user_fctx = col_stats ? chunk_api_generate_colstats_context(chunk_oids, ht_relid) :
-										 chunk_api_generate_relstats_context(chunk_oids);
-		funcctx->tuple_desc = BlessTupleDesc(tupdesc);
-		MemoryContextSwitchTo(oldcontext);
+			/* Save the chunk oid list on the multi-call memory context so that it
+			 * survives across multiple calls to this function (until SRF is
+			 * done). */
+			funcctx->user_fctx = col_stats ?
+									 chunk_api_generate_colstats_context(chunk_oids, ht_relid) :
+									 chunk_api_generate_relstats_context(chunk_oids);
+			funcctx->tuple_desc = BlessTupleDesc(tupdesc);
+		});
 	}
 
 	funcctx = SRF_PERCALL_SETUP();

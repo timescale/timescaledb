@@ -752,15 +752,12 @@ ts_tablespace_show(PG_FUNCTION_ARGS)
 
 	if (SRF_IS_FIRSTCALL())
 	{
-		MemoryContext oldcontext;
-
 		if (!OidIsValid(hypertable_oid))
 			elog(ERROR, "invalid argument");
 
 		funcctx = SRF_FIRSTCALL_INIT();
-		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
-		funcctx->user_fctx = ts_hypertable_cache_pin();
-		MemoryContextSwitchTo(oldcontext);
+		TS_WITH_MEMORY_CONTEXT(funcctx->multi_call_memory_ctx,
+							   funcctx->user_fctx = ts_hypertable_cache_pin(););
 	}
 
 	funcctx = SRF_PERCALL_SETUP();

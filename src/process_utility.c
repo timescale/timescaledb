@@ -1049,9 +1049,7 @@ process_truncate(ProcessUtilityArgs *args)
 		/* Append the relation to the list in the same parse tree memory context */
 		if (list_append)
 		{
-			MemoryContext oldctx = MemoryContextSwitchTo(parsetreectx);
-			relations = lappend(relations, rv);
-			MemoryContextSwitchTo(oldctx);
+			TS_WITH_MEMORY_CONTEXT(parsetreectx, relations = lappend(relations, rv););
 		}
 	}
 

@@ -72,21 +72,22 @@ subspace_store_internal_node_descendants(SubspaceStoreInternalNode *node, int in
 SubspaceStore *
 ts_subspace_store_init(const Hyperspace *space, MemoryContext mcxt, int16 max_items)
 {
-	MemoryContext old = MemoryContextSwitchTo(mcxt);
-	SubspaceStore *sst = palloc(sizeof(SubspaceStore));
+	SubspaceStore *sst;
+	TS_WITH_MEMORY_CONTEXT(mcxt, {
+		sst = palloc(sizeof(SubspaceStore));
 
-	/*
-	 * make sure that the first dimension is a time dimension, otherwise the
-	 * tree will grow in a way that makes pruning less effective.
-	 */
-	Assert(space->num_dimensions < 1 || space->dimensions[0].type == DIMENSION_TYPE_OPEN);
+		/*
+		 * make sure that the first dimension is a time dimension, otherwise the
+		 * tree will grow in a way that makes pruning less effective.
+		 */
+		Assert(space->num_dimensions < 1 || space->dimensions[0].type == DIMENSION_TYPE_OPEN);
 
-	sst->origin = subspace_store_internal_node_create(space->num_dimensions == 1);
-	sst->num_dimensions = space->num_dimensions;
-	/* max_items = 0 is treated as unlimited */
-	sst->max_items = max_items;
-	sst->mcxt = mcxt;
-	MemoryContextSwitchTo(old);
+		sst->origin = subspace_store_internal_node_create(space->num_dimensions == 1);
+		sst->num_dimensions = space->num_dimensions;
+		/* max_items = 0 is treated as unlimited */
+		sst->max_items = max_items;
+		sst->mcxt = mcxt;
+	});
 	return sst;
 }
 
