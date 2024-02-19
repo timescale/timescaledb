@@ -13,6 +13,9 @@
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
+#include <storage/block.h>
+#include <storage/itemptr.h>
+#include <storage/off.h>
 #include <utils/builtins.h>
 #include <utils/hsearch.h>
 #include <utils/palloc.h>
@@ -144,20 +147,6 @@ extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_in
 #define InvalidTupleIndex 0
 #define MaxCompressedBlockNumber ((BlockNumber) 0x3FFFFF)
 
-/*
- * The compressed TID is encoded in the following manner, which places a limit
- * on 1024 rows in a single compressed tuple. Since we are currently storing
- * 1000 rows that should work.
- *
- *         32 bits                16 bits
- * +-------------------------+-----------------+
- * |       Block Number      |  Offset Number  |
- * +------+------------------+---+-------------+
- * | Flag | Compressed Tuple TID | Tuple Index |
- * +------+----------------------+-------------+
- *  1 bit         33 bits            10 bits
- */
-
 #define BLOCKID_BITS (CHAR_BIT * sizeof(BlockIdData))
 #define COMPRESSED_FLAG (1UL << (BLOCKID_BITS - 1))
 #define TUPINDEX_BITS (10U)
@@ -214,6 +203,20 @@ compressed_tid_to_tid(ItemPointerData *out_tid, const ItemPointerData *in_tid)
 		   ItemPointerGetOffsetNumber(out_tid) <= MaxHeapTuplesPerPage);
 
 	return tuple_index;
+}
+
+static inline void
+compressed_tid_increment_idx(ItemPointerData *tid)
+{
+	const OffsetNumber offsetno = ItemPointerGetOffsetNumber(tid);
+
+	if (offsetno < MaxHeapTuplesPerPage)
+		ItemPointerSetOffsetNumber(tid, offsetno + 1);
+	else
+	{
+		BlockNumber blockno = ItemPointerGetBlockNumber(tid);
+		ItemPointerSet(tid, blockno + 1, 1);
+	}
 }
 
 static inline bool
@@ -299,6 +302,39 @@ arrow_slot_is_consumed(const TupleTableSlot *slot)
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
 	return aslot->tuple_index == aslot->total_row_count;
+}
+
+/*
+ * Fast path for storing next tuple when the underlying slot points to a
+ * compressed segment.
+ */
+static inline TupleTableSlot *
+ExecStoreNextArrowTuple(TupleTableSlot *slot)
+{
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
+	Assert(slot != NULL);
+	Assert(slot->tts_tupleDescriptor != NULL);
+
+	if (unlikely(!TTS_IS_ARROWTUPLE(slot)))
+		elog(ERROR, "trying to store an on-disk arrow tuple into wrong type of slot");
+
+	Assert(TTS_EMPTY(aslot->noncompressed_slot));
+	Assert(aslot->tuple_index > 0);
+	Assert(is_compressed_tid(&slot->tts_tid));
+	Assert(aslot->child_slot == aslot->compressed_slot);
+	aslot->tuple_index++;
+	compressed_tid_increment_idx(&slot->tts_tid);
+	slot->tts_flags &= ~TTS_FLAG_EMPTY;
+	slot->tts_nvalid = 0;
+
+	if (aslot->valid_attrs != NULL)
+	{
+		pfree(aslot->valid_attrs);
+		aslot->valid_attrs = NULL;
+	}
+
+	return slot;
 }
 
 extern const int16 *arrow_slot_get_attribute_offset_map(TupleTableSlot *slot);
