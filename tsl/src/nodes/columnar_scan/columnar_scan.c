@@ -409,84 +409,113 @@ ExecVectorizedQual(VectorizedExprState *vexprstate, ExprContext *econtext)
 }
 
 static TupleTableSlot *
-columnar_next(ColumnarScanState *state)
+columnar_scan_exec(CustomScanState *state)
 {
+	ColumnarScanState *cstate = (ColumnarScanState *) state;
 	TableScanDesc scandesc;
 	EState *estate;
 	ExprContext *econtext;
+	ExprState *qual;
+	ProjectionInfo *projinfo;
 	ScanDirection direction;
 	TupleTableSlot *slot;
+	bool has_vecquals = cstate->vexprstate.vectorized_quals_constified != NIL;
 
-	scandesc = state->css.ss.ss_currentScanDesc;
-	estate = state->css.ss.ps.state;
-	econtext = state->css.ss.ps.ps_ExprContext;
+	scandesc = state->ss.ss_currentScanDesc;
+	estate = state->ss.ps.state;
+	econtext = state->ss.ps.ps_ExprContext;
+	qual = state->ss.ps.qual;
+	projinfo = state->ss.ps.ps_ProjInfo;
 	direction = estate->es_direction;
-	slot = state->css.ss.ss_ScanTupleSlot;
+	slot = state->ss.ss_ScanTupleSlot;
 
 	if (scandesc == NULL)
 	{
-		ColumnarScanState *cstate = (ColumnarScanState *) state;
 		/*
 		 * We reach here if the scan is not parallel, or if we're serially
 		 * executing a scan that was planned to be parallel.
 		 */
-		scandesc = table_beginscan(state->css.ss.ss_currentRelation,
+		scandesc = table_beginscan(state->ss.ss_currentRelation,
 								   estate->es_snapshot,
 								   cstate->nscankeys,
 								   cstate->scankeys);
-		state->css.ss.ss_currentScanDesc = scandesc;
+		state->ss.ss_currentScanDesc = scandesc;
 
 		/* Remove filter execution if all quals are used as scankeys on the
 		 * compressed relation */
-		if (scandesc->rs_nkeys == list_length(state->css.ss.ps.plan->qual))
+		if (scandesc->rs_nkeys == list_length(state->ss.ps.plan->qual))
 		{
 			/* Reset expression state for executing quals */
-			state->css.ss.ps.qual = NULL;
+			state->ss.ps.qual = NULL;
 			/* Need to reset qual expression too to remove "Filter:" from EXPLAIN */
-			state->css.ss.ps.plan->qual = NIL;
+			state->ss.ps.plan->qual = NIL;
 		}
 	}
 
 	/*
-	 * Scan tuples and apply vectorized filters
+	 * If we have neither a qual to check nor a projection, do the fast path
+	 * and just return the raw scan tuple.
 	 */
-	while (table_scan_getnextslot(scandesc, direction, slot))
+	if (!qual && !projinfo && !has_vecquals)
 	{
-		if (!likely(TTS_IS_ARROWTUPLE(slot)))
+		CHECK_FOR_INTERRUPTS();
+		ResetExprContext(econtext);
+
+		if (table_scan_getnextslot(scandesc, direction, slot))
 			return slot;
+		return NULL;
+	}
+
+	ResetExprContext(econtext);
+
+	/*
+	 * Scan tuples and apply vectorized filters, followed by any remaining
+	 * (non-vectorized) qual filters and projection.
+	 */
+	for (;;)
+	{
+		CHECK_FOR_INTERRUPTS();
+		slot = state->ss.ss_ScanTupleSlot;
+
+		if (!table_scan_getnextslot(scandesc, direction, slot))
+		{
+			/* Nothing to return, but be careful to use the projection result
+			 * slot so it has correct tupleDesc. */
+			if (projinfo)
+				return ExecClearTuple(projinfo->pi_state.resultslot);
+			else
+				return NULL;
+		}
 
 		econtext->ecxt_scantuple = slot;
 
-		switch (ExecVectorizedQual(&state->vexprstate, econtext))
+		if (likely(TTS_IS_ARROWTUPLE(slot)))
 		{
-			case VQualSegmentFiltered:
-				arrow_slot_mark_consumed(slot);
-				InstrCountTuples2(state, 1);
-				InstrCountFiltered1(state, arrow_slot_total_row_count(slot));
-				break;
-			case VQualRowFiltered:
-				InstrCountFiltered1(state, 1);
-				break;
-			case VQualRowMatch:
-				return slot;
+			switch (ExecVectorizedQual(&cstate->vexprstate, econtext))
+			{
+				case VQualSegmentFiltered:
+					arrow_slot_mark_consumed(slot);
+					InstrCountTuples2(state, 1);
+					InstrCountFiltered1(state, arrow_slot_total_row_count(slot));
+					continue;
+				case VQualRowFiltered:
+					InstrCountFiltered1(state, 1);
+					continue;
+				case VQualRowMatch:
+					break;
+			}
 		}
+
+		if (qual == NULL || ExecQual(qual, econtext))
+		{
+			if (projinfo)
+				return ExecProject(projinfo);
+			return slot;
+		}
+
+		ResetExprContext(econtext);
+		InstrCountFiltered1(state, 1);
 	}
-
-	return NULL;
-}
-
-/*
- * recheck -- access method routine to recheck a tuple in EvalPlanQual
- */
-static bool
-columnar_recheck(SeqScanState *state, TupleTableSlot *slot)
-{
-	/*
-	 * Note that unlike IndexScan, SeqScan never use keys in heap_beginscan
-	 * (and this is very bad) - so, here we do not check are keys ok or not.
-	 */
-	elog(ERROR, "%s not implemented", __FUNCTION__);
-	return true;
 }
 
 static void
@@ -574,14 +603,6 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 		cstate->vexprstate.vectorized_quals_constified =
 			lappend(cstate->vexprstate.vectorized_quals_constified, constified);
 	}
-}
-
-static TupleTableSlot *
-columnar_scan_exec(CustomScanState *state)
-{
-	return ExecScan(&state->ss,
-					(ExecScanAccessMtd) columnar_next,
-					(ExecScanRecheckMtd) columnar_recheck);
 }
 
 static void
