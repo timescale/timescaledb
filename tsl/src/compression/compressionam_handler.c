@@ -329,7 +329,7 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
 	scan->compressed_rel = table_open(caminfo->compressed_relid, AccessShareLock);
-	scan->compressed_tuple_index = 1;
+	scan->compressed_tuple_index = InvalidTupleIndex;
 	scan->returned_noncompressed_count = 0;
 	scan->returned_compressed_count = 0;
 	scan->compressed_row_count = 0;
@@ -371,7 +371,7 @@ compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool all
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
-	scan->compressed_tuple_index = 1;
+	scan->compressed_tuple_index = InvalidTupleIndex;
 	table_rescan(scan->cscan_desc, key);
 	heapam->scan_rescan(scan->uscan_desc, key, set_params, allow_strat, allow_sync, allow_pagemode);
 }
@@ -428,7 +428,7 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 
 	child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(scan->compressed_rel));
 
-	if (TupIsNull(child_slot) || arrow_slot_is_consumed(slot))
+	if (scan->compressed_tuple_index == InvalidTupleIndex || arrow_slot_is_consumed(slot))
 	{
 		if (!table_scan_getnextslot(scan->cscan_desc, direction, child_slot))
 		{
@@ -444,8 +444,10 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 	}
 	else
 	{
-		scan->compressed_tuple_index = arrow_slot_row_index(slot) + 1;
-		ExecStoreArrowTuple(slot, scan->compressed_tuple_index);
+		Assert(arrow_slot_row_index(slot) == scan->compressed_tuple_index);
+		scan->compressed_tuple_index++;
+		ExecStoreNextArrowTuple(slot);
+		Assert(arrow_slot_row_index(slot) == scan->compressed_tuple_index);
 	}
 
 	scan->returned_compressed_count++;
