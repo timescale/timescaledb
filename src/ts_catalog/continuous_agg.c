@@ -125,7 +125,7 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 		if (!input->is_default)
 		{
 			Node *value = (Node *) makeString(ts_with_clause_result_deparse_value(input));
-			DefElem *elem = makeDefElemExtended("timescaledb",
+			DefElem *elem = makeDefElemExtended(EXTENSION_NAMESPACE,
 												(char *) def.arg_name,
 												value,
 												DEFELEM_UNSPEC,

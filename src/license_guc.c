@@ -93,7 +93,7 @@ ts_license_enable_module_loading(void)
 	load_enabled = true;
 
 	/* re-set the license to actually load the submodule if needed */
-	result = set_config_option("timescaledb.license",
+	result = set_config_option(MAKE_EXTOPTION("license"),
 							   ts_guc_license,
 							   PGC_SUSET,
 							   load_source,

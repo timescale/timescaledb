@@ -350,7 +350,7 @@ materialization_per_refresh_window(void)
 {
 #define DEFAULT_MATERIALIZATIONS_PER_REFRESH_WINDOW 10
 #define MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME                                               \
-	"timescaledb.materializations_per_refresh_window"
+	MAKE_EXTOPTION("materializations_per_refresh_window")
 
 	const char *max_materializations_setting =
 		GetConfigOption(MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME, true, false);
