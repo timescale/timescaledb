@@ -71,9 +71,9 @@ step s2_select:
 QUERY PLAN                                                                                                                   
 -----------------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                                 
-  Sort Key: _materialized_hypertable_140.time_bucket                                                                         
-  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_140                                                              
-        Order: _materialized_hypertable_140.time_bucket                                                                      
+  Sort Key: _materialized_hypertable_X.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                              
+        Order: _materialized_hypertable_X.time_bucket                                                                      
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
@@ -92,9 +92,9 @@ step s1_select:
 QUERY PLAN                                                                                                                   
 -----------------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                                 
-  Sort Key: _materialized_hypertable_140.time_bucket                                                                         
-  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_140                                                              
-        Order: _materialized_hypertable_140.time_bucket                                                                      
+  Sort Key: _materialized_hypertable_X.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                              
+        Order: _materialized_hypertable_X.time_bucket                                                                      
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
@@ -187,9 +187,9 @@ step s2_select:
 QUERY PLAN                                                                                                                   
 -----------------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                                 
-  Sort Key: _materialized_hypertable_142.time_bucket                                                                         
-  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_142                                                              
-        Order: _materialized_hypertable_142.time_bucket                                                                      
+  Sort Key: _materialized_hypertable_X.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                              
+        Order: _materialized_hypertable_X.time_bucket                                                                      
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
@@ -216,9 +216,9 @@ step s2_select:
 QUERY PLAN                                                                                                                   
 -----------------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                                 
-  Sort Key: _materialized_hypertable_142.time_bucket                                                                         
-  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_142                                                              
-        Order: _materialized_hypertable_142.time_bucket                                                                      
+  Sort Key: _materialized_hypertable_X.time_bucket                                                                         
+  ->  Custom Scan (ChunkAppend) on _materialized_hypertable_X                                                              
+        Order: _materialized_hypertable_X.time_bucket                                                                      
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                           
         ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk

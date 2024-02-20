@@ -38,6 +38,7 @@
 
 #define CONTINUOUS_AGG_MAX_JOIN_RELATIONS 2
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
+#define CAGG_INVALIDATION_THRESHOLD_NAME "invalidation threshold watermark"
 
 typedef struct FinalizeQueryInfo
 {
