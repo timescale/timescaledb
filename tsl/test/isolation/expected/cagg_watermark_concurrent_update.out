@@ -22,7 +22,7 @@ QUERY PLAN
 -----------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                           
   Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
-  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
         Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                   
         Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
@@ -44,7 +44,7 @@ QUERY PLAN
 -----------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                           
   Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
-  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
         Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                   
         Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
@@ -74,9 +74,9 @@ Merge Append
   Sort Key: _materialized_hypertable_140.time_bucket                                                                         
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_140                                                              
         Order: _materialized_hypertable_140.time_bucket                                                                      
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                         
         Group Key: (time_bucket('@ 4 hours'::interval, "time"))                                                              
@@ -95,9 +95,9 @@ Merge Append
   Sort Key: _materialized_hypertable_140.time_bucket                                                                         
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_140                                                              
         Order: _materialized_hypertable_140.time_bucket                                                                      
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_140_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                         
         Group Key: (time_bucket('@ 4 hours'::interval, "time"))                                                              
@@ -124,7 +124,7 @@ QUERY PLAN
 -----------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                           
   Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
-  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
         Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                   
         Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
@@ -146,7 +146,7 @@ QUERY PLAN
 -----------------------------------------------------------------------------------------------------------------------
 Merge Append                                                                                                           
   Sort Key: _hyper_X_X_chunk.time_bucket                                                                           
-  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+  ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
         Index Cond: (time_bucket < 'Sat Jan 01 16:00:00 2000 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                   
         Group Key: (time_bucket('@ 4 hours'::interval, temperature."time"))                                            
@@ -190,9 +190,9 @@ Merge Append
   Sort Key: _materialized_hypertable_142.time_bucket                                                                         
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_142                                                              
         Order: _materialized_hypertable_142.time_bucket                                                                      
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Wed Jan 01 16:00:00 2020 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                         
         Group Key: (time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time"))                                         
@@ -219,9 +219,9 @@ Merge Append
   Sort Key: _materialized_hypertable_142.time_bucket                                                                         
   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_142                                                              
         Order: _materialized_hypertable_142.time_bucket                                                                      
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                           
-        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_142_time_bucket_i on _hyper_X_X_chunk
+        ->  Index Scan Backward using _hyper_X_X_chunk__materialized_hypertable_X_time_bucket_i on _hyper_X_X_chunk
               Index Cond: (time_bucket < 'Thu Jan 02 16:00:00 2020 PST'::timestamp with time zone)                           
   ->  GroupAggregate                                                                                                         
         Group Key: (time_bucket('@ 4 hours'::interval, _hyper_X_X_chunk."time"))                                         
