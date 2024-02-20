@@ -5,26 +5,28 @@
  */
 
 #include <postgres.h>
+#include <access/tupconvert.h>
+#include <access/xact.h>
 #include <catalog/pg_type.h>
-#include <executor/spi.h>
-#include <fmgr.h>
 #include <commands/dbcommands.h>
 #include <commands/trigger.h>
+#include <executor/spi.h>
+#include <fmgr.h>
 #include <lib/stringinfo.h>
 #include <miscadmin.h>
-#include <utils/hsearch.h>
-#include <access/tupconvert.h>
 #include <storage/lmgr.h>
 #include <utils/builtins.h>
+#include <utils/hsearch.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
-#include <access/xact.h>
+#include <utils/snapmgr.h>
 
 #include <scanner.h>
 
 #include "compat/compat.h"
 
 #include "chunk.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
@@ -36,6 +38,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 
+#include "continuous_aggs/common.h"
 #include "continuous_aggs/insert.h"
 
 /*
@@ -438,6 +441,8 @@ invalidation_tuple_found(TupleInfo *ti, void *min)
 	if (DatumGetInt64(watermark) < *((int64 *) min))
 		*((int64 *) min) = DatumGetInt64(watermark);
 
+	DEBUG_WAITPOINT("invalidation_tuple_found_done");
+
 	/*
 	 * Return SCAN_CONTINUE because we check for multiple tuples as an error
 	 * condition.
@@ -445,7 +450,7 @@ invalidation_tuple_found(TupleInfo *ti, void *min)
 	return SCAN_CONTINUE;
 }
 
-int64
+static int64
 get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 {
 	int64 min_val = INVAL_POS_INFINITY;
@@ -471,13 +476,20 @@ get_lowest_invalidated_time_for_hypertable(Oid hypertable_relid)
 		.lockmode = AccessShareLock,
 		.scandirection = ForwardScanDirection,
 		.result_mctx = NULL,
+
+		/* We need to define a custom snapshot for this scan. The default snapshot (SNAPSHOT_SELF)
+		   reads data of all committed transactions, even if they have started after our scan. If a
+		   parallel session updates the scanned value and commits during a scan, we end up in a
+		   situation where we see the old and the new value. This causes ts_scanner_scan_one() to
+		   fail. */
+		.snapshot = GetLatestSnapshot(),
 	};
 
 	/* If we don't find any invalidation threshold watermark, then we've never done any
 	 * materialization we'll treat this as if the invalidation timestamp is at min value, since the
 	 * first materialization needs to scan the entire table anyway; the invalidations are redundant.
 	 */
-	if (!ts_scanner_scan_one(&scanctx, false, "invalidation threshold watermark"))
+	if (!ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME))
 		return INVAL_NEG_INFINITY;
 
 	return min_val;

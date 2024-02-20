@@ -202,7 +202,7 @@ invalidation_threshold_set_or_get(const ContinuousAgg *cagg,
 				F_INT4EQ,
 				Int32GetDatum(cagg->data.raw_hypertable_id));
 
-	found = ts_scanner_scan_one(&scanctx, false, "invalidation threshold");
+	found = ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME);
 	Ensure(found,
 		   "invalidation threshold for hypertable %d not found",
 		   cagg->data.raw_hypertable_id);
@@ -308,7 +308,7 @@ invalidation_threshold_initialize(const ContinuousAgg *cagg)
 				F_INT4EQ,
 				Int32GetDatum(cagg->data.raw_hypertable_id));
 
-	found = ts_scanner_scan_one(&scanctx, false, "invalidation threshold");
+	found = ts_scanner_scan_one(&scanctx, false, CAGG_INVALIDATION_THRESHOLD_NAME);
 
 	if (!found)
 	{
