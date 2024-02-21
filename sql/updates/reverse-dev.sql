@@ -3,6 +3,9 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.remove_dropped_chunk_metadata(INT
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_aggs_bucket_function`
 --
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_origin = '' WHERE bucket_origin IS NULL;
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_timezone = '' WHERE bucket_timezone IS NULL;
+
 CREATE TABLE _timescaledb_catalog._tmp_continuous_aggs_bucket_function AS
     SELECT
       mat_hypertable_id,

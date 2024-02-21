@@ -93,7 +93,7 @@ typedef struct ContinuousAggsBucketFunction
 	TimestampTz bucket_origin;
 
 	/* `bucket_offset` argument of the function. */
-	Interval *bucket_offest;
+	Interval *bucket_offset;
 
 	/* `timezone` argument of the function provided by the user. */
 	char *timezone;
