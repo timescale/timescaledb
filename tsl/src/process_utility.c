@@ -9,6 +9,7 @@
 #include <catalog/pg_trigger.h>
 #include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
+#include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
 #include <storage/lockdefs.h>
@@ -41,17 +42,35 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
 						bool to_compressionam = (strcmp(cmd->name, "hyperstore") == 0);
-
-						if (to_compressionam)
-							compressionam_alter_access_method_begin(relid, false);
-						else
+						if (!to_compressionam)
 						{
+							/* If neither the current tableam nor the desired tableam is hyperstore,
+							 * we do nothing. */
 							Relation rel = RelationIdGetRelation(relid);
-
-							if (rel->rd_tableam == compressionam_routine())
-								compressionam_alter_access_method_begin(relid, true);
+							if (rel->rd_tableam != compressionam_routine())
+								return;
 							RelationClose(rel);
 						}
+
+						/* Here we know that we are either moving to or from a hyperstore */
+
+						Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+						if (chunk)
+						{
+							compressionam_alter_access_method_begin(relid, !to_compressionam);
+							return;
+						}
+
+						if (ts_is_hypertable(relid))
+							return;
+
+						ereport(ERROR,
+								errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								errmsg("hyperstore access method not supported on \"%s\"",
+									   stmt->relation->relname),
+								errdetail("Hyperstore access method is only supported on "
+										  "hypertables and chunks."));
+
 						break;
 					}
 #endif
