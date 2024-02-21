@@ -563,10 +563,15 @@ initialize_func_info()
 								ObjectIdGetDatum(namespaceoid));
 
 		if (!HeapTupleIsValid(tuple))
-			elog(ERROR,
+		{
+			/* The function cache could be accessed during an extension upgrade. Not all expected
+			 * functions have to exist at this point. */
+			elog(ts_extension_is_loaded() ? ERROR : NOTICE,
 				 "cache lookup failed for function \"%s\" with %d args",
 				 finfo->funcname,
 				 finfo->nargs);
+			continue;
+		}
 
 		funcid = proc_get_oid(tuple);
 

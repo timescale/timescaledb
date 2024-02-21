@@ -67,8 +67,8 @@ SELECT * FROM timescaledb_information.job_stats;
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | raw_hypertable_id | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | direct_view_schema | direct_view_name | materialized_only | finalized 
--------------------+-------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------+--------------------+------------------+-------------------+-----------
+ mat_hypertable_id | raw_hypertable_id | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name | materialized_only | finalized 
+-------------------+-------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------------+------------------+-------------------+-----------
 (0 rows)
 
 -- though user on access node has required GRANTS, this will propagate GRANTS to the connected data nodes
@@ -103,11 +103,16 @@ SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::inte
 
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 -- min distance from end should be 1
-SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width
-FROM _timescaledb_catalog.continuous_agg;
- mat_hypertable_id | user_view_schema |      user_view_name      | bucket_width 
--------------------+------------------+--------------------------+--------------
-                 2 | public           | test_continuous_agg_view |            2
+SELECT mat_hypertable_id, user_view_schema, user_view_name FROM _timescaledb_catalog.continuous_agg;
+ mat_hypertable_id | user_view_schema |      user_view_name      
+-------------------+------------------+--------------------------
+                 2 | public           | test_continuous_agg_view
+(1 row)
+
+SELECT mat_hypertable_id, bucket_width FROM _timescaledb_catalog.continuous_aggs_bucket_function;
+ mat_hypertable_id | bucket_width 
+-------------------+--------------
+                 2 | 2
 (1 row)
 
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
