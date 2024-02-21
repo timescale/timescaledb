@@ -1775,3 +1775,17 @@ ts_relation_uses_hyperstore(Oid relid)
 
 	return amoid == clamoid;
 }
+
+bool
+ts_should_use_transparent_decompression(const Hypertable *ht, Oid relid)
+{
+	if (!ht)
+		return false;
+
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		return false;
+	else if (ts_relation_uses_hyperstore(relid))
+		return ts_guc_enable_transparent_decompression == 2;
+
+	return ts_guc_enable_transparent_decompression > 0;
+}

@@ -250,6 +250,8 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 	}
 }
 
+struct Hypertable;
+
 void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);
 
 extern TSDLLEXPORT HeapTuple ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums);
@@ -322,3 +324,4 @@ ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid v
 }
 
 TSDLLEXPORT bool ts_relation_uses_hyperstore(Oid relid);
+TSDLLEXPORT bool ts_should_use_transparent_decompression(const struct Hypertable *ht, Oid relid);
