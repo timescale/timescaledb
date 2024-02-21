@@ -84,8 +84,11 @@ switch_to_heapam(Relation rel)
 }
 
 static CompressionAmInfo *
-lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
+lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok,
+									bool *compressed_relation_created)
 {
+	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
+
 	CompressionAmInfo *caminfo;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
@@ -111,16 +114,36 @@ lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
 	FormData_chunk form = ts_chunk_get_formdata(caminfo->relation_id);
 	caminfo->compressed_relation_id = form.compressed_chunk_id;
 
-	if (caminfo->compressed_relation_id > 0)
+	/* Create compressed chunk and set the created flag if it does not
+	 * exist. */
+	if (compressed_relation_created)
+		*compressed_relation_created = (caminfo->compressed_relation_id == 0);
+	if (caminfo->compressed_relation_id == 0)
 	{
-		caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
-		caminfo->count_cattno =
-			get_attnum(caminfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
-		Assert(OidIsValid(caminfo->count_cattno));
+		/* Consider if we want to make it simpler to create the compressed
+		 * table by just considering a normal side-relation with no strong
+		 * connection to the original chunk. We do not need constraints,
+		 * foreign keys, or any other things on this table since it never
+		 * participate in any plans. */
+
+		Chunk *chunk = ts_chunk_get_by_relid(rel->rd_id, true);
+		Ensure(chunk, "\"%s\" is not a chunk", get_rel_name(rel->rd_id));
+		Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+		Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
+		ts_chunk_constraints_create(ht_compressed, c_chunk);
+		ts_trigger_create_all_on_chunk(c_chunk);
+		ts_chunk_set_compressed_chunk(chunk, c_chunk->fd.id);
+
+		caminfo->compressed_relation_id = c_chunk->fd.id;
 	}
 
-	else
-		caminfo->compressed_relid = InvalidOid;
+	caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
+	caminfo->count_cattno =
+		get_attnum(caminfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+
+	Assert(caminfo->compressed_relation_id > 0 && OidIsValid(caminfo->compressed_relid));
+	Assert(caminfo->count_cattno != InvalidAttrNumber);
 
 	for (int i = 0; i < caminfo->num_columns; i++)
 	{
@@ -177,7 +200,10 @@ CompressionAmInfo *
 RelationGetCompressionAmInfo(Relation rel)
 {
 	if (NULL == rel->rd_amcache)
-		rel->rd_amcache = lazy_build_compressionam_info_cache(rel, false);
+		rel->rd_amcache = lazy_build_compressionam_info_cache(rel, false, NULL);
+
+	Assert(rel->rd_amcache &&
+		   OidIsValid(((CompressionAmInfo *) rel->rd_amcache)->compressed_relid));
 
 	return rel->rd_amcache;
 }
@@ -593,6 +619,7 @@ compressionam_index_fetch_begin(Relation rel)
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	cscan->uncompr_hscan = rel->rd_tableam->index_fetch_begin(rel);
 	rel->rd_tableam = oldtam;
+
 	ItemPointerSetInvalid(&cscan->tid);
 
 	return &cscan->h_base;
@@ -616,14 +643,15 @@ static void
 compressionam_index_fetch_end(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
-	Relation crel = cscan->compr_rel;
 	Relation rel = scan->rel;
 
+	Relation crel = cscan->compr_rel;
 	crel->rd_tableam->index_fetch_end(cscan->compr_hscan);
+	table_close(crel, AccessShareLock);
+
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	rel->rd_tableam->index_fetch_end(cscan->uncompr_hscan);
 	rel->rd_tableam = oldtam;
-	table_close(crel, AccessShareLock);
 	pfree(cscan);
 }
 
@@ -1574,7 +1602,19 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 									 BlockNumber numblocks, IndexBuildCallback callback,
 									 void *callback_state, TableScanDesc scan)
 {
+	/*
+	 * We can be called from ProcessUtility with a hypertable because we need
+	 * to process all ALTER TABLE commands in the list to set options
+	 * correctly for the hypertable.
+	 *
+	 * If we are called on a hypertable, we just skip scanning for tuples and
+	 * say that the relation was empty.
+	 */
+	if (ts_is_hypertable(relation->rd_id))
+		return 0.0;
+
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+
 	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 	IndexCallbackState icstate = {
 		.callback = callback,
@@ -1720,7 +1760,22 @@ static void
 compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
 									 double *tuples, double *allvisfrac)
 {
-	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	/*
+	 * We can be called from ProcessUtility with a hypertable because we need
+	 * to process all ALTER TABLE commands in the list to set options
+	 * correctly for the hypertable.
+	 *
+	 * If we are called on a hypertable, we just say that the hypertable does
+	 * not have any pages or tuples.
+	 */
+	if (ts_is_hypertable(rel->rd_id))
+	{
+		*pages = 0;
+		*allvisfrac = 0;
+		*tuples = 0;
+		return;
+	}
+
 	double ctuples;
 	double callvisfrac;
 	BlockNumber cpages;
@@ -1728,8 +1783,7 @@ compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumb
 	BlockNumber relallvisible;
 	Relation crel;
 
-	if (!OidIsValid(caminfo->compressed_relid))
-		return;
+	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	rel->rd_tableam->relation_estimate_size(rel, attr_widths, pages, tuples, allvisfrac);
@@ -1806,11 +1860,13 @@ convert_to_compressionam(Oid relid)
 	ConversionState *state = palloc0(sizeof(ConversionState));
 	Relation relation = table_open(relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
-	CompressionAmInfo *caminfo = lazy_build_compressionam_info_cache(relation, true);
+	bool compress_chunk_created;
+	CompressionAmInfo *caminfo =
+		lazy_build_compressionam_info_cache(relation, true, &compress_chunk_created);
 
 	state->relid = relid;
 
-	if (OidIsValid(caminfo->compressed_relation_id))
+	if (!compress_chunk_created)
 	{
 		/* A compressed relation already exists, so converting from legacy
 		 * compression. It is only necessary to write the non-compressed data
@@ -1819,6 +1875,15 @@ convert_to_compressionam(Oid relid)
 		return;
 	}
 
+	/*
+	 * We compress the existing non-compressed data in the table when moving
+	 * to a table access method.
+	 *
+	 * TODO: Consider if we should compress data when creating a
+	 * hyperstore. It might make more sense to just "adopt" the table in the
+	 * state they are and deal with compression as part of the normal
+	 * procedure.
+	 */
 	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * caminfo->num_keys);
 	Oid *sort_operators = palloc0(sizeof(*sort_operators) * caminfo->num_keys);
 	Oid *sort_collations = palloc0(sizeof(*sort_collations) * caminfo->num_keys);
@@ -1917,7 +1982,7 @@ compressionam_xact_event(XactEvent event, void *arg)
 		case XACT_EVENT_PRE_COMMIT:
 		{
 			ListCell *lc;
-			/* Check for relations that are now partially compressed and
+			/* Check for relations that might now be partially compressed and
 			 * update their status */
 			foreach (lc, partially_compressed_relids)
 			{
@@ -2024,7 +2089,7 @@ convert_to_compressionam_finish(Oid relid)
 }
 
 /*
- * Convert the table away from compression AM to another table access method.
+ * Convert the chunk away from compression AM to another table access method.
  * When this happens it is necessary to cleanup metadata.
  */
 static void
@@ -2048,10 +2113,7 @@ compressionam_alter_access_method_begin(Oid relid, bool to_other_am)
 }
 
 /*
- * Called at the end of converting to a table access method.
- *
- * Note that this function is called on every ALTER TABLE SET ACCESS METHOD,
- * even when the compression TAM is neither old nor new TAM.
+ * Called at the end of converting a chunk to a table access method.
  */
 void
 compressionam_alter_access_method_finish(Oid relid, bool to_other_am)
