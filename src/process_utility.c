@@ -3309,6 +3309,41 @@ process_altertable_chunk_set_tablespace(AlterTableCmd *cmd, Oid relid)
 	}
 }
 
+/*
+ * Set the access method for a table.
+ *
+ * If called on a hypertable, this will set the compression flag on the
+ * hypertable in addition to running the set access method code.
+ */
+#if PG15_GE
+static void
+process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
+{
+	AlterTableStmt *stmt = castNode(AlterTableStmt, args->parsetree);
+	Oid relid = AlterTableLookupRelation(stmt, NoLock);
+	bool to_compressionam = (strcmp(cmd->name, "hyperstore") == 0);
+	Cache *hcache;
+	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
+	if (ht)
+	{
+		/* For hypertables, we automatically set the compression flag if we
+		 * are setting the access method to be a hyperstore. */
+		DefElem *elem = makeDefElemExtended(EXTENSION_NAMESPACE,
+											"compress",
+											(Node *) makeInteger(to_compressionam),
+											DEFELEM_UNSPEC,
+											-1);
+
+		AlterTableCmd *cmd = makeNode(AlterTableCmd);
+		cmd->type = T_AlterTableCmd;
+		cmd->subtype = AT_SetRelOptions;
+		cmd->def = (Node *) list_make1(elem);
+		stmt->cmds = lappend(stmt->cmds, cmd);
+	}
+	ts_cache_release(hcache);
+}
+#endif
+
 static DDLResult
 process_altertable_start_table(ProcessUtilityArgs *args)
 {
@@ -3317,8 +3352,6 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 	Cache *hcache;
 	Hypertable *ht;
 	ListCell *lc;
-	DDLResult result = DDL_CONTINUE;
-	int num_cmds;
 
 	if (!OidIsValid(relid))
 		return DDL_CONTINUE;
@@ -3334,7 +3367,6 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 		relation_not_only(stmt->relation);
 		add_hypertable_to_process_args(args, ht);
 	}
-	num_cmds = list_length(stmt->cmds);
 	foreach (lc, stmt->cmds)
 	{
 		AlterTableCmd *cmd = (AlterTableCmd *) lfirst(lc);
@@ -3412,19 +3444,17 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				}
 				break;
 			}
+
 			case AT_SetRelOptions:
 			{
 				if (ht != NULL)
 				{
-					if (num_cmds != 1)
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("ALTER TABLE <hypertable> SET does not support multiple "
-										"clauses")));
-					}
 					EventTriggerAlterTableStart(args->parsetree);
-					result = process_altertable_set_options(cmd, ht);
+					/* If we dealt with the option, we remove it from the
+					 * list. We do not set the result variable since there
+					 * could be other options that are not dealt with. */
+					if (process_altertable_set_options(cmd, ht) == DDL_DONE)
+						stmt->cmds = foreach_delete_current(stmt->cmds, lc);
 				}
 				break;
 			}
@@ -3436,13 +3466,23 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				if (NULL == ht)
 					process_altertable_chunk_set_tablespace(cmd, relid);
 				break;
+
+#if PG15_GE
+			case AT_SetAccessMethod:
+				process_set_access_method(cmd, args);
+				break;
+#endif
+
 			default:
 				break;
 		}
 	}
 
 	ts_cache_release(hcache);
-	return result;
+
+	/* If there are any commands remaining in the list, we need to deal with
+	 * them. Otherwise, we just skip the rest. */
+	return (list_length(stmt->cmds) > 0) ? DDL_CONTINUE : DDL_DONE;
 }
 
 static void
