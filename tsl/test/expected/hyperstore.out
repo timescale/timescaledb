@@ -214,7 +214,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
          ->  Sort
                Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                     ->  Parallel Seq Scan on compress_hyper_2_7_chunk
+                     ->  Parallel Seq Scan on compress_hyper_2_8_chunk
                            Filter: (device < 4)
 (8 rows)
 
@@ -514,7 +514,7 @@ INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
                      cchunk                     
 ------------------------------------------------
- _timescaledb_internal.compress_hyper_2_7_chunk
+ _timescaledb_internal.compress_hyper_2_8_chunk
 (1 row)
 
 ALTER TABLE :chunk SET ACCESS METHOD heap;
@@ -557,9 +557,9 @@ SELECT format('%I.%I', c2.schema_name, c2.table_name)::regclass AS cchunk
 FROM _timescaledb_catalog.chunk c1
 INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
-                     cchunk                     
-------------------------------------------------
- _timescaledb_internal.compress_hyper_2_9_chunk
+                     cchunk                      
+-------------------------------------------------
+ _timescaledb_internal.compress_hyper_2_11_chunk
 (1 row)
 
 -- Show same output as first query above but for heap
