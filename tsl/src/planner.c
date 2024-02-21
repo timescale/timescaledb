@@ -102,7 +102,8 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 						   Hypertable *ht)
 {
 	bool ishyperstore = ts_relation_uses_hyperstore(rte->relid);
-
+	const bool use_transparent_decompression =
+		ts_should_use_transparent_decompression(ht, rte->relid);
 	/* We can get here via query on hypertable in that case reloptkind
 	 * will be RELOPT_OTHER_MEMBER_REL or via direct query on chunk
 	 * in that case reloptkind will be RELOPT_BASEREL.
@@ -112,11 +113,9 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	 * Respecting ONLY here is important to not break postgres tools like pg_dump.
 	 */
 	TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
-	if (ts_guc_enable_transparent_decompression && ht &&
+	if (use_transparent_decompression &&
 		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
-		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
-		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht) &&
-		(!ishyperstore || ts_guc_enable_transparent_decompression == 2))
+		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))))
 	{
 		if (fdw_private->cached_chunk_struct == NULL)
 		{
