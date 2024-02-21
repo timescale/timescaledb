@@ -193,7 +193,6 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		{
 			TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) child_rel->fdw_private;
 			const RangeTblEntry *rte = planner_rt_fetch(appinfo->child_relid, root);
-			bool ishyperstore = ts_relation_uses_hyperstore(rte->relid);
 
 			/*
 			 * This function is called only in tandem with our own hypertable
@@ -202,8 +201,7 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 			Assert(fdw_private->cached_chunk_struct != NULL);
 
 			const bool use_transparent_decompression =
-				!ishyperstore && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(parent_ht) &&
-				ts_guc_enable_transparent_decompression;
+				ts_should_use_transparent_decompression(parent_ht, rte->relid);
 
 			/*
 			 * We only clear the index list if we have enabled transparent
