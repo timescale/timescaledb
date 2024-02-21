@@ -66,10 +66,6 @@ FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'conditions_summary'
 \gset
 
-SELECT bucket_width
-FROM _timescaledb_catalog.continuous_agg
-WHERE mat_hypertable_id = :cagg_id;
-
 \pset null <NULL>
 SELECT *
 FROM _timescaledb_catalog.continuous_aggs_bucket_function

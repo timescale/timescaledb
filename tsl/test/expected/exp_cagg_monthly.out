@@ -62,14 +62,6 @@ SELECT raw_hypertable_id AS ht_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'conditions_summary'
 \gset
-SELECT bucket_width
-FROM _timescaledb_catalog.continuous_agg
-WHERE mat_hypertable_id = :cagg_id;
- bucket_width 
---------------
-           -1
-(1 row)
-
 \pset null <NULL>
 SELECT *
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
@@ -325,8 +317,8 @@ DROP MATERIALIZED VIEW conditions_summary;
 NOTICE:  drop cascades to 3 other objects
 SELECT * FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
- mat_hypertable_id | raw_hypertable_id | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | bucket_width | direct_view_schema | direct_view_name | materialized_only | finalized 
--------------------+-------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------+--------------------+------------------+-------------------+-----------
+ mat_hypertable_id | raw_hypertable_id | parent_mat_hypertable_id | user_view_schema | user_view_name | partial_view_schema | partial_view_name | direct_view_schema | direct_view_name | materialized_only | finalized 
+-------------------+-------------------+--------------------------+------------------+----------------+---------------------+-------------------+--------------------+------------------+-------------------+-----------
 (0 rows)
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function

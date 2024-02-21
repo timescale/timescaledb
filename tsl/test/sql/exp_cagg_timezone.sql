@@ -113,10 +113,6 @@ FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'conditions_summary_tz'
 \gset
 
-SELECT bucket_width
-FROM _timescaledb_catalog.continuous_agg
-WHERE mat_hypertable_id = :cagg_id_tz;
-
 -- Make sure the timezone is saved in the catalog table
 SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
@@ -139,10 +135,6 @@ SELECT mat_hypertable_id AS cagg_id_1w
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'conditions_summary_1w'
 \gset
-
-SELECT bucket_width
-FROM _timescaledb_catalog.continuous_agg
-WHERE mat_hypertable_id = :cagg_id_1w;
 
 -- Make sure the timezone is saved in the catalog table
 SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
