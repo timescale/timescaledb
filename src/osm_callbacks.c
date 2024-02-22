@@ -74,3 +74,12 @@ ts_get_osm_hypertable_drop_chunks_hook()
 		return ptr->hypertable_drop_chunks_hook;
 	return NULL;
 }
+
+chunk_startup_exclusion_hook_type
+ts_get_osm_chunk_startup_exclusion_hook()
+{
+	OsmCallbacks_Versioned *ptr = ts_get_osm_callbacks();
+	if (ptr && ptr->version_num == 1)
+		return ptr->chunk_startup_exclusion_hook;
+	return NULL;
+}
