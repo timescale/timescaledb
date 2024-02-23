@@ -152,6 +152,9 @@ SELECT set_integer_now_func('test_table_smallint', 'dummy_now_smallint');
 
 INSERT INTO test_table_smallint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_smallint SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_table_smallint" is set to ""
+NOTICE:  default order by for hypertable "test_table_smallint" is set to ""time" DESC"
 \set ON_ERROR_STOP 0
 select add_compression_policy( 'test_table_smallint', compress_after=> '1 day'::interval );
 ERROR:  invalid value for parameter compress_after
@@ -193,6 +196,9 @@ SELECT set_integer_now_func('test_table_integer', 'dummy_now_integer');
 
 INSERT INTO test_table_integer SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_integer SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_table_integer" is set to ""
+NOTICE:  default order by for hypertable "test_table_integer" is set to ""time" DESC"
 SELECT add_compression_policy('test_table_integer', 2::INTEGER) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |      check_schema      |        check_name        | timezone 
@@ -230,6 +236,9 @@ SELECT set_integer_now_func('test_table_bigint', 'dummy_now_bigint');
 
 INSERT INTO test_table_bigint SELECT generate_series(1,5), 10;
 ALTER TABLE test_table_bigint SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_table_bigint" is set to ""
+NOTICE:  default order by for hypertable "test_table_bigint" is set to ""time" DESC"
 SELECT add_compression_policy('test_table_bigint', 2::BIGINT) AS compressjob_id \gset
 SELECT * FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
   id  |     application_name      | schedule_interval | max_runtime | max_retries | retry_period |      proc_schema       |     proc_name      |       owner       | scheduled | fixed_schedule | initial_start | hypertable_id |                  config                   |      check_schema      |        check_name        | timezone 
@@ -267,6 +276,9 @@ SELECT set_integer_now_func('test_table_nologin', 'dummy_now_bigint');
 (1 row)
 
 ALTER TABLE test_table_nologin set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_table_nologin" is set to ""
+NOTICE:  default order by for hypertable "test_table_nologin" is set to ""time" DESC"
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('test_table_nologin', 2::int);
 ERROR:  permission denied to start background process as role "nologin_role"
@@ -300,6 +312,9 @@ FROM conditions
 GROUP BY device, time_bucket(INTERVAL '1 hour', "time") WITH NO DATA;
 CALL refresh_continuous_aggregate('conditions_summary', NULL, NULL);
 ALTER TABLE conditions SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "conditions" is set to ""
+NOTICE:  default order by for hypertable "conditions" is set to ""time" DESC"
 SELECT COUNT(*) AS dropped_chunks_count
   FROM drop_chunks('conditions', TIMESTAMPTZ '2018-12-15 00:00');
  dropped_chunks_count 
@@ -532,6 +547,9 @@ SELECT compress_chunk(:'CHUNK_NAME'::regclass);
 CREATE TABLE metrics(time timestamptz NOT NULL);
 SELECT hypertable_id AS "HYPERTABLE_ID", schema_name, table_name, created FROM create_hypertable('metrics','time') \gset
 ALTER TABLE metrics SET (timescaledb.compress);
+psql:include/recompress_basic.sql:120: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/recompress_basic.sql:120: NOTICE:  default segment by for hypertable "metrics" is set to ""
+psql:include/recompress_basic.sql:120: NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 -- create chunk with some data and compress
 INSERT INTO metrics SELECT '2000-01-01' FROM generate_series(1,10);
 -- create custom compression job without recompress boolean

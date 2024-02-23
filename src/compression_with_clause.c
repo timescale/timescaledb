@@ -176,8 +176,8 @@ throw_order_by_error(char *order_by)
 }
 
 /* compress_orderby is parsed same as order by in select queries */
-static OrderBySettings
-parse_order_collist(char *inpstr, Hypertable *hypertable)
+OrderBySettings
+ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 {
 	StringInfoData buf;
 	List *parsed;
@@ -322,13 +322,9 @@ ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypert
 OrderBySettings
 ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertable *hypertable)
 {
-	if (parsed_options[CompressOrderBy].is_default == false)
-	{
-		Datum textarg = parsed_options[CompressOrderBy].parsed;
-		return parse_order_collist(TextDatumGetCString(textarg), hypertable);
-	}
-	else
-		return (OrderBySettings){ 0 };
+	Ensure(parsed_options[CompressOrderBy].is_default == false, "with clause is not default");
+	Datum textarg = parsed_options[CompressOrderBy].parsed;
+	return ts_compress_parse_order_collist(TextDatumGetCString(textarg), hypertable);
 }
 
 /* returns List of CompressedParsedCol

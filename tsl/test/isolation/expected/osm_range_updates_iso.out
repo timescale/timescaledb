@@ -131,6 +131,9 @@ osm_test  |                0|                        |     3
 
 step Cb: BEGIN;
 step UR1b: BEGIN;
+C: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+C: NOTICE:  default segment by for hypertable "osm_test" is set to ""
+C: NOTICE:  default order by for hypertable "osm_test" is set to ""time" DESC"
 step Cenable: 
   ALTER TABLE osm_test set (timescaledb.compress);
  <waiting ...>

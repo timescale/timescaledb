@@ -5,9 +5,13 @@
  */
 #include <postgres.h>
 #include <utils/guc.h>
+#include <utils/varlena.h>
+#include <utils/regproc.h>
+#include <parser/parse_func.h>
 #include <miscadmin.h>
 
 #include "guc.h"
+#include "extension.h"
 #include "license_guc.h"
 #include "config.h"
 #include "hypertable_cache.h"
@@ -76,6 +80,8 @@ TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+static char *ts_guc_default_segmentby_fn = NULL;
+static char *ts_guc_default_orderby_fn = NULL;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
@@ -216,6 +222,90 @@ static void
 assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 {
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable, newval);
+}
+
+static Oid
+get_segmentby_func(char *input_name)
+{
+	List *namelist = NIL;
+
+	if (strlen(input_name) == 0)
+	{
+		return InvalidOid;
+	}
+
+#if PG16_LT
+	namelist = stringToQualifiedNameList(input_name);
+#else
+	namelist = stringToQualifiedNameList(input_name, NULL);
+#endif
+	Oid argtyp[] = { REGCLASSOID };
+	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+}
+
+static bool
+check_segmentby_func(char **newval, void **extra, GucSource source)
+{
+	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
+	if (ts_extension_is_loaded())
+	{
+		Oid segment_func_oid = get_segmentby_func(*newval);
+
+		if (strlen(*newval) > 0 && !OidIsValid(segment_func_oid))
+		{
+			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
+			return false;
+		}
+	}
+	return true;
+}
+
+Oid
+ts_guc_default_segmentby_fn_oid()
+{
+	return get_segmentby_func(ts_guc_default_segmentby_fn);
+}
+
+static Oid
+get_orderby_func(char *input_name)
+{
+	List *namelist = NIL;
+
+	if (strlen(input_name) == 0)
+	{
+		return InvalidOid;
+	}
+
+#if PG16_LT
+	namelist = stringToQualifiedNameList(input_name);
+#else
+	namelist = stringToQualifiedNameList(input_name, NULL);
+#endif
+	Oid argtyp[] = { REGCLASSOID, TEXTARRAYOID };
+	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+}
+
+static bool
+check_orderby_func(char **newval, void **extra, GucSource source)
+{
+	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
+	if (ts_extension_is_loaded())
+	{
+		Oid func_oid = get_orderby_func(*newval);
+
+		if (strlen(*newval) > 0 && !OidIsValid(func_oid))
+		{
+			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
+			return false;
+		}
+	}
+	return true;
+}
+
+Oid
+ts_guc_default_orderby_fn_oid()
+{
+	return get_orderby_func(ts_guc_default_orderby_fn);
 }
 
 void
@@ -569,6 +659,32 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_segmentby_default_function"),
+							   /* short_desc= */ "Function that sets default segment_by",
+							   /* long_desc= */
+							   "Function to use for calculating default segment_by setting for "
+							   "compression",
+							   /* valueAddr= */ &ts_guc_default_segmentby_fn,
+							   /* Value= */ "_timescaledb_functions.get_segmentby_defaults",
+							   /* context= */ PGC_USERSET,
+							   /* flags= */ 0,
+							   /* check_hook= */ check_segmentby_func,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
+
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_orderby_default_function"),
+							   /* short_desc= */ "Function that sets default order_by",
+							   /* long_desc= */
+							   "Function to use for calculating default order_by setting for "
+							   "compression",
+							   /* valueAddr= */ &ts_guc_default_orderby_fn,
+							   /* Value= */ "_timescaledb_functions.get_orderby_defaults",
+							   /* context= */ PGC_USERSET,
+							   /* flags= */ 0,
+							   /* check_hook= */ check_orderby_func,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("license"),
 							   /* short_desc= */ "TimescaleDB license type",

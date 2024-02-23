@@ -179,6 +179,8 @@ INSERT INTO test3 SELECT t, 2, gen_rand_minstd(), gen_rand_minstd() FROM generat
 INSERT INTO test3 SELECT t, 3, gen_rand_minstd(), gen_rand_minstd() FROM generate_series('2018-03-02 2:00'::TIMESTAMPTZ, '2018-03-02 2:01', '1 minute') t;
 -- Compression is set to merge those 25 chunks into 12 2 hour chunks and a single 1 hour chunks on a different space dimensions.
 ALTER TABLE test3 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='2 hours');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test3" is set to ""
 SELECT
   $$
   SELECT * FROM test3 WHERE i = 1 ORDER BY "Time"
@@ -240,6 +242,8 @@ NOTICE:  adding not-null constraint to column "Time"
 -- Setting compress_chunk_time_interval to non-multiple of chunk_time_interval should emit a warning.
 ALTER TABLE test4 set (timescaledb.compress, timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='90 minutes');
 WARNING:  compress chunk interval is not a multiple of chunk interval, you should use a factor of chunk interval to merge as much as possible
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test4" is set to ""
 DROP TABLE test4;
 CREATE TABLE test5 ("Time" timestamptz, i integer, value integer);
 SELECT table_name from create_hypertable('test5', 'Time', chunk_time_interval=> INTERVAL '1 hour');

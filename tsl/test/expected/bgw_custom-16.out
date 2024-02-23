@@ -913,6 +913,8 @@ INSERT INTO sensor_data
 		time;
 -- enable compression
 ALTER TABLE sensor_data SET (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "sensor_data" is set to ""
 -- create new chunks
 INSERT INTO sensor_data
 	SELECT

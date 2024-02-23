@@ -497,7 +497,7 @@ ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_s
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id,location');
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
-ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_orderby = 'device_id,location');
+ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby='', timescaledb.compress_orderby = 'device_id,location');
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'time,location', timescaledb.compress_orderby = 'device_id');
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);

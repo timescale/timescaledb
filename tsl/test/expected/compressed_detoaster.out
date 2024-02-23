@@ -12,6 +12,9 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table longstr set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "longstr" is set to ""
+NOTICE:  default order by for hypertable "longstr" is set to "ts DESC"
 -- We want to test the case for inline compression. It is technically possible,
 -- but very hard to hit with the usual toast_tuple_target = 128 on compressed
 -- chunks. So here we increase the toast_tuple_target to simplify

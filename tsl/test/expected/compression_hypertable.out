@@ -433,6 +433,8 @@ select create_hypertable( 'test5', 'time', chunk_time_interval=> '1 day'::interv
 (1 row)
 
 alter table test5 set (timescaledb.compress, timescaledb.compress_orderby = 'device_id, time');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test5" is set to ""
 insert into test5
 select generate_series('2018-01-01 00:00'::timestamp, '2018-01-10 00:00'::timestamp, '2 hour'), 'device_1', gen_rand_minstd();
 insert into test5
@@ -588,6 +590,8 @@ NOTICE:  adding not-null constraint to column "time"
 
 ALTER TABLE test7 SET
   (timescaledb.compress, timescaledb.compress_orderby = 'time DESC, c1 DESC');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test7" is set to ""
 INSERT INTO test7
   SELECT t, d, '2019/07/07 01:00', gen_rand_minstd(), 'a'
   FROM generate_series(1, 10) t,

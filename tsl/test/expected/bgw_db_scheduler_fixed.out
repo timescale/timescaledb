@@ -1655,6 +1655,8 @@ select show_chunks('test_table_scheduler');
 (8 rows)
 
 alter table test_table_scheduler set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_table_scheduler" is set to ""
 select add_retention_policy('test_table_scheduler', interval '2 year', initial_start => :'init'::timestamptz, timezone => 'Europe/Berlin');
  add_retention_policy 
 ----------------------

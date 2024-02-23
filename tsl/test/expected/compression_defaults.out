@@ -1,7 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 -- statitics on
 CREATE TABLE "public"."metrics" (
     "time" timestamp with time zone NOT NULL,
@@ -32,11 +32,66 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 8}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 8}
 (1 row)
 
+ALTER TABLE metrics SET (timescaledb.compress = true);
+NOTICE:  default segment by for hypertable "metrics" is set to "device_id"
+NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+---------+-------------+---------+--------------+--------------------
+ metrics | {device_id} | {time}  | {t}          | {t}
+(1 row)
+
+ALTER TABLE metrics SET (timescaledb.compress = false);
+ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
+NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+---------+-------------+---------+--------------+--------------------
+ metrics | {device_id} | {time}  | {t}          | {t}
+(1 row)
+
+ALTER TABLE metrics SET (timescaledb.compress = false);
+--make sure all the GUC combinations work
+SET timescaledb.compression_segmentby_default_function = '';
+SET timescaledb.compression_orderby_default_function = '';
+ALTER TABLE metrics SET (timescaledb.compress = true);
+WARNING:  column "device_id" should be used for segmenting or ordering
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+-----------+---------+--------------+--------------------
+ metrics |           | {time}  | {t}          | {t}
+(1 row)
+
+ALTER TABLE metrics SET (timescaledb.compress = false);
+SET timescaledb.compression_segmentby_default_function   = '';
+RESET timescaledb.compression_orderby_default_function;
+ALTER TABLE metrics SET (timescaledb.compress = true);
+NOTICE:  default order by for hypertable "metrics" is set to "device_id, "time" DESC"
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  | segmentby |     orderby      | orderby_desc | orderby_nullsfirst 
+---------+-----------+------------------+--------------+--------------------
+ metrics |           | {device_id,time} | {f,t}        | {f,t}
+(1 row)
+
+ALTER TABLE metrics SET (timescaledb.compress = false);
+RESET timescaledb.compression_segmentby_default_function;
+SET timescaledb.compression_orderby_default_function = '';
+ALTER TABLE metrics SET (timescaledb.compress = true);
+NOTICE:  default segment by for hypertable "metrics" is set to "device_id"
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+---------+-------------+---------+--------------+--------------------
+ metrics | {device_id} | {time}  | {t}          | {t}
+(1 row)
+
+ALTER TABLE metrics SET (timescaledb.compress = false);
+RESET timescaledb.compression_segmentby_default_function;
+RESET timescaledb.compression_orderby_default_function;
 --opposite order of columns
 drop index test_idx;
 CREATE UNIQUE INDEX test_idx ON metrics(time, device_id);
@@ -47,9 +102,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 8}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 8}
 (1 row)
 
 --use a high-cardinality column in the index
@@ -62,9 +117,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
-                get_orderby_defaults                
-----------------------------------------------------
- {"clauses": ["val", "time DESC"], "confidence": 8}
+                  get_orderby_defaults                  
+--------------------------------------------------------
+ {"clauses": ["val", "\"time\" DESC"], "confidence": 8}
 (1 row)
 
 --use a non-unique index
@@ -77,9 +132,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 5}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 5}
 (1 row)
 
 --another non-unique index column order
@@ -92,9 +147,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
-                get_orderby_defaults                
-----------------------------------------------------
- {"clauses": ["time DESC", "val"], "confidence": 5}
+                  get_orderby_defaults                  
+--------------------------------------------------------
+ {"clauses": ["\"time\" DESC", "val"], "confidence": 5}
 (1 row)
 
 --use a high-cardinality column in the non-unque index
@@ -107,9 +162,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
-                get_orderby_defaults                
-----------------------------------------------------
- {"clauses": ["time DESC", "val"], "confidence": 5}
+                  get_orderby_defaults                  
+--------------------------------------------------------
+ {"clauses": ["\"time\" DESC", "val"], "confidence": 5}
 (1 row)
 
 --use 2 indexes
@@ -123,9 +178,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
-                get_orderby_defaults                
-----------------------------------------------------
- {"clauses": ["time DESC", "val"], "confidence": 5}
+                  get_orderby_defaults                  
+--------------------------------------------------------
+ {"clauses": ["\"time\" DESC", "val"], "confidence": 5}
 (1 row)
 
 --no indexes
@@ -138,11 +193,22 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 5}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 5}
 (1 row)
 
+ALTER TABLE metrics SET (timescaledb.compress = true);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "metrics" is set to ""
+NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
+SELECT * FROM _timescaledb_catalog.compression_settings;
+  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+-----------+---------+--------------+--------------------
+ metrics |           | {time}  | {t}          | {t}
+(1 row)
+
+ALTER TABLE metrics SET (timescaledb.compress = false);
 -- tables with no stats --
 drop table metrics;
 --serial case
@@ -155,7 +221,7 @@ CREATE TABLE "public"."metrics" (
 SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
   create_hypertable   
 ----------------------
- (2,public,metrics,t)
+ (8,public,metrics,t)
 (1 row)
 
 --no indexes
@@ -166,9 +232,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 5}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 5}
 (1 row)
 
 --minimum index
@@ -220,7 +286,7 @@ CREATE TABLE "public"."metrics" (
 SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>false);
   create_hypertable   
 ----------------------
- (3,public,metrics,t)
+ (9,public,metrics,t)
 (1 row)
 
 --minimum index
@@ -249,9 +315,9 @@ CREATE TABLE "public"."metrics" (
     "val" double precision
 ) WITH (autovacuum_enabled=0);
 SELECT create_hypertable('public.metrics', 'time', create_default_indexes=>true);
-  create_hypertable   
-----------------------
- (4,public,metrics,t)
+   create_hypertable   
+-----------------------
+ (10,public,metrics,t)
 (1 row)
 
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
@@ -261,9 +327,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 5}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 5}
 (1 row)
 
 CREATE INDEX test_idx ON metrics(device_id);
@@ -274,9 +340,9 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 5}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 5}
 (1 row)
 
 drop index test_idx;
@@ -288,8 +354,46 @@ SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 (1 row)
 
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
-            get_orderby_defaults             
----------------------------------------------
- {"clauses": ["time DESC"], "confidence": 8}
+              get_orderby_defaults               
+-------------------------------------------------
+ {"clauses": ["\"time\" DESC"], "confidence": 8}
 (1 row)
 
+--test on an empty order_by
+CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
+SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
+  create_hypertable   
+----------------------
+ (11,public,table1,t)
+(1 row)
+
+SELECT _timescaledb_functions.get_orderby_defaults('table1', ARRAY['col1']::text[]);
+       get_orderby_defaults       
+----------------------------------
+ {"clauses": [], "confidence": 5}
+(1 row)
+
+ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
+NOTICE:  default order by for hypertable "table1" is set to ""
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+--------+-----------+---------+--------------+--------------------
+ table1 | {col1}    |         |              | 
+(1 row)
+
+ALTER TABLE table1 SET (timescaledb.compress = false);
+\set ON_ERROR_STOP 0
+SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
+ERROR:  invalid value for parameter "timescaledb.compression_segmentby_default_function": "function_does_not_exist"
+SET timescaledb.compression_orderby_default_function = 'function_does_not_exist';
+ERROR:  invalid value for parameter "timescaledb.compression_orderby_default_function": "function_does_not_exist"
+--wrong function signatures
+SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_orderby_defaults';
+ERROR:  invalid value for parameter "timescaledb.compression_segmentby_default_function": "_timescaledb_functions.get_orderby_defaults"
+SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.get_segmentby_defaults';
+ERROR:  invalid value for parameter "timescaledb.compression_orderby_default_function": "_timescaledb_functions.get_segmentby_defaults"
+\set ON_ERROR_STOP 1
+SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.get_orderby_defaults';
+SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_segmentby_defaults';
+RESET timescaledb.compression_segmentby_default_function;
+RESET timescaledb.compression_orderby_default_function;
