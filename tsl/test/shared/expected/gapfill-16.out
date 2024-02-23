@@ -3247,6 +3247,7 @@ SELECT
   '4e0ee04cc6a94fd40497b8dbaac2fe434e0ee04cc6a94fd40497b8dbaac2fe43',
   random();
 ALTER TABLE gapfill_group_toast SET(timescaledb.compress, timescaledb.compress_segmentby = 'device');
+NOTICE:  default order by for hypertable "gapfill_group_toast" is set to ""time" DESC"
 SELECT count(compress_chunk(c)) FROM show_chunks('gapfill_group_toast') c;
  count 
      2

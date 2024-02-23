@@ -101,6 +101,8 @@ NOTICE:  adding not-null constraint to column "fmid"
 (1 row)
 
 ALTER TABLE metaseg_tab SET (timescaledb.compress, timescaledb.compress_orderby= 'end_dt');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "metaseg_tab" is set to ""
 INSERT INTO metaseg_tab values (56,0,'2012-12-10 09:45:00','2012-12-10 09:50:00',1,0.1,'2012-12-10');
 SELECT compress_chunk(i) from show_chunks('metaseg_tab') i;
              compress_chunk             
@@ -190,6 +192,7 @@ WARNING:  column type "character varying" used for "dev_vc" does not follow best
 (1 row)
 
 ALTER TABLE pushdown_relabel SET (timescaledb.compress, timescaledb.compress_segmentby='dev_vc,dev_c');
+NOTICE:  default order by for hypertable "pushdown_relabel" is set to ""time" DESC"
 INSERT INTO pushdown_relabel SELECT '2000-01-01','varchar','char';
 SELECT compress_chunk(i) from show_chunks('pushdown_relabel') i;
              compress_chunk             
@@ -282,6 +285,7 @@ ALTER TABLE deleteme SET (
   timescaledb.compress,
   timescaledb.compress_segmentby = 'segment'
 );
+NOTICE:  default order by for hypertable "deleteme" is set to ""timestamp" DESC"
 SELECT compress_chunk(i) FROM show_chunks('deleteme') i;
              compress_chunk             
 ----------------------------------------
@@ -319,6 +323,7 @@ ALTER TABLE deleteme_with_bytea SET (
   timescaledb.compress,
   timescaledb.compress_segmentby = 'bdata'
 );
+NOTICE:  default order by for hypertable "deleteme_with_bytea" is set to ""time" DESC"
 SELECT compress_chunk(i) FROM show_chunks('deleteme_with_bytea') i;
              compress_chunk              
 -----------------------------------------
@@ -355,6 +360,7 @@ NOTICE:  adding not-null constraint to column "time"
 (1 row)
 
 ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentby='c_date,c_time, c_timetz,c_timestamp,c_name');
+NOTICE:  default order by for hypertable "svf_pushdown" is set to ""time" DESC"
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
               compress_chunk              

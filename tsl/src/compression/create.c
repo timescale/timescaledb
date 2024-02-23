@@ -29,6 +29,7 @@
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/rel.h>
+#include <utils/datum.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
@@ -48,6 +49,7 @@
 #include "trigger.h"
 #include "utils.h"
 #include "guc.h"
+#include <executor/spi.h>
 
 static const char *sparse_index_types[] = { "min", "max" };
 
@@ -888,6 +890,238 @@ validate_hypertable_for_compression(Hypertable *ht)
 	}
 }
 
+/*
+ * Get the default segment by value for a hypertable
+ */
+static ArrayType *
+compression_setting_segmentby_get_default(const Hypertable *ht)
+{
+	StringInfoData command;
+	StringInfoData result;
+	int res;
+	ArrayType *column_res = NULL;
+	Datum datum;
+	text *message;
+	char *original_search_path = pstrdup(GetConfigOption("search_path", false, true));
+	bool isnull;
+	MemoryContext upper = CurrentMemoryContext;
+	MemoryContext old;
+	int32 confidence = -1;
+	Oid default_segmentby_fn = ts_guc_default_segmentby_fn_oid();
+
+	if (!OidIsValid(default_segmentby_fn))
+	{
+		elog(LOG_SERVER_ONLY,
+			 "segment_by default: hypertable=\"%s\" columns=\"\" function: \"\" confidence=-1",
+			 get_rel_name(ht->main_table_relid));
+		return NULL;
+	}
+
+	initStringInfo(&command);
+	appendStringInfo(&command,
+					 "SELECT "
+					 " (SELECT array_agg(x)  "
+					 " FROM jsonb_array_elements_text(seg_by->'columns') t(x))::text[], "
+					 " seg_by->>'message', "
+					 " (seg_by->>'confidence')::int "
+					 "FROM %s.%s(%d) seg_by",
+					 quote_identifier(get_namespace_name(get_func_namespace(default_segmentby_fn))),
+					 quote_identifier(get_func_name(default_segmentby_fn)),
+					 ht->main_table_relid);
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* Lock down search_path */
+	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
+	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
+
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not get the default segment by for a hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)))));
+
+	old = MemoryContextSwitchTo(upper);
+	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+	if (!isnull)
+		column_res = DatumGetArrayTypePCopy(datum);
+	MemoryContextSwitchTo(old);
+
+	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
+
+	if (!isnull)
+	{
+		message = DatumGetTextPP(datum);
+		elog(WARNING,
+			 "there was some uncertainty picking the default segment by for the hypertable: %s",
+			 text_to_cstring(message));
+	}
+
+	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
+	if (!isnull)
+	{
+		confidence = DatumGetInt32(datum);
+	}
+
+	/* Reset search path since this can be executed as part of a larger transaction */
+	resetStringInfo(&command);
+	appendStringInfo(&command, "SET LOCAL search_path TO %s", original_search_path);
+	res = SPI_exec(command.data, 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not reset search_path"))));
+	pfree(original_search_path);
+
+	pfree(command.data);
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	initStringInfo(&result);
+	ts_array_append_stringinfo(column_res, &result);
+	elog(NOTICE,
+		 "default segment by for hypertable \"%s\" is set to \"%s\"",
+		 get_rel_name(ht->main_table_relid),
+		 result.data);
+
+	elog(LOG_SERVER_ONLY,
+		 "segment_by default: hypertable=\"%s\" columns=\"%s\" function: \"%s.%s\" confidence=%d",
+		 get_rel_name(ht->main_table_relid),
+		 result.data,
+		 get_namespace_name(get_func_namespace(default_segmentby_fn)),
+		 get_func_name(default_segmentby_fn),
+		 confidence);
+	pfree(result.data);
+	return column_res;
+}
+
+/*
+ * Get the default segment by value for a hypertable
+ */
+static OrderBySettings
+compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
+{
+	StringInfoData command;
+	int res;
+	text *column_res = NULL;
+	Datum datum;
+	text *message;
+	bool isnull;
+	MemoryContext upper = CurrentMemoryContext;
+	MemoryContext old;
+	char *orderby;
+	char *original_search_path = pstrdup(GetConfigOption("search_path", false, true));
+	int32 confidence = -1;
+
+	Oid types[] = { TEXTARRAYOID };
+	Datum values[] = { PointerGetDatum(segmentby) };
+	char nulls[] = { segmentby == NULL ? 'n' : 'v' };
+	Oid orderby_fn = ts_guc_default_orderby_fn_oid();
+
+	if (!OidIsValid(orderby_fn))
+	{
+		/* fallback to original logic */
+		OrderBySettings obs = (OrderBySettings){ 0 };
+		obs = add_time_to_order_by_if_not_included(obs, segmentby, ht);
+		elog(LOG_SERVER_ONLY,
+			 "order_by default: hypertable=\"%s\" function=\"\" confidence=-1",
+			 get_rel_name(ht->main_table_relid));
+		return obs;
+	}
+
+	initStringInfo(&command);
+	appendStringInfo(&command,
+					 "SELECT "
+					 " (SELECT string_agg(x, ', ') FROM "
+					 "jsonb_array_elements_text(seg_by->'clauses') "
+					 "t(x))::text, "
+					 " seg_by->>'message', "
+					 " (seg_by->>'confidence')::int "
+					 "FROM %s.%s(%d, coalesce($1, array[]::text[])) seg_by",
+					 quote_identifier(get_namespace_name(get_func_namespace(orderby_fn))),
+					 quote_identifier(get_func_name(orderby_fn)),
+					 ht->main_table_relid);
+
+	if (SPI_connect() != SPI_OK_CONNECT)
+		elog(ERROR, "could not connect to SPI");
+
+	/* Lock down search_path */
+	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+
+	res = SPI_execute_with_args(command.data,
+								1,
+								types,
+								values,
+								nulls,
+								true /* read_only */,
+								0 /*count*/);
+	if (res < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 (errmsg("could not get the default order by for a hypertable \"%s\"",
+						 get_rel_name(ht->main_table_relid)))));
+
+	old = MemoryContextSwitchTo(upper);
+	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+
+	if (!isnull)
+		column_res = DatumGetTextPCopy(datum);
+	MemoryContextSwitchTo(old);
+
+	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 2, &isnull);
+
+	if (!isnull)
+	{
+		message = DatumGetTextPP(datum);
+		elog(WARNING,
+			 "there was some uncertainty picking the default order by for the hypertable: %s",
+			 text_to_cstring(message));
+	}
+	datum = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 3, &isnull);
+	if (!isnull)
+	{
+		confidence = DatumGetInt32(datum);
+	}
+
+	/* Reset search path since this can be executed as part of a larger transaction */
+	resetStringInfo(&command);
+	appendStringInfo(&command, "SET LOCAL search_path TO %s", original_search_path);
+	res = SPI_exec(command.data, 0);
+	if (res < 0)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not reset search_path"))));
+	pfree(original_search_path);
+	pfree(command.data);
+
+	res = SPI_finish();
+	if (res != SPI_OK_FINISH)
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(res));
+
+	if (column_res != NULL)
+		orderby = TextDatumGetCString(PointerGetDatum(column_res));
+	else
+		orderby = "";
+
+	elog(NOTICE,
+		 "default order by for hypertable \"%s\" is set to \"%s\"",
+		 get_rel_name(ht->main_table_relid),
+		 orderby);
+
+	elog(LOG_SERVER_ONLY,
+		 "order_by default: hypertable=\"%s\" clauses=\"%s\" function=\"%s.%s\" confidence=%d",
+		 get_rel_name(ht->main_table_relid),
+		 orderby,
+		 get_namespace_name(get_func_namespace(orderby_fn)),
+		 get_func_name(orderby_fn),
+		 confidence);
+	return ts_compress_parse_order_collist(orderby, ht);
+}
+
 static void
 compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 							WithClauseResult *with_clause_options)
@@ -906,11 +1140,23 @@ compression_settings_update(Hypertable *ht, CompressionSettings *settings,
 	{
 		settings->fd.segmentby = ts_compress_hypertable_parse_segment_by(with_clause_options, ht);
 	}
+	else if (!settings->fd.segmentby)
+	{
+		settings->fd.segmentby = compression_setting_segmentby_get_default(ht);
+	}
 
 	if (!with_clause_options[CompressOrderBy].is_default || !settings->fd.orderby)
 	{
-		OrderBySettings obs = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
-		obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
+		OrderBySettings obs;
+		if (with_clause_options[CompressOrderBy].is_default)
+		{
+			obs = compression_setting_orderby_get_default(ht, settings->fd.segmentby);
+		}
+		else
+		{
+			obs = ts_compress_hypertable_parse_order_by(with_clause_options, ht);
+			obs = add_time_to_order_by_if_not_included(obs, settings->fd.segmentby, ht);
+		}
 		settings->fd.orderby = obs.orderby;
 		settings->fd.orderby_desc = obs.orderby_desc;
 		settings->fd.orderby_nullsfirst = obs.orderby_nullsfirst;

@@ -12,6 +12,7 @@ SELECT FROM create_hypertable(relation=>'testtable', time_column_name=> 'time');
 (1 row)
 
 ALTER TABLE testtable SET (timescaledb.compress, timescaledb.compress_segmentby='segment_by_value');
+NOTICE:  default order by for hypertable "testtable" is set to ""time" DESC"
 INSERT INTO testtable
 SELECT time AS time,
 value AS segment_by_value,
@@ -2270,6 +2271,7 @@ SELECT FROM create_hypertable(relation=>'testtable2', time_column_name=> 'time')
 (1 row)
 
 ALTER TABLE testtable2 SET (timescaledb.compress, timescaledb.compress_segmentby='segment_by_value1, segment_by_value2');
+NOTICE:  default order by for hypertable "testtable2" is set to ""time" DESC"
 INSERT INTO testtable2
 SELECT time AS time,
 value1 AS segment_by_value1,

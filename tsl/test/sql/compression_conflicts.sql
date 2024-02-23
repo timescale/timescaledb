@@ -81,7 +81,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 CREATE TABLE comp_conflicts_2(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
 
 SELECT table_name FROM create_hypertable('comp_conflicts_2','time');
-ALTER TABLE comp_conflicts_2 SET (timescaledb.compress);
+ALTER TABLE comp_conflicts_2 SET (timescaledb.compress, timescaledb.compress_segmentby='');
 
 -- implicitly create chunk
 INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1);
@@ -219,7 +219,7 @@ SELECT count(*) FROM ONLY :CHUNK;
 CREATE TABLE comp_conflicts_4(time timestamptz NOT NULL, device text, value float, UNIQUE(time, device));
 
 SELECT table_name FROM create_hypertable('comp_conflicts_4','time');
-ALTER TABLE comp_conflicts_4 SET (timescaledb.compress,timescaledb.compress_orderby='time,device');
+ALTER TABLE comp_conflicts_4 SET (timescaledb.compress,timescaledb.compress_segmentby='',timescaledb.compress_orderby='time,device');
 
 -- implicitly create chunk
 INSERT INTO comp_conflicts_4 SELECT generate_series('2020-01-01'::timestamp, '2020-01-01 2:00:00', '1s'), 'd1',0.1;

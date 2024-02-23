@@ -59,6 +59,7 @@ ALTER TABLE sample_table SET (
 	timescaledb.compress,
 	timescaledb.compress_segmentby = 'sensor_id'
 );
+NOTICE:  default order by for hypertable "sample_table" is set to ""time" DESC"
 -- compress all chunks
 SELECT compress_chunk(show_chunks('sample_table'));
              compress_chunk             
@@ -460,6 +461,7 @@ SELECT * FROM create_hypertable('sample_table', 'time', chunk_time_interval => 1
 ALTER TABLE sample_table SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'time, val');
+NOTICE:  default order by for hypertable "sample_table" is set to ""
 INSERT INTO sample_table VALUES (1, 1, 1), (2, 2, 1), (3, 3, 1), (1, 3, 2), (11, 4, 2), (1, 1, 2);
 -- compress all chunks
 SELECT compress_chunk(show_chunks('sample_table'));
@@ -583,6 +585,7 @@ INSERT INTO sample_table VALUES ('2017-03-22T09:18:22', 23.5, 1, '{"a": 1, "b": 
                                 ('2017-08-22T09:18:22', 34.1, 3, '{"c": 4}');
 ALTER TABLE sample_table SET (timescaledb.compress,
                               timescaledb.compress_segmentby = 'time');
+NOTICE:  default order by for hypertable "sample_table" is set to ""
 SELECT compress_chunk(show_chunks('sample_table'));
              compress_chunk              
 -----------------------------------------
@@ -1004,6 +1007,7 @@ ALTER TABLE sample_table DROP COLUMN c;
 ALTER TABLE sample_table SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'device_id, d');
+NOTICE:  default order by for hypertable "sample_table" is set to ""time" DESC"
 -- compress all chunks
 SELECT compress_chunk(show_chunks('sample_table'));
               compress_chunk              
@@ -1230,6 +1234,7 @@ ALTER TABLE sample_table DROP column c3;
 ALTER TABLE sample_table ADD column c4 text;
 INSERT INTO sample_table SELECT '2000-01-01', '1', '2', '3';
 ALTER TABLE sample_table SET (timescaledb.compress,timescaledb.compress_segmentby='c4');
+NOTICE:  default order by for hypertable "sample_table" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('sample_table'));
               compress_chunk              
 ------------------------------------------
@@ -1985,7 +1990,9 @@ SELECT table_name FROM create_hypertable('join_test2', 'time');
 (1 row)
 
 ALTER TABLE join_test1 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "join_test1" is set to ""time" DESC"
 ALTER TABLE join_test2 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "join_test2" is set to ""time" DESC"
 INSERT INTO join_test1 VALUES ('2000-01-01','d1',0.1), ('2000-02-01','d1',0.1), ('2000-03-01','d1',0.1);
 INSERT INTO join_test2 VALUES ('2000-02-01','d1',0.1), ('2000-02-01','d2',0.1), ('2000-02-01','d3',0.1);
 SELECT compress_chunk(show_chunks('join_test1'));
@@ -2473,6 +2480,9 @@ NOTICE:  adding not-null constraint to column "a"
 
 INSERT INTO t values(1, 2);
 ALTER TABLE t SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "t" is set to ""
+NOTICE:  default order by for hypertable "t" is set to "a DESC"
 SELECT compress_chunk(show_chunks('t'));
               compress_chunk              
 ------------------------------------------
@@ -2706,6 +2716,8 @@ ALTER TABLE test_limit SET (
     timescaledb.compress,
     timescaledb.compress_orderby = 'timestamp'
 );
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_limit" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
  count 
 -------
