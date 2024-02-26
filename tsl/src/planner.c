@@ -159,9 +159,12 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	 * alternative paths. This should not be compatible with transparent
 	 * decompression, so only add if we didn't add decompression paths above.
 	 */
-	else if (ts_is_hypercore_am(chunk->amoid) && ts_guc_enable_columnarscan)
+	else if (ts_is_hypercore_am(chunk->amoid))
 	{
-		columnar_scan_set_rel_pathlist(root, rel, ht);
+		if (ts_guc_enable_columnarscan)
+			columnar_scan_set_rel_pathlist(root, rel, ht);
+
+		hyperstore_set_rel_pathlist(root, rel, ht);
 	}
 }
 

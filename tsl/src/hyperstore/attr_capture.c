@@ -3,10 +3,12 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
 
+#include <catalog/pg_attribute.h>
 #include <executor/executor.h>
+#include <nodes/bitmapset.h>
+#include <nodes/execnodes.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/nodes.h>
 #include <optimizer/optimizer.h>
@@ -91,6 +93,55 @@ collect_targets(List *targetlist, struct CaptureAttributesContext *context)
 	}
 }
 
+/*
+ * Capture index attributes.
+ *
+ * The attributes referenced by an index is captured so that the hyperstore
+ * TAM can later identify the index as a segmentby index (one that only
+ * indexes compressed segments/tuples). When a segmentby index is identified
+ * by hyperstore, it will "unwrap" the compressed tuples on-the-fly into
+ * individual (uncompressed) tuples even though the index only references the
+ * compressed segments.
+ */
+static void
+capture_index_attributes(ScanState *state, Relation indexrel)
+{
+	Bitmapset *attrs = NULL;
+
+	/* Index relation can be NULL in case of, e.g., EXPLAINs. It is OK to not
+	 * capture index attributes in this case, because no scan is actually
+	 * run. */
+	if (NULL == indexrel)
+		return;
+
+	const int2vector *indkeys = &indexrel->rd_index->indkey;
+
+	for (int i = 0; i < indkeys->dim1; i++)
+	{
+		const AttrNumber attno = indkeys->values[i];
+		attrs = bms_add_member(attrs, attno);
+	}
+
+	arrow_slot_set_index_attrs(state->ss_ScanTupleSlot, attrs);
+}
+
+static void
+collect_refs_and_targets(ScanState *state, struct CaptureAttributesContext *context)
+{
+	Assert(TTS_IS_ARROWTUPLE(state->ss_ScanTupleSlot));
+	Assert(state->ss_currentRelation);
+	context->tupdesc = state->ss_ScanTupleSlot->tts_tupleDescriptor;
+	context->rel = state->ss_currentRelation;
+
+	collect_references(state->ps.plan->qual, context);
+	collect_targets(state->ps.plan->targetlist, context);
+	arrow_slot_set_referenced_attrs(state->ss_ScanTupleSlot, context->atts);
+
+	/* Just a precaution */
+	context->tupdesc = 0;
+	context->rel = 0;
+}
+
 static bool
 capture_attributes(PlanState *planstate, void *ptr)
 {
@@ -104,26 +155,28 @@ capture_attributes(PlanState *planstate, void *ptr)
 	{
 		/* There are some scan states missing here */
 		case T_IndexScanState:
+			if (TTS_IS_ARROWTUPLE(state->ss_ScanTupleSlot))
+			{
+				const IndexScanState *istate = castNode(IndexScanState, planstate);
+				capture_index_attributes(state, istate->iss_RelationDesc);
+				collect_refs_and_targets(state, context);
+			}
+			break;
+		case T_IndexOnlyScanState:
+			if (TTS_IS_ARROWTUPLE(state->ss_ScanTupleSlot))
+			{
+				IndexOnlyScanState *istate = castNode(IndexOnlyScanState, planstate);
+				capture_index_attributes(state, istate->ioss_RelationDesc);
+				collect_refs_and_targets(state, context);
+			}
+			break;
 		case T_CustomScanState:
 		case T_SeqScanState:
 		case T_BitmapHeapScanState:
 			/* If this is an Arrow TTS, update the attributes that are referenced so that
 			 * we do not decompress attributes that are not used. */
 			if (TTS_IS_ARROWTUPLE(state->ss_ScanTupleSlot))
-			{
-				/* If this is a baserel, ss_currentRelation should not be null. */
-				Assert(state->ss_currentRelation);
-				context->tupdesc = state->ss_ScanTupleSlot->tts_tupleDescriptor;
-				context->rel = state->ss_currentRelation;
-
-				collect_references(state->ps.plan->qual, context);
-				collect_targets(state->ps.plan->targetlist, context);
-				arrow_slot_set_referenced_attrs(state->ss_ScanTupleSlot, context->atts);
-
-				/* Just a precaution */
-				context->tupdesc = 0;
-				context->rel = 0;
-			}
+				collect_refs_and_targets(state, context);
 			break;
 
 		default:

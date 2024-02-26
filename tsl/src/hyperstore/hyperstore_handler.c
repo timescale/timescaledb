@@ -588,6 +588,13 @@ hyperstore_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, 
 	});
 }
 
+enum SegmentbyIndexStatus
+{
+	SEGMENTBY_INDEX_UNKNOWN = -1,
+	SEGMENTBY_INDEX_FALSE = 0,
+	SEGMENTBY_INDEX_TRUE = 1,
+};
+
 typedef struct IndexFetchComprData
 {
 	IndexFetchTableData h_base; /* AM independent part of the descriptor */
@@ -596,6 +603,11 @@ typedef struct IndexFetchComprData
 	Relation compr_rel;
 	ItemPointerData tid;
 	int64 num_decompressions;
+	uint64 return_count;
+	enum SegmentbyIndexStatus segindex;
+	bool call_again;		  /* Used to remember the previous value of call_again in
+							   * index_fetch_tuple */
+	bool internal_call_again; /* Call again passed on to compressed heap */
 } IndexFetchComprData;
 
 /* ------------------------------------------------------------------------
@@ -609,6 +621,8 @@ hyperstore_index_fetch_begin(Relation rel)
 	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 
 	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	cscan->segindex = SEGMENTBY_INDEX_UNKNOWN;
+	cscan->return_count = 0;
 	cscan->h_base.rel = rel;
 	cscan->compr_rel = crel;
 	cscan->compr_hscan = crel->rd_tableam->index_fetch_begin(crel);
@@ -653,7 +667,57 @@ hyperstore_index_fetch_end(IndexFetchTableData *scan)
 }
 
 /*
+ * Check if a scan is on a segmentby index.
+ *
+ * To identify a segmentby index, it is necessary to know the columns
+ * (attributes) indexed by the index. Unfortunately, the TAM does not have
+ * access to information about the index being scanned, so this information is
+ * instead captured at the start of the scan (using the executor start hook)
+ * and stored in the ArrowTupleTableSlot.
+ *
+ * For EXPLAINs (without ANALYZE), the index attributes in the slot might not
+ * be set because the index is never really opened. For such a case, when
+ * nothing is actually scanned, it is OK to return "false" even though the
+ * query is using a segmentby index.
+ */
+static inline bool
+is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
+{
+	if (cscan->segindex == SEGMENTBY_INDEX_UNKNOWN)
+	{
+		ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+		const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(cscan->h_base.rel);
+		int16 attno = -1;
+
+		if (bms_is_empty(aslot->index_attrs))
+			return false;
+
+		while ((attno = bms_next_member(aslot->index_attrs, attno)) >= 0)
+		{
+			if (!caminfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
+				return false;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+/*
  * Return tuple for given TID via index scan.
+ *
+ * An index scan calls this function to fetch the "heap" tuple with the given
+ * TID from the index.
+ *
+ * The TID points to a tuple either in the regular (non-compressed) or the
+ * compressed relation. The data is fetched from the identified relation.
+ *
+ * If the index only indexes segmentby column(s), the index is itself
+ * "compressed" and there is only one TID per compressed segment/tuple. In
+ * that case, the "call_again" parameter is used to make sure the index scan
+ * calls this function until all the rows in a compressed tuple is
+ * returned. This "unwrapping" only happens in the case of segmentby indexes.
  */
 static bool
 hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, Snapshot snapshot,
@@ -669,7 +733,6 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 	if (!is_compressed_tid(tid))
 	{
 		child_slot = arrow_slot_get_noncompressed_slot(slot);
-
 		const TableAmRoutine *oldtam = switch_to_heapam(rel);
 		bool result = rel->rd_tableam->index_fetch_tuple(cscan->uncompr_hscan,
 														 tid,
@@ -685,6 +748,7 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 			ExecStoreArrowTuple(slot, InvalidTupleIndex);
 		}
 
+		cscan->return_count++;
 		return result;
 	}
 
@@ -693,6 +757,19 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 	 * that data. */
 	if (ts_guc_enable_transparent_decompression == 2)
 		return false;
+
+	bool is_segmentby_index = is_segmentby_index_scan(cscan, slot);
+
+	/* Fast path for segmentby index scans. If the compressed tuple is still
+	 * being consumed, just increment the tuple index and return. */
+	if (is_segmentby_index && cscan->call_again)
+	{
+		ExecStoreNextArrowTuple(slot);
+		cscan->call_again = !arrow_slot_is_last(slot);
+		*call_again = cscan->call_again || cscan->internal_call_again;
+		cscan->return_count++;
+		return true;
+	}
 
 	/* Recreate the original TID for the compressed table */
 	uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
@@ -719,6 +796,7 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 		 * return the same Arrow slot */
 		Assert(slot->tts_tableOid == RelationGetRelid(scan->rel));
 		ExecStoreArrowTuple(slot, tuple_index);
+		cscan->return_count++;
 		return true;
 	}
 
@@ -726,7 +804,7 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 													  &decoded_tid,
 													  snapshot,
 													  child_slot,
-													  call_again,
+													  &cscan->internal_call_again,
 													  all_dead);
 
 	if (result)
@@ -736,6 +814,15 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 		/* Save the current compressed TID */
 		ItemPointerCopy(&decoded_tid, &cscan->tid);
 		cscan->num_decompressions++;
+
+		if (is_segmentby_index)
+		{
+			Assert(tuple_index == 1);
+			cscan->call_again = !arrow_slot_is_last(slot);
+			*call_again = cscan->call_again || cscan->internal_call_again;
+		}
+
+		cscan->return_count++;
 	}
 
 	return result;
@@ -1470,13 +1557,27 @@ typedef struct IndexCallbackState
 	double ntuples;
 	Datum *values;
 	bool *isnull;
-	MemoryContext decompression_mcxt;
-	ArrowArray **arrow_columns;
 	Bitmapset *segmentby_cols;
 	Bitmapset *orderby_cols;
+	bool is_segmentby_index;
+	MemoryContext decompression_mcxt;
+	ArrowArray **arrow_columns;
 } IndexCallbackState;
 
 /*
+ * Callback for index builds on compressed relation.
+ *
+ * When building an index, this function is called once for every compressed
+ * tuple. But to build an index over the original (non-compressed) values, it
+ * is necessary to "unwrap" the compressed data. Therefore, the function calls
+ * the original index build callback once for every value in the compressed
+ * tuple.
+ *
+ * However, when the index covers only segmentby columns, and the value is the
+ * same for all original rows in the segment, the index storage can be
+ * optimized by only indexing the compressed row and then unwrapping it during
+ * scanning instead.
+ *
  * TODO: need to rerun filters on uncompressed tuples.
  */
 static void
@@ -1496,12 +1597,29 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 
 		if (bms_is_member(attno, segmentby_cols))
 		{
-			// Segment by column, nothing to decompress. Just return the value
-			// from the compressed chunk since it is the same for every row in
-			// the compressed tuple.
-			int countoff = icstate->index_info->ii_NumIndexAttrs;
-			Assert(num_rows == -1 || num_rows == DatumGetInt32(values[countoff]));
-			num_rows = DatumGetInt32(values[countoff]);
+			/*
+			 * For a segmentby column, there is nothing to decompress, so just
+			 * return the non-compressed value.
+			 *
+			 * There's an opportunity to optimize index storage size for
+			 * "segmentby indexes", i.e., those indexes that cover all, or a
+			 * subset, of segmentby columns.
+			 *
+			 * In case of a segmentby index, index only one value (essentially
+			 * the compressed tuple), otherwise, index the non-compressed
+			 * values (the number of such values is indicated by "count"
+			 * metadata column).
+			 */
+			if (icstate->is_segmentby_index)
+			{
+				num_rows = 1;
+			}
+			else
+			{
+				int countoff = icstate->index_info->ii_NumIndexAttrs;
+				Assert(num_rows == -1 || num_rows == DatumGetInt32(values[countoff]));
+				num_rows = DatumGetInt32(values[countoff]);
+			}
 		}
 		else
 		{
@@ -1520,6 +1638,9 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 				MemoryContext oldcxt = MemoryContextSwitchTo(icstate->decompression_mcxt);
 				icstate->arrow_columns[i] =
 					decompress_all(PointerGetDatum(header), idesc->attrs[i].atttypid, oldcxt);
+
+				/* If "num_rows" was set previously by another column, the
+				 * value should be the same for this column */
 				Assert(num_rows == -1 || num_rows == icstate->arrow_columns[i]->length);
 				num_rows = icstate->arrow_columns[i]->length;
 				MemoryContextReset(icstate->decompression_mcxt);
@@ -1579,6 +1700,8 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 
 		ItemPointerData index_tid;
 		tid_to_compressed_tid(&index_tid, tid, rownum + 1);
+		Assert(!icstate->is_segmentby_index || rownum == 0);
+
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
 		icstate->ntuples++;
 	}
@@ -1586,10 +1709,6 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 
 /*
  * Build index.
- *
- * TODO: Explore potential to reduce index size by only having one TID for
- * each compressed tuple (instead of a TID per value) and use the call_again
- * functionality in the index scan callbacks to return all values.
  */
 static double
 hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, IndexInfo *indexInfo,
@@ -1626,6 +1745,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 													/* initBlockSize = */ 64 * 1024,
 													/* maxBlockSize = */ 64 * 1024),
 		.arrow_columns = palloc(sizeof(ArrowArray *) * indexInfo->ii_NumIndexAttrs),
+		.is_segmentby_index = true,
 	};
 	IndexInfo iinfo = *indexInfo;
 
@@ -1639,13 +1759,17 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 
 		iinfo.ii_IndexAttrNumbers[i] = cattno;
 		icstate.arrow_columns[i] = NULL;
+
+		/* If the indexed column is not a segmentby column, then this is not a
+		 * segmentby index */
+		if (!bms_is_member(attno, icstate.segmentby_cols))
+			icstate.is_segmentby_index = false;
 	}
 
 	/* Include the count column in the callback. It is needed to know the
 	 * uncompressed tuple count in case of building an index on the segmentby
 	 * column. */
 	iinfo.ii_IndexAttrNumbers[iinfo.ii_NumIndexAttrs++] = caminfo->count_cattno;
-
 	/* Check uniqueness on compressed */
 	iinfo.ii_Unique = false;
 	iinfo.ii_ExclusionOps = NULL;
@@ -2122,6 +2246,66 @@ hyperstore_alter_access_method_finish(Oid relid, bool to_other_am)
 
 	/* Finishing the conversion to compression TAM is handled in
 	 * the finish_bulk_insert callback */
+}
+
+/*
+ * Convert any index-only scans on segmentby indexes to regular index scans
+ * since index-only scans are not supported on segmentby indexes.
+ *
+ * Indexes on segmentby columns are optimized to store only one index
+ * reference per segment instead of one per value in each segment. This relies
+ * on "unwrapping" the segment during scanning. However, with an
+ * IndexOnlyScan, the Hyperstore TAM's index_fetch_tuple() is not be called to
+ * fetch the heap tuple (since the scan returns directly from the index), and
+ * there is no opportunity to unwrap the tuple. Therefore, turn IndexOnlyScans
+ * into regular IndexScans on segmentby indexes.
+ */
+static void
+convert_index_only_scans(const HyperstoreInfo *caminfo, List *pathlist)
+{
+	ListCell *lc;
+
+	foreach (lc, pathlist)
+	{
+		Path *path = lfirst(lc);
+		bool is_segmentby_index = true;
+
+		if (path->pathtype == T_IndexOnlyScan)
+		{
+			IndexPath *ipath = (IndexPath *) path;
+			Relation irel = relation_open(ipath->indexinfo->indexoid, AccessShareLock);
+			const int2vector *indkeys = &irel->rd_index->indkey;
+
+			for (int i = 0; i < indkeys->dim1; i++)
+			{
+				const AttrNumber attno = indkeys->values[i];
+
+				if (!caminfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
+				{
+					is_segmentby_index = false;
+					break;
+				}
+			}
+
+			/* Convert this IndexOnlyScan to a regular IndexScan since
+			 * segmentby indexes do not support IndexOnlyScans */
+			if (is_segmentby_index)
+				path->pathtype = T_IndexScan;
+
+			relation_close(irel, AccessShareLock);
+		}
+	}
+}
+
+void
+hyperstore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
+{
+	const RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+	Relation relation = table_open(rte->relid, AccessShareLock);
+	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
+	convert_index_only_scans(caminfo, rel->pathlist);
+	convert_index_only_scans(caminfo, rel->partial_pathlist);
+	table_close(relation, AccessShareLock);
 }
 
 /* ------------------------------------------------------------------------
