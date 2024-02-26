@@ -104,8 +104,13 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		}
 	}
 
-	if (ishyperstore && ts_guc_enable_transparent_decompression != 2 && ts_guc_enable_columnarscan)
-		columnar_scan_set_rel_pathlist(root, rel, ht);
+	if (ishyperstore)
+	{
+		if (ts_guc_enable_transparent_decompression != 2 && ts_guc_enable_columnarscan)
+			columnar_scan_set_rel_pathlist(root, rel, ht);
+
+		hyperstore_set_rel_pathlist(root, rel, ht);
+	}
 }
 
 void
