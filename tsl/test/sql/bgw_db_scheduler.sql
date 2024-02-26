@@ -368,7 +368,9 @@ SHOW timescaledb.shutdown_bgw_scheduler;
 
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 
-SELECT * FROM sorted_bgw_log;
+-- The number of scheduler restarts is not deterministic during [..]_wait_for_scheduler_finish().
+-- Therefore, we filter these messages to get a deterministic test output.
+SELECT * FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
@@ -719,7 +721,9 @@ SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_i
 -- Run the second time
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 50);
 SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes FROM _timescaledb_internal.bgw_job_stat;
-SELECT * FROM sorted_bgw_log;
+-- We increase the mock time a lot to ensure the job does not get restarted. However, the amount of scheduler sleep/wakeup cycles
+-- is not deterministic. Therefore, we filter these messages to get a deterministic test output.
+SELECT * FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
 
 -- clean up jobs
