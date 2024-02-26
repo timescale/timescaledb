@@ -769,6 +769,15 @@ arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs)
 	TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, { aslot->referenced_attrs = bms_copy(attrs); });
 }
 
+void
+arrow_slot_set_index_attrs(TupleTableSlot *slot, Bitmapset *attrs)
+{
+	Assert(TTS_IS_ARROWTUPLE(slot));
+
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, { aslot->index_attrs = bms_copy(attrs); });
+}
+
 const TupleTableSlotOps TTSOpsArrowTuple = { .base_slot_size = sizeof(ArrowTupleTableSlot),
 											 .init = tts_arrow_init,
 											 .release = tts_arrow_release,
