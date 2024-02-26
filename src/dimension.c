@@ -239,6 +239,7 @@ dimension_fill_in_from_tuple(Dimension *d, TupleInfo *ti, Oid main_table_relid)
 				values[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)]);
 	}
 
+	d->fd.correlated = DatumGetBool(values[AttrNumberGetAttrOffset(Anum_dimension_correlated)]);
 	d->column_attno = get_attnum(main_table_relid, NameStr(d->fd.column_name));
 	d->main_table_relid = main_table_relid;
 
@@ -564,6 +565,49 @@ dimension_scan_internal(ScanKeyData *scankey, int nkeys, tuple_found_func tuple_
 	return ts_scanner_scan(&scanctx);
 }
 
+/*
+ * Check if there are any correlated constraint entries and if yes create
+ * two new structures in the hypertable
+ */
+void
+ts_correlated_constraints_assign(Hypertable *h, MemoryContext mctx)
+{
+	int i;
+	int num_corr_cons = 0;
+	Hyperspace *hs = h->space, *sec_hs = NULL, *new_hs = NULL;
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		Dimension *dim = &hs->dimensions[i];
+
+		if (IS_CORRELATED_CONSTRAINT(dim))
+			num_corr_cons++;
+	}
+
+	if (num_corr_cons == 0)
+		return;
+
+	Assert(num_corr_cons < hs->num_dimensions);
+	sec_hs = hyperspace_create(hs->hypertable_id, hs->main_table_relid, num_corr_cons, mctx);
+	new_hs = hyperspace_create(hs->hypertable_id,
+							   hs->main_table_relid,
+							   hs->num_dimensions - num_corr_cons,
+							   mctx);
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		Dimension *dim = &hs->dimensions[i];
+
+		if (IS_CORRELATED_CONSTRAINT(dim))
+			sec_hs->dimensions[sec_hs->num_dimensions++] = *dim;
+		else
+			new_hs->dimensions[new_hs->num_dimensions++] = *dim;
+	}
+	pfree(h->space);
+	h->space = new_hs;
+	h->correlated_space = sec_hs;
+}
+
 Hyperspace *
 ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimensions,
 				  MemoryContext mctx)
@@ -782,7 +826,8 @@ dimension_tuple_update(TupleInfo *ti, void *data)
 
 static int32
 dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid coltype,
-						  int16 num_slices, regproc partitioning_func, int64 interval_length)
+						  int16 num_slices, regproc partitioning_func, int64 interval_length,
+						  bool correlated)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_dimension];
@@ -820,7 +865,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	else
 	{
 		/* Open (time) dimension */
-		Assert(num_slices <= 0 && interval_length > 0);
+		Assert(correlated || (num_slices <= 0 && interval_length > 0));
 		values[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] =
 			Int64GetDatum(interval_length);
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
@@ -834,6 +879,9 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 	/* no compress interval length by default */
 	nulls[AttrNumberGetAttrOffset(Anum_dimension_compress_interval_length)] = true;
 
+	/* if it's a correlated constraint */
+	values[AttrNumberGetAttrOffset(Anum_dimension_correlated)] = BoolGetDatum(correlated);
+
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	dimension_id = Int32GetDatum(ts_catalog_table_next_seq_id(ts_catalog_get(), DIMENSION));
 	values[AttrNumberGetAttrOffset(Anum_dimension_id)] = dimension_id;
@@ -845,7 +893,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 
 static int32
 dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slices,
-				 regproc partitioning_func, int64 interval_length)
+				 regproc partitioning_func, int64 interval_length, bool correlated)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -858,7 +906,8 @@ dimension_insert(int32 hypertable_id, Name colname, Oid coltype, int16 num_slice
 											 coltype,
 											 num_slices,
 											 partitioning_func,
-											 interval_length);
+											 interval_length,
+											 correlated);
 	table_close(rel, RowExclusiveLock);
 	return dimension_id;
 }
@@ -1480,7 +1529,7 @@ ts_dimension_info_validate(DimensionInfo *info)
 int32
 ts_dimension_add_from_info(DimensionInfo *info)
 {
-	if (info->set_not_null && info->type == DIMENSION_TYPE_OPEN)
+	if (!info->correlated && info->set_not_null && info->type == DIMENSION_TYPE_OPEN)
 		dimension_add_not_null_on_column(info->table_relid, NameStr(info->colname));
 
 	Assert(info->ht != NULL);
@@ -1490,7 +1539,8 @@ ts_dimension_add_from_info(DimensionInfo *info)
 										  info->coltype,
 										  info->num_slices,
 										  info->partitioning_func,
-										  info->interval);
+										  info->interval,
+										  info->correlated);
 
 	return info->dimension_id;
 }
@@ -1553,6 +1603,7 @@ dimension_create_datum(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_gen
  * 3. Interval for open ('time') dimensions
  * 4. Partitioning function
  * 5. IF NOT EXISTS option (bool)
+ * 6. Is it a correlated constraint? (bool)
  */
 static Datum
 ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_generic)
@@ -1590,7 +1641,7 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot specify both the number of partitions and an interval")));
 
-	if (!info->num_slices_is_set && !OidIsValid(info->interval_type))
+	if (!info->num_slices_is_set && !OidIsValid(info->interval_type) && !info->correlated)
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot omit both the number of partitions and the interval")));
@@ -1673,6 +1724,7 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
+		.correlated = PG_ARGISNULL(6) ? false : PG_GETARG_BOOL(6),
 	};
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();

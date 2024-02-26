@@ -242,6 +242,8 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->main_table_relid =
 		ts_get_relation_relid(NameStr(h->fd.schema_name), NameStr(h->fd.table_name), true);
 	h->space = ts_dimension_scan(h->fd.id, h->main_table_relid, h->fd.num_dimensions, ti->mctx);
+	/* check and assign correlated constraint */
+	ts_correlated_constraints_assign(h, ti->mctx);
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);

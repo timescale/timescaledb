@@ -329,3 +329,26 @@ ANALYZE _timescaledb_catalog.continuous_agg;
 --
 -- END Rebuild the catalog table `_timescaledb_catalog.continuous_agg`
 --
+
+DROP FUNCTION IF EXISTS @extschema@.add_dimension(
+    REGCLASS,
+    NAME,
+    INTEGER,
+    ANYELEMENT,
+    REGPROC,
+    BOOLEAN
+);
+
+CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
+    hypertable              REGCLASS,
+    column_name             NAME,
+    number_partitions       INTEGER = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::BIGINT,
+    partitioning_func       REGPROC = NULL,
+    if_not_exists           BOOLEAN = FALSE,
+    correlated              BOOLEAN = FALSE
+) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
+AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
+
+ALTER TABLE _timescaledb_catalog.dimension ADD COLUMN correlated BOOLEAN;
+UPDATE _timescaledb_catalog.dimension SET correlated = FALSE;

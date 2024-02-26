@@ -206,4 +206,25 @@ CREATE FUNCTION _timescaledb_functions.get_chunk_colstats(relid REGCLASS)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, att_num INTEGER, nullfrac REAL, width INTEGER, distinctval REAL, slotkind INTEGER[], slotopstrings CSTRING[], slotcollations OID[], slot1numbers FLOAT4[], slot2numbers FLOAT4[], slot3numbers FLOAT4[], slot4numbers FLOAT4[], slot5numbers FLOAT4[], slotvaluetypetrings CSTRING[], slot1values CSTRING[], slot2values CSTRING[], slot3values CSTRING[], slot4values CSTRING[], slot5values CSTRING[])
 AS $$BEGIN END$$ LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp;
 
+DROP FUNCTION IF EXISTS @extschema@.add_dimension(
+    REGCLASS,
+    NAME,
+    INTEGER,
+    ANYELEMENT,
+    REGPROC,
+    BOOLEAN,
+    BOOLEAN
+);
 
+CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
+    hypertable              REGCLASS,
+    column_name             NAME,
+    number_partitions       INTEGER = NULL,
+    chunk_time_interval     ANYELEMENT = NULL::BIGINT,
+    partitioning_func       REGPROC = NULL,
+    if_not_exists           BOOLEAN = FALSE
+) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
+AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
+
+DELETE FROM _timescaledb_catalog.dimension WHERE correlated IS TRUE;
+ALTER TABLE _timescaledb_catalog.dimension DROP COLUMN correlated;
