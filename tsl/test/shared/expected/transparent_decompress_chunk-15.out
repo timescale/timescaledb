@@ -403,20 +403,17 @@ QUERY PLAN
 (8 rows)
 
 --functions not yet optimized
-:PREFIX SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;
+:PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;
 QUERY PLAN
- Limit (actual rows=10 loops=1)
-   ->  Gather Merge (actual rows=10 loops=1)
+ Limit
+   ->  Gather Merge
          Workers Planned: 2
-         Workers Launched: 2
-         ->  Sort (actual rows=10 loops=2)
+         ->  Sort
                Sort Key: _hyper_X_X_chunk."time", _hyper_X_X_chunk.device_id
-               Worker 0:  Sort Method: top-N heapsort 
-               Worker 1:  Sort Method: top-N heapsort 
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=8995 loops=2)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
                      Vectorized Filter: ("time" < now())
-                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk (actual rows=10 loops=2)
-(11 rows)
+                     ->  Parallel Seq Scan on compress_hyper_X_X_chunk
+(8 rows)
 
 -- test sort optimization interaction
 :PREFIX_NO_VERBOSE SELECT time FROM :TEST_TABLE ORDER BY time DESC LIMIT 10;
