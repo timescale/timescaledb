@@ -68,8 +68,8 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
 select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
   from timescaledb_information.chunks
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
- order by chunk2 desc
- limit 1 \gset
+ order by chunk2 asc
+ limit 1 offset 1 \gset
 -- We need to drop the index to trigger parallel plans. Otherwise they
 -- will use the index.
 drop index hypertable_device_id_idx;
