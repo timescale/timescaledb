@@ -522,6 +522,48 @@ ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start, i
 	return ts_dimension_vec_sort(&slices);
 }
 
+/*
+ * Scan for a slice that is exactly equal to the given range.
+ *
+ * Returns a dimension vector of the matching slice if any.
+ */
+DimensionVec *
+ts_dimension_slice_equal_scan(int32 dimension_id, int64 range_start, int64 range_end)
+{
+	ScanKeyData scankey[3];
+	DimensionVec *slice = ts_dimension_vec_create(1); /* maximum 1 dimension slice expected */
+
+	ScanKeyInit(&scankey[0],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_dimension_id,
+				BTEqualStrategyNumber,
+				F_INT4EQ,
+				Int32GetDatum(dimension_id));
+
+	ScanKeyInit(&scankey[1],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_start,
+				BTEqualStrategyNumber,
+				F_INT8EQ,
+				Int64GetDatum(range_start));
+
+	ScanKeyInit(&scankey[2],
+				Anum_dimension_slice_dimension_id_range_start_range_end_idx_range_end,
+				BTEqualStrategyNumber,
+				F_INT8EQ,
+				Int64GetDatum(range_end));
+
+	dimension_slice_scan_limit_internal(DIMENSION_SLICE_DIMENSION_ID_RANGE_START_RANGE_END_IDX,
+										scankey,
+										3,
+										dimension_vec_tuple_found,
+										&slice,
+										1,
+										AccessShareLock,
+										NULL,
+										CurrentMemoryContext);
+
+	return slice;
+}
+
 DimensionVec *
 ts_dimension_slice_scan_by_dimension(int32 dimension_id, int limit)
 {
@@ -981,6 +1023,224 @@ ts_dimension_slice_insert_multi(DimensionSlice **slices, Size num_slices)
 	table_close(rel, RowExclusiveLock);
 
 	return n;
+}
+
+/*
+ * Insert correlated constraint dimension slices into the catalog.
+ *
+ * Create entries with MINVALUE/MAXVALUE as ranges for correlated
+ * constraints and insert these entries. This allows for all the
+ * chunks to be picked up when queries use correlated columns in
+ * WHERE clauses.
+ *
+ * Also, add these to the chunk's constraint lists so that they
+ * eventually get added into the metadate in this same transaction
+ *
+ * We will asynchronously convert the entries into proper ranges
+ * later
+ *
+ * Returns the number of slices inserted.
+ */
+int
+ts_correlated_constraints_dimension_slice_insert(const Hypertable *ht, Chunk *chunk)
+{
+	Catalog *catalog;
+	Relation rel;
+	Size i = 0;
+	Hyperspace *hs = ht->correlated_space;
+
+	if (hs == NULL)
+		return i;
+
+	catalog = ts_catalog_get();
+	rel = table_open(catalog_get_table_id(catalog, DIMENSION_SLICE), RowExclusiveLock);
+
+	for (i = 0; i < hs->num_dimensions; i++)
+	{
+		Dimension *dim = &hs->dimensions[i];
+		DimensionSlice *slice;
+		DimensionVec *vec;
+
+		/* Check if an entry already exists first */
+		vec = ts_dimension_slice_equal_scan(dim->fd.id,
+											DIMENSION_SLICE_MINVALUE,
+											DIMENSION_SLICE_MAXVALUE);
+		/* Add a new entry if none exists */
+		if (vec->num_slices == 0)
+		{
+			slice = ts_dimension_slice_create(dim->fd.id,
+											  DIMENSION_SLICE_MINVALUE,
+											  DIMENSION_SLICE_MAXVALUE);
+			dimension_slice_insert_relation(rel, slice);
+		}
+		else
+		{
+			Assert(vec->num_slices == 1);
+			slice = vec->slices[0];
+		}
+
+		ts_chunk_constraints_add(chunk->constraints,
+								 chunk->fd.id,
+								 slice->fd.id,
+								 NULL,
+								 NULL,
+								 DIMENSION_TYPE_CORRELATED);
+	}
+
+	table_close(rel, RowExclusiveLock);
+
+	return i;
+}
+
+/*
+ * Update correlated constraints dimension slices in the catalog for the
+ * provided chunk (it's assumed that the chunk is locked
+ * appropriately).
+ *
+ * Calculate actual ranges for the given chunk for correlated
+ * constraints and update these entries. This allows for the
+ * chunk to be picked up when queries use correlated columns in
+ * WHERE clauses with these ranges.
+ *
+ * If "reset" is specified then we change the range back to MINVALUE
+ * and MAXVALUE
+ *
+ * Returns the number of slices updated.
+ */
+int
+ts_correlated_constraints_dimension_slice_calculate_update(const Hypertable *ht, Chunk *chunk,
+														   bool reset)
+{
+	Size i = 0;
+	Hyperspace *hs = ht->correlated_space;
+	ChunkConstraints *constraints = chunk->constraints;
+	MemoryContext work_mcxt, orig_mcxt;
+
+	/* quick check for correlated constraints. Bail out early if none */
+	if (hs == NULL)
+		return i;
+
+	work_mcxt =
+		AllocSetContextCreate(CurrentMemoryContext, "dimension-slice-work", ALLOCSET_DEFAULT_SIZES);
+	orig_mcxt = MemoryContextSwitchTo(work_mcxt);
+
+	for (int constraint_index = 0; constraint_index < constraints->num_constraints;
+		 constraint_index++)
+	{
+		int slice_id;
+		DimensionSlice *slice;
+		ChunkConstraint *constraint = &constraints->constraints[constraint_index];
+		Datum minmax[2];
+		AttrNumber attno;
+		TupleInfo *ti;
+		ScanIterator slice_iterator;
+		const Dimension *dim;
+
+		if (!is_correlated_constraint(constraint))
+			continue;
+
+		/*
+		 * Find the slice by id. Don't have to lock it because the chunk is
+		 * assumed to be locked when this function is called.
+		 */
+		slice_id = constraint->fd.dimension_slice_id;
+		slice_iterator = ts_dimension_slice_scan_iterator_create(NULL, orig_mcxt);
+		ts_dimension_slice_scan_iterator_set_slice_id(&slice_iterator, slice_id, NULL);
+		ts_scan_iterator_start_scan(&slice_iterator);
+		ti = ts_scan_iterator_next(&slice_iterator);
+		Ensure(ti != NULL, "dimension slice %d not found!", slice_id);
+
+		slice = ts_dimension_slice_from_tuple(ti);
+
+		/* get the dimension from the correlated subspace. It has to exist */
+		dim = ts_hyperspace_get_dimension_by_id(ht->correlated_space, slice->fd.dimension_id);
+		if (dim == NULL)
+			ereport(ERROR,
+					errmsg("correlated constraint dimension %d not found!",
+						   slice->fd.dimension_id));
+
+		attno = ts_map_attno(ht->main_table_relid, chunk->table_id, dim->column_attno);
+
+		/* calculate the min/max for this correlated constraint attribute on this chunk */
+		if (reset || ts_chunk_get_minmax(chunk->table_id,
+										 dim->fd.column_type,
+										 attno,
+										 "correlated constraint",
+										 minmax))
+		{
+			DimensionSlice *new_slice;
+			DimensionVec *vec;
+			int64 min = reset ? DIMENSION_SLICE_MINVALUE :
+								ts_time_value_to_internal(minmax[0], dim->fd.column_type);
+			int64 max = reset ? DIMENSION_SLICE_MAXVALUE :
+								ts_time_value_to_internal(minmax[1], dim->fd.column_type);
+
+			/* The end value is exclusive to the range, so incr by 1 */
+			if (max != DIMENSION_SLICE_MAXVALUE)
+			{
+				max++;
+				/* Again, check overflow */
+				max = REMAP_LAST_COORDINATE(max);
+			}
+
+			/*
+			 * It's possible that an existing chunk might have the SAME values for this
+			 * correlated constraint due to which an entry might already exist in the
+			 * dimension_slice catalog table. So check for that.
+			 */
+
+			vec = ts_dimension_slice_equal_scan(dim->fd.id, min, max);
+
+			/* Add a new entry if none exists */
+			if (vec->num_slices == 0)
+			{
+				new_slice = ts_dimension_slice_create(dim->fd.id, min, max);
+				dimension_slice_insert(new_slice);
+			}
+			else
+			{
+				Assert(vec->num_slices == 1);
+				new_slice = vec->slices[0];
+			}
+
+			/* Generate a new name for this constraint using the new slice id */
+			ts_chunk_constraint_dimension_choose_name(&constraint->fd.constraint_name,
+													  CC_DIM_PREFIX,
+													  new_slice->fd.id);
+
+			/* Update the existing chunk constraint entry to point to this new slice */
+			ts_chunk_constraint_update_slice_id_name(chunk->fd.id,
+													 slice->fd.id,
+													 new_slice->fd.id,
+													 NameStr(constraint->fd.constraint_name));
+
+			/*
+			 * Adjust the ChunkConstraint entry with this new slice id. It's already
+			 * reflected in the catalog via the above call
+			 */
+			constraint->fd.dimension_slice_id = new_slice->fd.id;
+
+			i++;
+		}
+		else
+			ereport(WARNING,
+					errmsg("unable to calculate min/max values for correlated constraints"));
+
+		ts_scan_iterator_end(&slice_iterator);
+		ts_scan_iterator_close(&slice_iterator);
+	}
+
+	MemoryContextSwitchTo(orig_mcxt);
+	MemoryContextDelete(work_mcxt);
+
+	return i;
+}
+
+int
+ts_correlated_constraints_dimension_slice_reset(const Hypertable *ht, Chunk *chunk)
+{
+	elog(WARNING, "resetting correlated constraints dimension slice for chunk %d", chunk->fd.id);
+	return ts_correlated_constraints_dimension_slice_calculate_update(ht, chunk, true);
 }
 
 void

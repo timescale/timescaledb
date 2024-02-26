@@ -2210,6 +2210,8 @@ static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
 	int i;
+	int32 dimension_id;
+	bool dropped;
 
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
@@ -2222,6 +2224,11 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 	}
+
+	/*
+	 * Delete a correlated dimension constraint on this column, if any.
+	 */
+	ts_dimension_correlated_drop(ht, cmd->name, &dimension_id, &dropped);
 }
 
 /* process all regular-table alter commands to make sure they aren't adding
@@ -3083,7 +3090,7 @@ process_alter_column_type_end(Hypertable *ht, AlterTableCmd *cmd)
 	if (NULL == dim)
 		return;
 
-	ts_dimension_set_type(dim, new_type);
+	ts_dimension_set_column_type(dim, new_type);
 	ts_process_utility_set_expect_chunk_modification(true);
 	ts_chunk_recreate_all_constraints_for_dimension(ht, dim->fd.id);
 	ts_process_utility_set_expect_chunk_modification(false);

@@ -84,6 +84,7 @@ dimension_restrict_info_create(const Dimension *d)
 	switch (d->type)
 	{
 		case DIMENSION_TYPE_OPEN:
+		case DIMENSION_TYPE_CORRELATED:
 			return &dimension_restrict_info_open_create(d)->base;
 		case DIMENSION_TYPE_CLOSED:
 			return &dimension_restrict_info_closed_create(d)->base;
@@ -103,6 +104,7 @@ dimension_restrict_info_is_trivial(const DimensionRestrictInfo *dri)
 	switch (dri->dimension->type)
 	{
 		case DIMENSION_TYPE_OPEN:
+		case DIMENSION_TYPE_CORRELATED:
 		{
 			DimensionRestrictInfoOpen *open = (DimensionRestrictInfoOpen *) dri;
 			return open->lower_strategy == InvalidStrategy &&
@@ -246,6 +248,7 @@ dimension_restrict_info_add(DimensionRestrictInfo *dri, int strategy, Oid collat
 	switch (dri->dimension->type)
 	{
 		case DIMENSION_TYPE_OPEN:
+		case DIMENSION_TYPE_CORRELATED:
 			return dimension_restrict_info_open_add((DimensionRestrictInfoOpen *) dri,
 													strategy,
 													collation,
@@ -274,18 +277,28 @@ typedef struct HypertableRestrictInfo
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
-	int num_dimensions = ht->space->num_dimensions;
+	int num_dimensions = ht->space->num_dimensions +
+						 (ht->correlated_space ? ht->correlated_space->num_dimensions : 0);
 	HypertableRestrictInfo *res =
 		palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
 	int i;
+	int sec_index = 0;
 
 	res->num_dimensions = num_dimensions;
 
-	for (i = 0; i < num_dimensions; i++)
+	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		DimensionRestrictInfo *dri = dimension_restrict_info_create(&ht->space->dimensions[i]);
 
 		res->dimension_restriction[i] = dri;
+		sec_index++;
+	}
+	for (i = 0; ht->correlated_space != NULL && i < ht->correlated_space->num_dimensions; i++)
+	{
+		DimensionRestrictInfo *dri =
+			dimension_restrict_info_create(&ht->correlated_space->dimensions[i]);
+
+		res->dimension_restriction[sec_index++] = dri;
 	}
 
 	return res;
@@ -509,6 +522,7 @@ gather_restriction_dimension_vectors(const HypertableRestrictInfo *hri)
 		switch (dri->dimension->type)
 		{
 			case DIMENSION_TYPE_OPEN:
+			case DIMENSION_TYPE_CORRELATED:
 			{
 				const DimensionRestrictInfoOpen *open = (const DimensionRestrictInfoOpen *) dri;
 

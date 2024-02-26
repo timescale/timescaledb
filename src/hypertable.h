@@ -51,6 +51,7 @@ typedef struct Hypertable
 	Oid main_table_relid;
 	Oid chunk_sizing_func;
 	Hyperspace *space;
+	Hyperspace *correlated_space;
 	SubspaceStore *chunk_cache;
 	/*
 	 * Allows restricting the data nodes to use for the hypertable. Default is to

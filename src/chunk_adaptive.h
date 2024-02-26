@@ -24,6 +24,8 @@ typedef struct ChunkSizingInfo
 
 extern void ts_chunk_adaptive_sizing_info_validate(ChunkSizingInfo *info);
 extern void ts_chunk_sizing_func_validate(regproc func, ChunkSizingInfo *info);
+extern bool ts_chunk_get_minmax(Oid relid, Oid atttype, AttrNumber attnum, const char *call_context,
+								Datum minmax[2]);
 extern TSDLLEXPORT ChunkSizingInfo *ts_chunk_sizing_info_get_default_disabled(Oid table_relid);
 
 extern TSDLLEXPORT int64 ts_chunk_calculate_initial_chunk_target_size(void);

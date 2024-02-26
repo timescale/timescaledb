@@ -160,6 +160,24 @@ CREATE OR REPLACE FUNCTION @extschema@.by_range(column_name NAME,
     RETURNS _timescaledb_internal.dimension_info LANGUAGE C
     AS '@MODULE_PATHNAME@', 'ts_range_dimension';
 
+CREATE OR REPLACE FUNCTION @extschema@.by_correlation(column_name NAME)
+    RETURNS _timescaledb_internal.dimension_info LANGUAGE C
+    AS '@MODULE_PATHNAME@', 'ts_correlated_dimension';
+
+-- Remove a dimension on a hypertable. Currently only correlated constraint
+-- dimensions can be removed since the other dimensions will need a data
+-- rewrite which is not implemented
+--
+-- hypertable - OID of the table to remove dimension from
+-- column_name - NAME of the column on which the dimension exists
+-- if_not_exists - If set, and the dimension does not exist, generate a notice instead of an error
+CREATE OR REPLACE FUNCTION @extschema@.remove_dimension(
+    hypertable              REGCLASS,
+    column_name             NAME,
+    if_not_exists           BOOLEAN = FALSE
+) RETURNS TABLE(dimension_id INT, dropped BOOL)
+AS '@MODULE_PATHNAME@', 'ts_dimension_remove' LANGUAGE C VOLATILE;
+
 CREATE OR REPLACE FUNCTION @extschema@.attach_tablespace(
     tablespace NAME,
     hypertable REGCLASS,
