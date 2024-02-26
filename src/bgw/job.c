@@ -985,7 +985,7 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 	job_stat = ts_bgw_job_stat_find(job->fd.id);
 
 	/* stop to execute failing jobs after reached the "max_retries" option */
-	if (job->fd.max_retries > 0 && job_stat->fd.consecutive_failures >= job->fd.max_retries)
+	if (job->fd.max_retries >= 0 && job_stat->fd.consecutive_failures >= job->fd.max_retries)
 	{
 		ereport(WARNING,
 				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),

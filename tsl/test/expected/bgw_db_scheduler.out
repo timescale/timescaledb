@@ -1646,7 +1646,95 @@ DETAIL:  owner of job 1026
 DELETE FROM _timescaledb_config.bgw_job WHERE id = :job_id;
 -- This should succeed
 DROP USER renamed_user;
+--
+-- Test without retry
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+SELECT ts_bgw_params_reset_time();
+ ts_bgw_params_reset_time 
+--------------------------
+ 
+(1 row)
+
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
+ ts_bgw_params_mock_wait_returns_immediately 
+---------------------------------------------
+ 
+(1 row)
+
+DELETE FROM _timescaledb_config.bgw_job;
+INSERT INTO _timescaledb_config.bgw_job(application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name) VALUES('bgw_test_job_2_error', INTERVAL '5000ms', INTERVAL '20ms', 0, INTERVAL '20ms', 'public', 'bgw_test_job_2_error') RETURNING id;
+  id  
+------
+ 1027
+(1 row)
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- Run the first time
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes FROM _timescaledb_internal.bgw_job_stat;
+ job_id | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------+------------+-----------------+----------------+---------------
+   1027 | f                |          1 |               0 |              1 |             0
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |   application_name   |                            msg                            
+--------+----------------------+-----------------------------------------------------------
+      0 | DB Scheduler         | [TESTING] Registered new background worker
+      1 | DB Scheduler         | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      1 | bgw_test_job_2_error | job 1027 reached max_retries after 1 consecutive failures
+      2 | bgw_test_job_2_error | job 1027 threw an error
+      3 | bgw_test_job_2_error | Error job 2
+      2 | DB Scheduler         | [TESTING] Wait until (RANDOM), started at (RANDOM)
+(6 rows)
+
+SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
+         last_finish          | last_successful_finish | last_run_success 
+------------------------------+------------------------+------------------
+ Fri Dec 31 16:00:00 1999 PST | -infinity              | f
+(1 row)
+
+-- Run the second time
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 50);
+ ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish 
+------------------------------------------------------------
+ 
+(1 row)
+
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes FROM _timescaledb_internal.bgw_job_stat;
+ job_id | last_run_success | total_runs | total_successes | total_failures | total_crashes 
+--------+------------------+------------+-----------------+----------------+---------------
+   1027 | f                |          1 |               0 |              1 |             0
+(1 row)
+
+SELECT * FROM sorted_bgw_log;
+ msg_no |   application_name   |                            msg                            
+--------+----------------------+-----------------------------------------------------------
+      0 | DB Scheduler         | [TESTING] Registered new background worker
+      1 | DB Scheduler         | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      1 | bgw_test_job_2_error | job 1027 reached max_retries after 1 consecutive failures
+      2 | bgw_test_job_2_error | job 1027 threw an error
+      3 | bgw_test_job_2_error | Error job 2
+      2 | DB Scheduler         | [TESTING] Wait until (RANDOM), started at (RANDOM)
+      0 | DB Scheduler         | [TESTING] Wait until (RANDOM), started at (RANDOM)
+(7 rows)
+
+SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
+         last_finish          | last_successful_finish | last_run_success 
+------------------------------+------------------------+------------------
+ Fri Dec 31 16:00:00 1999 PST | -infinity              | f
+(1 row)
+
 -- clean up jobs
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
  stop_background_workers 
 -------------------------
