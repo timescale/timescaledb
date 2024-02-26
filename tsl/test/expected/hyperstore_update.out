@@ -69,8 +69,8 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
 select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
   from timescaledb_information.chunks
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
- order by chunk2 desc
- limit 1 \gset
+ order by chunk2 asc
+ limit 1 offset 1 \gset
 -- TODO(#1068) Parallel sequence scan does not work
 set max_parallel_workers_per_gather to 0;
 select twist_chunk(show_chunks(:'hypertable'));
