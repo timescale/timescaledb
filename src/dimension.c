@@ -1749,7 +1749,10 @@ ts_dimension_info_out(PG_FUNCTION_ARGS)
 static DimensionInfo *
 make_dimension_info(Name colname, DimensionType dimtype)
 {
-	DimensionInfo *info = palloc0(sizeof(DimensionInfo));
+	size_t size = sizeof(DimensionInfo);
+	DimensionInfo *info = palloc0(size);
+	SET_VARSIZE(info, size);
+
 	info->type = dimtype;
 	namestrcpy(&info->colname, NameStr(*colname));
 	return info;
