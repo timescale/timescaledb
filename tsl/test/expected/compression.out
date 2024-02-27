@@ -1812,7 +1812,7 @@ SELECT sum(cpu) FROM f_sensor_data;
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                      Output: _hyper_37_73_chunk.cpu
                      ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
-                           Output: compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature, compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1
+                           Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
 (11 rows)
 
 -- Encourage use of Index Scan
@@ -1831,7 +1831,7 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
    ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
          Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
          ->  Parallel Index Scan using compress_hyper_38_74_chunk_sensor_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_38_74_chunk
-               Output: compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature, compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1
+               Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
                Index Cond: (compress_hyper_38_74_chunk.sensor_id > 100)
 (8 rows)
 
@@ -1867,7 +1867,7 @@ SELECT sum(cpu) FROM f_sensor_data;
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_37_73_chunk
                            Output: _hyper_37_73_chunk.cpu
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_38_74_chunk
-                                 Output: compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature, compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1
+                                 Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
 (16 rows)
 
 :explain
@@ -1885,7 +1885,7 @@ SELECT * FROM f_sensor_data WHERE sensor_id > 100;
                Output: _hyper_37_73_chunk."time", _hyper_37_73_chunk.sensor_id, _hyper_37_73_chunk.cpu, _hyper_37_73_chunk.temperature
                Filter: (_hyper_37_73_chunk.sensor_id > 100)
                ->  Parallel Index Scan using compress_hyper_38_74_chunk_sensor_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_38_74_chunk
-                     Output: compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature, compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1
+                     Output: compress_hyper_38_74_chunk._ts_meta_count, compress_hyper_38_74_chunk._ts_meta_sequence_num, compress_hyper_38_74_chunk.sensor_id, compress_hyper_38_74_chunk._ts_meta_min_1, compress_hyper_38_74_chunk._ts_meta_max_1, compress_hyper_38_74_chunk."time", compress_hyper_38_74_chunk.cpu, compress_hyper_38_74_chunk.temperature
                      Index Cond: (compress_hyper_38_74_chunk.sensor_id > 100)
 (13 rows)
 
@@ -1981,7 +1981,7 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_78_chunk
                      Output: _hyper_41_78_chunk."time", _hyper_41_78_chunk.device, _hyper_41_78_chunk.value
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_42_80_chunk
-                           Output: compress_hyper_42_80_chunk."time", compress_hyper_42_80_chunk.device, compress_hyper_42_80_chunk.value, compress_hyper_42_80_chunk._ts_meta_count, compress_hyper_42_80_chunk._ts_meta_sequence_num, compress_hyper_42_80_chunk._ts_meta_min_1, compress_hyper_42_80_chunk._ts_meta_max_1
+                           Output: compress_hyper_42_80_chunk._ts_meta_count, compress_hyper_42_80_chunk._ts_meta_sequence_num, compress_hyper_42_80_chunk.device, compress_hyper_42_80_chunk._ts_meta_min_1, compress_hyper_42_80_chunk._ts_meta_max_1, compress_hyper_42_80_chunk."time", compress_hyper_42_80_chunk.value
          ->  Merge Append
                Sort Key: _hyper_41_77_chunk."time" DESC, _hyper_41_77_chunk.device
                ->  Sort
@@ -1990,7 +1990,7 @@ SELECT * FROM ht_metrics_partially_compressed ORDER BY time DESC, device LIMIT 1
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_41_77_chunk
                            Output: _hyper_41_77_chunk."time", _hyper_41_77_chunk.device, _hyper_41_77_chunk.value
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_42_79_chunk
-                                 Output: compress_hyper_42_79_chunk."time", compress_hyper_42_79_chunk.device, compress_hyper_42_79_chunk.value, compress_hyper_42_79_chunk._ts_meta_count, compress_hyper_42_79_chunk._ts_meta_sequence_num, compress_hyper_42_79_chunk._ts_meta_min_1, compress_hyper_42_79_chunk._ts_meta_max_1
+                                 Output: compress_hyper_42_79_chunk._ts_meta_count, compress_hyper_42_79_chunk._ts_meta_sequence_num, compress_hyper_42_79_chunk.device, compress_hyper_42_79_chunk._ts_meta_min_1, compress_hyper_42_79_chunk._ts_meta_max_1, compress_hyper_42_79_chunk."time", compress_hyper_42_79_chunk.value
                ->  Sort
                      Output: _hyper_41_77_chunk."time", _hyper_41_77_chunk.device, _hyper_41_77_chunk.value
                      Sort Key: _hyper_41_77_chunk."time" DESC, _hyper_41_77_chunk.device
@@ -2094,10 +2094,10 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                      Filter: ((_hyper_43_83_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_83_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      Batch Sorted Merge: true
                      ->  Sort
-                           Output: compress_hyper_44_86_chunk."timestamp", compress_hyper_44_86_chunk.attr_id, compress_hyper_44_86_chunk.number_val, compress_hyper_44_86_chunk._ts_meta_count, compress_hyper_44_86_chunk._ts_meta_sequence_num, compress_hyper_44_86_chunk._ts_meta_min_1, compress_hyper_44_86_chunk._ts_meta_max_1
+                           Output: compress_hyper_44_86_chunk._ts_meta_count, compress_hyper_44_86_chunk._ts_meta_sequence_num, compress_hyper_44_86_chunk.attr_id, compress_hyper_44_86_chunk._ts_meta_min_1, compress_hyper_44_86_chunk._ts_meta_max_1, compress_hyper_44_86_chunk."timestamp", compress_hyper_44_86_chunk.number_val
                            Sort Key: compress_hyper_44_86_chunk._ts_meta_max_1 DESC
                            ->  Index Scan using compress_hyper_44_86_chunk_attr_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_44_86_chunk
-                                 Output: compress_hyper_44_86_chunk."timestamp", compress_hyper_44_86_chunk.attr_id, compress_hyper_44_86_chunk.number_val, compress_hyper_44_86_chunk._ts_meta_count, compress_hyper_44_86_chunk._ts_meta_sequence_num, compress_hyper_44_86_chunk._ts_meta_min_1, compress_hyper_44_86_chunk._ts_meta_max_1
+                                 Output: compress_hyper_44_86_chunk._ts_meta_count, compress_hyper_44_86_chunk._ts_meta_sequence_num, compress_hyper_44_86_chunk.attr_id, compress_hyper_44_86_chunk._ts_meta_min_1, compress_hyper_44_86_chunk._ts_meta_max_1, compress_hyper_44_86_chunk."timestamp", compress_hyper_44_86_chunk.number_val
                                  Index Cond: (compress_hyper_44_86_chunk.attr_id = "*VALUES*".column1)
                                  Filter: ((compress_hyper_44_86_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_86_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_43_82_chunk
@@ -2105,10 +2105,10 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                      Filter: ((_hyper_43_82_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_82_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      Batch Sorted Merge: true
                      ->  Sort
-                           Output: compress_hyper_44_85_chunk."timestamp", compress_hyper_44_85_chunk.attr_id, compress_hyper_44_85_chunk.number_val, compress_hyper_44_85_chunk._ts_meta_count, compress_hyper_44_85_chunk._ts_meta_sequence_num, compress_hyper_44_85_chunk._ts_meta_min_1, compress_hyper_44_85_chunk._ts_meta_max_1
+                           Output: compress_hyper_44_85_chunk._ts_meta_count, compress_hyper_44_85_chunk._ts_meta_sequence_num, compress_hyper_44_85_chunk.attr_id, compress_hyper_44_85_chunk._ts_meta_min_1, compress_hyper_44_85_chunk._ts_meta_max_1, compress_hyper_44_85_chunk."timestamp", compress_hyper_44_85_chunk.number_val
                            Sort Key: compress_hyper_44_85_chunk._ts_meta_max_1 DESC
                            ->  Index Scan using compress_hyper_44_85_chunk_attr_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_44_85_chunk
-                                 Output: compress_hyper_44_85_chunk."timestamp", compress_hyper_44_85_chunk.attr_id, compress_hyper_44_85_chunk.number_val, compress_hyper_44_85_chunk._ts_meta_count, compress_hyper_44_85_chunk._ts_meta_sequence_num, compress_hyper_44_85_chunk._ts_meta_min_1, compress_hyper_44_85_chunk._ts_meta_max_1
+                                 Output: compress_hyper_44_85_chunk._ts_meta_count, compress_hyper_44_85_chunk._ts_meta_sequence_num, compress_hyper_44_85_chunk.attr_id, compress_hyper_44_85_chunk._ts_meta_min_1, compress_hyper_44_85_chunk._ts_meta_max_1, compress_hyper_44_85_chunk."timestamp", compress_hyper_44_85_chunk.number_val
                                  Index Cond: (compress_hyper_44_85_chunk.attr_id = "*VALUES*".column1)
                                  Filter: ((compress_hyper_44_85_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_85_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_43_81_chunk
@@ -2116,10 +2116,10 @@ ORDER BY timestamp desc  LIMIT 1 ) a ON true;
                      Filter: ((_hyper_43_81_chunk."timestamp" > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (_hyper_43_81_chunk."timestamp" < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
                      Batch Sorted Merge: true
                      ->  Sort
-                           Output: compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk.number_val, compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1
+                           Output: compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1, compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.number_val
                            Sort Key: compress_hyper_44_84_chunk._ts_meta_max_1 DESC
                            ->  Index Scan using compress_hyper_44_84_chunk_attr_id__ts_meta_sequence_num_idx on _timescaledb_internal.compress_hyper_44_84_chunk
-                                 Output: compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk.number_val, compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1
+                                 Output: compress_hyper_44_84_chunk._ts_meta_count, compress_hyper_44_84_chunk._ts_meta_sequence_num, compress_hyper_44_84_chunk.attr_id, compress_hyper_44_84_chunk._ts_meta_min_1, compress_hyper_44_84_chunk._ts_meta_max_1, compress_hyper_44_84_chunk."timestamp", compress_hyper_44_84_chunk.number_val
                                  Index Cond: (compress_hyper_44_84_chunk.attr_id = "*VALUES*".column1)
                                  Filter: ((compress_hyper_44_84_chunk._ts_meta_max_1 > 'Fri Jun 30 00:00:00 2023'::timestamp without time zone) AND (compress_hyper_44_84_chunk._ts_meta_min_1 < 'Thu Jul 06 00:00:00 2023'::timestamp without time zone))
 (44 rows)
@@ -2219,28 +2219,28 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
                      Sort Key: compress_hyper_46_96_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_96_chunk (never executed)
-                           Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_88_chunk (never executed)
                Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
                      Sort Key: compress_hyper_46_95_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
-                           Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_87_chunk (never executed)
                Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
                      Sort Key: compress_hyper_46_94_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_94_chunk (never executed)
-                           Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
 (42 rows)
 
 -- Only the first chunks should be accessed (batch sorted merge is disabled)
@@ -2271,7 +2271,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_89_chunk."time", _hyper_45_89_chunk.sensor_id, _hyper_45_89_chunk.cpu, _hyper_45_89_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_96_chunk (never executed)
-                           Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                Sort Key: _hyper_45_88_chunk."time" DESC
@@ -2279,7 +2279,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
-                           Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                Sort Key: _hyper_45_87_chunk."time" DESC
@@ -2287,7 +2287,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_94_chunk (never executed)
-                           Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
 (39 rows)
 
 RESET timescaledb.enable_decompression_sorted_merge;
@@ -2334,67 +2334,67 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (actual rows=2 loops=1)
-                     Output: compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature, compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1, compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature
                      Sort Key: compress_hyper_46_100_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_100_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature, compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1, compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_92_chunk (actual rows=2 loops=1)
                Output: _hyper_45_92_chunk."time", _hyper_45_92_chunk.sensor_id, _hyper_45_92_chunk.cpu, _hyper_45_92_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (actual rows=2 loops=1)
-                     Output: compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature, compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1, compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature
                      Sort Key: compress_hyper_46_99_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_99_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature, compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1, compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_91_chunk (actual rows=1 loops=1)
                Output: _hyper_45_91_chunk."time", _hyper_45_91_chunk.sensor_id, _hyper_45_91_chunk.cpu, _hyper_45_91_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (actual rows=2 loops=1)
-                     Output: compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature, compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1, compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature
                      Sort Key: compress_hyper_46_98_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_98_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature, compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1, compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_90_chunk (never executed)
                Output: _hyper_45_90_chunk."time", _hyper_45_90_chunk.sensor_id, _hyper_45_90_chunk.cpu, _hyper_45_90_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature, compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1, compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature
                      Sort Key: compress_hyper_46_97_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_97_chunk (never executed)
-                           Output: compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature, compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1, compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_89_chunk (never executed)
                Output: _hyper_45_89_chunk."time", _hyper_45_89_chunk.sensor_id, _hyper_45_89_chunk.cpu, _hyper_45_89_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
                      Sort Key: compress_hyper_46_96_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_96_chunk (never executed)
-                           Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_88_chunk (never executed)
                Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
                      Sort Key: compress_hyper_46_95_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
-                           Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_87_chunk (never executed)
                Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
                      Sort Key: compress_hyper_46_94_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_94_chunk (never executed)
-                           Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
 (73 rows)
 
 -- Only the first chunks should be accessed (batch sorted merge is disabled)
@@ -2418,7 +2418,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_93_chunk."time", _hyper_45_93_chunk.sensor_id, _hyper_45_93_chunk.cpu, _hyper_45_93_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_100_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature, compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1, compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature
          ->  Sort (actual rows=2 loops=1)
                Output: _hyper_45_92_chunk."time", _hyper_45_92_chunk.sensor_id, _hyper_45_92_chunk.cpu, _hyper_45_92_chunk.temperature
                Sort Key: _hyper_45_92_chunk."time" DESC
@@ -2427,7 +2427,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_92_chunk."time", _hyper_45_92_chunk.sensor_id, _hyper_45_92_chunk.cpu, _hyper_45_92_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_99_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature, compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1, compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature
          ->  Sort (actual rows=1 loops=1)
                Output: _hyper_45_91_chunk."time", _hyper_45_91_chunk.sensor_id, _hyper_45_91_chunk.cpu, _hyper_45_91_chunk.temperature
                Sort Key: _hyper_45_91_chunk."time" DESC
@@ -2436,7 +2436,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_91_chunk."time", _hyper_45_91_chunk.sensor_id, _hyper_45_91_chunk.cpu, _hyper_45_91_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_98_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature, compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1, compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_90_chunk."time", _hyper_45_90_chunk.sensor_id, _hyper_45_90_chunk.cpu, _hyper_45_90_chunk.temperature
                Sort Key: _hyper_45_90_chunk."time" DESC
@@ -2444,7 +2444,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_90_chunk."time", _hyper_45_90_chunk.sensor_id, _hyper_45_90_chunk.cpu, _hyper_45_90_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_97_chunk (never executed)
-                           Output: compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature, compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1, compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_89_chunk."time", _hyper_45_89_chunk.sensor_id, _hyper_45_89_chunk.cpu, _hyper_45_89_chunk.temperature
                Sort Key: _hyper_45_89_chunk."time" DESC
@@ -2452,7 +2452,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_89_chunk."time", _hyper_45_89_chunk.sensor_id, _hyper_45_89_chunk.cpu, _hyper_45_89_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_96_chunk (never executed)
-                           Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                Sort Key: _hyper_45_88_chunk."time" DESC
@@ -2460,7 +2460,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
-                           Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                Sort Key: _hyper_45_87_chunk."time" DESC
@@ -2468,7 +2468,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_94_chunk (never executed)
-                           Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
 (66 rows)
 
 RESET timescaledb.enable_decompression_sorted_merge;
@@ -2492,58 +2492,58 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (actual rows=2 loops=1)
-                     Output: compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature, compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1, compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature
                      Sort Key: compress_hyper_46_100_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_100_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature, compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1, compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_92_chunk (actual rows=2 loops=1)
                Output: _hyper_45_92_chunk."time", _hyper_45_92_chunk.sensor_id, _hyper_45_92_chunk.cpu, _hyper_45_92_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (actual rows=2 loops=1)
-                     Output: compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature, compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1, compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature
                      Sort Key: compress_hyper_46_99_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_99_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature, compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1, compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_91_chunk (actual rows=1 loops=1)
                Output: _hyper_45_91_chunk."time", _hyper_45_91_chunk.sensor_id, _hyper_45_91_chunk.cpu, _hyper_45_91_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (actual rows=2 loops=1)
-                     Output: compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature, compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1, compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature
                      Sort Key: compress_hyper_46_98_chunk._ts_meta_max_1 DESC
                      Sort Method: quicksort 
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_98_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature, compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1, compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_90_chunk (never executed)
                Output: _hyper_45_90_chunk."time", _hyper_45_90_chunk.sensor_id, _hyper_45_90_chunk.cpu, _hyper_45_90_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature, compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1, compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature
                      Sort Key: compress_hyper_46_97_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_97_chunk (never executed)
-                           Output: compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature, compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1, compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_89_chunk (never executed)
                Output: _hyper_45_89_chunk."time", _hyper_45_89_chunk.sensor_id, _hyper_45_89_chunk.cpu, _hyper_45_89_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
                      Sort Key: compress_hyper_46_96_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_96_chunk (never executed)
-                           Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_88_chunk (never executed)
                Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                Batch Sorted Merge: true
                Bulk Decompression: false
                ->  Sort (never executed)
-                     Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                     Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
                      Sort Key: compress_hyper_46_95_chunk._ts_meta_max_1 DESC
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
-                           Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Merge Append (never executed)
                Sort Key: _hyper_45_87_chunk."time" DESC
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_45_87_chunk (never executed)
@@ -2551,10 +2551,10 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Batch Sorted Merge: true
                      Bulk Decompression: false
                      ->  Sort (never executed)
-                           Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
                            Sort Key: compress_hyper_46_94_chunk._ts_meta_max_1 DESC
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_46_94_chunk (never executed)
-                                 Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                                 Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
                ->  Index Scan using _hyper_45_87_chunk_sensor_data_compressed_time_idx on _timescaledb_internal._hyper_45_87_chunk (never executed)
                      Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
 (77 rows)
@@ -2580,7 +2580,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_93_chunk."time", _hyper_45_93_chunk.sensor_id, _hyper_45_93_chunk.cpu, _hyper_45_93_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_100_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature, compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_100_chunk._ts_meta_count, compress_hyper_46_100_chunk._ts_meta_sequence_num, compress_hyper_46_100_chunk.sensor_id, compress_hyper_46_100_chunk._ts_meta_min_1, compress_hyper_46_100_chunk._ts_meta_max_1, compress_hyper_46_100_chunk."time", compress_hyper_46_100_chunk.cpu, compress_hyper_46_100_chunk.temperature
          ->  Sort (actual rows=2 loops=1)
                Output: _hyper_45_92_chunk."time", _hyper_45_92_chunk.sensor_id, _hyper_45_92_chunk.cpu, _hyper_45_92_chunk.temperature
                Sort Key: _hyper_45_92_chunk."time" DESC
@@ -2589,7 +2589,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_92_chunk."time", _hyper_45_92_chunk.sensor_id, _hyper_45_92_chunk.cpu, _hyper_45_92_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_99_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature, compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_99_chunk._ts_meta_count, compress_hyper_46_99_chunk._ts_meta_sequence_num, compress_hyper_46_99_chunk.sensor_id, compress_hyper_46_99_chunk._ts_meta_min_1, compress_hyper_46_99_chunk._ts_meta_max_1, compress_hyper_46_99_chunk."time", compress_hyper_46_99_chunk.cpu, compress_hyper_46_99_chunk.temperature
          ->  Sort (actual rows=1 loops=1)
                Output: _hyper_45_91_chunk."time", _hyper_45_91_chunk.sensor_id, _hyper_45_91_chunk.cpu, _hyper_45_91_chunk.temperature
                Sort Key: _hyper_45_91_chunk."time" DESC
@@ -2598,7 +2598,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_91_chunk."time", _hyper_45_91_chunk.sensor_id, _hyper_45_91_chunk.cpu, _hyper_45_91_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_98_chunk (actual rows=2 loops=1)
-                           Output: compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature, compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_98_chunk._ts_meta_count, compress_hyper_46_98_chunk._ts_meta_sequence_num, compress_hyper_46_98_chunk.sensor_id, compress_hyper_46_98_chunk._ts_meta_min_1, compress_hyper_46_98_chunk._ts_meta_max_1, compress_hyper_46_98_chunk."time", compress_hyper_46_98_chunk.cpu, compress_hyper_46_98_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_90_chunk."time", _hyper_45_90_chunk.sensor_id, _hyper_45_90_chunk.cpu, _hyper_45_90_chunk.temperature
                Sort Key: _hyper_45_90_chunk."time" DESC
@@ -2606,7 +2606,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_90_chunk."time", _hyper_45_90_chunk.sensor_id, _hyper_45_90_chunk.cpu, _hyper_45_90_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_97_chunk (never executed)
-                           Output: compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature, compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_97_chunk._ts_meta_count, compress_hyper_46_97_chunk._ts_meta_sequence_num, compress_hyper_46_97_chunk.sensor_id, compress_hyper_46_97_chunk._ts_meta_min_1, compress_hyper_46_97_chunk._ts_meta_max_1, compress_hyper_46_97_chunk."time", compress_hyper_46_97_chunk.cpu, compress_hyper_46_97_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_89_chunk."time", _hyper_45_89_chunk.sensor_id, _hyper_45_89_chunk.cpu, _hyper_45_89_chunk.temperature
                Sort Key: _hyper_45_89_chunk."time" DESC
@@ -2614,7 +2614,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_89_chunk."time", _hyper_45_89_chunk.sensor_id, _hyper_45_89_chunk.cpu, _hyper_45_89_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_96_chunk (never executed)
-                           Output: compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature, compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_96_chunk._ts_meta_count, compress_hyper_46_96_chunk._ts_meta_sequence_num, compress_hyper_46_96_chunk.sensor_id, compress_hyper_46_96_chunk._ts_meta_min_1, compress_hyper_46_96_chunk._ts_meta_max_1, compress_hyper_46_96_chunk."time", compress_hyper_46_96_chunk.cpu, compress_hyper_46_96_chunk.temperature
          ->  Sort (never executed)
                Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                Sort Key: _hyper_45_88_chunk."time" DESC
@@ -2622,7 +2622,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                      Output: _hyper_45_88_chunk."time", _hyper_45_88_chunk.sensor_id, _hyper_45_88_chunk.cpu, _hyper_45_88_chunk.temperature
                      Bulk Decompression: true
                      ->  Seq Scan on _timescaledb_internal.compress_hyper_46_95_chunk (never executed)
-                           Output: compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature, compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1
+                           Output: compress_hyper_46_95_chunk._ts_meta_count, compress_hyper_46_95_chunk._ts_meta_sequence_num, compress_hyper_46_95_chunk.sensor_id, compress_hyper_46_95_chunk._ts_meta_min_1, compress_hyper_46_95_chunk._ts_meta_max_1, compress_hyper_46_95_chunk."time", compress_hyper_46_95_chunk.cpu, compress_hyper_46_95_chunk.temperature
          ->  Merge Append (never executed)
                Sort Key: _hyper_45_87_chunk."time" DESC
                ->  Sort (never executed)
@@ -2632,7 +2632,7 @@ SELECT * FROM sensor_data_compressed ORDER BY time DESC LIMIT 5;
                            Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
                            Bulk Decompression: true
                            ->  Seq Scan on _timescaledb_internal.compress_hyper_46_94_chunk (never executed)
-                                 Output: compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature, compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1
+                                 Output: compress_hyper_46_94_chunk._ts_meta_count, compress_hyper_46_94_chunk._ts_meta_sequence_num, compress_hyper_46_94_chunk.sensor_id, compress_hyper_46_94_chunk._ts_meta_min_1, compress_hyper_46_94_chunk._ts_meta_max_1, compress_hyper_46_94_chunk."time", compress_hyper_46_94_chunk.cpu, compress_hyper_46_94_chunk.temperature
                ->  Index Scan using _hyper_45_87_chunk_sensor_data_compressed_time_idx on _timescaledb_internal._hyper_45_87_chunk (never executed)
                      Output: _hyper_45_87_chunk."time", _hyper_45_87_chunk.sensor_id, _hyper_45_87_chunk.cpu, _hyper_45_87_chunk.temperature
 (70 rows)
