@@ -27,6 +27,12 @@ SELECT by_range('id', '1 week'::interval, 'part_func'::regproc);
 SELECT by_hash('id', 3);
 SELECT by_hash('id', 3, partition_func => 'part_func');
 
+-- Check if we handle the varlength of the datatype properly
+SELECT * FROM by_range('id') WHERE by_range IS NOT NULL;
+SELECT * FROM by_range('id', partition_func => 'part_func') WHERE by_range IS NOT NULL;
+SELECT * FROM by_hash('id', 3) WHERE by_hash IS NOT NULL;
+SELECT * FROM by_hash('id', 3, partition_func => 'part_func') WHERE by_hash IS NOT NULL;
+
 \set ON_ERROR_STOP 0
 SELECT 'hash//id//3//-'::_timescaledb_internal.dimension_info;
 SELECT by_range(NULL::name);
