@@ -122,7 +122,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 	Relation rel = table_open(src_relid, AccessShareLock);
 
-    /*
+	/*
 	 * Check which columns have btree indexes. We will create sparse minmax
 	 * indexes for them in compressed chunk.
 	 */
@@ -134,6 +134,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		Oid index_oid = lfirst_oid(lc);
 		Relation index_rel = index_open(index_oid, AccessShareLock);
 		IndexInfo *index_info = BuildIndexInfo(index_rel);
+		index_close(index_rel, NoLock);
 
 		if (index_info->ii_Am != BTREE_AM_OID)
 		{
@@ -148,8 +149,6 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				btree_columns = bms_add_member(btree_columns, attno);
 			}
 		}
-
-		index_close(index_rel, NoLock);
 	}
 
 	TupleDesc tupdesc = rel->rd_att;
@@ -201,17 +200,16 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
+			/*
+			 * We must be able to create the metadata for the orderby columns,
+			 * because it is required for sorting.
+			 */
 			if (!OidIsValid(type->lt_opr))
-			{
-				/*
-				 * We must have the metadata for the orderby columns, because
-				 * it is required for sorting.
-				 */
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
 						 errmsg("invalid ordering column type %s", format_type_be(attr->atttypid)),
 						 errdetail("Could not identify a less-than operator for the type.")));
-			}
+
 			/* segment_meta min and max columns */
 			compressed_column_defs = lappend(compressed_column_defs,
 											 makeColumnDef(column_segment_min_name(index),
