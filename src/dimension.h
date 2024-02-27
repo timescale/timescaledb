@@ -93,6 +93,11 @@ typedef struct Hypertable Hypertable;
  */
 typedef struct DimensionInfo
 {
+	/* We declare the SQL type dimension_info with INTERNALLENGTH = VARIABLE.
+	 * So, PostgreSQL expects a proper length info field (varlena header).
+	 */
+	int32 vl_len_;
+
 	Oid table_relid;
 	int32 dimension_id;
 	NameData colname;
