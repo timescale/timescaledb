@@ -13,27 +13,26 @@
 
 #include <jsonb_utils.h>
 #include <utils/builtins.h>
+
 #include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/job_api.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/policies_v2.h"
 #include "bgw_policy/policy_utils.h"
+#include "bgw/job_stat.h"
 #include "bgw/job.h"
-#include "ts_catalog/continuous_agg.h"
+#include "bgw/timer.h"
 #include "continuous_aggs/materialize.h"
 #include "dimension.h"
-#include "hypertable_cache.h"
-#include "time_utils.h"
-#include "policy_utils.h"
 #include "guc.h"
-#include "bgw_policy/policies_v2.h"
-#include "bgw/job_stat.h"
-#include "bgw/timer.h"
+#include "hypertable_cache.h"
+#include "policy_utils.h"
+#include "time_utils.h"
+#include "ts_catalog/continuous_agg.h"
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
-
-/* infinite number of retries for continuous aggregate jobs */
-#define DEFAULT_MAX_RETRIES (-1)
 
 int32
 policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
@@ -630,7 +629,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&refresh_interval,
 										DEFAULT_MAX_RUNTIME,
-										DEFAULT_MAX_RETRIES,
+										JOB_RETRY_UNLIMITED,
 										&refresh_interval,
 										&proc_schema,
 										&proc_name,

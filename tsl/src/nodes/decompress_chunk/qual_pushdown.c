@@ -138,7 +138,10 @@ expr_fetch_metadata(QualPushdownContext *context, Expr *expr, AttrNumber *min_at
 
 	Var *var = castNode(Var, expr);
 
-	/* Not on the chunk we expect */
+	/*
+	 * Not on the chunk we expect. This doesn't really happen because we don't
+	 * push down the join quals, only the baserestrictinfo.
+	 */
 	if ((Index) var->varno != context->chunk_rel->relid)
 		return;
 
@@ -184,16 +187,19 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 	expr_fetch_metadata(context, leftop, &min_attno, &max_attno);
 	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
 	{
+		/* No metadata for the left operand, try to commute the operator. */
 		op_oid = get_commutator(op_oid);
 		Expr *tmp = leftop;
 		leftop = rightop;
 		rightop = tmp;
 
 		expr_fetch_metadata(context, leftop, &min_attno, &max_attno);
-		if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
-		{
-			return NULL;
-		}
+	}
+
+	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
+	{
+		/* No metadata for either operand. */
+		return NULL;
 	}
 
 	Var *var_with_segment_meta = castNode(Var, leftop);
@@ -223,11 +229,6 @@ pushdown_op_to_segment_meta_min_max(QualPushdownContext *context, List *expr_arg
 		return NULL;
 
 	expr_type_id = exprType((Node *) expr);
-
-	if (min_attno == InvalidAttrNumber || max_attno == InvalidAttrNumber)
-	{
-		return NULL;
-	}
 
 	switch (strategy)
 	{

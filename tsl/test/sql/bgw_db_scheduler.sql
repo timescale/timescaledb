@@ -368,7 +368,9 @@ SHOW timescaledb.shutdown_bgw_scheduler;
 
 SELECT ts_bgw_db_scheduler_test_wait_for_scheduler_finish();
 
-SELECT * FROM sorted_bgw_log;
+-- The number of scheduler restarts is not deterministic during [..]_wait_for_scheduler_finish().
+-- Therefore, we filter these messages to get a deterministic test output.
+SELECT * FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
 
 ALTER SYSTEM RESET timescaledb.shutdown_bgw_scheduler;
 SELECT pg_reload_conf();
@@ -697,8 +699,33 @@ DELETE FROM _timescaledb_config.bgw_job WHERE id = :job_id;
 -- This should succeed
 DROP USER renamed_user;
 
+
+--
+-- Test without retry
+--
+\c :TEST_DBNAME :ROLE_SUPERUSER
+TRUNCATE bgw_log;
+TRUNCATE _timescaledb_internal.bgw_job_stat;
+SELECT ts_bgw_params_reset_time();
+SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_ON_JOB);
+DELETE FROM _timescaledb_config.bgw_job;
+INSERT INTO _timescaledb_config.bgw_job(application_name, schedule_interval, max_runtime, max_retries, retry_period, proc_schema, proc_name) VALUES('bgw_test_job_2_error', INTERVAL '5000ms', INTERVAL '20ms', 0, INTERVAL '20ms', 'public', 'bgw_test_job_2_error') RETURNING id;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- Run the first time
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25);
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes FROM _timescaledb_internal.bgw_job_stat;
+SELECT * FROM sorted_bgw_log;
+SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
+
+-- Run the second time
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(100, 50);
+SELECT job_id, last_run_success, total_runs, total_successes, total_failures, total_crashes FROM _timescaledb_internal.bgw_job_stat;
+-- We increase the mock time a lot to ensure the job does not get restarted. However, the amount of scheduler sleep/wakeup cycles
+-- is not deterministic. Therefore, we filter these messages to get a deterministic test output.
+SELECT * FROM sorted_bgw_log WHERE msg NOT LIKE '[TESTING] Wait until%';
+SELECT last_finish, last_successful_finish, last_run_success FROM _timescaledb_internal.bgw_job_stat;
+
 -- clean up jobs
+\c :TEST_DBNAME :ROLE_SUPERUSER
 SELECT _timescaledb_functions.stop_background_workers();
-
-
-

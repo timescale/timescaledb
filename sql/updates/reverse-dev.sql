@@ -3,6 +3,9 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.remove_dropped_chunk_metadata(INT
 --
 -- Rebuild the catalog table `_timescaledb_catalog.continuous_aggs_bucket_function`
 --
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_origin = '' WHERE bucket_origin IS NULL;
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_timezone = '' WHERE bucket_timezone IS NULL;
+
 CREATE TABLE _timescaledb_catalog._tmp_continuous_aggs_bucket_function AS
     SELECT
       mat_hypertable_id,
@@ -52,3 +55,8 @@ ANALYZE _timescaledb_catalog.continuous_aggs_bucket_function;
 --
 -- End rebuild the catalog table `_timescaledb_catalog.continuous_aggs_bucket_function`
 --
+
+-- Convert _timescaledb_catalog.continuous_aggs_bucket_function.origin back to Timestamp
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function
+   SET origin = origin::timestamptz::timestamp::text
+   WHERE length(origin) > 1;

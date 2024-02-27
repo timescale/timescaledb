@@ -500,6 +500,16 @@ SELECT city,
 FROM conditions_timestamptz
 GROUP BY city, bucket;
 
+-- Make sure the origin is saved in the catalog table
+SELECT mat_hypertable_id AS cagg_id
+  FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_summary_timestamptz'
+\gset
+
+SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
+  FROM _timescaledb_catalog.continuous_aggs_bucket_function
+  WHERE mat_hypertable_id = :cagg_id;
+
 SELECT city, to_char(bucket at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS b, min, max
 FROM conditions_summary_timestamptz
 ORDER BY b, city;

@@ -719,3 +719,49 @@ SET timescaledb.materializations_per_refresh_window='-';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
 \set VERBOSITY terse
+
+-- Test refresh with undefined invalidation threshold and variable sized buckets
+CREATE TABLE timestamp_ht (
+  time timestamptz NOT NULL,
+  value float
+);
+
+SELECT create_hypertable('timestamp_ht', 'time');
+
+CREATE MATERIALIZED VIEW temperature_4h
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+-- We also treat time_buckets with an hourly interval that uses a time-zone
+-- as a variable see caggtimebucket_validate().
+CREATE MATERIALIZED VIEW temperature_4h_2
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, 'Europe/Berlin') AS bucket_4h, avg(value) AS average
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', time, 'Europe/Berlin'), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month_hierarchical
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', bucket_4h), avg(average)
+    FROM temperature_4h_2
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month_hierarchical_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', bucket_4h, 'Europe/Berlin'), avg(average)
+    FROM temperature_4h_2
+    GROUP BY 1 ORDER BY 1;

@@ -283,6 +283,10 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 */
 	Relation out_rel = relation_open(out_table, ExclusiveLock);
 
+	/* Sanity check we are dealing with relations */
+	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
+	Ensure(out_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
+
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
 	/* Before calling row compressor relation should be segmented and sorted as configured

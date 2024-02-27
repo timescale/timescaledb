@@ -188,8 +188,8 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
  */
 static void
 create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const char *bucket_width,
-									 const char *origin, const char *offset, const char *timezone,
-									 const bool bucket_fixed_width)
+									 const char *bucket_origin, const char *bucket_offset,
+									 const char *bucket_timezone, const bool bucket_fixed_width)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -203,18 +203,53 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 	desc = RelationGetDescr(rel);
 
 	memset(values, 0, sizeof(values));
+
+	/* Hypertable ID */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_mat_hypertable_id)] =
 		matht_id;
+
+	/* Bucket function */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
 		ObjectIdGetDatum(bucket_function);
+
+	/* Bucket width */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
 		CStringGetTextDatum(bucket_width);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
-		CStringGetTextDatum(origin);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] =
-		CStringGetTextDatum(offset);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] =
-		CStringGetTextDatum(timezone ? timezone : "");
+
+	/* Bucket origin */
+	if (bucket_origin != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
+			CStringGetTextDatum(bucket_origin);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] = true;
+	}
+
+	/* Bucket offset */
+	if (bucket_offset != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] =
+			CStringGetTextDatum(bucket_offset);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] = true;
+	}
+
+	/* Bucket timezone */
+	if (bucket_timezone != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] =
+			CStringGetTextDatum(bucket_timezone);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] = true;
+	}
+
+	/* Bucket fixed width */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_fixed_width)] =
 		BoolGetDatum(bucket_fixed_width);
 
@@ -784,28 +819,27 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	if (bucket_info->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		const char *bucket_width;
-		const char *origin = "";
-		const char *offset = "";
+		const char *bucket_origin = NULL;
+		const char *bucket_offset = NULL;
 
 		/*
 		 * Variable-sized buckets work only with intervals.
 		 */
 		Assert(bucket_info->interval != NULL);
-		bucket_width = DatumGetCString(
+		const char *bucket_width = DatumGetCString(
 			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->interval)));
 
 		if (!TIMESTAMP_NOT_FINITE(bucket_info->origin))
 		{
-			origin = DatumGetCString(
-				DirectFunctionCall1(timestamp_out, TimestampGetDatum(bucket_info->origin)));
+			bucket_origin = DatumGetCString(
+				DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(bucket_info->origin)));
 		}
 
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
 											 bucket_info->bucket_func->funcid,
 											 bucket_width,
-											 origin,
-											 offset,
+											 bucket_origin,
+											 bucket_offset,
 											 bucket_info->timezone,
 											 bucket_info->bucket_width != BUCKET_WIDTH_VARIABLE);
 	}

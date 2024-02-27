@@ -32,7 +32,7 @@
 
 #define EXTENSION_PROXY_TABLE "cache_inval_extension"
 
-#define RENDEZVOUS_LOADER_PRESENT_NAME "timescaledb.loader_present"
+#define RENDEZVOUS_LOADER_PRESENT_NAME MAKE_EXTOPTION("loader_present")
 
 enum ExtensionState
 {
@@ -179,7 +179,7 @@ extension_load_without_preload()
 {
 	/* cannot use GUC variable here since extension not yet loaded */
 	char *allow_install_without_preload =
-		GetConfigOptionByName("timescaledb.allow_install_without_preload", NULL, true);
+		GetConfigOptionByName(MAKE_EXTOPTION("allow_install_without_preload"), NULL, true);
 
 	if (allow_install_without_preload == NULL || strcmp(allow_install_without_preload, "on") != 0)
 	{
