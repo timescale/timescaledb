@@ -109,6 +109,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = TELEMETRY_EVENT_TABLE_NAME,
 	},
+	[BGW_JOB_STAT_HISTORY] = {
+		.schema_name = INTERNAL_SCHEMA_NAME,
+		.table_name = BGW_JOB_STAT_HISTORY_TABLE_NAME,
+	},
 	[_MAX_CATALOG_TABLES] = {
 		.schema_name = "invalid schema",
 		.table_name = "invalid table",
@@ -243,6 +247,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length = _MAX_CONTINUOUS_AGGS_BUCKET_FUNCTION_INDEX,
 		.names = (char *[]) {
 			[CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX] = "continuous_aggs_bucket_function_pkey",
+		},
+	},
+	[BGW_JOB_STAT_HISTORY] = {
+		.length = _MAX_BGW_JOB_STAT_HISTORY_INDEX,
+		.names = (char *[]) {
+			[BGW_JOB_STAT_HISTORY_PKEY_IDX] = "bgw_job_stat_history_pkey",
 		},
 	}
 };

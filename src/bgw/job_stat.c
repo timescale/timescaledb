@@ -18,6 +18,9 @@
 #include <utils/builtins.h>
 #include <utils/resowner.h>
 #include "time_bucket.h"
+#include "guc.h"
+#include <executor/spi.h>
+#include <utils/snapmgr.h>
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
@@ -134,7 +137,10 @@ bgw_job_stat_tuple_mark_start(TupleInfo *ti, void *const data)
 	if (should_free)
 		heap_freetuple(tuple);
 
-	fd->last_start = ts_timer_get_current_timestamp();
+	if (data)
+		fd->last_start = *(TimestampTz *) data;
+	else
+		fd->last_start = ts_timer_get_current_timestamp();
 	fd->last_finish = DT_NOBEGIN;
 	fd->next_start = DT_NOBEGIN;
 
@@ -168,6 +174,7 @@ typedef struct
 {
 	JobResult result;
 	BgwJob *job;
+	TimestampTz finish_time;
 } JobResultCtx;
 
 /*
@@ -478,7 +485,7 @@ bgw_job_stat_tuple_mark_end(TupleInfo *ti, void *const data)
 	if (should_free)
 		heap_freetuple(tuple);
 
-	fd->last_finish = ts_timer_get_current_timestamp();
+	fd->last_finish = result_ctx->finish_time;
 
 	duration = DatumGetIntervalP(DirectFunctionCall2(timestamp_mi,
 													 TimestampTzGetDatum(fd->last_finish),
@@ -572,7 +579,7 @@ bgw_job_stat_tuple_set_next_start(TupleInfo *ti, void *const data)
 
 static bool
 bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
-							 TimestampTz next_start)
+							 TimestampTz start_time, TimestampTz next_start)
 {
 	TupleDesc desc = RelationGetDescr(rel);
 	Datum values[Natts_bgw_job_stat];
@@ -585,7 +592,7 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_job_id)] = Int32GetDatum(bgw_job_id);
 	if (mark_start)
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
-			TimestampGetDatum(ts_timer_get_current_timestamp());
+			TimestampGetDatum(start_time);
 	else
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_stat_last_start)] =
 			TimestampGetDatum(DT_NOBEGIN);
@@ -626,9 +633,94 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 	return true;
 }
 
+typedef struct Job_end_stat_history
+{
+	int32 job_id;
+	TimestampTz start_time;
+	TimestampTz finish_time;
+	bool was_successful;
+	Form_job_error error_data_form;
+} Job_end_stat_history;
+
+static bool
+bgw_job_stat_history_insert_relation(int32 bgw_job_id, TimestampTz start_time,
+									 TimestampTz next_start,
+									 Job_end_stat_history *job_end_stat_history)
+{
+	int rc;
+	StringInfo command = makeStringInfo();
+	Oid coloids[Natts_Anum_job_stat_history] = {
+		INT4OID, NAMEOID, NAMEOID, JSONBOID, TIMESTAMPTZOID, TIMESTAMPTZOID, BOOLOID, JSONBOID
+	};
+	Datum values[Natts_Anum_job_stat_history];
+	char nulls[Natts_Anum_job_stat_history] = { ' ' };
+
+	PushActiveSnapshot(GetLatestSnapshot());
+	BgwJob *job = ts_bgw_job_find(bgw_job_id, CurrentMemoryContext, false /*fail_if_not_found*/);
+	if (!job)
+	{
+		elog(LOG, "unable to find job with id %d", bgw_job_id);
+		return false;
+	}
+
+	values[AttrNumberGetAttrOffset(Anum_job_stat_history_job_id)] = Int32GetDatum(bgw_job_id);
+	values[AttrNumberGetAttrOffset(Anum_job_stat_history_proc_schema)] =
+		NameGetDatum(&job->fd.proc_schema);
+	values[AttrNumberGetAttrOffset(Anum_job_stat_history_proc_name)] =
+		NameGetDatum(&job->fd.proc_name);
+	values[AttrNumberGetAttrOffset(Anum_job_stat_history_start_time)] =
+		TimestampGetDatum(start_time);
+	values[AttrNumberGetAttrOffset(Anum_job_stat_history_finish_time)] =
+		TimestampGetDatum(next_start);
+	values[AttrNumberGetAttrOffset(Anum_job_stat_history_was_successful)] = Int64GetDatum(0);
+
+	if (job->fd.config != NULL)
+		values[AttrNumberGetAttrOffset(Anum_job_stat_history_job_config)] =
+			JsonbPGetDatum(job->fd.config);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_job_stat_history_job_config)] = 'n';
+
+	if (job_end_stat_history && job_end_stat_history->error_data_form)
+		values[AttrNumberGetAttrOffset(Anum_job_stat_history_error_data)] =
+			JsonbPGetDatum(job_end_stat_history->error_data_form->error_data);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_job_stat_history_error_data)] = 'n';
+
+	appendStringInfo(command,
+					 "INSERT INTO " INTERNAL_SCHEMA_NAME "." BGW_JOB_STAT_HISTORY_TABLE_NAME
+					 " (job_id, proc_schema, proc_name, job_config,"
+					 "start_time, finish_time, was_success, error_data)"
+					 "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)");
+
+	if ((rc = SPI_connect() != SPI_OK_CONNECT))
+	{
+		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+		return false;
+	}
+	rc = SPI_execute_with_args(command->data,
+							   Natts_Anum_job_stat_history,
+							   coloids,
+							   values,
+							   nulls,
+							   false /*read only*/,
+							   0 /*tcount?*/);
+	if (rc != SPI_OK_INSERT)
+	{
+		elog(ERROR, "SPI_execute_with_args failed: error code %d", rc);
+		return false;
+	}
+	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+	{
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+	}
+	PopActiveSnapshot();
+	return true;
+}
+
 void
 ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 {
+	TimestampTz start_time = ts_timer_get_current_timestamp();
 	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
 	 * job races and adds a job when we insert the relation as well since that
 	 * can trigger a failure when inserting a row for the job. We use the
@@ -639,11 +731,80 @@ ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 	if (!bgw_job_stat_scan_job_id(bgw_job_id,
 								  bgw_job_stat_tuple_mark_start,
 								  NULL,
-								  NULL,
+								  &start_time,
 								  RowExclusiveLock))
-		bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
+		bgw_job_stat_insert_relation(rel, bgw_job_id, true, start_time, DT_NOBEGIN);
 	table_close(rel, NoLock);
 	pgstat_report_activity(STATE_IDLE, NULL);
+	elog(LOG, "ts_bgw_job_stat_mark_start %d", ts_guc_bgw_stat_history_record);
+	if (ts_guc_bgw_stat_history_record)
+		bgw_job_stat_history_insert_relation(bgw_job_id, start_time, DT_NOBEGIN, NULL);
+}
+
+static bool
+bgw_job_stat_history_mark_end(Job_end_stat_history *job_end_stat_history)
+{
+	int rc;
+	int updated_rows;
+	StringInfo command = makeStringInfo();
+	Oid coloids[5] = { TIMESTAMPTZOID, BOOLOID, JSONBOID, INT4OID, TIMESTAMPTZOID };
+	Datum values[5];
+	char nulls[5] = { ' ' };
+
+	PushActiveSnapshot(GetLatestSnapshot());
+	BgwJobStat *stat = ts_bgw_job_stat_find(job_end_stat_history->job_id);
+	job_end_stat_history->start_time = stat->fd.last_start;
+
+	values[0] = TimestampGetDatum(job_end_stat_history->finish_time);
+	values[1] = BoolGetDatum(job_end_stat_history->was_successful);
+	if (job_end_stat_history->error_data_form)
+		values[2] = JsonbPGetDatum(job_end_stat_history->error_data_form->error_data);
+	else
+		nulls[2] = 'n';
+	values[3] = Int32GetDatum(job_end_stat_history->job_id);
+	values[4] = TimestampGetDatum(job_end_stat_history->start_time);
+
+	appendStringInfo(command,
+					 "UPDATE " INTERNAL_SCHEMA_NAME "." BGW_JOB_STAT_HISTORY_TABLE_NAME
+					 " SET finish_time = $1, was_success = $2, error_data = $3"
+					 " WHERE job_id = $4 AND start_time = $5");
+
+	if ((rc = SPI_connect() != SPI_OK_CONNECT))
+	{
+		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+		return false;
+	}
+	rc = SPI_execute_with_args(command->data,
+							   5,
+							   coloids,
+							   values,
+							   nulls,
+							   false /*read only*/,
+							   0 /*tcount?*/);
+	if (rc != SPI_OK_UPDATE)
+	{
+		elog(ERROR, "SPI_execute_with_args failed: error code %d", rc);
+		return false;
+	}
+	updated_rows = SPI_processed;
+	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+	{
+		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+	}
+	PopActiveSnapshot();
+
+	if ((job_end_stat_history->error_data_form) && (updated_rows == 0) &&
+		(!ts_guc_bgw_stat_history_record))
+	{
+		elog(LOG, "SPI_updated rows: %d", updated_rows);
+		return bgw_job_stat_history_insert_relation(job_end_stat_history->job_id,
+													job_end_stat_history->start_time,
+													job_end_stat_history->finish_time,
+													job_end_stat_history);
+		elog(LOG, "SPI_updated rows complete: %d", updated_rows);
+	}
+
+	return true;
 }
 
 void
@@ -652,7 +813,9 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 	JobResultCtx res = {
 		.job = job,
 		.result = result,
+		.finish_time = ts_timer_get_current_timestamp(),
 	};
+	Job_end_stat_history job_end_stat_history;
 
 	if (!bgw_job_stat_scan_job_id(job->fd.id,
 								  bgw_job_stat_tuple_mark_end,
@@ -661,6 +824,27 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 								  ShareRowExclusiveLock))
 		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
 	pgstat_report_activity(STATE_IDLE, NULL);
+	elog(LOG, "bgw_job_stat_history_mark_end1 %s  %d", timestamptz_to_str(res.finish_time), result);
+	if (ts_guc_bgw_stat_history_record)
+	{
+		job_end_stat_history.job_id = job->fd.id;
+		job_end_stat_history.finish_time = res.finish_time;
+		job_end_stat_history.was_successful = (result == JOB_SUCCESS) ? true : false;
+		job_end_stat_history.error_data_form = NULL;
+		bgw_job_stat_history_mark_end(&job_end_stat_history);
+	}
+}
+
+TSDLLEXPORT bool
+ts_job_errors_history_insert_tuple(FormData_job_error *job_err)
+{
+	Job_end_stat_history job_end_stat_history;
+	job_end_stat_history.job_id = job_err->job_id;
+	job_end_stat_history.was_successful = false;
+	job_end_stat_history.error_data_form = job_err;
+	job_end_stat_history.finish_time = 0;
+	bgw_job_stat_history_mark_end(&job_end_stat_history);
+	return true;
 }
 
 void
@@ -732,7 +916,7 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 								  NULL,
 								  &next_start,
 								  RowExclusiveLock))
-		bgw_job_stat_insert_relation(rel, bgw_job_id, false, next_start);
+		bgw_job_stat_insert_relation(rel, bgw_job_id, false, 0 /* not used */, next_start);
 	table_close(rel, NoLock);
 }
 
@@ -788,3 +972,37 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 
 	return jobstat->fd.next_start;
 }
+
+/* TODO convert the jobs table to a hypertable only if it is not a hypertable already */
+// TSDLLEXPORT bool
+// ts_bgw_convert_jobs_to_hypertable()
+// {
+// 	StringInfo command = makeStringInfo();
+// 	int rc;
+
+// 	appendStringInfo(command,
+// 				     "SELECT create_hypertable('" INTERNAL_SCHEMA_NAME "."
+// BGW_JOB_STAT_HISTORY_TABLE_NAME
+// 					 ", 'start', chunk_time_interval=>INTERVAL '1 min'");
+
+// 	if ((rc = SPI_connect() != SPI_OK_CONNECT))
+// 	{
+// 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
+// 		return false;
+// 	}
+// 	rc = SPI_execute(command->data,
+// 							   false /*read only*/,
+// 							   0 /*tcount?*/);
+// 	if (rc != SPI_OK_SELECT)
+// 	{
+// 		elog(ERROR, "SPI_execute_with_args failed: error code %d", rc);
+// 		return false;
+// 	}
+
+// 	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+// 	{
+// 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
+// 		return false;
+// 	}
+// 	return true;
+// }

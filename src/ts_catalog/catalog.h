@@ -53,6 +53,7 @@ typedef enum CatalogTable
 	JOB_ERRORS,
 	CONTINUOUS_AGGS_WATERMARK,
 	TELEMETRY_EVENT,
+	BGW_JOB_STAT_HISTORY,
 	/* Don't forget updating catalog.c when adding new tables! */
 	_MAX_CATALOG_TABLES,
 } CatalogTable;
@@ -1220,6 +1221,51 @@ typedef struct FormData_job_error
 } FormData_job_error;
 
 typedef FormData_job_error *Form_job_error;
+
+#define BGW_JOB_STAT_HISTORY_TABLE_NAME "bgw_job_stat_history"
+
+enum Anum_job_stat_history
+{
+	Anum_job_stat_history_job_id = 1,
+	Anum_job_stat_history_proc_schema,
+	Anum_job_stat_history_proc_name,
+	Anum_job_stat_history_job_config,
+	Anum_job_stat_history_start_time,
+	Anum_job_stat_history_finish_time,
+	Anum_job_stat_history_was_successful,
+	Anum_job_stat_history_error_data,
+	_Anum_job_stat_history_max,
+};
+
+#define Natts_Anum_job_stat_history (_Anum_job_stat_history_max - 1)
+
+typedef struct FormData_job_stat_history
+{
+	int32 job_id;
+	NameData proc_schema;
+	NameData proc_name;
+	TimestampTz start_time;
+	TimestampTz finish_time;
+	bool was_successful;
+	Jsonb *error_data;
+} FormData_job_stat_history;
+
+typedef FormData_job_stat_history *Form_job_stat_history;
+
+enum
+{
+	BGW_JOB_STAT_HISTORY_PKEY_IDX = 0,
+	_MAX_BGW_JOB_STAT_HISTORY_INDEX,
+};
+
+enum Anum_bgw_job_stat_history_pkey_idx
+{
+	Anum_bgw_job_stat_history_pkey_idx_job_id = 1,
+	Anum_bgw_job_stat_history_pkey_idx_start_time,
+	_Anum_bgw_job_stat_history_pkey_idx_max,
+};
+
+#define Natts_bjw_job_stat_history_pkey_idx (_Anum_bgw_job_stat_history_pkey_idx_max - 1)
 
 #define HYPERTABLE_STATUS_DEFAULT 0
 /* flag set when hypertable has an attached OSM chunk */

@@ -1308,7 +1308,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		jerr.pid = MyProcPid;
 
 		ts_job_errors_insert_tuple(&jerr);
-
+		ts_job_errors_history_insert_tuple(&jerr);
 		CommitTransactionCommand();
 		FlushErrorState();
 		ReThrowError(edata);

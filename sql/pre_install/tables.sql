@@ -482,6 +482,21 @@ CREATE TABLE _timescaledb_internal.job_errors (
   error_data jsonb
 );
 
+ CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
+  job_id INTEGER NOT NULL,
+  proc_schema NAME,
+  proc_name NAME,
+  job_config jsonb,
+  start_time TIMESTAMPTZ,
+  finish_time TIMESTAMPTZ,
+  was_success boolean,
+  error_data jsonb,
+  --table constraints
+  CONSTRAINT bgw_job_stat_history_pkey PRIMARY KEY (job_id, start_time)
+ );
+-- SELECT @extschema@.create_hypertable('_timescaledb_internal.bg_job_stat_history', 'start', chunk_time_interval=>INTERVAL '1 min');
+SELECT pg_catalog.pg_extension_config_dump('_timescaledb_internal.job_errors', '');
+
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all

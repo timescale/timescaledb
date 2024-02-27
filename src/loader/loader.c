@@ -607,6 +607,7 @@ _PG_init(void)
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
+	// TODO ts_bgw_convert_jobs_to_hypertable();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)

@@ -75,6 +75,8 @@ TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+TSDLLEXPORT bool ts_guc_bgw_stat_history_record = true;
+
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
@@ -669,6 +671,17 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 #endif
+
+	DefineCustomBoolVariable(/* name= */ "timescaledb.bgw_job_stat_history_record",
+							 /* short_desc= */ "Store the background job status history",
+							 /* long_desc= */ "Retain job run status in a hypertable",
+							 /* valueAddr= */ &ts_guc_bgw_stat_history_record,
+							 /* bootValue= */ true,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 
 	/* register feature flags */
 	ts_feature_flag_add(FEATURE_HYPERTABLE);

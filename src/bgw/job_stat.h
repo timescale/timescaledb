@@ -44,3 +44,5 @@ extern TSDLLEXPORT void ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id);
 
 extern TSDLLEXPORT TimestampTz ts_get_next_scheduled_execution_slot(BgwJob *job,
 																	TimestampTz finish_time);
+extern TSDLLEXPORT bool ts_job_errors_history_insert_tuple(FormData_job_error *job_err);
+extern TSDLLEXPORT bool ts_bgw_convert_jobs_to_hypertable();
