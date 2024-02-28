@@ -298,7 +298,6 @@ TSCopyMultiInsertInfoIsFull(TSCopyMultiInsertInfo *miinfo)
 static inline int
 TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuffer *buffer)
 {
-	ExplicitMemoryContext oldcontext;
 	int i;
 
 	Assert(miinfo != NULL);
@@ -309,84 +308,89 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	int ti_options = miinfo->ti_options;
 	int nused = buffer->nused;
 	TupleTableSlot **slots = buffer->slots;
-
+	uint64 save_cur_lineno = 0;
+	bool line_buf_valid = false;
+	ResultRelInfo *resultRelInfo;
+	ChunkInsertState *cis;
+#if PG14_GE
+	CopyFromState cstate;
+#endif
 	/*
 	 * table_multi_insert and reinitialization of the chunk insert state may
 	 * leak memory, so switch to short-lived memory context before calling it.
 	 */
-	oldcontext = MemoryContextSwitchTo(GetPerTupleMemoryContext(estate));
 
-	/*
-	 * A chunk can be closed while buffering the tuples. Even when the chunk
-	 * insert state is moved to the copy memory context, the underlying
-	 * table is closed and pointers (e.g., result_relation_info point) to invalid
-	 * addresses. Re-reading the chunk insert state ensures that the table is
-	 * open and the pointers are valid.
-	 *
-	 * No callback on changed chunk is needed, the bulk insert state buffer is
-	 * freed in TSCopyMultiInsertBufferCleanup().
-	 */
-	ChunkInsertState *cis =
-		ts_chunk_dispatch_get_chunk_insert_state(miinfo->ccstate->dispatch,
-												 buffer->point,
-												 buffer->slots[0],
-												 NULL /* on chunk changed function */,
-												 NULL /* payload for on chunk changed function */);
+	TS_WITH_MEMORY_CONTEXT(GetPerTupleMemoryContext(estate), {
+		/*
+		 * A chunk can be closed while buffering the tuples. Even when the chunk
+		 * insert state is moved to the copy memory context, the underlying
+		 * table is closed and pointers (e.g., result_relation_info point) to invalid
+		 * addresses. Re-reading the chunk insert state ensures that the table is
+		 * open and the pointers are valid.
+		 *
+		 * No callback on changed chunk is needed, the bulk insert state buffer is
+		 * freed in TSCopyMultiInsertBufferCleanup().
+		 */
+		cis = ts_chunk_dispatch_get_chunk_insert_state(
+			miinfo->ccstate->dispatch,
+			buffer->point,
+			buffer->slots[0],
+			NULL /* on chunk changed function */,
+			NULL /* payload for on chunk changed function */);
 
-	if (ts_guc_max_tuples_decompressed_per_dml > 0)
-	{
-		if (miinfo->ccstate->dispatch->dispatch_state->tuples_decompressed >
-			ts_guc_max_tuples_decompressed_per_dml)
+		if (ts_guc_max_tuples_decompressed_per_dml > 0)
 		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					 errmsg("tuple decompression limit exceeded by operation"),
-					 errdetail("current limit: %d, tuples decompressed: %lld",
-							   ts_guc_max_tuples_decompressed_per_dml,
-							   (long long int)
-								   miinfo->ccstate->dispatch->dispatch_state->tuples_decompressed),
-					 errhint("Consider increasing "
-							 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
-							 "set to 0 (unlimited).")));
+			if (miinfo->ccstate->dispatch->dispatch_state->tuples_decompressed >
+				ts_guc_max_tuples_decompressed_per_dml)
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+						 errmsg("tuple decompression limit exceeded by operation"),
+						 errdetail("current limit: %d, tuples decompressed: %lld",
+								   ts_guc_max_tuples_decompressed_per_dml,
+								   (long long int) miinfo->ccstate->dispatch->dispatch_state
+									   ->tuples_decompressed),
+						 errhint("Consider increasing "
+								 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
+								 "set to 0 (unlimited).")));
+			}
 		}
-	}
 
-	ResultRelInfo *resultRelInfo = cis->result_relation_info;
+		resultRelInfo = cis->result_relation_info;
 
-	/*
-	 * Add context information to the copy state, which is used to display
-	 * error messages with additional details. Providing this information is
-	 * only possible in PG >= 14. Until PG13 the CopyFromState structure is
-	 * kept internally in copy.c and no access to its members is possible.
-	 * Since PG14, the structure is stored in copyfrom_internal.h and the
-	 * members can be accessed.
-	 */
+		/*
+		 * Add context information to the copy state, which is used to display
+		 * error messages with additional details. Providing this information is
+		 * only possible in PG >= 14. Until PG13 the CopyFromState structure is
+		 * kept internally in copy.c and no access to its members is possible.
+		 * Since PG14, the structure is stored in copyfrom_internal.h and the
+		 * members can be accessed.
+		 */
 #if PG14_GE
-	uint64 save_cur_lineno = 0;
-	bool line_buf_valid = false;
-	CopyFromState cstate = miinfo->ccstate->cstate;
+		cstate = miinfo->ccstate->cstate;
 
-	/* cstate can be NULL in calls that are invoked from timescaledb_move_from_table_to_chunks. */
-	if (cstate != NULL)
-	{
-		line_buf_valid = cstate->line_buf_valid;
-		save_cur_lineno = cstate->cur_lineno;
+		/* cstate can be NULL in calls that are invoked from timescaledb_move_from_table_to_chunks.
+		 */
+		if (cstate != NULL)
+		{
+			line_buf_valid = cstate->line_buf_valid;
+			save_cur_lineno = cstate->cur_lineno;
 
-		cstate->line_buf_valid = false;
-	}
+			cstate->line_buf_valid = false;
+		}
 #endif
 
 #if PG14_LT
-	estate->es_result_relation_info = resultRelInfo;
+		estate->es_result_relation_info = resultRelInfo;
 #endif
 
-	table_multi_insert(resultRelInfo->ri_RelationDesc,
-					   slots,
-					   nused,
-					   mycid,
-					   ti_options,
-					   buffer->bistate);
-	MemoryContextSwitchTo(oldcontext);
+		table_multi_insert(resultRelInfo->ri_RelationDesc,
+						   slots,
+						   nused,
+						   mycid,
+						   ti_options,
+						   buffer->bistate);
+	});
 
 	for (i = 0; i < nused; i++)
 	{

@@ -84,66 +84,64 @@ static EquivalenceClass *
 append_ec_for_seqnum(PlannerInfo *root, CompressionInfo *info, SortInfo *sort_info, Var *var,
 					 Oid sortop, bool nulls_first)
 {
-	ExplicitMemoryContext oldcontext = MemoryContextSwitchTo(root->planner_cxt);
-
+	EquivalenceClass *newec;
 	Oid opfamily, opcintype, equality_op;
-	int16 strategy;
-	List *opfamilies;
-	EquivalenceClass *newec = makeNode(EquivalenceClass);
-	EquivalenceMember *em = makeNode(EquivalenceMember);
+	TS_WITH_MEMORY_CONTEXT(root->planner_cxt, {
+		int16 strategy;
+		List *opfamilies;
+		EquivalenceMember *em = makeNode(EquivalenceMember);
+		newec = makeNode(EquivalenceClass);
 
-	/* Find the operator in pg_amop --- failure shouldn't happen */
-	if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
-		elog(ERROR, "operator %u is not a valid ordering operator", sortop);
+		/* Find the operator in pg_amop --- failure shouldn't happen */
+		if (!get_ordering_op_properties(sortop, &opfamily, &opcintype, &strategy))
+			elog(ERROR, "operator %u is not a valid ordering operator", sortop);
 
-	/*
-	 * EquivalenceClasses need to contain opfamily lists based on the family
-	 * membership of mergejoinable equality operators, which could belong to
-	 * more than one opfamily.  So we have to look up the opfamily's equality
-	 * operator and get its membership.
-	 */
-	equality_op = get_opfamily_member(opfamily, opcintype, opcintype, BTEqualStrategyNumber);
-	if (!OidIsValid(equality_op)) /* shouldn't happen */
-		elog(ERROR,
-			 "missing operator %d(%u,%u) in opfamily %u",
-			 BTEqualStrategyNumber,
-			 opcintype,
-			 opcintype,
-			 opfamily);
-	opfamilies = get_mergejoin_opfamilies(equality_op);
-	if (!opfamilies) /* certainly should find some */
-		elog(ERROR, "could not find opfamilies for equality operator %u", equality_op);
+		/*
+		 * EquivalenceClasses need to contain opfamily lists based on the family
+		 * membership of mergejoinable equality operators, which could belong to
+		 * more than one opfamily.  So we have to look up the opfamily's equality
+		 * operator and get its membership.
+		 */
+		equality_op = get_opfamily_member(opfamily, opcintype, opcintype, BTEqualStrategyNumber);
+		if (!OidIsValid(equality_op)) /* shouldn't happen */
+			elog(ERROR,
+				 "missing operator %d(%u,%u) in opfamily %u",
+				 BTEqualStrategyNumber,
+				 opcintype,
+				 opcintype,
+				 opfamily);
+		opfamilies = get_mergejoin_opfamilies(equality_op);
+		if (!opfamilies) /* certainly should find some */
+			elog(ERROR, "could not find opfamilies for equality operator %u", equality_op);
 
-	em->em_expr = (Expr *) var;
-	em->em_relids = bms_make_singleton(info->compressed_rel->relid);
+		em->em_expr = (Expr *) var;
+		em->em_relids = bms_make_singleton(info->compressed_rel->relid);
 #if PG16_LT
-	em->em_nullable_relids = NULL;
+		em->em_nullable_relids = NULL;
 #endif
-	em->em_is_const = false;
-	em->em_is_child = false;
-	em->em_datatype = INT4OID;
+		em->em_is_const = false;
+		em->em_is_child = false;
+		em->em_datatype = INT4OID;
 
-	newec->ec_opfamilies = list_copy(opfamilies);
-	newec->ec_collation = 0;
-	newec->ec_members = list_make1(em);
-	newec->ec_sources = NIL;
-	newec->ec_derives = NIL;
-	newec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
-	newec->ec_has_const = false;
-	newec->ec_has_volatile = false;
+		newec->ec_opfamilies = list_copy(opfamilies);
+		newec->ec_collation = 0;
+		newec->ec_members = list_make1(em);
+		newec->ec_sources = NIL;
+		newec->ec_derives = NIL;
+		newec->ec_relids = bms_make_singleton(info->compressed_rel->relid);
+		newec->ec_has_const = false;
+		newec->ec_has_volatile = false;
 #if PG16_LT
-	newec->ec_below_outer_join = false;
+		newec->ec_below_outer_join = false;
 #endif
-	newec->ec_broken = false;
-	newec->ec_sortref = 0;
-	newec->ec_min_security = UINT_MAX;
-	newec->ec_max_security = 0;
-	newec->ec_merged = NULL;
+		newec->ec_broken = false;
+		newec->ec_sortref = 0;
+		newec->ec_min_security = UINT_MAX;
+		newec->ec_max_security = 0;
+		newec->ec_merged = NULL;
 
-	root->eq_classes = lappend(root->eq_classes, newec);
-
-	MemoryContextSwitchTo(oldcontext);
-
+		root->eq_classes = lappend(root->eq_classes, newec);
+	});
 	return newec;
 }
 
