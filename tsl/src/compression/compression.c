@@ -2355,6 +2355,8 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 									&tmfd,
 									false);
 		Assert(result == TM_Ok);
+
+		Assert(cis->cds != NULL);
 		cis->cds->batches_decompressed += decompressor.batches_decompressed;
 		cis->cds->tuples_decompressed += decompressor.tuples_decompressed;
 	}
