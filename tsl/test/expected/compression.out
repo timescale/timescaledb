@@ -2773,3 +2773,51 @@ SELECT * FROM ONLY :CHUNK2;
 ------+--------+-------
 (0 rows)
 
+------
+--- Test copy with a compressed table with unique index
+------
+CREATE TABLE compressed_table (time timestamptz, a int, b int, c int);
+CREATE UNIQUE INDEX compressed_table_index ON compressed_table(time, a, b, c);
+SELECT create_hypertable('compressed_table', 'time');
+NOTICE:  adding not-null constraint to column "time"
+       create_hypertable        
+--------------------------------
+ (49,public,compressed_table,t)
+(1 row)
+
+ALTER TABLE compressed_table SET (timescaledb.compress, timescaledb.compress_segmentby='a', timescaledb.compress_orderby = 'time DESC');
+WARNING:  column "b" should be used for segmenting or ordering
+WARNING:  column "c" should be used for segmenting or ordering
+COPY compressed_table (time,a,b,c) FROM stdin;
+SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_49_106_chunk
+(1 row)
+
+\set ON_ERROR_STOP 0
+COPY compressed_table (time,a,b,c) FROM stdin;
+ERROR:  duplicate key value violates unique constraint "_hyper_49_106_chunk_compressed_table_index"
+\set ON_ERROR_STOP 1
+COPY compressed_table (time,a,b,c) FROM stdin;
+SELECT * FROM compressed_table;
+                time                | a  | b | c 
+------------------------------------+----+---+---
+ Thu Feb 29 01:00:00 2024 PST       |  5 | 1 | 1
+ Thu Feb 29 06:02:03.87313 2024 PST | 10 | 2 | 2
+ Thu Feb 29 06:02:03.87313 2024 PST | 20 | 3 | 3
+(3 rows)
+
+SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
+              compress_chunk               
+-------------------------------------------
+ _timescaledb_internal._hyper_49_106_chunk
+(1 row)
+
+-- Check DML decompression limit
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
+\set ON_ERROR_STOP 0
+COPY compressed_table (time,a,b,c) FROM stdin;
+ERROR:  tuple decompression limit exceeded by operation
+\set ON_ERROR_STOP 1
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;

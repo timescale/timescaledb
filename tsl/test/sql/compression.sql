@@ -1120,3 +1120,42 @@ SELECT compress_chunk(:'CHUNK2');
 -- should return no rows
 SELECT * FROM ONLY :CHUNK2;
 
+------
+--- Test copy with a compressed table with unique index
+------
+
+CREATE TABLE compressed_table (time timestamptz, a int, b int, c int);
+CREATE UNIQUE INDEX compressed_table_index ON compressed_table(time, a, b, c);
+
+SELECT create_hypertable('compressed_table', 'time');
+ALTER TABLE compressed_table SET (timescaledb.compress, timescaledb.compress_segmentby='a', timescaledb.compress_orderby = 'time DESC');
+
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 10:00:00.00000+01	5	1	1
+2024-02-29 15:02:03.87313+01	10	2	2
+\.
+
+SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
+
+\set ON_ERROR_STOP 0
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 15:02:03.87313+01	10	2	2
+\.
+\set ON_ERROR_STOP 1
+
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 15:02:03.87313+01	20	3	3
+\.
+
+SELECT * FROM compressed_table;
+SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
+
+-- Check DML decompression limit
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
+\set ON_ERROR_STOP 0
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 15:02:03.87313+01	10	4	4
+2024-02-29 15:02:03.87313+01	20	5	5
+\.
+\set ON_ERROR_STOP 1
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;

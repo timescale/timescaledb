@@ -175,6 +175,11 @@ copy_chunk_state_create(Hypertable *ht, Relation rel, CopyFromFunc from_func, Co
 	ccstate->rel = rel;
 	ccstate->estate = estate;
 	ccstate->dispatch = ts_chunk_dispatch_create(ht, estate, 0);
+
+	/* In the copy path, no chunk dispatch node and no chunk dispatch state is available. Create an
+	 * empty state to be able to count decompressed tuples. */
+	ccstate->dispatch->dispatch_state = palloc0(sizeof(ChunkDispatchState));
+
 	ccstate->cstate = cstate;
 	ccstate->scandesc = scandesc;
 	ccstate->next_copy_from = from_func;
@@ -327,6 +332,24 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 												 buffer->slots[0],
 												 NULL /* on chunk changed function */,
 												 NULL /* payload for on chunk changed function */);
+
+	if (ts_guc_max_tuples_decompressed_per_dml > 0)
+	{
+		if (miinfo->ccstate->dispatch->dispatch_state->tuples_decompressed >
+			ts_guc_max_tuples_decompressed_per_dml)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+					 errmsg("tuple decompression limit exceeded by operation"),
+					 errdetail("current limit: %d, tuples decompressed: %lld",
+							   ts_guc_max_tuples_decompressed_per_dml,
+							   (long long int)
+								   miinfo->ccstate->dispatch->dispatch_state->tuples_decompressed),
+					 errhint("Consider increasing "
+							 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
+							 "set to 0 (unlimited).")));
+		}
+	}
 
 	ResultRelInfo *resultRelInfo = cis->result_relation_info;
 
