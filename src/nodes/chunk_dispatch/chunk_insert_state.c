@@ -67,7 +67,7 @@ chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch)
 static bool
 chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 {
-	if (!dispatch->dispatch_state)
+	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
 		return false;
 	return get_modifytable(dispatch)->returningLists != NIL;
 }
@@ -87,7 +87,7 @@ chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 OnConflictAction
 chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
-	if (!dispatch->dispatch_state)
+	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
 		return ONCONFLICT_NONE;
 	return get_modifytable(dispatch)->onConflictAction;
 }
@@ -95,8 +95,9 @@ chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 static CmdType
 chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
 {
-	return dispatch->dispatch_state == NULL ? CMD_INSERT :
-											  dispatch->dispatch_state->mtstate->operation;
+	return (dispatch->dispatch_state == NULL || dispatch->dispatch_state->mtstate == NULL) ?
+			   CMD_INSERT :
+			   dispatch->dispatch_state->mtstate->operation;
 }
 
 /*
