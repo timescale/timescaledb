@@ -155,12 +155,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 	for (int attoffset = 0; attoffset < tupdesc->natts; attoffset++)
 	{
-		Oid attroid = InvalidOid;
-		int32 typmod = -1;
-		Oid collid = 0;
-
 		Form_pg_attribute attr = TupleDescAttr(tupdesc, attoffset);
-		ColumnDef *coldef;
 		if (attr->attisdropped)
 			continue;
 		if (strncmp(NameStr(attr->attname),
@@ -171,31 +166,24 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 COMPRESSION_COLUMN_METADATA_PREFIX);
 
 		bool is_segmentby = ts_array_is_member(segmentby, NameStr(attr->attname));
-		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
-
 		if (is_segmentby)
 		{
-			attroid = attr->atttypid; /*segment by columns have original type */
-			typmod = attr->atttypmod;
-			collid = attr->attcollation;
+			segmentby_column_defs = lappend(segmentby_column_defs,
+											makeColumnDef(NameStr(attr->attname),
+														  attr->atttypid,
+														  attr->atttypmod,
+														  attr->attcollation));
+			continue;
 		}
-
-		if (!OidIsValid(attroid))
-		{
-			attroid = compresseddata_oid; /* default type for column */
-		}
-
-		coldef = makeColumnDef(NameStr(attr->attname), attroid, typmod, collid);
 
 		/*
-		 * Put the metadata columns before the compressed columns, because they
-		 * are accessed before decompression.
+		 * This is either an orderby or a normal compressed column. We want to
+		 * have metadata for some of them.  Put the metadata columns before the
+		 * respective compressed column, because they are accessed before
+		 * decompression.
 		 */
-		if (is_segmentby)
-		{
-			/* No additional metadata for segmentby. */
-		}
-		else if (is_orderby)
+		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
+		if (is_orderby)
 		{
 			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
@@ -257,14 +245,11 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			}
 		}
 
-		if (is_segmentby)
-		{
-			segmentby_column_defs = lappend(segmentby_column_defs, coldef);
-		}
-		else
-		{
-			compressed_column_defs = lappend(compressed_column_defs, coldef);
-		}
+		compressed_column_defs = lappend(compressed_column_defs,
+										 makeColumnDef(NameStr(attr->attname),
+													   compresseddata_oid,
+													   /* typmod = */ -1,
+													   /* collOid = */ InvalidOid));
 	}
 
 	/*
