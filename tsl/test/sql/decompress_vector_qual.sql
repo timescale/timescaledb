@@ -501,8 +501,13 @@ select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\';
 \set ON_ERROR_STOP 1
 
-reset timescaledb.debug_require_vector_qual;
-select count(distinct a) from text_table;
+
+-- We don't vectorize comparison operators with text because they are probably
+-- not very useful.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
+
 
 reset timescaledb.debug_require_vector_qual;
 reset timescaledb.enable_bulk_decompression;

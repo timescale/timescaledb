@@ -1532,11 +1532,19 @@ ERROR:  LIKE pattern must not end with escape character
 select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\';
 ERROR:  LIKE pattern must not end with escape character
 \set ON_ERROR_STOP 1
-reset timescaledb.debug_require_vector_qual;
-select count(distinct a) from text_table;
- count 
--------
-  2905
+-- We don't vectorize comparison operators with text because they are probably
+-- not very useful.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  3900 |   1 | 1000 |   0 |   8
+(1 row)
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
+ count | min | max  | min | max 
+-------+-----+------+-----+-----
+  2500 |   1 | 1000 |   4 |   7
 (1 row)
 
 reset timescaledb.debug_require_vector_qual;
