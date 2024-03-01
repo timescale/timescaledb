@@ -713,11 +713,6 @@ GROUP BY 1,2 WITH NO DATA;
 SELECT mat_hypertable_id AS cond_1_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_1' \gset
--- Test manual invalidation error
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.invalidation_cagg_log_add_entry(:cond_1_id, 1, 0);
-ERROR:  cannot invalidate cagg, end time should be greater than start time
-\set ON_ERROR_STOP 1
 -- Test invalidations with bucket size 1
 INSERT INTO conditions VALUES (0, 1, 1.0);
 SELECT * FROM hyper_invals;
@@ -920,11 +915,6 @@ ORDER BY 1,2;
              7 | -2147483648
 (1 row)
 
--- Test manual invalidation error
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.invalidation_hyper_log_add_entry(:thresh_hyper_id, 1, 0);
-ERROR:  cannot invalidate hypertable, end time should be greater than start time
-\set ON_ERROR_STOP 1
 -- Test that threshold is initilized to min value when there's no data
 -- and we specify an infinite end. Note that the min value may differ
 -- depending on time type.
@@ -1236,3 +1226,52 @@ CALL refresh_continuous_aggregate('cond_10', 0, 200);
 WARNING:  invalid value for session variable "timescaledb.materializations_per_refresh_window"
 DETAIL:  Expected an integer but current value is "-".
 \set VERBOSITY terse
+-- Test refresh with undefined invalidation threshold and variable sized buckets
+CREATE TABLE timestamp_ht (
+  time timestamptz NOT NULL,
+  value float
+);
+SELECT create_hypertable('timestamp_ht', 'time');
+     create_hypertable     
+---------------------------
+ (9,public,timestamp_ht,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW temperature_4h
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  continuous aggregate "temperature_4h" is already up-to-date
+-- We also treat time_buckets with an hourly interval that uses a time-zone
+-- as a variable see caggtimebucket_validate().
+CREATE MATERIALIZED VIEW temperature_4h_2
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, 'Europe/Berlin') AS bucket_4h, avg(value) AS average
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  continuous aggregate "temperature_4h_2" is already up-to-date
+CREATE MATERIALIZED VIEW temperature_1month
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  continuous aggregate "temperature_1month" is already up-to-date
+CREATE MATERIALIZED VIEW temperature_1month_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', time, 'Europe/Berlin'), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  continuous aggregate "temperature_1month_ts" is already up-to-date
+CREATE MATERIALIZED VIEW temperature_1month_hierarchical
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', bucket_4h), avg(average)
+    FROM temperature_4h_2
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  continuous aggregate "temperature_1month_hierarchical" is already up-to-date
+CREATE MATERIALIZED VIEW temperature_1month_hierarchical_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', bucket_4h, 'Europe/Berlin'), avg(average)
+    FROM temperature_4h_2
+    GROUP BY 1 ORDER BY 1;
+NOTICE:  continuous aggregate "temperature_1month_hierarchical_ts" is already up-to-date

@@ -56,6 +56,15 @@ create table log(
 create unique index on log(job_date, test_name);
 
 select create_hypertable('log', 'job_date');
+
+create table ipe(
+    job_date timestamptz,
+    error text,
+    location text,
+    statement text
+);
+
+select create_hypertable('ipe', 'job_date');
 "
 
 # Create the job record.
@@ -148,6 +157,15 @@ do
         }' "$x" > "$x.tmp"
     mv "$x.tmp" "$x"
 done
+
+# Save a snippet of logs where a backend was terminated by signal.
+grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
+
+# Find internal program errors in Postgres logs.
+jq 'select(.state_code == "XX000" and .error_severity != "LOG")
+    | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
+' -r postmaster.json > ipe.tsv ||:
+"${PSQL[@]}" -c "\copy ipe from ipe.tsv"
 
 # Upload the logs.
 # Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".

@@ -273,7 +273,7 @@ get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 		namestrcpy(objname, NameStr(ht->fd.table_name));
 	else if (status == HypertableIsMaterialization)
 	{
-		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
 		namestrcpy(objname, NameStr(cagg->data.user_view_name));
 	}
 	else
@@ -460,12 +460,20 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	compresschunkcxt_init(&cxt, hcache, hypertable_relid, chunk_relid);
 
 	/* acquire locks on src and compress hypertable and src chunk */
+	ereport(LOG,
+			(errmsg("acquiring locks for compressing \"%s.%s\"",
+					get_namespace_name(get_rel_namespace(chunk_relid)),
+					get_rel_name(chunk_relid))));
 	LockRelationOid(cxt.srcht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.srcht_chunk->table_id, ExclusiveLock);
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+	ereport(LOG,
+			(errmsg("locks acquired for compressing \"%s.%s\"",
+					get_namespace_name(get_rel_namespace(chunk_relid)),
+					get_rel_name(chunk_relid))));
 
 	DEBUG_WAITPOINT("compress_chunk_impl_start");
 
@@ -487,12 +495,20 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
 		new_compressed_chunk = true;
+		ereport(LOG,
+				(errmsg("new compressed chunk \"%s.%s\" created",
+						NameStr(compress_ht_chunk->fd.schema_name),
+						NameStr(compress_ht_chunk->fd.table_name))));
 	}
 	else
 	{
 		/* use an existing compressed chunk to compress into */
 		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true);
 		result_chunk_id = mergable_chunk->table_id;
+		ereport(LOG,
+				(errmsg("merge into existing compressed chunk \"%s.%s\"",
+						NameStr(compress_ht_chunk->fd.schema_name),
+						NameStr(compress_ht_chunk->fd.table_name))));
 	}
 
 	/* Since the compressed relation is created in the same transaction as the tuples that will be
@@ -563,7 +579,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		if (chunk_unordered)
 		{
 			ts_chunk_set_unordered(mergable_chunk);
-			tsl_recompress_chunk_wrapper(mergable_chunk);
+			tsl_compress_chunk_wrapper(mergable_chunk, true, false);
 		}
 	}
 
@@ -610,6 +626,10 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
+	ereport(LOG,
+			(errmsg("acquiring locks for decompressing \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(uncompressed_hypertable->main_table_relid, AccessShareLock);
 	LockRelationOid(compressed_hypertable->main_table_relid, AccessShareLock);
@@ -633,6 +653,10 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+	ereport(LOG,
+			(errmsg("locks acquired for decompressing \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
 
 	DEBUG_WAITPOINT("decompress_chunk_impl_start");
 
@@ -755,20 +779,45 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
+	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
+	uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+
+	PG_RETURN_OID(uncompressed_chunk_id);
+}
+
+Oid
+tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress)
+{
+	Oid uncompressed_chunk_id = chunk->table_id;
+
 	if (ts_chunk_is_compressed(chunk))
 	{
+		if (recompress)
+		{
+			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
+			Oid compressed_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, true);
+			CompressionSettings *chunk_settings =
+				ts_compression_settings_get(compressed_chunk_relid);
+
+			if (!ts_compression_settings_equal(ht_settings, chunk_settings))
+			{
+				decompress_chunk_impl(chunk, false);
+				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+				return uncompressed_chunk_id;
+			}
+		}
 		if (!ts_chunk_needs_recompression(chunk))
 		{
 			ereport((if_not_compressed ? NOTICE : ERROR),
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
-			PG_RETURN_OID(uncompressed_chunk_id);
+			return uncompressed_chunk_id;
 		}
 
 		if (get_compressed_chunk_index_for_recompression(chunk))
@@ -786,7 +835,7 @@ tsl_compress_chunk(PG_FUNCTION_ARGS)
 		uncompressed_chunk_id = compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 	}
 
-	PG_RETURN_OID(uncompressed_chunk_id);
+	return uncompressed_chunk_id;
 }
 
 Datum
@@ -820,29 +869,6 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
 
-bool
-tsl_recompress_chunk_wrapper(Chunk *uncompressed_chunk)
-{
-	Oid uncompressed_chunk_relid = uncompressed_chunk->table_id;
-
-	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
-	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
-
-	if (!ht->fd.compressed_hypertable_id)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
-
-	if (ts_chunk_is_compressed(uncompressed_chunk))
-	{
-		decompress_chunk_impl(uncompressed_chunk, false);
-	}
-
-	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
-	Assert(!ts_chunk_is_compressed(chunk));
-	compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
-
-	return true;
-}
-
 /* Sort the tuples and recompress them */
 static void
 recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel,
@@ -852,7 +878,8 @@ recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel
 	row_compressor_reset(row_compressor);
 	row_compressor_append_sorted_rows(row_compressor,
 									  tuplesortstate,
-									  RelationGetDescr(compressed_chunk_rel));
+									  RelationGetDescr(compressed_chunk_rel),
+									  compressed_chunk_rel);
 	tuplesort_end(tuplesortstate);
 	CommandCounterIncrement();
 }
@@ -1213,7 +1240,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	RowCompressor row_compressor;
 	row_compressor_init(settings,
 						&row_compressor,
-						uncompressed_rel_tupdesc,
+						uncompressed_chunk_rel,
 						compressed_chunk_rel,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
@@ -1384,7 +1411,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		row_compressor_reset(&row_compressor);
 		row_compressor_append_sorted_rows(&row_compressor,
 										  segment_tuplesortstate,
-										  RelationGetDescr(uncompressed_chunk_rel));
+										  RelationGetDescr(uncompressed_chunk_rel),
+										  uncompressed_chunk_rel);
 		tuplesort_end(segment_tuplesortstate);
 
 		/* make changes visible */

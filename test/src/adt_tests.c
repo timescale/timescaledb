@@ -105,7 +105,7 @@ bit_array_test(void)
 	BitArray bits;
 	BitArrayIterator iter;
 	int i;
-	bit_array_init(&bits);
+	bit_array_init(&bits, 0);
 
 	for (i = 0; i < 65; i++)
 		bit_array_append(&bits, i, i);

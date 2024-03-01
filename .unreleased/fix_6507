@@ -1,2 +1,0 @@
-Fixes: #6507 time_bucket_gapfill with timezones doesn't handle daylight savings 
-Thanks: @JerkoNikolic Thanks for reporting the issue with gapfill and DST

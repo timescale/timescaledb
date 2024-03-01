@@ -82,10 +82,7 @@ CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
-CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);
-CROSSMODULE_WRAPPER(invalidation_hyper_log_add_entry);
-CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
-CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
+CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
@@ -340,10 +337,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
-	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
-	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
-	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
-	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
+	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */

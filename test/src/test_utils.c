@@ -20,6 +20,7 @@
 #include <utils/memutils.h>
 
 #include "debug_point.h"
+#include "extension_constants.h"
 
 TS_FUNCTION_INFO_V1(ts_test_error_injection);
 TS_FUNCTION_INFO_V1(ts_debug_shippable_error_after_n_rows);
@@ -139,7 +140,7 @@ get_error_after_rows()
 	int error_after = 7103; /* default is an arbitrary prime */
 
 	const char *error_after_option =
-		GetConfigOption("timescaledb.debug_broken_sendrecv_error_after", true, false);
+		GetConfigOption(MAKE_EXTOPTION("debug_broken_sendrecv_error_after"), true, false);
 	if (error_after_option)
 	{
 		error_after = pg_strtoint32(error_after_option);

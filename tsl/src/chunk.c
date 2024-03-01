@@ -58,7 +58,7 @@ chunk_freeze_chunk(PG_FUNCTION_ARGS)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on distributed chunk or foreign table \"%s\"",
+				 errmsg("operation not supported on tiered chunk \"%s\"",
 						get_rel_name(chunk_relid))));
 	}
 	if (ts_chunk_is_frozen(chunk))

@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
+#include <commands/defrem.h>
 #include <funcapi.h>
 #include <hypertable_cache.h>
 #include <nodes/makefuncs.h>
@@ -347,7 +348,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	/* We need to do a reverse lookup here since the given hypertable might be
 	   a materialized hypertable, and thus need to call drop_chunks on the
 	   continuous aggregate instead. */
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hypertable->fd.id);
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hypertable->fd.id, true);
 	if (cagg)
 	{
 		object_relid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
@@ -419,7 +420,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->refresh_window.type = dim_type;
 		policy_data->refresh_window.start = refresh_start;
 		policy_data->refresh_window.end = refresh_end;
-		policy_data->cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
+		policy_data->cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
 		policy_data->start_is_null = start_isnull;
 		policy_data->end_is_null = end_isnull;
 	}
@@ -513,7 +514,7 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		if (!ts_chunk_needs_recompression(chunk))
 			continue;
 
-		tsl_recompress_chunk_wrapper(chunk);
+		tsl_compress_chunk_wrapper(chunk, true, false);
 
 		elog(LOG,
 			 "completed recompressing chunk \"%s.%s\"",

@@ -191,12 +191,7 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 		MemoryContextDelete(cagg_watermark_cache->mctx);
 	}
 
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_hypertable_id);
-
-	if (NULL == cagg)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid materialized hypertable ID: %d", mat_hypertable_id)));
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_hypertable_id, false);
 
 	/*
 	 * Preemptive permission check to ensure the function complains about lack
@@ -264,12 +259,7 @@ ts_continuous_agg_watermark_materialized(PG_FUNCTION_ARGS)
 	Hypertable *ht;
 	int64 watermark;
 
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_hypertable_id);
-
-	if (NULL == cagg)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid materialized hypertable ID: %d", mat_hypertable_id)));
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_hypertable_id, false);
 
 	/*
 	 * Preemptive permission check to ensure the function complains about lack
@@ -411,12 +401,7 @@ TSDLLEXPORT void
 ts_cagg_watermark_update(Hypertable *mat_ht, int64 watermark, bool watermark_isnull,
 						 bool force_update)
 {
-	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_ht->fd.id);
-
-	if (NULL == cagg)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid materialized hypertable ID: %d", mat_ht->fd.id)));
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_ht->fd.id, false);
 
 	/* If we have a real-time CAgg, it uses a watermark function. So, we have to invalidate the rel
 	 * cache to force a replanning of prepared statements. See cagg_watermark_update_internal for

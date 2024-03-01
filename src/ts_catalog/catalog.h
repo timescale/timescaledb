@@ -69,6 +69,8 @@ typedef struct TableIndexDef
 	char **names;
 } TableIndexDef;
 
+#define TS_CAGG_CATALOG_IDX "continuous_agg_pkey"
+
 #define INVALID_CATALOG_TABLE _MAX_CATALOG_TABLES
 #define INVALID_INDEXID -1
 
@@ -882,11 +884,12 @@ typedef enum Anum_continuous_agg_raw_hypertable_id_idx
 typedef enum Anum_continuous_aggs_bucket_function
 {
 	Anum_continuous_aggs_bucket_function_mat_hypertable_id = 1,
-	Anum_continuous_aggs_bucket_function_experimental,
-	Anum_continuous_aggs_bucket_function_name,
+	Anum_continuous_aggs_bucket_function_function,
 	Anum_continuous_aggs_bucket_function_bucket_width,
-	Anum_continuous_aggs_bucket_function_origin,
-	Anum_continuous_aggs_bucket_function_timezone,
+	Anum_continuous_aggs_bucket_function_bucket_origin,
+	Anum_continuous_aggs_bucket_function_bucket_offset,
+	Anum_continuous_aggs_bucket_function_bucket_timezone,
+	Anum_continuous_aggs_bucket_function_bucket_fixed_width,
 	_Anum_continuous_aggs_bucket_function_max,
 } Anum_continuous_aggs_bucket_function;
 

@@ -12,6 +12,7 @@
 
 #include "debug_guc.h"
 #include "debug_assert.h"
+#include "extension_constants.h"
 
 TSDLLEXPORT DebugOptimizerFlags ts_debug_optimizer_flags;
 
@@ -212,7 +213,7 @@ void
 ts_debug_init(void)
 {
 	static char *debug_optimizer_flags_string = NULL;
-	DefineCustomStringVariable("timescaledb.debug_optimizer_flags",
+	DefineCustomStringVariable(MAKE_EXTOPTION("debug_optimizer_flags"),
 							   "List of optimizer debug flags",
 							   "A list of flags for configuring the optimizer debug output.",
 							   &debug_optimizer_flags_string,

@@ -82,9 +82,10 @@ static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char
 									  bool materialized_only, const char *direct_schema,
 									  const char *direct_view, const bool finalized,
 									  const int32 parent_mat_hypertable_id);
-static void create_bucket_function_catalog_entry(int32 matht_id, bool experimental,
-												 const char *name, const char *bucket_width,
-												 const char *origin, const char *timezone);
+static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
+												 const char *bucket_width, const char *origin,
+												 const char *offset, const char *timezone,
+												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
 #if PG14_LT
@@ -186,9 +187,9 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
  * CONTINUOUS_AGGS_BUCKET_FUNCTION.
  */
 static void
-create_bucket_function_catalog_entry(int32 matht_id, bool experimental, const char *name,
-									 const char *bucket_width, const char *origin,
-									 const char *timezone)
+create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const char *bucket_width,
+									 const char *bucket_origin, const char *bucket_offset,
+									 const char *bucket_timezone, const bool bucket_fixed_width)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -202,17 +203,55 @@ create_bucket_function_catalog_entry(int32 matht_id, bool experimental, const ch
 	desc = RelationGetDescr(rel);
 
 	memset(values, 0, sizeof(values));
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)] = matht_id;
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_experimental)] =
-		BoolGetDatum(experimental);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_name)] =
-		CStringGetTextDatum(name);
+
+	/* Hypertable ID */
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_mat_hypertable_id)] =
+		matht_id;
+
+	/* Bucket function */
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
+		ObjectIdGetDatum(bucket_function);
+
+	/* Bucket width */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
 		CStringGetTextDatum(bucket_width);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_origin)] =
-		CStringGetTextDatum(origin);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_timezone)] =
-		CStringGetTextDatum(timezone ? timezone : "");
+
+	/* Bucket origin */
+	if (bucket_origin != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
+			CStringGetTextDatum(bucket_origin);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] = true;
+	}
+
+	/* Bucket offset */
+	if (bucket_offset != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] =
+			CStringGetTextDatum(bucket_offset);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] = true;
+	}
+
+	/* Bucket timezone */
+	if (bucket_timezone != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] =
+			CStringGetTextDatum(bucket_timezone);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] = true;
+	}
+
+	/* Bucket fixed width */
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_fixed_width)] =
+		BoolGetDatum(bucket_fixed_width);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -780,45 +819,29 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	if (bucket_info->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		const char *bucket_width;
-		const char *origin = "";
+		const char *bucket_origin = NULL;
+		const char *bucket_offset = NULL;
 
 		/*
 		 * Variable-sized buckets work only with intervals.
 		 */
 		Assert(bucket_info->interval != NULL);
-		bucket_width = DatumGetCString(
+		const char *bucket_width = DatumGetCString(
 			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->interval)));
 
 		if (!TIMESTAMP_NOT_FINITE(bucket_info->origin))
 		{
-			origin = DatumGetCString(
-				DirectFunctionCall1(timestamp_out, TimestampGetDatum(bucket_info->origin)));
+			bucket_origin = DatumGetCString(
+				DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(bucket_info->origin)));
 		}
 
-		/*
-		 * These values are not used for anything except Assert's yet
-		 * for the same reasons. Once the design of variable-sized buckets
-		 * is finalized we will have a better idea of what schema is needed exactly.
-		 * Until then the choice was made in favor of the most generic schema
-		 * that can be optimized later.
-		 */
-		Oid bucket_func_schema_oid = get_func_namespace(bucket_info->bucket_func->funcid);
-		Ensure(OidIsValid(bucket_func_schema_oid),
-			   "namespace for funcid %d not found",
-			   bucket_info->bucket_func->funcid);
-		char *bucket_func_schema_name = get_namespace_name(bucket_func_schema_oid);
-		Ensure(bucket_func_schema_name != NULL,
-			   "unable to get namespace name for Oid %d",
-			   bucket_func_schema_oid);
-		bool is_experimental =
-			(strncmp(bucket_func_schema_name, EXPERIMENTAL_SCHEMA_NAME, NAMEDATALEN) == 0);
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
-											 is_experimental,
-											 get_func_name(bucket_info->bucket_func->funcid),
+											 bucket_info->bucket_func->funcid,
 											 bucket_width,
-											 origin,
-											 bucket_info->timezone);
+											 bucket_origin,
+											 bucket_offset,
+											 bucket_info->timezone,
+											 bucket_info->bucket_width != BUCKET_WIDTH_VARIABLE);
 	}
 
 	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */

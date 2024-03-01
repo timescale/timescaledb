@@ -32,6 +32,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/chunk_append/transform.h"
 #include "vector_predicates.h"
 #include "ts_catalog/array_utils.h"
 
@@ -651,7 +652,17 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 	foreach (lc, qual_list)
 	{
 		Node *source_qual = lfirst(lc);
-		Node *vectorized_qual = make_vectorized_qual(path, source_qual);
+
+		/*
+		 * We can't vectorize the stable cross-type operators (for example
+		 * timestamp > timestamptz), so try to cast the constant to the same
+		 * type to convert it to the same-type operator. We do the same thing
+		 * for chunk exclusion.
+		 */
+		Node *transformed_comparison =
+			(Node *) ts_transform_cross_datatype_comparison((Expr *) source_qual);
+
+		Node *vectorized_qual = make_vectorized_qual(path, transformed_comparison);
 		if (vectorized_qual)
 		{
 			*vectorized = lappend(*vectorized, vectorized_qual);

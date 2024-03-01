@@ -1,5 +1,8 @@
 name: Regression Linux i386
 "on":
+  schedule:
+    # run daily 0:00 on main branch
+    - cron: '0 0 * * *'
   push:
     branches:
       - main
@@ -84,7 +87,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "linux-32-bit-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
@@ -142,8 +145,8 @@ jobs:
       id: collectlogs
       shell: bash
       run: |
-        find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name postmaster.log -exec cat {} + > postgres.log
+        find build -name regression.diffs -exec cat {} + > regression.log
+        find build -name postmaster.log -exec cat {} + > postmaster.log
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
@@ -205,7 +208,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log linux-i386 PG${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.log
 
     - name: Save TAP test logs
       if: always()

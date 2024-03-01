@@ -33,17 +33,9 @@ SELECT pg_typeof(_timescaledb_internal.get_git_commit());
 SELECT pg_typeof(_timescaledb_internal.get_os_info());
 SELECT _timescaledb_internal.get_partition_for_key(NULL::text);
 SELECT _timescaledb_internal.get_partition_hash(NULL::text);
-SELECT _timescaledb_internal.hypertable_invalidation_log_delete(0);
 SELECT _timescaledb_internal.hypertable_local_size(NULL,NULL);
 SELECT _timescaledb_internal.indexes_local_size(NULL,NULL);
 SELECT _timescaledb_internal.interval_to_usec(NULL);
-SELECT _timescaledb_internal.invalidation_cagg_log_add_entry(0,0,0);
-SELECT _timescaledb_internal.invalidation_hyper_log_add_entry(0,0,0);
-SELECT _timescaledb_internal.invalidation_process_cagg_log(0,0,0,0,0,NULL,NULL,NULL);
-SELECT _timescaledb_internal.invalidation_process_cagg_log(0,0,0,0,0,NULL,NULL,NULL,NULL);
-SELECT _timescaledb_internal.invalidation_process_hypertable_log(0,0,0,NULL,NULL,NULL);
-SELECT _timescaledb_internal.invalidation_process_hypertable_log(0,0,0,NULL,NULL,NULL,NULL);
-SELECT _timescaledb_internal.materialization_invalidation_log_delete(0);
 SELECT _timescaledb_internal.partialize_agg(NULL::text);
 SELECT _timescaledb_internal.policy_compression_check(NULL);
 SELECT _timescaledb_internal.policy_job_error_retention(0,NULL);
@@ -83,6 +75,7 @@ CALL _timescaledb_internal.policy_recompression(0,NULL);
 CALL _timescaledb_internal.policy_refresh_continuous_aggregate(0,NULL);
 CALL _timescaledb_internal.policy_reorder(0,NULL);
 CALL _timescaledb_internal.policy_retention(0,NULL);
+CALL public.recompress_chunk(0);
 \set ON_ERROR_STOP 1
 
 -- tests for the cagg invalidation trigger on the deprecated schema

@@ -27,7 +27,6 @@ body:
       description: You can pick multiple subsystems and features.
       multiple: true
       options:
-        - Access node
         - Adaptive chunking
         - Background worker
         - Build system
@@ -36,11 +35,7 @@ body:
         - Configuration
         - Continuous aggregate
         - Data ingestion
-        - Data node
-        - Distributed hypertable
         - Gapfill
-        - Multi-node
-        - Node management
         - Packaging
         - Partitioning
         - Platform/OS

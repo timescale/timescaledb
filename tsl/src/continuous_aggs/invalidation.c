@@ -148,7 +148,6 @@ static void invalidation_state_init(CaggInvalidationState *state, int32 mat_hype
 									int32 raw_hypertable_id, Oid dimtype,
 									const CaggsInfo *all_caggs);
 static void invalidation_state_cleanup(const CaggInvalidationState *state);
-static ArrayType *bucket_functions_default_argument(int ndim);
 
 static Relation
 open_invalidation_log(LogType type, LOCKMODE lockmode)
@@ -217,54 +216,6 @@ invalidation_cagg_log_add_entry(int32 cagg_hyper_id, int64 start, int64 end)
 	heap_freetuple(tuple);
 	table_close(rel, NoLock);
 }
-
-/**
- * Adds a materialization invalidation log entry to the local data node.
- *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable
- * @param start_time The starting time of the materialization invalidation log entry.
- * @param end_time The ending time of the materialization invalidation log entry.
- */
-Datum
-tsl_invalidation_cagg_log_add_entry(PG_FUNCTION_ARGS)
-{
-	int32 mat_hypertable_id = PG_GETARG_INT32(0);
-	int64 start_time = PG_GETARG_INT64(1);
-	int64 end_time = PG_GETARG_INT64(2);
-
-	if (end_time < start_time)
-		elog(ERROR, "cannot invalidate cagg, end time should be greater than start time");
-
-	invalidation_cagg_log_add_entry(mat_hypertable_id, start_time, end_time);
-
-	PG_RETURN_VOID();
-}
-
-/**
- * Adds a hypertable invalidation log entry to the local data node.
- *
- * @param raw_hypertable_id The hypertable ID of the original hypertable
- * @param start_time The starting time of the materialization invalidation log entry.
- * @param end_time The ending time of the materialization invalidation log entry.
- */
-Datum
-tsl_invalidation_hyper_log_add_entry(PG_FUNCTION_ARGS)
-{
-	int32 raw_hypertable_id = PG_GETARG_INT32(0);
-	int64 start_time = PG_GETARG_INT64(1);
-	int64 end_time = PG_GETARG_INT64(2);
-
-	if (end_time < start_time)
-		elog(ERROR, "cannot invalidate hypertable, end time should be greater than start time");
-
-	invalidation_hyper_log_add_entry(raw_hypertable_id, start_time, end_time);
-
-	PG_RETURN_VOID();
-}
-
-#define INVALIDATION_CAGG_ADD_ENTRY_NARGS 3
-#define INVALIDATION_CAGG_LOG_ADD_ENTRY_FUNCNAME "invalidation_cagg_log_add_entry"
-#define INVALIDATION_HYPER_LOG_ADD_ENTRY_FUNCNAME "invalidation_hyper_log_add_entry"
 
 void
 invalidation_hyper_log_add_entry(int32 hyper_id, int64 start, int64 end)
@@ -1060,74 +1011,6 @@ invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 raw_hypertabl
 	invalidation_state_cleanup(&state);
 }
 
-/*
- * Generates the default bucket_functions[] argument for the following functions:
- *
- * - _timescaledb_internal.invalidation_process_hypertable_log()
- * - _timescaledb_internal.invalidation_process_cagg_log()
- *
- * Users are expected to have the same or higher version of TimescaleDB on the
- * data nodes. When the access node runs the older version that knows nothing
- * about the bucket_functions[] argument, the data nodes that runs newer version
- * will receive less arguments that they expect. When this happens data nodes
- * generate the default argument, and execute the rest of the logic as usual.
- */
-static ArrayType *
-bucket_functions_default_argument(int ndim)
-{
-	int i;
-	Datum *bucketfunctions = palloc(sizeof(Datum) * ndim);
-
-	for (i = 0; i < ndim; i++)
-		bucketfunctions[i] = CStringGetTextDatum("");
-
-	return construct_array(bucketfunctions, ndim, TEXTOID, -1, false, TYPALIGN_INT);
-}
-
-/**
- * Processes the hypertable invalidation log for all the CAGGs that belong to the hypertable.
- * The invalidations are cut, merged and moved to the materialization invalidation log.
- *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable that is currently
- *                          being refreshed.
- * @param raw_hypertable_id The hypertable ID of the original hypertable
- * @param dimtype The OID of the type of the time dimension for this CAGG.
- * @param mat_hypertable_ids The array of hypertable IDs for all CAGG materialized hypertables that
- *                           belong to 'raw_hypertable_id'.
- * @param bucket_widths The array of time bucket widths for all the CAGGs that belong to
- *                      'raw_hypertable_id'.
- * @param max_bucket_widths (Deprecated) This argument is ignored and is present only for backward
- *                          compatibility.
- * @param bucket_functions (Optional) The array of serialized information about bucket functions.
- */
-Datum
-tsl_invalidation_process_hypertable_log(PG_FUNCTION_ARGS)
-{
-	int32 mat_hypertable_id = PG_GETARG_INT32(0);
-	int32 raw_hypertable_id = PG_GETARG_INT32(1);
-	Oid dimtype = PG_GETARG_OID(2);
-	ArrayType *mat_hypertable_ids = PG_GETARG_ARRAYTYPE_P(3);
-	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(4);
-	ArrayType *bucket_functions = PG_NARGS() > 6 ?
-									  PG_GETARG_ARRAYTYPE_P(6) :
-									  bucket_functions_default_argument(ARR_NDIM(bucket_widths));
-	CaggsInfo all_caggs_info;
-
-	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
-									   bucket_widths,
-									   bucket_functions,
-									   &all_caggs_info);
-
-	invalidation_process_hypertable_log(mat_hypertable_id,
-										raw_hypertable_id,
-										dimtype,
-										&all_caggs_info);
-	PG_RETURN_VOID();
-}
-
-#define INVALIDATION_PROCESS_HYPERTABLE_LOG_NARGS 7
-#define INVALIDATION_PROCESS_HYPERTABLE_LOG_FUNCNAME "invalidation_process_hypertable_log"
-
 InvalidationStore *
 invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 							  const InternalTimeRange *refresh_window,
@@ -1182,88 +1065,6 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 	}
 
 	return store;
-}
-
-/**
- * Processes the materialization invalidation log for the CAGG being refreshed that belongs to the
- * hypertable with hypertable ID 'raw_hypertable_id'. The invalidations are cut, merged and returned
- * as a single refresh window.
- *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable that is currently
- *                          being refreshed.
- * @param raw_hypertable_id The hypertable ID of the original hypertable
- * @param dimtype The OID of the type of the time dimension for this CAGG.
- * @param window_start The starting time of the CAGG refresh window.
- * @param window_end The ending time of the CAGG refresh window.
- * @param mat_hypertable_ids The array of hypertable IDs for all CAGG materialized hypertables that
- *                           belong to 'raw_hypertable_id'.
- * @param bucket_widths The array of time bucket widths for all the CAGGs that belong to
- *                      'raw_hypertable_id'.
- * @param max_bucket_widths (Deprecated) This argument is ignored and is present only for backward
- *                          compatibility.
- * @param bucket_functions (Optional) The array of serialized information about bucket functions.
- * @return a tuple of:
- *         ret_window_start - The merged refresh window starting time
- *         ret_window_end - The merged refresh window ending time
- */
-Datum
-tsl_invalidation_process_cagg_log(PG_FUNCTION_ARGS)
-{
-	bool do_merged_refresh;
-	InvalidationStore *invalidations pg_attribute_unused() = NULL;
-
-	int32 mat_hypertable_id = PG_GETARG_INT32(0);
-	int32 raw_hypertable_id = PG_GETARG_INT32(1);
-	InternalTimeRange refresh_window = { .type = PG_GETARG_OID(2),
-										 .start = PG_GETARG_INT64(3),
-										 .end = PG_GETARG_INT64(4) };
-	ArrayType *mat_hypertable_ids = PG_GETARG_ARRAYTYPE_P(5);
-	ArrayType *bucket_widths = PG_GETARG_ARRAYTYPE_P(6);
-	ArrayType *bucket_functions = PG_NARGS() > 8 ?
-									  PG_GETARG_ARRAYTYPE_P(8) :
-									  bucket_functions_default_argument(ARR_NDIM(bucket_widths));
-	CaggsInfo all_caggs_info;
-	InternalTimeRange ret_merged_refresh_window;
-
-	ts_populate_caggs_info_from_arrays(mat_hypertable_ids,
-									   bucket_widths,
-									   bucket_functions,
-									   &all_caggs_info);
-
-	/* Force to always merge the refresh ranges since it is running in the data node
-	 * by setting (max_materializations = 0) */
-	invalidations = invalidation_process_cagg_log(mat_hypertable_id,
-												  raw_hypertable_id,
-												  &refresh_window,
-												  &all_caggs_info,
-												  0 /* max_materializations */,
-												  &do_merged_refresh,
-												  &ret_merged_refresh_window);
-	HeapTuple tuple;
-	TupleDesc tupdesc;
-	Datum values[2];
-	bool nulls[2] = { false, false };
-
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		elog(ERROR, "function returning record called in context that cannot accept type record");
-
-	tupdesc = BlessTupleDesc(tupdesc);
-
-	if (!do_merged_refresh)
-	{ /* No invalidations found whatsoever */
-		Assert(!invalidations);
-		nulls[0] = true;
-		nulls[1] = true;
-	}
-	else
-	{
-		values[0] = Int64GetDatum(ret_merged_refresh_window.start);
-		values[1] = Int64GetDatum(ret_merged_refresh_window.end);
-	}
-
-	tuple = heap_form_tuple(tupdesc, values, nulls);
-
-	PG_RETURN_DATUM(HeapTupleGetDatum(tuple));
 }
 
 void

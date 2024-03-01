@@ -38,6 +38,7 @@
 
 #define CONTINUOUS_AGG_MAX_JOIN_RELATIONS 2
 #define DEFAULT_MATPARTCOLUMN_NAME "time_partition_col"
+#define CAGG_INVALIDATION_THRESHOLD_NAME "invalidation threshold watermark"
 
 typedef struct FinalizeQueryInfo
 {
@@ -80,7 +81,7 @@ typedef struct CAggTimebucketInfo
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.
 	 */
-	Timestamp origin;
+	TimestampTz origin;
 } CAggTimebucketInfo;
 
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
@@ -107,7 +108,6 @@ extern void RemoveRangeTableEntries(Query *query);
 extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
 								int materialize_htid);
 extern void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist);
-extern void mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo);
 extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
