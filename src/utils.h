@@ -6,15 +6,17 @@
 #pragma once
 
 #include <postgres.h>
+
 #include <access/htup_details.h>
-#include <catalog/pg_proc.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_proc.h>
 #include <common/int.h>
-#include <foreign/foreign.h>
-#include <nodes/pathnodes.h>
-#include <nodes/extensible.h>
-#include <utils/datetime.h>
 #include <debug_assert.h>
+#include <foreign/foreign.h>
+#include <nodes/extensible.h>
+#include <nodes/pathnodes.h>
+#include <utils/builtins.h>
+#include <utils/datetime.h>
 
 #include "compat/compat.h"
 
@@ -240,3 +242,24 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 }
 
 void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);
+
+extern TSDLLEXPORT HeapTuple ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums);
+
+static inline void
+ts_datum_set_text_from_cstring(const AttrNumber attno, NullableDatum *datums, const char *value)
+{
+	if (value != NULL)
+	{
+		datums[AttrNumberGetAttrOffset(attno)].value = PointerGetDatum(cstring_to_text(value));
+		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	}
+	else
+		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+}
+
+static inline void
+ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool value)
+{
+	datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+}
