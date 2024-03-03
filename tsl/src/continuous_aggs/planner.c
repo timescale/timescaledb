@@ -193,7 +193,7 @@ could_be_realtime_cagg_query(Query *query)
 	if (query->commandType != CMD_SELECT)
 		return false;
 
-	if (query->hasWindowFuncs || query->hasTargetSRFs)
+	if (query->hasTargetSRFs)
 		return false;
 
 	/* One range table, could be a query direct on a CAgg or a CTE expression */
