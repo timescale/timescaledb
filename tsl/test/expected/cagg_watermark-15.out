@@ -1808,3 +1808,22 @@ UNION ALL
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- Issue #6722: constify cagg_watermark using window func when querying a cagg
+:EXPLAIN_ANALYZE
+SELECT time_bucket, lead(count) OVER (ORDER BY time_bucket) FROM small_integer_ht_cagg;
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ WindowAgg (actual rows=6 loops=1)
+   ->  Sort (actual rows=6 loops=1)
+         Sort Key: _hyper_15_64_chunk.time_bucket
+         Sort Method: quicksort 
+         ->  Append (actual rows=6 loops=1)
+               ->  Index Scan using _hyper_15_64_chunk__materialized_hypertable_15_time_bucket_idx on _hyper_15_64_chunk (actual rows=6 loops=1)
+                     Index Cond: (time_bucket < '30'::bigint)
+               ->  HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('5'::bigint, "time")
+                     Batches: 1 
+                     ->  Result (actual rows=0 loops=1)
+                           One-Time Filter: false
+(12 rows)
+
