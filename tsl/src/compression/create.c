@@ -109,11 +109,9 @@ compressed_column_metadata_name_v2(char *metadata_type, char *column_name)
 	char *result;
 	if (len > 39)
 	{
-		const char *errstr = NULL;
 		char hash[33];
-		Ensure(pg_md5_hash(column_name, len, hash, &errstr),
-			   "md5 computation failure: '%s'",
-			   errstr);
+		Ensure(pg_md5_hash_compat(column_name, len, hash, /* errstr = */ NULL),
+			   "md5 computation failure");
 
 		result = psprintf("_ts_meta_v2_%.6s_%.4s_%.39s", metadata_type, hash, column_name);
 	}
