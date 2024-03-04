@@ -174,6 +174,16 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 		IndexInfo *index_info = BuildIndexInfo(index_rel);
 		index_close(index_rel, NoLock);
 
+		/*
+		 * We want to create the sparse minmax index, if it can satisfy the same
+		 * kinds of queries as the uncompressed index. The simplest case is btree
+		 * which can satisfy equality and comparison tests, same as sparse minmax.
+		 *
+		 * We can be smarter here, e.g. for BRIN, sparse minmax can be similar
+		 * to BRIN with range opclass, but not for bloom filter opclass. For GIN,
+		 * sparse minmax is useless because it doesn't help satisfy text search
+		 * queries, and so on. Currently we check only the simplest btree case.
+		 */
 		if (index_info->ii_Am != BTREE_AM_OID)
 		{
 			continue;
