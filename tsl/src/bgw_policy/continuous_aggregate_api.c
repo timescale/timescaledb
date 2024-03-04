@@ -111,13 +111,20 @@ get_time_from_config(const Dimension *dim, const Jsonb *config, const char *json
 }
 
 int64
-policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config, bool *start_isnull)
+policy_refresh_cagg_get_refresh_start(const ContinuousAgg *cagg, const Dimension *dim,
+									  const Jsonb *config, bool *start_isnull)
 {
 	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_START_OFFSET, start_isnull);
 
 	/* interpret NULL as min value for that type */
 	if (*start_isnull)
-		return ts_time_get_min(ts_dimension_get_partition_type(dim));
+	{
+		Oid type = ts_dimension_get_partition_type(dim);
+
+		return ts_continuous_agg_bucket_width_variable(cagg) ? ts_time_get_nobegin_or_min(type) :
+															   ts_time_get_min(type);
+	}
+
 	return res;
 }
 
