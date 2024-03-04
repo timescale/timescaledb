@@ -155,3 +155,10 @@ UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_timezone 
 -- So far, there were no difference between 0 and -1 retries. Since now on, 0 means no retries. Updating the retry
 -- count of existing jobs to -1 to keep the current semantics.
 UPDATE _timescaledb_config.bgw_job SET max_retries = -1 WHERE max_retries = 0;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_relstats;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_colstats;
+DROP FUNCTION IF EXISTS _timescaledb_internal.get_chunk_relstats;
+DROP FUNCTION IF EXISTS _timescaledb_internal.get_chunk_colstats;
+
+
