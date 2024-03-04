@@ -51,17 +51,6 @@ is_osm_present()
 static void
 try_disable_bulk_decompression(PlannerInfo *root, Node *node)
 {
-	if (node == NULL)
-	{
-		return;
-	}
-
-	if (IsA(node, ProjectionPath))
-	{
-		try_disable_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
-		return;
-	}
-
 	if (IsA(node, List))
 	{
 		ListCell *lc;
@@ -72,23 +61,51 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node)
 		return;
 	}
 
+	if (IsA(node, ProjectionPath))
+	{
+		try_disable_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
+		return;
+	}
+
+	if (IsA(node, AppendPath))
+	{
+		try_disable_bulk_decompression(root, (Node *) castNode(AppendPath, node)->subpaths);
+		return;
+	}
+
+	if (IsA(node, MergeAppendPath))
+	{
+		MergeAppendPath *mergeappend = castNode(MergeAppendPath, node);
+		ListCell *lc;
+		foreach (lc, mergeappend->subpaths)
+		{
+			Path *child = (Path *) lfirst(lc);
+			if (pathkeys_contained_in(mergeappend->path.pathkeys, child->pathkeys))
+			{
+				try_disable_bulk_decompression(root, (Node *) child);
+			}
+		}
+		return;
+	}
+
 	if (!IsA(node, CustomPath))
 	{
 		return;
 	}
 
 	CustomPath *custom_child = castNode(CustomPath, node);
+	if (strcmp(custom_child->methods->CustomName, "ChunkAppend") == 0)
+	{
+		try_disable_bulk_decompression(root, (Node *) custom_child->custom_paths);
+		return;
+	}
+
 	if (strcmp(custom_child->methods->CustomName, "DecompressChunk") != 0)
 	{
 		return;
 	}
 
 	DecompressChunkPath *dcpath = (DecompressChunkPath *) custom_child;
-	ListCell *column_cell;
-	foreach (column_cell, dcpath->bulk_decompression_column)
-	{
-		lfirst(column_cell) = false;
-	}
 	dcpath->enable_bulk_decompression = false;
 }
 
@@ -101,11 +118,6 @@ try_disable_bulk_decompression(PlannerInfo *root, Node *node)
 static void
 check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 {
-	if (node == NULL)
-	{
-		return;
-	}
-
 	ListCell *lc;
 	switch (node->type)
 	{
@@ -117,15 +129,30 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 			break;
 		case T_LimitPath:
 		{
+			double limit = -1;
 			LimitPath *path = castNode(LimitPath, node);
-			/*
-			 * Theoretically we could handle plain Limit as well, but it is more
-			 * complicated because the limit and offset are specified not by
-			 * plain constants there, but by some expression nodes.
-			 * This matters when we have a single chunk (direct select or due to
-			 * plan-time exclusion).
-			 */
-			check_limit_bulk_decompression(root, (Node *) path->subpath);
+
+			if (path->limitCount != NULL)
+			{
+				Const *count = castNode(Const, path->limitCount);
+				Assert(count->consttype == INT8OID);
+				Assert(DatumGetInt64(count->constvalue) >= 0);
+				limit = DatumGetInt64(count->constvalue);
+			}
+
+			if (path->limitOffset != NULL)
+			{
+				Const *offset = castNode(Const, path->limitOffset);
+				Assert(offset->consttype == INT8OID);
+				Assert(DatumGetInt64(offset->constvalue) >= 0);
+				limit += DatumGetInt64(offset->constvalue);
+			}
+
+			if (limit > 0 && limit < 100)
+			{
+				try_disable_bulk_decompression(root, (Node *) path->subpath);
+			}
+
 			break;
 		}
 #if PG14_GE
@@ -146,20 +173,6 @@ check_limit_bulk_decompression(PlannerInfo *root, Node *node)
 			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->outerjoinpath);
 			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->innerjoinpath);
 			break;
-		case T_CustomPath:
-		{
-			CustomPath *custom_this = castNode(CustomPath, node);
-			if (strcmp(custom_this->methods->CustomName, "ChunkAppend") != 0)
-			{
-				break;
-			}
-			ChunkAppendPath *chunk_append = (ChunkAppendPath *) custom_this;
-			if (chunk_append->limit_tuples > 0 && chunk_append->limit_tuples < 100)
-			{
-				try_disable_bulk_decompression(root, (Node *) chunk_append->cpath.custom_paths);
-			}
-			return;
-		}
 		default:
 			break;
 	}

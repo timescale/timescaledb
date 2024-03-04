@@ -80,7 +80,7 @@ typedef struct DecompressChunkPath
 	List *bulk_decompression_column;
 
 	/*
-	 * Whether the bulk decompression is enabled.
+	 * Whether the bulk decompression is enabled for this path.
 	 */
 	bool enable_bulk_decompression;
 
