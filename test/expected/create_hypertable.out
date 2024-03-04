@@ -124,7 +124,7 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 
 select * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+------------
   1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         |                  | f
   2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         |                  | f
   3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         |                  | f
@@ -141,7 +141,7 @@ SELECT set_number_partitions('test_schema.test_table', 1, 'location');
 
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+------------
   5 |             2 | location    | text        | f       |          1 | _timescaledb_functions   | get_partition_hash |                 |                          |                         |                  | f
 (1 row)
 
@@ -153,7 +153,7 @@ SELECT set_number_partitions('test_schema.test_table', 2, 'location');
 
 select * from _timescaledb_catalog.dimension WHERE column_name = 'location';
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+------------
   5 |             2 | location    | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         |                  | f
 (1 row)
 
@@ -187,7 +187,7 @@ select * from _timescaledb_catalog.hypertable where table_name = 'test_table';
 
 select * from _timescaledb_catalog.dimension;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func  | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+-------------+---------+------------+--------------------------+--------------------+-----------------+--------------------------+-------------------------+------------------+------------
   1 |             1 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         |                  | f
   2 |             1 | device_id   | text        | f       |          2 | _timescaledb_functions   | get_partition_hash |                 |                          |                         |                  | f
   3 |             2 | time        | bigint      | t       |            |                          |                    |   2592000000000 |                          |                         |                  | f
@@ -789,7 +789,7 @@ select set_integer_now_func('test_table_int', 'dummy_now');
 
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------+------------
  29 |            17 | time        | bigint      | t       |            |                          |                   |               1 |                          | public                  | dummy_now        | f
 (1 row)
 
@@ -827,7 +827,7 @@ select set_integer_now_func('test_table_int', 'my_user_schema.dummy_now4', repla
 ALTER SCHEMA my_user_schema RENAME TO my_new_schema;
 select * from _timescaledb_catalog.dimension WHERE hypertable_id = :TEST_TABLE_INT_HYPERTABLE_ID;
  id | hypertable_id | column_name | column_type | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+-------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------+------------
  29 |            17 | time        | bigint      | t       |            |                          |                   |               1 |                          | my_new_schema           | dummy_now4       | f
 (1 row)
 

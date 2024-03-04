@@ -90,7 +90,7 @@ FROM _timescaledb_catalog.hypertable;
 -- interval => 86400000000 microseconds
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema | partitioning_func | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-------------------+-----------------+--------------------------+-------------------------+------------------+------------
   2 |             2 | time        | timestamp with time zone | t       |            |                          |                   |     86400000000 |                          |                         |                  | f
 (1 row)
 

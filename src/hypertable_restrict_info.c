@@ -275,18 +275,28 @@ typedef struct HypertableRestrictInfo
 HypertableRestrictInfo *
 ts_hypertable_restrict_info_create(RelOptInfo *rel, Hypertable *ht)
 {
-	int num_dimensions = ht->space->num_dimensions;
+	int num_dimensions = ht->space->num_dimensions +
+						 (ht->correlated_space ? ht->correlated_space->num_dimensions : 0);
 	HypertableRestrictInfo *res =
 		palloc0(sizeof(HypertableRestrictInfo) + sizeof(DimensionRestrictInfo *) * num_dimensions);
 	int i;
+	int sec_index = 0;
 
 	res->num_dimensions = num_dimensions;
 
-	for (i = 0; i < num_dimensions; i++)
+	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		DimensionRestrictInfo *dri = dimension_restrict_info_create(&ht->space->dimensions[i]);
 
 		res->dimension_restriction[i] = dri;
+		sec_index++;
+	}
+	for (i = 0; ht->correlated_space != NULL && i < ht->correlated_space->num_dimensions; i++)
+	{
+		DimensionRestrictInfo *dri =
+			dimension_restrict_info_create(&ht->correlated_space->dimensions[i]);
+
+		res->dimension_restriction[sec_index++] = dri;
 	}
 
 	return res;

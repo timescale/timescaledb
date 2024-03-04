@@ -12,7 +12,7 @@ NOTICE:  adding not-null constraint to column "time"
 -- Show legacy partitioning function is used
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------+------------
   1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         |                  | f
   2 |             1 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                          |                         |                  | f
 (2 rows)
@@ -55,7 +55,7 @@ NOTICE:  adding not-null constraint to column "time"
 
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |       column_type        | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+--------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------+------------
   1 |             1 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         |                  | f
   2 |             1 | device      | integer                  | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                          |                         |                  | f
   3 |             2 | time        | timestamp with time zone | t       |            |                          |                       |    604800000000 |                          |                         |                  | f
@@ -134,7 +134,7 @@ SELECT add_dimension('part_add_dim', 'location', 2, partitioning_func => '_times
 
 SELECT * FROM _timescaledb_catalog.dimension;
  id | hypertable_id | column_name |         column_type         | aligned | num_slices | partitioning_func_schema |   partitioning_func   | interval_length | compress_interval_length | integer_now_func_schema | integer_now_func | correlated 
-----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------+-----------
+----+---------------+-------------+-----------------------------+---------+------------+--------------------------+-----------------------+-----------------+--------------------------+-------------------------+------------------+------------
   1 |             1 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000 |                          |                         |                  | f
   2 |             1 | device      | integer                     | f       |          2 | _timescaledb_functions   | get_partition_for_key |                 |                          |                         |                  | f
   3 |             2 | time        | timestamp with time zone    | t       |            |                          |                       |    604800000000 |                          |                         |                  | f

@@ -53,6 +53,8 @@ ts_dimension_slice_scan_range_limit(int32 dimension_id, StrategyNumber start_str
 									int limit, const ScanTupLock *tuplock);
 extern DimensionVec *ts_dimension_slice_collision_scan_limit(int32 dimension_id, int64 range_start,
 															 int64 range_end, int limit);
+extern DimensionVec *ts_dimension_slice_equal_scan(int32 dimension_id, int64 range_start,
+												   int64 range_end);
 extern bool ts_dimension_slice_scan_for_existing(const DimensionSlice *slice,
 												 const ScanTupLock *tuplock);
 extern DimensionSlice *ts_dimension_slice_scan_by_id_and_lock(int32 dimension_slice_id,
@@ -77,6 +79,7 @@ extern bool ts_dimension_slice_cut(DimensionSlice *to_cut, const DimensionSlice 
 extern void ts_dimension_slice_free(DimensionSlice *slice);
 extern int ts_dimension_slice_insert_multi(DimensionSlice **slice, Size num_slices);
 extern void ts_dimension_slice_insert(DimensionSlice *slice);
+extern int ts_correlated_constraints_dimension_slice_insert(const Hypertable *ht, Chunk *chunk);
 extern int ts_dimension_slice_cmp(const DimensionSlice *left, const DimensionSlice *right);
 extern int ts_dimension_slice_cmp_coordinate(const DimensionSlice *slice, int64 coord);
 
@@ -87,6 +90,9 @@ extern TSDLLEXPORT int32 ts_dimension_slice_oldest_valid_chunk_for_reorder(
 extern TSDLLEXPORT List *ts_dimension_slice_get_chunkids_to_compress(
 	int32 dimension_id, StrategyNumber start_strategy, int64 start_value,
 	StrategyNumber end_strategy, int64 end_value, bool compress, bool recompress, int32 numchunks);
+extern TSDLLEXPORT int
+ts_correlated_constraints_dimension_slice_calculate_update(const Hypertable *ht, Chunk *chunk,
+														   bool reset);
 
 extern DimensionSlice *ts_dimension_slice_from_tuple(TupleInfo *ti);
 extern ScanIterator ts_dimension_slice_scan_iterator_create(const ScanTupLock *tuplock,

@@ -1636,12 +1636,24 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 
 	info->ht = ts_hypertable_cache_get_cache_and_entry(info->table_relid, CACHE_FLAG_NONE, &hcache);
 
+	/* for correlated constraints the type is INT8OID */
+	if (info->correlated)
+	{
+		if (OidIsValid(info->interval_type))
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 errmsg("interval type cannot be specified for correlated constraints")));
+
+		info->interval_type = INT8OID;
+		info->interval_datum = Int64GetDatum(1);
+	}
+
 	if (info->num_slices_is_set && OidIsValid(info->interval_type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot specify both the number of partitions and an interval")));
 
-	if (!info->num_slices_is_set && !OidIsValid(info->interval_type) && !info->correlated)
+	if (!info->num_slices_is_set && !OidIsValid(info->interval_type))
 		ereport(ERROR,
 				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
 				 errmsg("cannot omit both the number of partitions and the interval")));
@@ -1697,7 +1709,8 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 															   chunk->fd.id,
 															   slice->fd.id,
 															   NULL,
-															   NULL);
+															   NULL,
+															   info->correlated);
 				ts_chunk_constraint_insert(cc);
 			}
 		}
