@@ -18,9 +18,6 @@
 
 #define COMPRESSION_COLUMN_METADATA_PATTERN_V1 "_ts_meta_%s_%d"
 
-/* Version 2 is indexed by the uncompressed chunk attno, not by the orderby index. */
-#define COMPRESSION_COLUMN_METADATA_PATTERN_V2 "_ts_meta_v2_%s_%d"
-
 bool tsl_process_compress_table(AlterTableCmd *cmd, Hypertable *ht,
 								WithClauseResult *with_clause_options);
 void tsl_process_compress_table_add_column(Hypertable *ht, ColumnDef *orig_def);
@@ -30,6 +27,7 @@ Chunk *create_compress_chunk(Hypertable *compress_ht, Chunk *src_chunk, Oid tabl
 
 char *column_segment_min_name(int16 column_index);
 char *column_segment_max_name(int16 column_index);
+char *compressed_column_metadata_name_v2(char *column_name, char *metadata_type);
 
 typedef struct CompressionSettings CompressionSettings;
 int compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,

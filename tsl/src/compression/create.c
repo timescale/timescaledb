@@ -20,6 +20,7 @@
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
+#include <common/md5.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <parser/parse_type.h>
@@ -84,6 +85,46 @@ column_segment_max_name(int16 column_index)
 	return compression_column_segment_metadata_name("max", column_index);
 }
 
+/*
+ * Get metadata name for a given column name and metadata type, format version 2.
+ * We can't reference the attribute numbers, because they can change after
+ * drop/restore if we had any dropped columns.
+ * We might have to truncate the column names to fit into the NAMEDATALEN here,
+ * in this case we disambiguate them with their md5 hash.
+ */
+char *
+compressed_column_metadata_name_v2(char *metadata_type, char *column_name)
+{
+	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
+	Assert(strlen(metadata_type) <= 6);
+
+	const int len = strlen(column_name);
+	Assert(len < NAMEDATALEN);
+
+	/*
+	 * We have to fit the name into NAMEDATALEN - 1 which is 63 bytes:
+	 * 12 (_ts_meta_v2_) + 6 (metadata_type) + 1 (_) + x (column_name) + 1 (_) + 4 (hash) = 63;
+	 * x = 63 - 24 = 39.
+	 */
+	char *result;
+	if (len > 39)
+	{
+		const char *errstr = NULL;
+		char hash[33];
+		Ensure(pg_md5_hash(column_name, len, hash, &errstr),
+			   "md5 computation failure: '%s'",
+			   errstr);
+
+		result = psprintf("_ts_meta_v2_%.6s_%.4s_%.39s", metadata_type, hash, column_name);
+	}
+	else
+	{
+		result = psprintf("_ts_meta_v2_%.6s_%.39s", metadata_type, column_name);
+	}
+	Assert(strlen(result) < NAMEDATALEN);
+	return result;
+}
+
 int
 compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
 								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
@@ -99,8 +140,7 @@ compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid
 		return get_attnum(compressed_reloid, metadata_name);
 	}
 
-	char *metadata_name =
-		psprintf(COMPRESSION_COLUMN_METADATA_PATTERN_V2, metadata_type, chunk_attno);
+	char *metadata_name = compressed_column_metadata_name_v2(metadata_type, attname);
 	return get_attnum(compressed_reloid, metadata_name);
 }
 
@@ -228,17 +268,17 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 */
 				compressed_column_defs =
 					lappend(compressed_column_defs,
-							makeColumnDef(psprintf(COMPRESSION_COLUMN_METADATA_PATTERN_V2,
-												   "min",
-												   attr->attnum),
+							makeColumnDef(compressed_column_metadata_name_v2("min",
+																			 NameStr(
+																				 attr->attname)),
 										  attr->atttypid,
 										  attr->atttypmod,
 										  attr->attcollation));
 				compressed_column_defs =
 					lappend(compressed_column_defs,
-							makeColumnDef(psprintf(COMPRESSION_COLUMN_METADATA_PATTERN_V2,
-												   "max",
-												   attr->attnum),
+							makeColumnDef(compressed_column_metadata_name_v2("max",
+																			 NameStr(
+																				 attr->attname)),
 										  attr->atttypid,
 										  attr->atttypmod,
 										  attr->attcollation));

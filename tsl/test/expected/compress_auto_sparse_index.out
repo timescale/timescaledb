@@ -21,12 +21,12 @@ select count(compress_chunk(x)) from show_chunks('sparse') x;
 (1 row)
 
 explain select * from sparse where value = 1;
-                                                   QUERY PLAN                                                    
------------------------------------------------------------------------------------------------------------------
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
  Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..19.75 rows=72000 width=12)
    Vectorized Filter: (value = '1'::double precision)
    ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..19.75 rows=72 width=76)
-         Filter: ((_ts_meta_v2_min_2 <= '1'::double precision) AND (_ts_meta_v2_max_2 >= '1'::double precision))
+         Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
 (4 rows)
 
 -- Not for expression indexes.
@@ -78,4 +78,27 @@ explain select * from sparse where value = 1;
    Vectorized Filter: (value = '1'::double precision)
    ->  Seq Scan on compress_hyper_2_5_chunk  (cost=0.00..17.50 rows=750 width=76)
 (3 rows)
+
+-- Long column names.
+select count(decompress_chunk(x)) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+\set ECHO none
+select count(compress_chunk(x)) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=3.48..10.45 rows=3000 width=264)
+   Vectorized Filter: (abcdef012345678_bbcdef012345678_cbcdef012345678_dbcdef0 = 1)
+   ->  Seq Scan on compress_hyper_2_6_chunk  (cost=0.00..10.45 rows=3 width=2092)
+         Filter: ((_ts_meta_v2_min_9218_abcdef012345678_bbcdef012345678_cbcdef0 <= 1) AND (_ts_meta_v2_max_9218_abcdef012345678_bbcdef012345678_cbcdef0 >= 1))
+(4 rows)
 

@@ -31,3 +31,19 @@ explain select * from sparse where value = 1;
 drop index ii;
 select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 explain select * from sparse where value = 1;
+
+
+-- Long column names.
+select count(decompress_chunk(x)) from show_chunks('sparse') x;
+
+\set ECHO none
+select format('alter table sparse add column %1$s int; create index on sparse(%1$s);',
+    substr('Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef012345678_', 1, x))
+from generate_series(1, 63) x
+\gexec
+\set ECHO queries
+
+select count(compress_chunk(x)) from show_chunks('sparse') x;
+
+explain select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
+
