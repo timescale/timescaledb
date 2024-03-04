@@ -160,41 +160,44 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 
 	Relation rel = table_open(src_relid, AccessShareLock);
 
-	/*
-	 * Check which columns have btree indexes. We will create sparse minmax
-	 * indexes for them in compressed chunk.
-	 */
 	Bitmapset *btree_columns = NULL;
-	ListCell *lc;
-	List *index_oids = RelationGetIndexList(rel);
-	foreach (lc, index_oids)
+	if (ts_guc_auto_sparse_indexes)
 	{
-		Oid index_oid = lfirst_oid(lc);
-		Relation index_rel = index_open(index_oid, AccessShareLock);
-		IndexInfo *index_info = BuildIndexInfo(index_rel);
-		index_close(index_rel, NoLock);
-
 		/*
-		 * We want to create the sparse minmax index, if it can satisfy the same
-		 * kinds of queries as the uncompressed index. The simplest case is btree
-		 * which can satisfy equality and comparison tests, same as sparse minmax.
-		 *
-		 * We can be smarter here, e.g. for 'BRIN', sparse minmax can be similar
-		 * to 'BRIN' with range opclass, but not for bloom filter opclass. For GIN,
-		 * sparse minmax is useless because it doesn't help satisfy text search
-		 * queries, and so on. Currently we check only the simplest btree case.
+		 * Check which columns have btree indexes. We will create sparse minmax
+		 * indexes for them in compressed chunk.
 		 */
-		if (index_info->ii_Am != BTREE_AM_OID)
+		ListCell *lc;
+		List *index_oids = RelationGetIndexList(rel);
+		foreach (lc, index_oids)
 		{
-			continue;
-		}
+			Oid index_oid = lfirst_oid(lc);
+			Relation index_rel = index_open(index_oid, AccessShareLock);
+			IndexInfo *index_info = BuildIndexInfo(index_rel);
+			index_close(index_rel, NoLock);
 
-		for (int i = 0; i < index_info->ii_NumIndexKeyAttrs; i++)
-		{
-			AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
-			if (attno != InvalidAttrNumber)
+			/*
+			 * We want to create the sparse minmax index, if it can satisfy the same
+			 * kinds of queries as the uncompressed index. The simplest case is btree
+			 * which can satisfy equality and comparison tests, same as sparse minmax.
+			 *
+			 * We can be smarter here, e.g. for 'BRIN', sparse minmax can be similar
+			 * to 'BRIN' with range opclass, but not for bloom filter opclass. For GIN,
+			 * sparse minmax is useless because it doesn't help satisfy text search
+			 * queries, and so on. Currently we check only the simplest btree case.
+			 */
+			if (index_info->ii_Am != BTREE_AM_OID)
 			{
-				btree_columns = bms_add_member(btree_columns, attno);
+				continue;
+			}
+
+			for (int i = 0; i < index_info->ii_NumIndexKeyAttrs; i++)
+			{
+				AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
+				if (attno != InvalidAttrNumber)
+				{
+					btree_columns = bms_add_member(btree_columns, attno);
+				}
 			}
 		}
 	}

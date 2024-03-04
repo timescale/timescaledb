@@ -13,6 +13,16 @@ create index ii on sparse(value);
 select count(compress_chunk(x)) from show_chunks('sparse') x;
 explain select * from sparse where value = 1;
 
+
+-- Should be disabled with the GUC
+set timescaledb.auto_sparse_indexes to off;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+explain select * from sparse where value = 1;
+reset timescaledb.auto_sparse_indexes;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+explain select * from sparse where value = 1;
+
+
 -- Not for expression indexes.
 drop index ii;
 create index ii on sparse((value + 1));

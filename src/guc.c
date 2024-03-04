@@ -73,6 +73,7 @@ bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
+TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
@@ -500,6 +501,19 @@ _guc_init(void)
 							 "Increases throughput of decompression, but might increase query "
 							 "memory usage",
 							 &ts_guc_enable_bulk_decompression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("auto_sparse_indexes"),
+							 "Create sparse indexes on compressed chunks",
+							 "The hypertable columns that are used as index keys will have "
+							 "suitable sparse indexes when compressed. Must be set at the moment "
+							 "of chunk compression, e.g. when the `compress_chunk()` is called.",
+							 &ts_guc_auto_sparse_indexes,
 							 true,
 							 PGC_USERSET,
 							 0,
