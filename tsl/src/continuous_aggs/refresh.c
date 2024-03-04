@@ -597,22 +597,8 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 													  refresh_window.type,
 													  true);
 	else
-		/*
-		 * To determine inscribed/circumscribed refresh window for variable-sized
-		 * buckets we should be able to calculate time_bucket(window.begin) and
-		 * time_bucket(window.end). This, however, is not possible in general case.
-		 * As an example, the minimum date is 4714-11-24 BC, which is before any
-		 * reasonable default `origin` value. Thus for variable-sized buckets
-		 * instead of minimum date we use -infinity since time_bucket(-infinity)
-		 * is well-defined as -infinity.
-		 *
-		 * For more details see:
-		 * - ts_compute_inscribed_bucketed_refresh_window_variable()
-		 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
-		 */
-		refresh_window.start = ts_continuous_agg_bucket_width_variable(cagg) ?
-								   ts_time_get_nobegin_or_min(refresh_window.type) :
-								   ts_time_get_min(refresh_window.type);
+		/* get min time for a cagg depending of the primary partition type */
+		refresh_window.start = cagg_get_time_min(cagg);
 
 	if (!PG_ARGISNULL(2))
 		refresh_window.end = ts_time_value_from_arg(PG_GETARG_DATUM(2),
