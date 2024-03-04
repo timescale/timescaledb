@@ -12,5 +12,6 @@ ISOLATIONTEST=$1
 shift
 
 $ISOLATIONTEST "$@" | \
-   sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g'
+   sed -e 's!_[0-9]\{1,\}_[0-9]\{1,\}_chunk!_X_X_chunk!g' | \
+   sed -e 's!hypertable_[0-9]\{1,\}!hypertable_X!g'
  

@@ -14,6 +14,7 @@ set(TEST_FILES
     cagg_refresh.sql
     cagg_utils.sql
     compress_default.sql
+    compress_float8_corrupt.sql
     compressed_detoaster.sql
     compressed_collation.sql
     compression_create_compressed_table.sql

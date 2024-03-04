@@ -79,12 +79,6 @@ WARNING:  function _timescaledb_internal.get_approx_row_count(regclass) is depre
                     0
 (1 row)
 
-SELECT _timescaledb_internal.get_chunk_colstats(0);
-WARNING:  function _timescaledb_internal.get_chunk_colstats(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  invalid table
-SELECT _timescaledb_internal.get_chunk_relstats(0);
-WARNING:  function _timescaledb_internal.get_chunk_relstats(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  invalid table
 SELECT _timescaledb_internal.get_compressed_chunk_index_for_recompression(0);
 WARNING:  function _timescaledb_internal.get_compressed_chunk_index_for_recompression(regclass) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  invalid Oid

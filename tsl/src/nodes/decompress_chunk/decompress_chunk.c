@@ -381,10 +381,18 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 		 segmentby_attno =
 			 bms_next_member(compression_info->chunk_segmentby_attnos, segmentby_attno))
 	{
+		char *colname = get_attname(compression_info->chunk_rte->relid,
+									segmentby_attno,
+									/* missing_ok = */ false);
+		AttrNumber compressed_attno = get_attnum(compression_info->compressed_rte->relid, colname);
+		Ensure(compressed_attno != InvalidAttrNumber,
+			   "segmentby column %s not found in compressed chunk %d",
+			   colname,
+			   compression_info->compressed_rte->relid);
 		Var *var = palloc(sizeof(Var));
 		*var = (Var){ .xpr.type = T_Var,
 					  .varno = compression_info->compressed_rel->relid,
-					  .varattno = segmentby_attno };
+					  .varattno = compressed_attno };
 		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
 	const double open_batches_estimated = estimate_num_groups_compat(root,

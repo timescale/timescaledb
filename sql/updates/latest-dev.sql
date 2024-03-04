@@ -146,3 +146,19 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_bucket_function(INTEGER)
 UPDATE _timescaledb_catalog.continuous_aggs_bucket_function
    SET bucket_origin = bucket_origin::timestamp::timestamptz::text
    WHERE length(bucket_origin) > 1;
+
+-- Historically, we have used empty strings for undefined bucket_origin and timezone
+-- attributes. This is now replaced by proper NULL values. We use TRIM() to ensure we handle empty string well.
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_origin = NULL WHERE TRIM(bucket_origin) = '';
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_timezone = NULL WHERE TRIM(bucket_timezone) = '';
+
+-- So far, there were no difference between 0 and -1 retries. Since now on, 0 means no retries. Updating the retry
+-- count of existing jobs to -1 to keep the current semantics.
+UPDATE _timescaledb_config.bgw_job SET max_retries = -1 WHERE max_retries = 0;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_relstats;
+DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_colstats;
+DROP FUNCTION IF EXISTS _timescaledb_internal.get_chunk_relstats;
+DROP FUNCTION IF EXISTS _timescaledb_internal.get_chunk_colstats;
+
+

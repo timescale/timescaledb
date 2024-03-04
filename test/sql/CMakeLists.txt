@@ -101,7 +101,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     bgw_launcher.sql
     c_unit_tests.sql
     copy_memory_usage.sql
-    guc_options.sql
     metadata.sql
     multi_transaction_index.sql
     net.sql

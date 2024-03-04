@@ -3143,7 +3143,7 @@ List *
 ts_chunk_get_chunk_ids_by_hypertable_id(int32 hypertable_id)
 {
 	List *chunkids = NIL;
-	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
+	ScanIterator iterator = ts_scan_iterator_create(CHUNK, AccessShareLock, CurrentMemoryContext);
 
 	init_scan_by_hypertable_id(&iterator, hypertable_id);
 	ts_scanner_foreach(&iterator)
