@@ -1,7 +1,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-set work_mem to '256MB';
 -- disable memoize on PG14+
 SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
  enable_memoize 
@@ -16,34 +15,22 @@ ANALYZE compressed_join_temp;
 EXPLAIN (analyze,costs off,timing off,summary off) SELECT *
 FROM compressed_join_temp t
 INNER JOIN metrics_compressed m ON t.time = m.time AND t.device_id = m.device_id
-ORDER BY t.device_id, t.time
 LIMIT 1;
 QUERY PLAN
  Limit (actual rows=1 loops=1)
-   ->  Merge Join (actual rows=1 loops=1)
-         Merge Cond: ((m_1.device_id = t.device_id) AND (m_1."time" = t."time"))
-         ->  Merge Append (actual rows=82038 loops=1)
-               Sort Key: m_1.device_id, m_1."time"
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_1 (actual rows=21587 loops=1)
-                     ->  Sort (actual rows=23 loops=1)
-                           Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=220 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_2 (actual rows=30227 loops=1)
-                     ->  Sort (actual rows=32 loops=1)
-                           Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=310 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_3 (actual rows=30226 loops=1)
-                     ->  Sort (actual rows=31 loops=1)
-                           Sort Key: compress_hyper_X_X_chunk.device_id, compress_hyper_X_X_chunk._ts_meta_sequence_num DESC
-                           Sort Method: quicksort 
-                           ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=310 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: t.device_id, t."time"
-               Sort Method: quicksort 
+   ->  Hash Join (actual rows=1 loops=1)
+         Hash Cond: ((m_1."time" = t."time") AND (m_1.device_id = t.device_id))
+         ->  Append (actual rows=43181 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_1 (actual rows=17990 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=20 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_2 (actual rows=25190 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=30 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk m_3 (actual rows=1 loops=1)
+                     ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=1 loops=1)
+         ->  Hash (actual rows=10 loops=1)
+               Buckets: 1024  Batches: 1 
                ->  Seq Scan on compressed_join_temp t (actual rows=10 loops=1)
-(24 rows)
+(13 rows)
 
 DROP TABLE compressed_join_temp;
 -- test join with partially compressed chunks

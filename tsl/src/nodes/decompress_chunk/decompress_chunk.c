@@ -733,7 +733,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				   compressed_rel,
 				   ts_chunk_is_partial(chunk));
 	set_baserel_size_estimates(root, compressed_rel);
-	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	double new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 
 	if (!compression_info->single_chunk)
 	{
