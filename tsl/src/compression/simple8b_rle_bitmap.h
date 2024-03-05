@@ -202,10 +202,10 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	CheckCompressedData(compressed->num_elements <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 	CheckCompressedData(compressed->num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-	const int num_elements = compressed->num_elements;
-	int num_ones = 0;
+	const uint32 num_elements = compressed->num_elements;
+	uint32 num_ones = 0;
 
-	const int num_selector_slots =
+	const uint32 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
 	const uint64 *compressed_data = compressed->slots + num_selector_slots;
 
@@ -214,12 +214,12 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	 * decompression loop and the get() function. Note that for get() we need at
 	 * least one byte of padding, hence the next multiple.
 	 */
-	const int num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
-	const int num_blocks = compressed->num_blocks;
+	const uint32 num_elements_padded = ((num_elements + 63) / 64 + 1) * 64;
+	const uint32 num_blocks = compressed->num_blocks;
 
 	bool *restrict bitmap_bools_ = palloc(sizeof(bool) * num_elements_padded);
-	int decompressed_index = 0;
-	for (int block_index = 0; block_index < num_blocks; block_index++)
+	uint32 decompressed_index = 0;
+	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
 		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
 		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
@@ -236,7 +236,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			/*
 			 * RLE block.
 			 */
-			const int n_block_values = simple8brle_rledata_repeatcount(block_data);
+			const uint32 n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 			/*
@@ -254,7 +254,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			 */
 			if (repeated_value)
 			{
-				for (int i = 0; i < n_block_values; i++)
+				for (uint32 i = 0; i < n_block_values; i++)
 				{
 					bitmap_bools_[decompressed_index + i] = true;
 				}
@@ -263,7 +263,7 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 			}
 			else
 			{
-				for (int i = 0; i < n_block_values; i++)
+				for (uint32 i = 0; i < n_block_values; i++)
 				{
 					bitmap_bools_[decompressed_index + i] = false;
 				}
@@ -341,8 +341,8 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 
 	/* Sanity check. */
 #ifdef USE_ASSERT_CHECKING
-	int num_ones_2 = 0;
-	for (int i = 0; i < num_elements; i++)
+	uint32 num_ones_2 = 0;
+	for (uint32 i = 0; i < num_elements; i++)
 	{
 		num_ones_2 += simple8brle_bitmap_get_at(&result, i);
 	}
