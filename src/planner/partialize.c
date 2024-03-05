@@ -236,11 +236,6 @@ get_existing_agg_path(const RelOptInfo *relation)
 static List *
 get_subpaths_from_append_path(Path *path, bool handle_gather_path)
 {
-	if (IsA(path, ProjectionPath))
-	{
-		ProjectionPath *p = castNode(ProjectionPath, path);
-		return get_subpaths_from_append_path(p->subpath, handle_gather_path);
-	}
 	if (IsA(path, AppendPath))
 	{
 		AppendPath *append_path = castNode(AppendPath, path);
@@ -336,22 +331,6 @@ copy_merge_append_path(PlannerInfo *root, MergeAppendPath *path, List *subpaths,
 static Path *
 copy_append_like_path(PlannerInfo *root, Path *path, List *new_subpaths, PathTarget *pathtarget)
 {
-	if (IsA(path, ProjectionPath))
-	{
-		/*
-		 * We can have a projection above chunk scan in the non-aggregated plan,
-		 * because the DecompressChunk node currently says it can't project.
-		 * But in the partially aggregated plan, we don't need it, because all
-		 * underlying plans can project. See the rest of this function for the
-		 * supported underlying plans. We do have to substitute the proper
-		 * targetlist though, but this is the purpose of the pathtarget
-		 * parameter of this function.
-		 */
-		ProjectionPath *p = castNode(ProjectionPath, path);
-		Path *subpath_copy = copy_append_like_path(root, p->subpath, new_subpaths, pathtarget);
-		return subpath_copy;
-	}
-
 	if (IsA(path, AppendPath))
 	{
 		AppendPath *append_path = castNode(AppendPath, path);

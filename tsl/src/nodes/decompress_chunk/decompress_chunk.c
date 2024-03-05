@@ -534,8 +534,6 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 	List *pathkeys = root->query_pathkeys;
 	MergeBatchResult merge_result = SCAN_FORWARD;
 
-//	fprintf(stderr, "csma %s\n", get_rel_name(chunk->table_id));
-
 	/* Ensure that we have path keys and the chunk is ordered */
 	if (pathkeys == NIL || ts_chunk_is_unordered(chunk))
 		return MERGE_NOT_POSSIBLE;
