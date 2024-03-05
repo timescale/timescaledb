@@ -118,8 +118,8 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 	AllocSetContextCreate(parent_mctx,                                                             \
 						  "DecompressBatchState bulk decompression",                               \
 						  /* minContextSize = */ 0,                                                \
-						  /* initBlockSize = */ 64 * 1024,                                         \
-						  /* maxBlockSize = */ 64 * 1024);
+						  /* initBlockSize = */ 4 * 8 * GLOBAL_MAX_ROWS_PER_COMPRESSION,           \
+						  /* maxBlockSize = */ 4 * 8 * GLOBAL_MAX_ROWS_PER_COMPRESSION);
 /*
  * Initialize the batch memory context
  *

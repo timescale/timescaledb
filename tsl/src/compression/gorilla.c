@@ -838,13 +838,13 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 
 #define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
 
-int16 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest);
+uint32 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest);
 
 /*
  * Decompress packed 6bit values in lanes that contain a round number of both
  * packed and unpacked bytes -- 4 6-bit values are packed into 3 8-bit values.
  */
-int16
+uint32
 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 {
 #define LANE_INPUTS 3
@@ -860,16 +860,16 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 	 * We do have to check that the result fits into the maximum number of rows,
 	 * because we get the length from user input.
 	 */
-	const uint16 n_bytes_packed = bitarray->buckets.num_elements * sizeof(uint64);
-	const uint16 n_lanes = (n_bytes_packed + LANE_INPUTS - 1) / LANE_INPUTS;
-	const uint16 n_outputs = n_lanes * LANE_OUTPUTS;
+	const uint32 n_bytes_packed = bitarray->buckets.num_elements * sizeof(uint64);
+	const uint32 n_lanes = (n_bytes_packed + LANE_INPUTS - 1) / LANE_INPUTS;
+	const uint32 n_outputs = n_lanes * LANE_OUTPUTS;
 	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED_N64);
 
-	for (uint16 lane = 0; lane < n_lanes; lane++)
+	for (uint32 lane = 0; lane < n_lanes; lane++)
 	{
 		uint8 *restrict lane_dest = &dest[lane * LANE_OUTPUTS];
 		const uint8 *restrict lane_src = &((uint8 *) bitarray->buckets.data)[lane * LANE_INPUTS];
-		for (uint16 output_in_lane = 0; output_in_lane < LANE_OUTPUTS; output_in_lane++)
+		for (uint32 output_in_lane = 0; output_in_lane < LANE_OUTPUTS; output_in_lane++)
 		{
 			const int startbit_abs = output_in_lane * BITS_PER_LEADING_ZEROS;
 			const int startbit_rel = startbit_abs % 8;
