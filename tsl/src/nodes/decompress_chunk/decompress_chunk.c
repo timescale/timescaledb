@@ -324,22 +324,13 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInf
 static void
 cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 {
-	/* Set the row number estimate. */
-	if (path->param_info != NULL)
-	{
-		path->rows = path->param_info->ppi_rows;
-	}
-	else
-	{
-		path->rows = path->parent->rows;
-	}
-
 	/* startup_cost is cost before fetching first tuple */
 	if (compressed_path->rows > 0)
 		path->startup_cost = compressed_path->total_cost / compressed_path->rows;
 
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
+	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
@@ -741,12 +732,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				   chunk_rel,
 				   compressed_rel,
 				   ts_chunk_is_partial(chunk));
-
 	set_baserel_size_estimates(root, compressed_rel);
-	const double new_tuples_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
-	const double new_rows_estimate =
-		new_tuples_estimate *
-		clauselist_selectivity(root, chunk_rel->baserestrictinfo, 0, JOIN_INNER, NULL);
+	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 
 	if (!compression_info->single_chunk)
 	{
@@ -755,23 +742,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		Assert(chunk_info->parent_reloid == ht->main_table_relid);
 		ht_relid = chunk_info->parent_relid;
 		RelOptInfo *hypertable_rel = root->simple_rel_array[ht_relid];
-		hypertable_rel->rows =
-			clamp_row_est(hypertable_rel->rows + new_rows_estimate - chunk_rel->rows);
-		hypertable_rel->tuples =
-			clamp_row_est(hypertable_rel->tuples + new_tuples_estimate - chunk_rel->tuples);
+		hypertable_rel->rows += (new_row_estimate - chunk_rel->rows);
 	}
 
-	/*
-	 * Note that we can be overwriting the estimate for uncompressed chunk part of a
-	 * partial chunk here, but the paths for the uncompressed part were already
-	 * built, so it is OK.
-	 */
-	chunk_rel->rows = new_rows_estimate;
-	/*
-	 * This is a workaround for the bug in upstream merge append cost estimation. See
-	 * https://www.postgresql.org/message-id/flat/CALzhyqyhoXQDR-Usd_0HeWk%3DuqNLzoVeT8KhRoo%3DpV_KzgO3QQ%40mail.gmail.com
-	 */
-	chunk_rel->tuples = new_rows_estimate;
+	chunk_rel->rows = new_row_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
 
