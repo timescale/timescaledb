@@ -400,9 +400,8 @@ consumeCompressedData(StringInfo si, int bytes)
 }
 
 /*
- * Normal compression uses 1k rows, but the regression tests use up to 1015.
  * We use this limit for sanity checks in case the compressed data is corrupt.
  */
-#define GLOBAL_MAX_ROWS_PER_COMPRESSION 4096
+#define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
 
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
