@@ -27,18 +27,19 @@
 #include "compat/compat.h"
 
 #include "bgw/job.h"
-#include "ts_catalog/continuous_agg.h"
-#include "ts_catalog/continuous_aggs_watermark.h"
+#include "compression_with_clause.h"
 #include "cross_module_fn.h"
+#include "errors.h"
+#include "func_cache.h"
 #include "hypercube.h"
-#include "hypertable.h"
 #include "hypertable_cache.h"
+#include "hypertable.h"
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
-#include "errors.h"
-#include "compression_with_clause.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
@@ -124,7 +125,7 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 		if (!input->is_default)
 		{
 			Node *value = (Node *) makeString(ts_with_clause_result_deparse_value(input));
-			DefElem *elem = makeDefElemExtended("timescaledb",
+			DefElem *elem = makeDefElemExtended(EXTENSION_NAMESPACE,
 												(char *) def.arg_name,
 												value,
 												DEFELEM_UNSPEC,
@@ -368,29 +369,29 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		fd->parent_mat_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)]);
 
-	memcpy(&fd->user_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->user_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->user_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)]));
+	namestrcpy(&fd->user_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)]));
 
-	memcpy(&fd->partial_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->partial_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->partial_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_schema)]));
+	namestrcpy(&fd->partial_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)]));
 
 	fd->bucket_width =
 		DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)]);
 
-	memcpy(&fd->direct_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->direct_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->direct_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)]));
+	namestrcpy(&fd->direct_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)]));
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
@@ -412,12 +413,10 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		const char *bucket_width_str;
-		const char *origin_str;
 		Datum values[Natts_continuous_aggs_bucket_function];
 		bool isnull[Natts_continuous_aggs_bucket_function];
-
 		bool should_free;
+
 		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 
 		/*
@@ -426,38 +425,53 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 		 */
 		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, isnull);
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_experimental - 1]);
-		bf->experimental =
-			DatumGetBool(values[Anum_continuous_aggs_bucket_function_experimental - 1]);
+		/* Bucket function */
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
+		bf->bucket_function = DatumGetObjectId(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_name - 1]);
-		bf->name = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_name - 1]);
+		Assert(OidIsValid(bf->bucket_function));
 
 		/*
-		 * So far bucket_width is stored as TEXT for flexibility, but it's type
-		 * most likely is going to change to Interval when the variable-sized
-		 * buckets feature will stabilize.
+		 * bucket_width
+		 *
+		 * The value is stored as TEXT since we have to store the interval value of time
+		 * buckets and also the number value of integer based buckets.
 		 */
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
-		bucket_width_str =
-			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
+		const char *bucket_width_str = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
 		Assert(strlen(bucket_width_str) > 0);
 		bf->bucket_width = DatumGetIntervalP(
 			DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_origin - 1]);
-		origin_str = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_origin - 1]);
-		if (strlen(origin_str) == 0)
-			TIMESTAMP_NOBEGIN(bf->origin);
+		/* Bucket origin */
+		if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)])
+		{
+			const char *origin_str = TextDatumGetCString(values[AttrNumberGetAttrOffset(
+				Anum_continuous_aggs_bucket_function_bucket_origin)]);
+			bf->bucket_origin = DatumGetTimestamp(DirectFunctionCall3(timestamptz_in,
+																	  CStringGetDatum(origin_str),
+																	  ObjectIdGetDatum(InvalidOid),
+																	  Int32GetDatum(-1)));
+		}
 		else
-			bf->origin = DatumGetTimestamp(DirectFunctionCall3(timestamp_in,
-															   CStringGetDatum(origin_str),
-															   ObjectIdGetDatum(InvalidOid),
-															   Int32GetDatum(-1)));
+		{
+			TIMESTAMP_NOBEGIN(bf->bucket_origin);
+		}
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_timezone - 1]);
-		bf->timezone =
-			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_timezone - 1]);
+		/* Bucket timezone */
+		if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)])
+		{
+			bf->timezone = TextDatumGetCString(values[AttrNumberGetAttrOffset(
+				Anum_continuous_aggs_bucket_function_bucket_timezone)]);
+		}
+
+		/* Bucket fixed width */
+		Assert(!isnull[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
+		bf->bucket_fixed_interval = DatumGetBool(values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
 
 		count++;
 
@@ -564,6 +578,33 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 	}
 
 	return status;
+}
+
+TSDLLEXPORT bool
+ts_continuous_agg_hypertable_all_finalized(int32 raw_hypertable_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	bool all_finalized = true;
+
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg data;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		continuous_agg_formdata_fill(&data, ti);
+
+		if (!data.finalized)
+		{
+			all_finalized = false;
+			break;
+		}
+	}
+
+	ts_scan_iterator_close(&iterator);
+
+	return all_finalized;
 }
 
 TSDLLEXPORT List *
@@ -1316,14 +1357,15 @@ ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
 static Datum
 generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 {
-	/* bf->timezone can't be NULL. If timezone is not specified, "" is stored */
-	Assert(bf->timezone != NULL);
+	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bf->bucket_function);
+	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bf->bucket_function);
+	bool is_experimental = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
 
-	if (!bf->experimental)
+	if (!is_experimental)
 	{
-		if (strlen(bf->timezone) > 0)
+		if (bf->timezone != NULL)
 		{
-			if (TIMESTAMP_NOT_FINITE(bf->origin))
+			if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 			{
 				/* using default origin */
 				return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
@@ -1338,11 +1380,11 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 										   IntervalPGetDatum(bf->bucket_width),
 										   timestamp,
 										   CStringGetTextDatum(bf->timezone),
-										   TimestampTzGetDatum((TimestampTz) bf->origin));
+										   TimestampTzGetDatum(bf->bucket_origin));
 			}
 		}
 
-		if (TIMESTAMP_NOT_FINITE(bf->origin))
+		if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 		{
 			/* using default origin */
 			return DirectFunctionCall2(ts_timestamp_bucket,
@@ -1355,14 +1397,14 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 			return DirectFunctionCall3(ts_timestamp_bucket,
 									   IntervalPGetDatum(bf->bucket_width),
 									   timestamp,
-									   TimestampGetDatum(bf->origin));
+									   TimestampTzGetDatum(bf->bucket_origin));
 		}
 	}
 	else
 	{
-		if (strlen(bf->timezone) > 0)
+		if (bf->timezone != NULL)
 		{
-			if (TIMESTAMP_NOT_FINITE(bf->origin))
+			if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 			{
 				/* using default origin */
 				return DirectFunctionCall3(ts_time_bucket_ng_timezone,
@@ -1376,12 +1418,12 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 				return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
 										   IntervalPGetDatum(bf->bucket_width),
 										   timestamp,
-										   TimestampTzGetDatum((TimestampTz) bf->origin),
+										   TimestampTzGetDatum(bf->bucket_origin),
 										   CStringGetTextDatum(bf->timezone));
 			}
 		}
 
-		if (TIMESTAMP_NOT_FINITE(bf->origin))
+		if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 		{
 			/* using default origin */
 			return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
@@ -1394,7 +1436,7 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 			return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
 									   IntervalPGetDatum(bf->bucket_width),
 									   timestamp,
-									   TimestampGetDatum(bf->origin));
+									   TimestampTzGetDatum(bf->bucket_origin));
 		}
 	}
 }
@@ -1410,12 +1452,7 @@ static Datum
 generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 {
 	Datum tzname = 0;
-	bool has_timezone;
-
-	/* bf->timezone can't be NULL. If timezone is not specified, "" is stored */
-	Assert(bf->timezone != NULL);
-
-	has_timezone = (strlen(bf->timezone) > 0);
+	bool has_timezone = (bf->timezone != NULL);
 
 	if (has_timezone)
 	{

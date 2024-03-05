@@ -15,7 +15,6 @@
 #include "chunk.h"
 #include "compat/compat.h"
 #include "continuous_aggs/planner.h"
-#include "debug_guc.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"

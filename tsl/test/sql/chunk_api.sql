@@ -8,7 +8,7 @@ SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 CREATE SCHEMA "ChunkSchema";
 -- Use range types as well for columns
-CREATE TABLE chunkapi (time timestamptz, device int, temp float, rng int8range);
+CREATE TABLE chunkapi(time timestamptz not null, device int, temp float, rng int8range);
 
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 
@@ -78,61 +78,6 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi',' {"time": [1515024
 
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-\set VERBOSITY terse
-
-SELECT (_timescaledb_functions.show_chunk(show_chunks)).*
-FROM show_chunks('chunkapi')
-ORDER BY chunk_id;
-
--- Show the new chunks
-\dt public.*
-\dt "ChunkSchema".*
-
--- Make ANALYZE deterministic
-SELECT setseed(1);
-
--- Test getting relation stats for chunks.  First get stats
--- chunk-by-chunk. Note that the table isn't ANALYZED, so no stats
--- present yet.
-SELECT (_timescaledb_functions.get_chunk_relstats(show_chunks)).*
-FROM show_chunks('chunkapi')
-ORDER BY chunk_id;
-SELECT (_timescaledb_functions.get_chunk_colstats(show_chunks)).*
-FROM show_chunks('chunkapi')
-ORDER BY chunk_id;
-
--- Get the same stats but by giving the hypertable as input
-SELECT * FROM _timescaledb_functions.get_chunk_relstats('chunkapi');
-SELECT * FROM _timescaledb_functions.get_chunk_colstats('chunkapi');
-
--- reltuples is -1 on PG14 when no VACUUM/ANALYZE has run yet
-SELECT relname, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END AS reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('chunkapi'))
-ORDER BY relname;
-
-SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
-FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('chunkapi'))
-ORDER BY tablename, attname;
-
--- Show stats after analyze
-ANALYZE chunkapi;
-SELECT * FROM _timescaledb_functions.get_chunk_relstats('chunkapi');
-SELECT * FROM _timescaledb_functions.get_chunk_colstats('chunkapi');
-
-SELECT relname, reltuples, relpages, relallvisible FROM pg_class WHERE relname IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
- FROM show_chunks('chunkapi'))
-ORDER BY relname;
-
-SELECT tablename, attname, inherited, null_frac, avg_width, n_distinct
-FROM pg_stats WHERE tablename IN
-(SELECT (_timescaledb_functions.show_chunk(show_chunks)).table_name
-FROM show_chunks('chunkapi'))
-ORDER BY tablename, attname;
-
 -- Test create_chunk_table to recreate the chunk table and show dimension slices
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
@@ -175,7 +120,7 @@ SELECT * FROM _timescaledb_functions.create_chunk('chunkapi', :'SLICES', :'CHUNK
 
 DROP TABLE chunkapi;
 DROP TABLE :CHUNK_SCHEMA.:CHUNK_NAME;
-CREATE TABLE chunkapi (time timestamptz, device int, temp float);
+CREATE TABLE chunkapi(time timestamptz not null, device int, temp float);
 SELECT * FROM create_hypertable('chunkapi', 'time', 'device', 2);
 
 SELECT count(*) FROM

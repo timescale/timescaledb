@@ -401,9 +401,11 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 				 errmsg("configuration materialization hypertable id %d not found",
 						materialization_id)));
 
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
+
 	open_dim = get_open_dimension_for_hypertable(mat_ht, true);
 	dim_type = ts_dimension_get_partition_type(open_dim);
-	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config, &start_isnull);
+	refresh_start = policy_refresh_cagg_get_refresh_start(cagg, open_dim, config, &start_isnull);
 	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);
 
 	if (refresh_start >= refresh_end)
@@ -420,7 +422,7 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->refresh_window.type = dim_type;
 		policy_data->refresh_window.start = refresh_start;
 		policy_data->refresh_window.end = refresh_end;
-		policy_data->cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
+		policy_data->cagg = cagg;
 		policy_data->start_is_null = start_isnull;
 		policy_data->end_is_null = end_isnull;
 	}

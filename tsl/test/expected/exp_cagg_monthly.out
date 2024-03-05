@@ -70,14 +70,16 @@ WHERE mat_hypertable_id = :cagg_id;
            -1
 (1 row)
 
-SELECT experimental, name, bucket_width, origin, timezone
+\pset null <NULL>
+SELECT *
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
- experimental |      name      | bucket_width | origin | timezone 
---------------+----------------+--------------+--------+----------
- t            | time_bucket_ng | @ 1 mon      |        | 
+ mat_hypertable_id |                      bucket_func                       | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+-------------------+--------------------------------------------------------+--------------+---------------+---------------+-----------------+--------------------
+                 2 | timescaledb_experimental.time_bucket_ng(interval,date) | @ 1 mon      | <NULL>        | <NULL>        | <NULL>          | f
 (1 row)
 
+\pset null ""
 -- Check that the saved invalidation threshold is -infinity
 SELECT _timescaledb_functions.to_timestamp(watermark)
 FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
@@ -329,8 +331,8 @@ WHERE mat_hypertable_id = :cagg_id;
 
 SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
- mat_hypertable_id | experimental | name | bucket_width | origin | timezone 
--------------------+--------------+------+--------------+--------+----------
+ mat_hypertable_id | bucket_func | bucket_width | bucket_origin | bucket_offset | bucket_timezone | bucket_fixed_width 
+-------------------+-------------+--------------+---------------+---------------+-----------------+--------------------
 (0 rows)
 
 -- Re-create cagg, this time WITH DATA

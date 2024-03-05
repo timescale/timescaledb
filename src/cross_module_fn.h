@@ -109,6 +109,7 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
+	PGFunction continuous_agg_get_bucket_function;
 	PGFunction cagg_try_repair;
 
 	PGFunction compressed_data_send;
@@ -143,8 +144,6 @@ typedef struct CrossModuleFunctions
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	PGFunction chunk_get_relstats;
-	PGFunction chunk_get_colstats;
 	PGFunction chunk_create_empty_table;
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;

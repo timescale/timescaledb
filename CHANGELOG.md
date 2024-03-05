@@ -4,6 +4,19 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.14.2 (2024-02-20)
+
+This release contains bug fixes since the 2.14.1 release.
+We recommend that you upgrade at the next available opportunity.
+
+**Bugfixes**
+* #6655 Fix segfault in cagg_validate_query
+* #6660 Fix refresh on empty CAgg with variable bucket
+* #6670 Don't try to compress osm chunks
+
+**Thanks**
+* @kav23alex for reporting a segfault in cagg_validate_query
+
 ## 2.14.1 (2024-02-14)
 
 This release contains bug fixes since the 2.14.0 release.

@@ -172,7 +172,7 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 	List *defelems = NIL;
 	const Dimension *mat_ht_dim = hyperspace_get_open_dimension(mat_ht->space, 0);
 	const char *mat_ht_timecolname = quote_identifier(NameStr(mat_ht_dim->fd.column_name));
-	DefElem *ordby = makeDefElemExtended("timescaledb",
+	DefElem *ordby = makeDefElemExtended(EXTENSION_NAMESPACE,
 										 "compress_orderby",
 										 (Node *) makeString((char *) mat_ht_timecolname),
 										 DEFELEM_UNSPEC,
@@ -197,7 +197,7 @@ cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht)
 		if (info->len > 0)
 		{
 			DefElem *segby;
-			segby = makeDefElemExtended("timescaledb",
+			segby = makeDefElemExtended(EXTENSION_NAMESPACE,
 										"compress_segmentby",
 										(Node *) makeString(info->data),
 										DEFELEM_UNSPEC,

@@ -565,3 +565,7 @@ UNION ALL
 TRUNCATE _timescaledb_catalog.continuous_aggs_hypertable_invalidation_log;
 TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- Issue #6722: constify cagg_watermark using window func when querying a cagg
+:EXPLAIN_ANALYZE
+SELECT time_bucket, lead(count) OVER (ORDER BY time_bucket) FROM small_integer_ht_cagg;

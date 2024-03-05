@@ -15,7 +15,6 @@
 #include "extension.h"
 #include "bgw/launcher_interface.h"
 #include "guc.h"
-#include "debug_guc.h"
 #include "ts_catalog/catalog.h"
 #include "version.h"
 #include "compat/compat.h"
@@ -115,7 +114,6 @@ _PG_init(void)
 #endif
 #ifdef TS_DEBUG
 	_conn_mock_init();
-	ts_debug_init();
 #endif
 
 	/* Register a cleanup function to be called when the backend exits */

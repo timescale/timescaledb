@@ -1052,7 +1052,7 @@ WHERE attrelid IN (:'COMPRESS_CHUNK_1'::regclass, :'UNCOMPRESS_CHUNK_1'::regclas
 ORDER BY attnum;
  attname | attnum 
 ---------+--------
- d       |      6
+ d       |      4
  d       |      7
 (2 rows)
 
@@ -1062,7 +1062,7 @@ WHERE attrelid IN (:'COMPRESS_CHUNK_2'::regclass, :'UNCOMPRESS_CHUNK_2'::regclas
 ORDER BY attnum;
  attname | attnum 
 ---------+--------
- d       |      6
+ d       |      4
  d       |      7
 (2 rows)
 
