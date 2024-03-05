@@ -32,7 +32,7 @@ typedef struct BulkInsertStateData *BulkInsertState;
 	char vl_len_[4];                                                                               \
 	uint8 compression_algorithm
 
-#define TARGET_COMPRESSED_BATCH_SIZE 4096
+#define TARGET_COMPRESSED_BATCH_SIZE 1000
 /* gap in sequence id between rows, potential for adding rows in gap later */
 #define SEQUENCE_NUM_GAP 10
 
