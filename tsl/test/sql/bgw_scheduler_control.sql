@@ -15,6 +15,10 @@ AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 CREATE FUNCTION ts_bgw_params_reset_time(set_time BIGINT, wait BOOLEAN) RETURNS VOID
 AS :MODULE_PATHNAME LANGUAGE C VOLATILE;
 
+ALTER DATABASE :TEST_DBNAME OWNER TO :ROLE_DEFAULT_PERM_USER;
+GRANT EXECUTE ON FUNCTION pg_reload_conf TO :ROLE_DEFAULT_PERM_USER;
+GRANT ALTER SYSTEM, SET ON PARAMETER timescaledb.bgw_log_level TO :ROLE_DEFAULT_PERM_USER;
+
 -- These are needed to set up the test scheduler
 CREATE TABLE public.bgw_dsm_handle_store(handle BIGINT);
 INSERT INTO public.bgw_dsm_handle_store VALUES (0);
@@ -43,10 +47,14 @@ TRUNCATE _timescaledb_internal.bgw_job_stat;
 --
 -- Debug messages should be in log now which it wasn't before.
 --
-\c :TEST_DBNAME :ROLE_SUPERUSER
-ALTER SYSTEM SET timescaledb.bgw_log_level = 'DEBUG1';
+-- We change user to make sure that granting SET and ALTER SYSTEM
+-- privileges to the default user actually works.
+--
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+ALTER DATABASE :TEST_DBNAME SET timescaledb.bgw_log_level = 'DEBUG1';
 SELECT pg_reload_conf();
 
+RESET ROLE;
 SELECT ts_bgw_params_reset_time(0, false);
 INSERT INTO _timescaledb_config.bgw_job(
        application_name,
@@ -75,7 +83,7 @@ INSERT INTO _timescaledb_config.bgw_job(
 SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
 SELECT * FROM cleaned_bgw_log;
 
-ALTER SYSTEM RESET timescaledb.bgw_log_level;
+ALTER DATABASE :TEST_DBNAME RESET timescaledb.bgw_log_level;
 SELECT pg_reload_conf();
 
 TRUNCATE bgw_log;
@@ -84,3 +92,11 @@ SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(25, 0);
 SELECT * FROM cleaned_bgw_log;
 
 SELECT delete_job(:job_id);
+
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+-- Make sure we can set the variable using ALTER SYSTEM using the
+-- previous grants. We don't bother about checking that it has an
+-- effect here since we already knows it works from the above code.
+ALTER SYSTEM SET timescaledb.bgw_log_level TO 'DEBUG2';
+ALTER SYSTEM RESET timescaledb.bgw_log_level;

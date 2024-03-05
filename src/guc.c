@@ -41,28 +41,6 @@ static const struct config_enum_entry telemetry_level_options[] = {
 };
 #endif
 
-static const struct config_enum_entry remote_data_fetchers[] = {
-	{ "auto", AutoFetcherType, false },
-	{ "copy", CopyFetcherType, false },
-	{ "cursor", CursorFetcherType, false },
-	{ "prepared", PreparedStatementFetcherType, false },
-	{ NULL, 0, false }
-};
-
-static const struct config_enum_entry hypertable_distributed_types[] = {
-	{ "auto", HYPERTABLE_DIST_AUTO, false },
-	{ "local", HYPERTABLE_DIST_LOCAL, false },
-	{ "distributed", HYPERTABLE_DIST_DISTRIBUTED, false },
-	{ NULL, 0, false }
-};
-
-static const struct config_enum_entry dist_copy_transfer_formats[] = {
-	{ "auto", DCTF_Auto, false },
-	{ "binary", DCTF_Binary, false },
-	{ "text", DCTF_Text, false },
-	{ NULL, 0, false }
-};
-
 /* Copied from contrib/auto_explain/auto_explain.c */
 static const struct config_enum_entry loglevel_options[] = {
 	{ "debug5", DEBUG5, false }, { "debug4", DEBUG4, false }, { "debug3", DEBUG3, false },
@@ -83,17 +61,17 @@ bool ts_guc_enable_constraint_exclusion = true;
 bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
+TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
+TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
-bool ts_guc_enable_per_data_node_queries = true;
-bool ts_guc_enable_parameterized_data_node_scan = true;
 bool ts_guc_enable_async_append = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
-TSDLLEXPORT bool ts_guc_enable_compression_indexscan = true;
+TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
@@ -109,17 +87,6 @@ char *ts_telemetry_cloud = NULL;
 TSDLLEXPORT char *ts_guc_license = TS_LICENSE_DEFAULT;
 char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
-TSDLLEXPORT bool ts_guc_enable_2pc = true;
-TSDLLEXPORT int ts_guc_max_insert_batch_size = 1000;
-TSDLLEXPORT bool ts_guc_enable_connection_binary_data = true;
-TSDLLEXPORT DistCopyTransferFormat ts_guc_dist_copy_transfer_format = DCTF_Auto;
-TSDLLEXPORT bool ts_guc_enable_client_ddl_on_data_nodes = false;
-TSDLLEXPORT char *ts_guc_ssl_dir = NULL;
-TSDLLEXPORT char *ts_guc_passfile = NULL;
-TSDLLEXPORT bool ts_guc_enable_remote_explain = false;
-TSDLLEXPORT DataFetcherType ts_guc_remote_data_fetcher = AutoFetcherType;
-TSDLLEXPORT HypertableDistType ts_guc_hypertable_distributed_default = HYPERTABLE_DIST_AUTO;
-TSDLLEXPORT int ts_guc_hypertable_replication_factor_default = 1;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
 
@@ -153,19 +120,19 @@ typedef struct
 } FeatureFlag;
 
 static FeatureFlag ts_feature_flags[] = {
-	[FEATURE_HYPERTABLE] = { "timescaledb.enable_hypertable_create",
+	[FEATURE_HYPERTABLE] = { MAKE_EXTOPTION("enable_hypertable_create"),
 							 "Enable creation of hypertable",
 							 &ts_guc_enable_hypertable_create },
 
-	[FEATURE_HYPERTABLE_COMPRESSION] = { "timescaledb.enable_hypertable_compression",
+	[FEATURE_HYPERTABLE_COMPRESSION] = { MAKE_EXTOPTION("enable_hypertable_compression"),
 										 "Enable hypertable compression functions",
 										 &ts_guc_enable_hypertable_compression },
 
-	[FEATURE_CAGG] = { "timescaledb.enable_cagg_create",
+	[FEATURE_CAGG] = { MAKE_EXTOPTION("enable_cagg_create"),
 					   "Enable creation of continuous aggregate",
 					   &ts_guc_enable_cagg_create },
 
-	[FEATURE_POLICY] = { "timescaledb.enable_policy_create",
+	[FEATURE_POLICY] = { MAKE_EXTOPTION("enable_policy_create"),
 						 "Enable creation of policies and user-defined actions",
 						 &ts_guc_enable_policy_create }
 };
@@ -207,16 +174,6 @@ ts_feature_flag_check(FeatureFlagType type)
  * know when it's OK to check their values for mutual consistency.
  */
 static bool gucs_are_initialized = false;
-
-/* Hook for plugins to allow additional SSL options */
-set_ssl_options_hook_type ts_set_ssl_options_hook = NULL;
-
-/* Assign the hook to the passed in function argument */
-void
-ts_assign_ssl_options_hook(void *fn)
-{
-	ts_set_ssl_options_hook = (set_ssl_options_hook_type) fn;
-}
 
 /*
  * Warn about the mismatched cache sizes that can lead to cache thrashing.
@@ -261,7 +218,7 @@ assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 void
 _guc_init(void)
 {
-	DefineCustomBoolVariable("timescaledb.enable_deprecation_warnings",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_deprecation_warnings"),
 							 "Enable warnings when using deprecated functionality",
 							 NULL,
 							 &ts_guc_enable_deprecation_warnings,
@@ -272,7 +229,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_optimizations",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_optimizations"),
 							 "Enable TimescaleDB query optimizations",
 							 NULL,
 							 &ts_guc_enable_optimizations,
@@ -283,7 +240,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.restoring",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("restoring"),
 							 "Install timescale in restoring mode",
 							 "Used for running pg_restore",
 							 &ts_guc_restoring,
@@ -294,7 +251,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_constraint_aware_append",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_constraint_aware_append"),
 							 "Enable constraint-aware append scans",
 							 "Enable constraint exclusion at execution time",
 							 &ts_guc_enable_constraint_aware_append,
@@ -305,7 +262,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_ordered_append",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_ordered_append"),
 							 "Enable ordered append scans",
 							 "Enable ordered append optimization for queries that are ordered by "
 							 "the time dimension",
@@ -317,7 +274,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_chunk_append",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunk_append"),
 							 "Enable chunk append node",
 							 "Enable using chunk append node",
 							 &ts_guc_enable_chunk_append,
@@ -328,7 +285,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_parallel_chunk_append",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_parallel_chunk_append"),
 							 "Enable parallel chunk append node",
 							 "Enable using parallel aware chunk append node",
 							 &ts_guc_enable_parallel_chunk_append,
@@ -339,7 +296,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_runtime_exclusion",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_runtime_exclusion"),
 							 "Enable runtime chunk exclusion",
 							 "Enable runtime chunk exclusion in ChunkAppend node",
 							 &ts_guc_enable_runtime_exclusion,
@@ -350,7 +307,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_constraint_exclusion",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_constraint_exclusion"),
 							 "Enable constraint exclusion",
 							 "Enable planner constraint exclusion",
 							 &ts_guc_enable_constraint_exclusion,
@@ -361,7 +318,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_qual_propagation",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_qual_propagation"),
 							 "Enable qualifier propagation",
 							 "Enable propagation of qualifiers in JOINs",
 							 &ts_guc_enable_qual_propagation,
@@ -372,7 +329,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_dml_decompression",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_decompression"),
 							 "Enable DML decompression",
 							 "Enable DML decompression when modifying compressed hypertable",
 							 &ts_guc_enable_dml_decompression,
@@ -383,7 +340,24 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_transparent_decompression",
+	DefineCustomIntVariable(MAKE_EXTOPTION("max_tuples_decompressed_per_dml_transaction"),
+							"The max number of tuples that can be decompressed during an "
+							"INSERT, UPDATE, or DELETE.",
+							" If the number of tuples exceeds this value, an error will "
+							"be thrown and transaction rolled back. "
+							"Setting this to 0 sets this value to unlimited number of "
+							"tuples decompressed.",
+							&ts_guc_max_tuples_decompressed_per_dml,
+							100000,
+							0,
+							2147483647,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
 							 "Enable transparent decompression",
 							 "Enable transparent decompression when querying hypertable",
 							 &ts_guc_enable_transparent_decompression,
@@ -394,7 +368,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_skipscan",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_skipscan"),
 							 "Enable SkipScan",
 							 "Enable SkipScan for DISTINCT queries",
 							 &ts_guc_enable_skip_scan,
@@ -405,7 +379,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_decompression_logrep_markers",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_decompression_logrep_markers"),
 							 "Enable logical replication markers for decompression ops",
 							 "Enable the generation of logical replication markers in the "
 							 "WAL stream to mark the start and end of decompressions (for insert, "
@@ -418,7 +392,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_decompression_sorted_merge",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_decompression_sorted_merge"),
 							 "Enable compressed batches heap merge",
 							 "Enable the merge of compressed batches to preserve the compression "
 							 "order by",
@@ -430,7 +404,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_cagg_reorder_groupby",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_reorder_groupby"),
 							 "Enable group by reordering",
 							 "Enable group by clause reordering for continuous aggregates",
 							 &ts_guc_enable_cagg_reorder_groupby,
@@ -441,7 +415,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_now_constify",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_now_constify"),
 							 "Enable now() constify",
 							 "Enable constifying now() in query constraints",
 							 &ts_guc_enable_now_constify,
@@ -452,10 +426,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_2pc",
-							 "Enable two-phase commit",
-							 "Enable two-phase commit on distributed hypertables",
-							 &ts_guc_enable_2pc,
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_cagg_watermark_constify"),
+							 "Enable cagg watermark constify",
+							 "Enable constifying cagg watermark for real-time caggs",
+							 &ts_guc_enable_cagg_watermark_constify,
 							 true,
 							 PGC_USERSET,
 							 0,
@@ -463,31 +437,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_per_data_node_queries",
-							 "Enable the per data node query optimization for hypertables",
-							 "Enable the optimization that combines different chunks belonging to "
-							 "the same hypertable into a single query per data_node",
-							 &ts_guc_enable_per_data_node_queries,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_parameterized_data_node_scan",
-							 "Enable parameterized data node scans",
-							 "Disable this as a workaround in case these plans are incorrectly "
-							 "chosen by the query planner when they are suboptimal",
-							 &ts_guc_enable_parameterized_data_node_scan,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_tiered_reads",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_tiered_reads"),
 							 "Enable tiered data reads",
 							 "Enable reading of tiered data by including a foreign table "
 							 "representing the data in the object storage into the query plan",
@@ -499,65 +449,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomIntVariable("timescaledb.max_insert_batch_size",
-							"The max number of tuples to batch before sending to a data node",
-							"When acting as a access node, TimescaleDB splits batches of "
-							"inserted tuples across multiple data nodes. It will batch up to the "
-							"configured batch size tuples per data node before flushing. "
-							"Setting this to 0 disables batching, reverting to tuple-by-tuple "
-							"inserts",
-							&ts_guc_max_insert_batch_size,
-							1000,
-							0,
-							65536,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_connection_binary_data",
-							 "Enable binary format for connection",
-							 "Enable binary format for data exchanged between nodes in the cluster",
-							 &ts_guc_enable_connection_binary_data,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	/*
-	 * The default is 'auto', so that the dist COPY could use text transfer
-	 * format for text input. It has a passthrough optimization for this case,
-	 * which greatly reduces the CPU usage. Ideally we would implement the same
-	 * optimization for binary, but the Postgres COPY code doesn't provide
-	 * enough APIs for that.
-	 */
-	DefineCustomEnumVariable("timescaledb.dist_copy_transfer_format",
-							 "Data format used by distributed COPY to send data to data nodes",
-							 "auto, binary or text",
-							 (int *) &ts_guc_dist_copy_transfer_format,
-							 DCTF_Auto,
-							 dist_copy_transfer_formats,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_client_ddl_on_data_nodes",
-							 "Enable DDL operations on data nodes by a client",
-							 "Do not restrict execution of DDL operations only by access node",
-							 &ts_guc_enable_client_ddl_on_data_nodes,
-							 false,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_async_append",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_async_append"),
 							 "Enable async query execution on data nodes",
 							 "Enable optimization that runs remote queries asynchronously"
 							 "across data nodes",
@@ -569,7 +461,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_chunkwise_aggregation",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_chunkwise_aggregation"),
 							 "Enable chunk-wise aggregation",
 							 "Enable the pushdown of aggregations to the"
 							 " chunk level",
@@ -581,7 +473,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_vectorized_aggregation",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_vectorized_aggregation"),
 							 "Enable vectorized aggregation",
 							 "Enable vectorized aggregation for compressed data",
 							 &ts_guc_enable_vectorized_aggregation,
@@ -592,10 +484,10 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_remote_explain",
-							 "Show explain from remote nodes when using VERBOSE flag",
-							 "Enable getting and showing EXPLAIN output from remote nodes",
-							 &ts_guc_enable_remote_explain,
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_indexscan"),
+							 "Enable compression to take indexscan path",
+							 "Enable indexscan during compression, if matching index is found",
+							 &ts_guc_enable_compression_indexscan,
 							 false,
 							 PGC_USERSET,
 							 0,
@@ -603,18 +495,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable("timescaledb.enable_compression_indexscan",
-							 "Enable compression to take indexscan path",
-							 "Enable indexscan during compression, if matching index is found",
-							 &ts_guc_enable_compression_indexscan,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable("timescaledb.enable_bulk_decompression",
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_bulk_decompression"),
 							 "Enable decompression of the entire compressed batches",
 							 "Increases throughput of decompression, but might increase query "
 							 "memory usage",
@@ -626,44 +507,7 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomEnumVariable("timescaledb.remote_data_fetcher",
-							 "Set remote data fetcher type",
-							 "Pick data fetcher type based on type of queries you plan to run "
-							 "(copy or cursor)",
-							 (int *) &ts_guc_remote_data_fetcher,
-							 AutoFetcherType,
-							 remote_data_fetchers,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomStringVariable("timescaledb.ssl_dir",
-							   "TimescaleDB user certificate directory",
-							   "Determines a path which is used to search user certificates and "
-							   "private keys",
-							   &ts_guc_ssl_dir,
-							   NULL,
-							   PGC_SIGHUP,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomStringVariable("timescaledb.passfile",
-							   "TimescaleDB password file path",
-							   "Specifies the name of the file used to store passwords used for "
-							   "data node connections",
-							   &ts_guc_passfile,
-							   NULL,
-							   PGC_SIGHUP,
-							   0,
-							   NULL,
-							   NULL,
-							   NULL);
-
-	DefineCustomIntVariable("timescaledb.max_open_chunks_per_insert",
+	DefineCustomIntVariable(MAKE_EXTOPTION("max_open_chunks_per_insert"),
 							"Maximum open chunks per insert",
 							"Maximum number of open chunk tables per insert",
 							&ts_guc_max_open_chunks_per_insert,
@@ -676,7 +520,7 @@ _guc_init(void)
 							assign_max_open_chunks_per_insert_hook,
 							NULL);
 
-	DefineCustomIntVariable("timescaledb.max_cached_chunks_per_hypertable",
+	DefineCustomIntVariable(MAKE_EXTOPTION("max_cached_chunks_per_hypertable"),
 							"Maximum cached chunks",
 							"Maximum number of chunks stored in the cache",
 							&ts_guc_max_cached_chunks_per_hypertable,
@@ -689,7 +533,7 @@ _guc_init(void)
 							assign_max_cached_chunks_per_hypertable_hook,
 							NULL);
 #ifdef USE_TELEMETRY
-	DefineCustomEnumVariable("timescaledb.telemetry_level",
+	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),
 							 "Telemetry settings level",
 							 "Level used to determine which telemetry to send",
 							 (int *) &ts_guc_telemetry_level,
@@ -702,7 +546,7 @@ _guc_init(void)
 							 NULL);
 #endif
 
-	DefineCustomStringVariable(/* name= */ "timescaledb.license",
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("license"),
 							   /* short_desc= */ "TimescaleDB license type",
 							   /* long_desc= */ "Determines which features are enabled",
 							   /* valueAddr= */ &ts_guc_license,
@@ -713,7 +557,7 @@ _guc_init(void)
 							   /* assign_hook= */ ts_license_guc_assign_hook,
 							   /* show_hook= */ NULL);
 
-	DefineCustomStringVariable(/* name= */ "timescaledb.last_tuned",
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned"),
 							   /* short_desc= */ "last tune run",
 							   /* long_desc= */ "records last time timescaledb-tune ran",
 							   /* valueAddr= */ &ts_last_tune_time,
@@ -724,7 +568,7 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
-	DefineCustomStringVariable(/* name= */ "timescaledb.last_tuned_version",
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("last_tuned_version"),
 							   /* short_desc= */ "version of timescaledb-tune",
 							   /* long_desc= */ "version of timescaledb-tune used to tune",
 							   /* valueAddr= */ &ts_last_tune_version,
@@ -735,18 +579,31 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
-	DefineCustomEnumVariable("timescaledb.bgw_log_level",
+	DefineCustomEnumVariable(MAKE_EXTOPTION("bgw_log_level"),
 							 "Log level for the background worker subsystem",
 							 "Log level for the scheduler and workers of the background worker "
 							 "subsystem. Requires configuration reload to change.",
 							 /* valueAddr= */ &ts_guc_bgw_log_level,
 							 /* bootValue= */ WARNING,
 							 /* options= */ loglevel_options,
-							 /* context= */ PGC_SIGHUP,
+							 /* context= */ PGC_SUSET,
 							 0,
 							 NULL,
 							 NULL,
 							 NULL);
+
+	/* this information is useful in general on customer deployments */
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_compression_path_info"),
+							 /* short_desc= */ "show various compression-related debug info",
+							 /* long_desc= */ "this is for debugging/information purposes",
+							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
+							 /* bootValue= */ false,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
+
 #ifdef USE_TELEMETRY
 	DefineCustomStringVariable(/* name= */ "timescaledb_telemetry.cloud",
 							   /* short_desc= */ "cloud provider",
@@ -761,7 +618,7 @@ _guc_init(void)
 #endif
 
 #ifdef TS_DEBUG
-	DefineCustomBoolVariable(/* name= */ "timescaledb.shutdown_bgw_scheduler",
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("shutdown_bgw_scheduler"),
 							 /* short_desc= */ "immediately shutdown the bgw scheduler",
 							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ &ts_shutdown_bgw,
@@ -772,7 +629,7 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomStringVariable(/* name= */ "timescaledb.current_timestamp_mock",
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("current_timestamp_mock"),
 							   /* short_desc= */ "set the current timestamp",
 							   /* long_desc= */ "this is for debugging purposes",
 							   /* valueAddr= */ &ts_current_timestamp_mock,
@@ -783,7 +640,7 @@ _guc_init(void)
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
 
-	DefineCustomEnumVariable(/* name= */ "timescaledb.debug_require_vector_qual",
+	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_qual"),
 							 /* short_desc= */
 							 "ensure that non-vectorized or vectorized filters are used in "
 							 "DecompressChunk node",
@@ -801,18 +658,7 @@ _guc_init(void)
 							 /* assign_hook= */ NULL,
 							 /* show_hook= */ NULL);
 
-	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_compression_path_info",
-							 /* short_desc= */ "show various compression-related debug info",
-							 /* long_desc= */ "this is for debugging purposes",
-							 /* valueAddr= */ &ts_guc_debug_compression_path_info,
-							 /* bootValue= */ false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
-	DefineCustomBoolVariable(/* name= */ "timescaledb.debug_require_batch_sorted_merge",
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_require_batch_sorted_merge"),
 							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
 							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ &ts_guc_debug_require_batch_sorted_merge,
@@ -824,33 +670,6 @@ _guc_init(void)
 							 /* show_hook= */ NULL);
 #endif
 
-	DefineCustomEnumVariable("timescaledb.hypertable_distributed_default",
-							 "Set distributed hypertables default creation policy",
-							 "Set default policy to create local or distributed hypertables "
-							 "(auto, local or distributed)",
-							 (int *) &ts_guc_hypertable_distributed_default,
-							 HYPERTABLE_DIST_AUTO,
-							 hypertable_distributed_types,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomIntVariable("timescaledb.hypertable_replication_factor_default",
-							"Default replication factor value to use with a hypertables",
-							"Global default value for replication factor to use with hypertables "
-							"when the `replication_factor` argument is not provided",
-							&ts_guc_hypertable_replication_factor_default,
-							1,
-							1,
-							65536,
-							PGC_USERSET,
-							0,
-							NULL,
-							NULL,
-							NULL);
-
 	/* register feature flags */
 	ts_feature_flag_add(FEATURE_HYPERTABLE);
 	ts_feature_flag_add(FEATURE_HYPERTABLE_COMPRESSION);
@@ -861,9 +680,4 @@ _guc_init(void)
 
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable,
 							   ts_guc_max_open_chunks_per_insert);
-}
-
-void
-_guc_fini(void)
-{
 }

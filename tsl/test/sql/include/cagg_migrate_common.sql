@@ -4,7 +4,7 @@
 
 -- Setup some variables
 SELECT
-    format('\! zcat include/data/cagg_migrate_%1$s.sql.gz > %2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "ZCAT_CMD",
+    format('\! zcat < include/data/cagg_migrate_%1$s.sql.gz > %2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "ZCAT_CMD",
     format('%2$s/results/cagg_migrate_%1$s.sql', lower(:'TIME_DIMENSION_DATATYPE'), :'TEST_OUTPUT_DIR') AS "TEST_SCHEMA_FILE"
 \gset
 
@@ -296,6 +296,44 @@ BEGIN;
 SELECT execute_migration();
 ROLLBACK;
 \set ON_ERROR_STOP 1
+
+--
+-- test dropping chunks
+--
+
+-- no chunks marked as dropped
+SELECT
+   c.table_name as chunk_name,
+   c.dropped
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id AND h.table_name = 'conditions' AND c.dropped
+ORDER BY 1;
+
+-- drop 1 chunk
+\if :IS_TIME_DIMENSION
+    SELECT drop_chunks('conditions', older_than => CAST('2022-01-08 00:00:00-00' AS :TIME_DIMENSION_DATATYPE));
+\else
+    SELECT drop_chunks('conditions', older_than => 10);
+\endif
+
+-- now he have one chunk marked as dropped
+SELECT
+   c.table_name as chunk_name,
+   c.dropped
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id AND h.table_name = 'conditions' AND c.dropped
+ORDER BY 1;
+
+-- this migration should remove the chunk metadata marked as dropped
+CALL cagg_migrate('conditions_summary_weekly', override => TRUE, drop_old => TRUE);
+
+-- no chunks marked as dropped
+SELECT
+   c.table_name as chunk_name,
+   c.dropped
+FROM _timescaledb_catalog.hypertable h, _timescaledb_catalog.chunk c
+WHERE h.id = c.hypertable_id AND h.table_name = 'conditions' AND c.dropped
+ORDER BY 1;
 
 -- cleanup
 DROP FUNCTION execute_migration();

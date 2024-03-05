@@ -1,0 +1,141 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1_begin s2_begin s1_compress s2_compress s2_commit s1_commit
+step s1_begin: BEGIN;
+step s2_begin: BEGIN;
+step s1_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 0) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s2_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 1) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s2_commit: COMMIT;
+step s1_commit: COMMIT;
+
+starting permutation: s1_begin s2_begin s1_compress s2_compress s2_decompress s1_decompress s2_commit s1_commit
+step s1_begin: BEGIN;
+step s2_begin: BEGIN;
+step s1_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 0) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s2_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 1) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s2_decompress: 
+	SELECT decompress_chunk(name) IS NOT NULL AS decompress  FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 1) ch;
+
+decompress
+----------
+t         
+(1 row)
+
+step s1_decompress: 
+	SELECT decompress_chunk(name) IS NOT NULL AS decompress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 0) ch;
+
+decompress
+----------
+t         
+(1 row)
+
+step s2_commit: COMMIT;
+step s1_commit: COMMIT;
+
+starting permutation: s1_begin s2_begin s1_compress s2_compress s2_commit s2_begin s2_decompress s1_decompress s2_commit s1_commit
+step s1_begin: BEGIN;
+step s2_begin: BEGIN;
+step s1_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 0) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s2_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 1) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s2_commit: COMMIT;
+step s2_begin: BEGIN;
+step s2_decompress: 
+	SELECT decompress_chunk(name) IS NOT NULL AS decompress  FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 1) ch;
+
+decompress
+----------
+t         
+(1 row)
+
+step s1_decompress: 
+	SELECT decompress_chunk(name) IS NOT NULL AS decompress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 0) ch;
+
+decompress
+----------
+t         
+(1 row)
+
+step s2_commit: COMMIT;
+step s1_commit: COMMIT;
+
+starting permutation: s1_begin s2_begin s1_compress s2_compress s1_commit s1_begin s2_decompress s1_decompress s2_commit s1_commit
+step s1_begin: BEGIN;
+step s2_begin: BEGIN;
+step s1_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 0) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s2_compress: 
+	SELECT compress_chunk(name) IS NOT NULL AS compress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 1) ch;
+
+compress
+--------
+t       
+(1 row)
+
+step s1_commit: COMMIT;
+step s1_begin: BEGIN;
+step s2_decompress: 
+	SELECT decompress_chunk(name) IS NOT NULL AS decompress  FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 1) ch;
+
+decompress
+----------
+t         
+(1 row)
+
+step s1_decompress: 
+	SELECT decompress_chunk(name) IS NOT NULL AS decompress FROM (SELECT name FROM chunks_to_compress ORDER BY id LIMIT 1 OFFSET 0) ch;
+
+decompress
+----------
+t         
+(1 row)
+
+step s2_commit: COMMIT;
+step s1_commit: COMMIT;

@@ -9,6 +9,10 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.relation_size(relation REGCLAS
 RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
 AS '@MODULE_PATHNAME@', 'ts_relation_size' LANGUAGE C VOLATILE;
 
+CREATE OR REPLACE FUNCTION _timescaledb_functions.relation_approximate_size(relation REGCLASS)
+RETURNS TABLE (total_size BIGINT, heap_size BIGINT, index_size BIGINT, toast_size BIGINT)
+AS '@MODULE_PATHNAME@', 'ts_relation_approximate_size' LANGUAGE C STRICT VOLATILE;
+
 CREATE OR REPLACE VIEW _timescaledb_internal.hypertable_chunk_local_size AS
 SELECT
     h.schema_name AS hypertable_schema,
@@ -106,39 +110,6 @@ $BODY$
          SELECT * FROM _chunk_sizes) AS sizes;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.hypertable_remote_size(
-    schema_name_in name,
-    table_name_in name)
-RETURNS TABLE (
-    table_bytes bigint,
-    index_bytes bigint,
-    toast_bytes bigint,
-    total_bytes bigint,
-    node_name   NAME)
-LANGUAGE SQL VOLATILE STRICT AS
-$BODY$
-    SELECT
-        sum(entry.table_bytes)::bigint AS table_bytes,
-        sum(entry.index_bytes)::bigint AS index_bytes,
-        sum(entry.toast_bytes)::bigint AS toast_bytes,
-        sum(entry.total_bytes)::bigint AS total_bytes,
-        srv.node_name
-    FROM (
-        SELECT
-            s.node_name
-        FROM
-            _timescaledb_catalog.hypertable AS ht,
-            _timescaledb_catalog.hypertable_data_node AS s
-        WHERE
-            ht.schema_name = schema_name_in
-            AND ht.table_name = table_name_in
-            AND s.hypertable_id = ht.id
-         ) AS srv
-    LEFT OUTER JOIN LATERAL _timescaledb_functions.data_node_hypertable_info(
-        srv.node_name, schema_name_in, table_name_in) entry ON TRUE
-    GROUP BY srv.node_name;
-$BODY$ SET search_path TO pg_catalog, pg_temp;
-
 -- Get relation size of hypertable
 -- like pg_relation_size(hypertable)
 --
@@ -202,6 +173,29 @@ $BODY$
    FROM @extschema@.hypertable_detailed_size(hypertable);
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
+-- Get approximate relation size of hypertable
+--
+-- hypertable - hypertable to get approximate size of
+--
+-- Returns:
+-- table_bytes        - Approximate disk space used by hypertable
+-- index_bytes        - Approximate disk space used by indexes
+-- toast_bytes        - Approximate disk space of toast tables
+-- total_bytes        - Total approximate disk space used by the specified table, including all indexes and TOAST data
+CREATE OR REPLACE FUNCTION @extschema@.hypertable_approximate_detailed_size(relation REGCLASS)
+RETURNS TABLE (table_bytes BIGINT, index_bytes BIGINT, toast_bytes BIGINT, total_bytes BIGINT)
+AS '@MODULE_PATHNAME@', 'ts_hypertable_approximate_size' LANGUAGE C VOLATILE;
+
+--- returns approximate total-bytes for a hypertable (includes table + index)
+CREATE OR REPLACE FUNCTION @extschema@.hypertable_approximate_size(
+    hypertable              REGCLASS)
+RETURNS BIGINT
+LANGUAGE SQL VOLATILE STRICT AS
+$BODY$
+   SELECT sum(total_bytes)::bigint
+   FROM @extschema@.hypertable_approximate_detailed_size(hypertable);
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunks_local_size(
     schema_name_in name,
     table_name_in name)
@@ -228,47 +222,6 @@ $BODY$
    WHERE
       ch.hypertable_schema = schema_name_in
       AND ch.hypertable_name = table_name_in;
-$BODY$ SET search_path TO pg_catalog, pg_temp;
-
----should return same information as chunks_local_size--
-CREATE OR REPLACE FUNCTION _timescaledb_functions.chunks_remote_size(
-    schema_name_in name,
-    table_name_in name)
-RETURNS TABLE (
-    chunk_id    integer,
-    chunk_schema NAME,
-    chunk_name  NAME,
-    table_bytes bigint,
-    index_bytes bigint,
-    toast_bytes bigint,
-    total_bytes bigint,
-    node_name NAME)
-LANGUAGE SQL VOLATILE STRICT AS
-$BODY$
-    SELECT
-        entry.chunk_id,
-        entry.chunk_schema,
-        entry.chunk_name,
-        entry.table_bytes AS table_bytes,
-        entry.index_bytes AS index_bytes,
-        entry.toast_bytes AS toast_bytes,
-        entry.total_bytes AS total_bytes,
-        srv.node_name
-    FROM (
-        SELECT
-            s.node_name
-        FROM
-            _timescaledb_catalog.hypertable AS ht,
-            _timescaledb_catalog.hypertable_data_node AS s
-        WHERE
-            ht.schema_name = schema_name_in
-            AND ht.table_name = table_name_in
-            AND s.hypertable_id = ht.id
-         ) AS srv
-    LEFT OUTER JOIN LATERAL _timescaledb_functions.data_node_chunk_info(
-        srv.node_name, schema_name_in, table_name_in) entry ON TRUE
-	WHERE
-	    entry.chunk_name IS NOT NULL;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get relation size of the chunks of an hypertable
@@ -543,42 +496,6 @@ $BODY$
         AND ch.hypertable_name = table_name_in;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-CREATE OR REPLACE FUNCTION _timescaledb_functions.compressed_chunk_remote_stats(schema_name_in name, table_name_in name)
-    RETURNS TABLE (
-        chunk_schema name,
-        chunk_name name,
-        compression_status text,
-        before_compression_table_bytes bigint,
-        before_compression_index_bytes bigint,
-        before_compression_toast_bytes bigint,
-        before_compression_total_bytes bigint,
-        after_compression_table_bytes bigint,
-        after_compression_index_bytes bigint,
-        after_compression_toast_bytes bigint,
-        after_compression_total_bytes bigint,
-        node_name name)
-    LANGUAGE SQL
-    STABLE STRICT
-    AS
-$BODY$
-    SELECT
-        ch.*,
-        srv.node_name
-    FROM (
-        SELECT
-            s.node_name
-        FROM
-            _timescaledb_catalog.hypertable AS ht,
-            _timescaledb_catalog.hypertable_data_node AS s
-        WHERE
-            ht.schema_name = schema_name_in
-            AND ht.table_name = table_name_in
-            AND s.hypertable_id = ht.id) AS srv
-    LEFT OUTER JOIN LATERAL _timescaledb_functions.data_node_compressed_chunk_stats(
-        srv.node_name, schema_name_in, table_name_in) ch ON TRUE
-	WHERE ch.chunk_name IS NOT NULL;
-$BODY$ SET search_path TO pg_catalog, pg_temp;
-
 -- Get per chunk compression statistics for a hypertable that has
 -- compression enabled
 CREATE OR REPLACE FUNCTION @extschema@.chunk_compression_stats (hypertable REGCLASS)
@@ -704,31 +621,6 @@ $BODY$
 		 AND c.oid = i.indrelid
 		 AND h.schema_name = schema_name_in
 		 AND h.table_name = c.relname;
-$BODY$ SET search_path TO pg_catalog, pg_temp;
-
-CREATE OR REPLACE FUNCTION _timescaledb_functions.indexes_remote_size(
-    schema_name_in             NAME,
-    table_name_in              NAME,
-    index_name_in              NAME
-)
-RETURNS BIGINT
-LANGUAGE SQL VOLATILE STRICT AS
-$BODY$
-    SELECT
-        sum(entry.total_bytes)::bigint AS total_bytes
-    FROM (
-        SELECT
-            s.node_name
-        FROM
-            _timescaledb_catalog.hypertable AS ht,
-            _timescaledb_catalog.hypertable_data_node AS s
-        WHERE
-            ht.schema_name = schema_name_in
-            AND ht.table_name = table_name_in
-            AND s.hypertable_id = ht.id
-         ) AS srv
-    JOIN LATERAL _timescaledb_functions.data_node_index_size(
-        srv.node_name, schema_name_in, index_name_in) entry ON TRUE;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
 -- Get sizes of indexes on a hypertable

@@ -7,14 +7,8 @@ SELECT table_name FROM create_hypertable('policy_test_timestamptz','time');
 
 ALTER TABLE policy_test_timestamptz SET (timescaledb.compress);
 
-SELECT
-  (string_to_array(extversion,'.'))[1] AS ts_major,
-  (string_to_array(extversion,'.'))[2] AS ts_minor
-  FROM pg_extension
- WHERE extname = 'timescaledb' \gset
-
-SELECT
-  :ts_major < 2 AS has_drop_chunks_policy \gset
+INSERT INTO policy_test_timestamptz(time, device_id, value) VALUES ('3020-01-01 00:00:00', 1, 1.0);
+SELECT compress_chunk(show_chunks('policy_test_timestamptz'));
 
 DO LANGUAGE PLPGSQL $$
 DECLARE
@@ -32,18 +26,14 @@ BEGIN
   FROM timescale_version;
 
   PERFORM add_reorder_policy('policy_test_timestamptz','policy_test_timestamptz_time_idx');
+  PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
 
   -- some policy API functions got renamed for 2.0 so we need to make
   -- sure to use the right name for the version. The schedule_interval
   -- parameter of add_compression_policy was introduced in 2.8.0
-  IF ts_major < 2 THEN
-    PERFORM add_drop_chunks_policy('policy_test_timestamptz','60d'::interval);
-    PERFORM add_compress_chunks_policy('policy_test_timestamptz','10d'::interval);
-  ELSIF ts_major <= 2 AND ts_minor < 8 THEN
-    PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
+  IF ts_major = 2 AND ts_minor < 8 THEN
     PERFORM add_compression_policy('policy_test_timestamptz','10d'::interval);
   ELSE
-    PERFORM add_retention_policy('policy_test_timestamptz','60d'::interval);
     PERFORM add_compression_policy('policy_test_timestamptz','10d'::interval, schedule_interval => '3 days 12:00:00'::interval);
   END IF;
 END
@@ -57,19 +47,11 @@ GRANT ALL ON SCHEMA PUBLIC TO "Kim Possible";
 SET ROLE "dotted.name";
 CREATE TABLE policy_test_user_1(time timestamptz not null, device_id int, value float);
 SELECT table_name FROM create_hypertable('policy_test_user_1','time');
-\if :has_drop_chunks_policy
-SELECT add_drop_chunks_policy('policy_test_user_1', '14 days'::interval);
-\else
 SELECT add_retention_policy('policy_test_user_1', '14 days'::interval);
-\endif
 
 SET ROLE "Kim Possible";
 CREATE TABLE policy_test_user_2(time timestamptz not null, device_id int, value float);
 SELECT table_name FROM create_hypertable('policy_test_user_2','time');
-\if :has_drop_chunks_policy
-SELECT add_drop_chunks_policy('policy_test_user_2', '14 days'::interval);
-\else
 SELECT add_retention_policy('policy_test_user_2', '14 days'::interval);
-\endif
 RESET ROLE;
 \endif

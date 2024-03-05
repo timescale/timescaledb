@@ -461,7 +461,6 @@ ORDER BY month, city;
 
 -- Clean up
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 66 other objects
 NOTICE:  drop cascades to 7 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
@@ -717,7 +716,6 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamp',
 
 -- Clean up
 DROP TABLE conditions_timestamp CASCADE;
-NOTICE:  drop cascades to 2 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_11_175_chunk
 -- Make sure CAGGs with custom origin work for timestamptz type
@@ -775,6 +773,19 @@ SELECT city,
 FROM conditions_timestamptz
 GROUP BY city, bucket;
 NOTICE:  refreshing continuous aggregate "conditions_summary_timestamptz"
+-- Make sure the origin is saved in the catalog table
+SELECT mat_hypertable_id AS cagg_id
+  FROM _timescaledb_catalog.continuous_agg
+  WHERE user_view_name = 'conditions_summary_timestamptz'
+\gset
+SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
+  FROM _timescaledb_catalog.continuous_aggs_bucket_function
+  WHERE mat_hypertable_id = :cagg_id;
+                                               bucket_func                                                | bucket_width |        bucket_origin         | bucket_timezone | bucket_fixed_width 
+----------------------------------------------------------------------------------------------------------+--------------+------------------------------+-----------------+--------------------
+ timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,timestamp with time zone,text) | @ 12 hours   | Mon Jun 01 02:00:00 2020 PDT | Europe/Moscow   | f
+(1 row)
+
 SELECT city, to_char(bucket at time zone 'MSK', 'YYYY-MM-DD HH24:MI:SS') AS b, min, max
 FROM conditions_summary_timestamptz
 ORDER BY b, city;
@@ -932,6 +943,5 @@ SELECT add_continuous_aggregate_policy('conditions_summary_timestamptz',
 
 -- Clean up
 DROP TABLE conditions_timestamptz CASCADE;
-NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to 3 other objects
 NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_181_chunk

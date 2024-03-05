@@ -131,7 +131,7 @@ class GitCommitMessage:
 
     def check_body_uses_why(self):
         "Rule 7: Use the body to explain what and why vs. how"
-        # Not enforcable
+        # Not enforceable
         return True
 
     rule_funcs = [

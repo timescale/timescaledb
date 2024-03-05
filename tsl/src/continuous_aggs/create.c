@@ -62,21 +62,17 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include "ts_catalog/hypertable_data_node.h"
 #include "dimension.h"
 #include "extension_constants.h"
 #include "func_cache.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"
 #include "invalidation.h"
-#include "dimension.h"
 #include "options.h"
 #include "time_utils.h"
 #include "utils.h"
 #include "errors.h"
 #include "refresh.h"
-#include "remote/dist_commands.h"
-#include "deparse.h"
 #include "timezones.h"
 #include "guc.h"
 
@@ -86,9 +82,10 @@ static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char
 									  bool materialized_only, const char *direct_schema,
 									  const char *direct_view, const bool finalized,
 									  const int32 parent_mat_hypertable_id);
-static void create_bucket_function_catalog_entry(int32 matht_id, bool experimental,
-												 const char *name, const char *bucket_width,
-												 const char *origin, const char *timezone);
+static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
+												 const char *bucket_width, const char *origin,
+												 const char *offset, const char *timezone,
+												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
 #if PG14_LT
@@ -96,18 +93,10 @@ static bool check_trigger_exists_hypertable(Oid relid, char *trigname);
 #endif
 static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
 static void mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht);
-static int32 mattablecolumninfo_create_materialization_table(
-	MatTableColumnInfo *matcolinfo, int32 hypertable_id, RangeVar *mat_rel,
-	CAggTimebucketInfo *bucket_info, bool create_addl_index, char *const tablespacename,
-	char *const table_access_method, ObjectAddress *mataddress);
-static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *mattblinfo,
-														  Query *userview_query, bool finalized);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
 static void fixup_userview_query_tlist(Query *userquery, List *tlist_aliases);
 static void cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquery,
 						CAggTimebucketInfo *bucket_info, WithClauseResult *with_clause_options);
-void cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht);
-void cagg_rename_view_columns(ContinuousAgg *agg);
 
 #define MATPARTCOL_INTERVAL_FACTOR 10
 #define CAGG_INVALIDATION_TRIGGER "continuous_agg_invalidation_trigger"
@@ -198,9 +187,9 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
  * CONTINUOUS_AGGS_BUCKET_FUNCTION.
  */
 static void
-create_bucket_function_catalog_entry(int32 matht_id, bool experimental, const char *name,
-									 const char *bucket_width, const char *origin,
-									 const char *timezone)
+create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const char *bucket_width,
+									 const char *bucket_origin, const char *bucket_offset,
+									 const char *bucket_timezone, const bool bucket_fixed_width)
 {
 	Catalog *catalog = ts_catalog_get();
 	Relation rel;
@@ -214,17 +203,55 @@ create_bucket_function_catalog_entry(int32 matht_id, bool experimental, const ch
 	desc = RelationGetDescr(rel);
 
 	memset(values, 0, sizeof(values));
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_mat_hypertable_id)] = matht_id;
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_experimental)] =
-		BoolGetDatum(experimental);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_name)] =
-		CStringGetTextDatum(name);
+
+	/* Hypertable ID */
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_mat_hypertable_id)] =
+		matht_id;
+
+	/* Bucket function */
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
+		ObjectIdGetDatum(bucket_function);
+
+	/* Bucket width */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
 		CStringGetTextDatum(bucket_width);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_origin)] =
-		CStringGetTextDatum(origin);
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_timezone)] =
-		CStringGetTextDatum(timezone ? timezone : "");
+
+	/* Bucket origin */
+	if (bucket_origin != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
+			CStringGetTextDatum(bucket_origin);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] = true;
+	}
+
+	/* Bucket offset */
+	if (bucket_offset != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] =
+			CStringGetTextDatum(bucket_offset);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] = true;
+	}
+
+	/* Bucket timezone */
+	if (bucket_timezone != NULL)
+	{
+		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] =
+			CStringGetTextDatum(bucket_timezone);
+	}
+	else
+	{
+		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] = true;
+	}
+
+	/* Bucket fixed width */
+	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_fixed_width)] =
+		BoolGetDatum(bucket_fixed_width);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -265,9 +292,7 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 											 NULL,
 											 NULL,
 											 NULL,
-											 chunk_sizing_info,
-											 HYPERTABLE_REGULAR,
-											 NULL);
+											 chunk_sizing_info);
 	if (!created)
 		ereport(ERROR,
 				(errcode(ERRCODE_INTERNAL_ERROR),
@@ -348,43 +373,6 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 #endif
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
-	if (hypertable_is_distributed(ht))
-	{
-		DistCmdResult *result;
-		List *data_node_list = ts_hypertable_get_data_node_name_list(ht);
-		List *cmd_descriptors = NIL; /* same order as ht->data_nodes */
-		DistCmdDescr *cmd_descr_data = NULL;
-		ListCell *cell;
-
-		unsigned i = 0;
-		cmd_descr_data = palloc(list_length(data_node_list) * sizeof(*cmd_descr_data));
-		foreach (cell, ht->data_nodes)
-		{
-			HypertableDataNode *node = lfirst(cell);
-			char node_hypertable_id_str[12];
-			CreateTrigStmt remote_stmt = stmt_template;
-
-			pg_ltoa(node->fd.node_hypertable_id, node_hypertable_id_str);
-			pg_ltoa(node->fd.hypertable_id, hypertable_id_str);
-
-			remote_stmt.args =
-				list_make2(makeString(node_hypertable_id_str), makeString(hypertable_id_str));
-			cmd_descr_data[i].sql = deparse_create_trigger(&remote_stmt);
-			cmd_descr_data[i].params = NULL;
-			cmd_descriptors = lappend(cmd_descriptors, &cmd_descr_data[i++]);
-		}
-
-		result =
-			ts_dist_multi_cmds_params_invoke_on_data_nodes(cmd_descriptors, data_node_list, true);
-		if (result)
-			ts_dist_cmd_close_response(result);
-		/*
-		 * FALL-THROUGH
-		 * We let the Access Node create a trigger as well, even though it is not used for data
-		 * modifications. We use the Access Node trigger as a check for existence of the remote
-		 * triggers.
-		 */
-	}
 	CreateTrigStmt local_stmt = stmt_template;
 	pg_ltoa(hypertable_id, hypertable_id_str);
 	local_stmt.args = list_make1(makeString(hypertable_id_str));
@@ -695,7 +683,7 @@ fixup_userview_query_tlist(Query *userquery, List *tlist_aliases)
  *               so don't recreate invalidation trigger.
 
  * Since 1.7, we support real time aggregation.
- * If real time aggregation is off i.e. materialized only, the mcagg vew is as described in Step 2.
+ * If real time aggregation is off i.e. materialized only, the mcagg view is as described in Step 2.
  * If it is turned on
  * we build a union query that selects from the internal mat view and the raw hypertable
  *     (see build_union_query for details)
@@ -831,45 +819,29 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 	if (bucket_info->bucket_width == BUCKET_WIDTH_VARIABLE)
 	{
-		const char *bucket_width;
-		const char *origin = "";
+		const char *bucket_origin = NULL;
+		const char *bucket_offset = NULL;
 
 		/*
 		 * Variable-sized buckets work only with intervals.
 		 */
 		Assert(bucket_info->interval != NULL);
-		bucket_width = DatumGetCString(
+		const char *bucket_width = DatumGetCString(
 			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->interval)));
 
 		if (!TIMESTAMP_NOT_FINITE(bucket_info->origin))
 		{
-			origin = DatumGetCString(
-				DirectFunctionCall1(timestamp_out, TimestampGetDatum(bucket_info->origin)));
+			bucket_origin = DatumGetCString(
+				DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(bucket_info->origin)));
 		}
 
-		/*
-		 * These values are not used for anything except Assert's yet
-		 * for the same reasons. Once the design of variable-sized buckets
-		 * is finalized we will have a better idea of what schema is needed exactly.
-		 * Until then the choice was made in favor of the most generic schema
-		 * that can be optimized later.
-		 */
-		Oid bucket_func_schema_oid = get_func_namespace(bucket_info->bucket_func->funcid);
-		Ensure(OidIsValid(bucket_func_schema_oid),
-			   "namespace for funcid %d not found",
-			   bucket_info->bucket_func->funcid);
-		char *bucket_func_schema_name = get_namespace_name(bucket_func_schema_oid);
-		Ensure(bucket_func_schema_name != NULL,
-			   "unable to get namespace name for Oid %d",
-			   bucket_func_schema_oid);
-		bool is_experimental =
-			(strncmp(bucket_func_schema_name, EXPERIMENTAL_SCHEMA_NAME, NAMEDATALEN) == 0);
 		create_bucket_function_catalog_entry(materialize_hypertable_id,
-											 is_experimental,
-											 get_func_name(bucket_info->bucket_func->funcid),
+											 bucket_info->bucket_func->funcid,
 											 bucket_width,
-											 origin,
-											 bucket_info->timezone);
+											 bucket_origin,
+											 bucket_offset,
+											 bucket_info->timezone,
+											 bucket_info->bucket_width != BUCKET_WIDTH_VARIABLE);
 	}
 
 	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */

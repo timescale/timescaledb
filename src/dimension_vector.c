@@ -115,9 +115,7 @@ ts_dimension_vec_add_unique_slice(DimensionVec **vecptr, DimensionSlice *slice)
 DimensionVec *
 ts_dimension_vec_add_slice_sort(DimensionVec **vecptr, DimensionSlice *slice)
 {
-	DimensionVec *vec;
-
-	*vecptr = vec = ts_dimension_vec_add_slice(vecptr, slice);
+	*vecptr = ts_dimension_vec_add_slice(vecptr, slice);
 	return ts_dimension_vec_sort(vecptr);
 }
 

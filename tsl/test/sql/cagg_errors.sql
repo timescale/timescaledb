@@ -290,6 +290,15 @@ WHERE user_view_name = 'mat_with_test'
 \gset
 
 \set ON_ERROR_STOP 0
+-- triggers not allowed on  continuous aggregate
+CREATE OR REPLACE FUNCTION not_allowed() RETURNS trigger AS $$
+BEGIN
+  RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER not_allowed_trigger INSTEAD OF INSERT ON mat_with_test
+FOR EACH ROW EXECUTE FUNCTION not_allowed();
+
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'false');
 ALTER MATERIALIZED VIEW mat_with_test SET(timescaledb.create_group_indexes = 'true');
 ALTER MATERIALIZED VIEW mat_with_test ALTER timec DROP default;
@@ -517,7 +526,7 @@ FROM
   INNER JOIN _timescaledb_catalog.hypertable uncompress ON (ht.id = uncompress.compressed_hypertable_id
       AND uncompress.table_name = 'comp_ht_test') \gset
 
-CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',_ts_meta_min_1) FROM :INTERNALTABLE GROUP BY 1;
+CREATE MATERIALIZED VIEW cagg1 WITH(timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',now()) FROM :INTERNALTABLE GROUP BY 1;
 
 --TEST ht + cagg, do not enable compression on ht and try to compress chunk on ht.
 --Check error handling for this case

@@ -70,39 +70,36 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 
 /*
  * Information about the bucketing function.
- *
- * Note that this structure should be serializable and it should be possible
- * to transfer it over the network to the data nodes. The following procedures
- * are responsible for serializing and deserializing respectively:
- *
- * - bucket_function_serialize()
- * - bucket_function_deserialize()
- *
- * Serialized data is used as an input of the following procedures:
- *
- * - _timescaledb_internal.invalidation_process_hypertable_log()
- * - _timescaledb_internal.invalidation_process_cagg_log()
- *
- * See bucket_functions[] argument.
  */
 typedef struct ContinuousAggsBucketFunction
 {
-	/*
-	 * Schema of the bucketing function.
-	 * Equals TRUE for "timescaledb_experimental", FALSE otherwise.
-	 */
-	bool experimental;
-	/* Name of the bucketing function, e.g. "time_bucket" or "time_bucket_ng" */
-	char *name;
-	/* `bucket_width` argument of the function */
+	/* Oid of the bucketing function. In the catalog table, the regprocedure is used. This ensures
+	 * that the Oid is mapped to a string when a backup is taken and the string is converted back to
+	 * the Oid when the backup is restored. This way, we can use an Oid in the catalog table even
+	 * when a backup is restored and the Oid may have changed. However, the dependency management in
+	 * PostgreSQL does not track the Oid. If the function is dropped and a new one is created, the
+	 * Oid changes and this value points to a non-existing Oid. This can not happen in real-world
+	 * situations since PostgreSQL protects the bucket_function from deletion until the CAgg is
+	 * defined. */
+	Oid bucket_function;
+
+	/* `bucket_width` argument of the function. */
 	Interval *bucket_width;
+
 	/*
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.
 	 */
-	Timestamp origin;
-	/* `timezone` argument of the function provided by the user */
+	TimestampTz bucket_origin;
+
+	/* `bucket_offset` argument of the function. */
+	Interval *bucket_offset;
+
+	/* `timezone` argument of the function provided by the user. */
 	char *timezone;
+
+	/* Is the interval of the bucket fixed? */
+	bool bucket_fixed_interval;
 } ContinuousAggsBucketFunction;
 
 typedef struct ContinuousAgg
@@ -172,22 +169,14 @@ typedef struct CaggPolicyOffset
 extern TSDLLEXPORT Oid ts_cagg_permissions_check(Oid cagg_oid, Oid userid);
 
 extern TSDLLEXPORT CaggsInfo ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id);
-extern TSDLLEXPORT void ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids,
-														   ArrayType *bucket_widths,
-														   ArrayType *bucket_functions,
-														   CaggsInfo *all_caggs);
-TSDLLEXPORT void ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs,
-												  ArrayType **mat_hypertable_ids,
-												  ArrayType **bucket_widths,
-												  ArrayType **bucket_functions);
-
 extern TSDLLEXPORT ContinuousAgg *
-ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id);
+ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id, bool missing_ok);
 
 extern TSDLLEXPORT void ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id);
 
 extern TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id);
+extern TSDLLEXPORT bool ts_continuous_agg_hypertable_all_finalized(int32 raw_hypertable_id);
 extern TSDLLEXPORT List *ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id);
 extern TSDLLEXPORT ContinuousAgg *ts_continuous_agg_find_by_view_name(const char *schema,
 																	  const char *name,
@@ -206,8 +195,6 @@ extern TSDLLEXPORT void ts_continuous_agg_rename_schema_name(const char *old_sch
 extern TSDLLEXPORT void ts_continuous_agg_rename_view(const char *old_schema, const char *old_name,
 													  const char *new_schema, const char *new_name,
 													  ObjectType *object_type);
-
-extern TSDLLEXPORT int32 ts_number_of_continuous_aggs(void);
 
 extern TSDLLEXPORT const Dimension *
 ts_continuous_agg_find_integer_now_func_by_materialization_id(int32 mat_htid);

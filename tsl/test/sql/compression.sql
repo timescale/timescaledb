@@ -56,8 +56,8 @@ _timescaledb_catalog.chunk ch1, _timescaledb_catalog.chunk ch2
 where ch1.compressed_chunk_id = ch2.id;
 
 \set ON_ERROR_STOP 0
---cannot recompress the chunk the second time around
-select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk');
+--cannot compress the chunk the second time around
+select compress_chunk( '_timescaledb_internal._hyper_1_2_chunk', false);
 
 --TEST2a try DML on a compressed chunk
 BEGIN;
@@ -542,7 +542,6 @@ SELECT count(*) from stattest;
 -- Uncompressed chunk table is empty since we just compressed the chunk and moved everything to compressed chunk table.
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :statchunk;
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 
 SELECT compch.table_name  as "STAT_COMP_CHUNK_NAME"
 FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
@@ -553,10 +552,8 @@ FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
 -- reltuples is initially -1 on PG14 before VACUUM/ANALYZE was run
 SELECT relpages, CASE WHEN reltuples > 0 THEN reltuples ELSE 0 END as reltuples FROM pg_class WHERE relname = :'STAT_COMP_CHUNK_NAME';
 
--- Now verify stats are updated on compressed chunk table when we analyze the hypertable.
-ANALYZE stattest;
-SELECT histogram_bounds FROM pg_stats WHERE tablename = :statchunk AND attname = 'c1';
 -- Unfortunately, the stats on the hypertable won't find any rows to sample from the chunk
+ANALYZE stattest;
 SELECT histogram_bounds FROM pg_stats WHERE tablename = 'stattest' AND attname = 'c1';
 SELECT relpages, reltuples FROM pg_class WHERE relname = :statchunk;
 
@@ -1074,3 +1071,91 @@ SELECT approximate_row_count('_timescaledb_internal.' || :'STAT_CHUNK2_NAME');
 SELECT approximate_row_count('stattest');
 
 DROP TABLE stattest;
+
+-- test that all variants of compress_chunk produce a fully compressed chunk
+CREATE TABLE compress_chunk_test(time TIMESTAMPTZ NOT NULL, device text, value float);
+SELECT create_hypertable('compress_chunk_test', 'time');
+
+INSERT INTO compress_chunk_test SELECT '2020-01-01', 'r2d2', 3.14;
+ALTER TABLE compress_chunk_test SET (timescaledb.compress);
+
+SELECT show_chunks('compress_chunk_test') AS "CHUNK" \gset
+
+-- initial call will compress the chunk
+SELECT compress_chunk(:'CHUNK');
+-- subsequent calls will be noop
+SELECT compress_chunk(:'CHUNK');
+-- unless if_not_compressed is set to false
+\set ON_ERROR_STOP 0
+SELECT compress_chunk(:'CHUNK', false);
+\set ON_ERROR_STOP 1
+
+ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='device');
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+-- changing compression settings will not recompress the chunk by default
+SELECT compress_chunk(:'CHUNK');
+-- unless we specify recompress := true
+SELECT compress_chunk(:'CHUNK', recompress := true);
+-- compressed_chunk_id should be different now
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+
+--test partial handling
+INSERT INTO compress_chunk_test SELECT '2020-01-01', 'c3po', 3.14;
+-- should result in merging uncompressed data into compressed chunk
+SELECT compress_chunk(:'CHUNK');
+-- compressed_chunk_id should not have changed
+SELECT compressed_chunk_id from _timescaledb_catalog.chunk ch INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name='compress_chunk_test';
+-- should return no rows
+SELECT * FROM ONLY :CHUNK;
+
+ALTER TABLE compress_chunk_test SET (timescaledb.compress_segmentby='');
+-- create another chunk
+INSERT INTO compress_chunk_test SELECT '2021-01-01', 'c3po', 3.14;
+SELECT show_chunks('compress_chunk_test') AS "CHUNK2" LIMIT 1 OFFSET 1 \gset
+SELECT compress_chunk(:'CHUNK2');
+
+-- make it partial and compress again
+INSERT INTO compress_chunk_test SELECT '2021-01-01', 'r2d2', 3.14;
+SELECT compress_chunk(:'CHUNK2');
+-- should return no rows
+SELECT * FROM ONLY :CHUNK2;
+
+------
+--- Test copy with a compressed table with unique index
+------
+
+CREATE TABLE compressed_table (time timestamptz, a int, b int, c int);
+CREATE UNIQUE INDEX compressed_table_index ON compressed_table(time, a, b, c);
+
+SELECT create_hypertable('compressed_table', 'time');
+ALTER TABLE compressed_table SET (timescaledb.compress, timescaledb.compress_segmentby='a', timescaledb.compress_orderby = 'time DESC');
+
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 10:00:00.00000+01	5	1	1
+2024-02-29 15:02:03.87313+01	10	2	2
+\.
+
+SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
+
+\set ON_ERROR_STOP 0
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 15:02:03.87313+01	10	2	2
+\.
+\set ON_ERROR_STOP 1
+
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 15:02:03.87313+01	20	3	3
+\.
+
+SELECT * FROM compressed_table;
+SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed_table') i;
+
+-- Check DML decompression limit
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
+\set ON_ERROR_STOP 0
+COPY compressed_table (time,a,b,c) FROM stdin;
+2024-02-29 15:02:03.87313+01	10	4	4
+2024-02-29 15:02:03.87313+01	20	5	5
+\.
+\set ON_ERROR_STOP 1
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;

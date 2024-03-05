@@ -1536,6 +1536,11 @@ FROM
   month_timezone
 GROUP BY 1;
 
+-- Test gapfill respects DST changes when generating timestamps (#6344)
+SELECT time_bucket_gapfill('1 month', time, 'awst','2023-01-01', '2023-07-01' ) AS month, sum(value) AS sum
+FROM month_timezone
+GROUP BY 1;
+
 DROP TABLE month_timezone;
 
 -- Test gapfill with additional group pathkeys added for optimization (#6396)

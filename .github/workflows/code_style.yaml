@@ -5,6 +5,7 @@ name: Code style
       - main
       - prerelease_test
   pull_request:
+
 jobs:
   cmake_checks:
     name: Check CMake files
@@ -13,7 +14,7 @@ jobs:
       - name: Install prerequisites
         run: pip install cmakelang
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run format on CMake files
         run: |
           find  -name CMakeLists.txt  -exec cmake-format -i {} +
@@ -28,7 +29,7 @@ jobs:
       - name: Install prerequisites
         run: sudo apt install perltidy
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Check trailing whitespace
         if: always()
         run: |
@@ -48,10 +49,24 @@ jobs:
         run: |
           pip install yamllint
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run yamllint
         run: |
           find . -type f \( -name "*.yaml" -or -name "*.yml" \) -print -exec yamllint {} \+
+
+  spelling_checks:
+    name: Check spelling
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install prerequisites
+        run: |
+          pip install codespell
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Run codespell
+        run: |
+          find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.sh" \) \
+            -exec codespell -L "inh,larg,inout" {} \+
 
   cc_checks:
     name: Check code formatting
@@ -60,7 +75,7 @@ jobs:
       fail-fast: false
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Check trailing whitespace
       if: always()
       run: |
@@ -93,21 +108,21 @@ jobs:
           pip list
           pip list --user
       - name: Checkout source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Run prospector
         run: |
           find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +
           git diff --exit-code
 
   misc_checks:
-    name: Check license, update scripts, git hooks, missing gitignore entries and unecessary template tests
+    name: Check license, update scripts, git hooks, missing gitignore entries and unnecessary template tests
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
     steps:
     - name: Checkout source
       if: always()
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Check license
       if: always()
       run: ./scripts/check_license_all.sh
@@ -118,13 +133,12 @@ jobs:
     - name: Check for unreferenced test files
       if: always()
       run: ./scripts/check_unreferenced_files.sh
-    - name: Check update scripts
-      if: always()
-      run: ./scripts/check_update_scripts.sh
     - name: Check for missing gitignore entries for template test files
       if: always()
-      run: ./scripts/check_missing_gitignore_for_template_tests.sh
-    - name: Check for unecessary template test files
+      run: |
+        ./bootstrap
+        ./scripts/check_missing_gitignore_for_template_tests.sh
+    - name: Check for unnecessary template test files
       if: always()
       run: ./scripts/check_unecessary_template_tests.sh
 

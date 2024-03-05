@@ -277,10 +277,6 @@ add_chunk_stats(HyperStats *stats, Form_pg_class class, const Chunk *chunk,
 	if (ts_chunk_is_compressed(chunk))
 		stats->compressed_chunk_count++;
 
-	/* Add replica chunks, if any. Only count the extra replicas */
-	if (list_length(chunk->data_nodes) > 1)
-		stats->replica_chunk_count += (list_length(chunk->data_nodes) - 1);
-
 	/*
 	 * A chunk on a distributed hypertable can be marked as compressed but
 	 * have no compression stats (the stats exists on the data node and might

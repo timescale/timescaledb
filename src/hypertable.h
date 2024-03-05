@@ -17,7 +17,6 @@
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "ts_catalog/tablespace.h"
-#include "ts_catalog/dimension_partition.h"
 
 #define OLD_INSERT_BLOCKER_NAME "insert_blocker"
 #define INSERT_BLOCKER_NAME "ts_insert_blocker"
@@ -57,7 +56,6 @@ typedef struct Hypertable
 	 * Allows restricting the data nodes to use for the hypertable. Default is to
 	 * use all available data nodes.
 	 */
-	List *data_nodes;
 } Hypertable;
 
 /* create_hypertable record attribute numbers */
@@ -91,22 +89,12 @@ typedef enum HypertableCreateFlags
 	HYPERTABLE_CREATE_MIGRATE_DATA = 1 << 2,
 } HypertableCreateFlags;
 
-/* Hypertable type defined by replication_factor value */
-typedef enum HypertableType
-{
-	/* Hypertable created on a data node as part of any other
-	 * distributed hypertable */
-	HYPERTABLE_DISTRIBUTED_MEMBER = -1,
-	/* Non-replicated hypertable (default for a single node) */
-	HYPERTABLE_REGULAR = 0,
-	/* Replicated hypertable (replication_factor is >= 1) */
-	HYPERTABLE_DISTRIBUTED
-} HypertableType;
-
-extern TSDLLEXPORT bool ts_hypertable_create_from_info(
-	Oid table_relid, int32 hypertable_id, uint32 flags, DimensionInfo *time_dim_info,
-	DimensionInfo *space_dim_info, Name associated_schema_name, Name associated_table_prefix,
-	ChunkSizingInfo *chunk_sizing_info, int16 replication_factor, List *data_node_names);
+extern TSDLLEXPORT bool ts_hypertable_create_from_info(Oid table_relid, int32 hypertable_id,
+													   uint32 flags, DimensionInfo *time_dim_info,
+													   DimensionInfo *closed_dim_info,
+													   Name associated_schema_name,
+													   Name associated_table_prefix,
+													   ChunkSizingInfo *chunk_sizing_info);
 extern TSDLLEXPORT bool ts_hypertable_create_compressed(Oid table_relid, int32 hypertable_id);
 
 extern TSDLLEXPORT Hypertable *ts_hypertable_get_by_id(int32 hypertable_id);
@@ -135,8 +123,6 @@ extern TSDLLEXPORT ObjectAddress ts_hypertable_create_trigger(const Hypertable *
 extern TSDLLEXPORT void ts_hypertable_drop_trigger(Oid relid, const char *trigger_name);
 extern TSDLLEXPORT void ts_hypertable_drop(Hypertable *hypertable, DropBehavior behavior);
 
-extern TSDLLEXPORT void ts_hypertable_check_partitioning(const Hypertable *ht,
-														 int32 id_of_updated_dimension);
 extern int ts_hypertable_reset_associated_schema_name(const char *associated_schema);
 extern TSDLLEXPORT Oid ts_hypertable_id_to_relid(int32 hypertable_id, bool return_invalid);
 extern TSDLLEXPORT int32 ts_hypertable_relid_to_id(Oid relid);
@@ -159,18 +145,6 @@ extern TSDLLEXPORT bool ts_hypertable_set_compressed(Hypertable *ht,
 extern TSDLLEXPORT bool ts_hypertable_unset_compressed(Hypertable *ht);
 extern TSDLLEXPORT bool ts_hypertable_set_compress_interval(Hypertable *ht,
 															int64 compress_interval);
-extern TSDLLEXPORT void ts_hypertable_clone_constraints_to_compressed(const Hypertable *ht,
-																	  List *constraint_list);
-extern TSDLLEXPORT List *ts_hypertable_assign_chunk_data_nodes(const Hypertable *ht,
-															   const Hypercube *cube);
-extern TSDLLEXPORT List *ts_hypertable_get_data_node_name_list(const Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_data_node_serverids_list(const Hypertable *ht);
-extern TSDLLEXPORT List *ts_hypertable_get_available_data_nodes(const Hypertable *ht,
-																bool error_if_missing);
-extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_names(const Hypertable *ht,
-																	 bool error_if_missing);
-extern TSDLLEXPORT List *ts_hypertable_get_available_data_node_server_oids(const Hypertable *ht);
-extern TSDLLEXPORT HypertableType ts_hypertable_get_type(const Hypertable *ht);
 extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *ht,
 															  int dimension_index, bool *isnull);
 
@@ -178,10 +152,6 @@ extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
 extern TSDLLEXPORT void ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema,
 												   const char *name);
-extern TSDLLEXPORT bool ts_hypertable_update_dimension_partitions(const Hypertable *ht);
-extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_name,
-														int32 replication_factor,
-														int num_data_nodes);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \
@@ -193,9 +163,3 @@ extern TSDLLEXPORT int16 ts_validate_replication_factor(const char *hypertable_n
 
 #define hypertable_adaptive_chunking_enabled(ht)                                                   \
 	(OidIsValid((ht)->chunk_sizing_func) && (ht)->fd.chunk_target_size > 0)
-
-#define hypertable_is_distributed(ht) ((ht)->fd.replication_factor > 0)
-#define hypertable_chunk_relkind(ht)                                                               \
-	(hypertable_is_distributed(ht) ? RELKIND_FOREIGN_TABLE : RELKIND_RELATION)
-#define hypertable_is_distributed_member(ht)                                                       \
-	((ht)->fd.replication_factor == HYPERTABLE_DISTRIBUTED_MEMBER)

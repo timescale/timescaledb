@@ -33,8 +33,6 @@
 #include "continuous_aggs/repair.h"
 #include "continuous_aggs/utils.h"
 #include "cross_module_fn.h"
-#include "data_node.h"
-#include "dist_util.h"
 #include "export.h"
 #include "hypertable.h"
 #include "license_guc.h"
@@ -45,15 +43,7 @@
 #include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"
-#include "process_utility.h"
-#include "remote/connection_cache.h"
-#include "remote/connection.h"
-#include "remote/dist_commands.h"
-#include "remote/dist_txn.h"
-#include "remote/txn_id.h"
-#include "remote/txn_resolve.h"
 #include "reorder.h"
-#include "dist_backup.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -63,13 +53,9 @@ PG_MODULE_MAGIC;
 #error "cannot compile the TSL for ApacheOnly mode"
 #endif
 
+#if PG16_LT
 extern void PGDLLEXPORT _PG_init(void);
-
-static void
-cache_syscache_invalidate(Datum arg, int cacheid, uint32 hashvalue)
-{
-	remote_connection_cache_invalidate_callback(arg, cacheid, hashvalue);
-}
+#endif
 
 /*
  * Cross module function initialization.
@@ -146,13 +132,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
-	.invalidation_cagg_log_add_entry = tsl_invalidation_cagg_log_add_entry,
-	.invalidation_hyper_log_add_entry = tsl_invalidation_hyper_log_add_entry,
-	.remote_invalidation_log_delete = remote_invalidation_log_delete,
-	.drop_dist_ht_invalidation_trigger = tsl_drop_dist_ht_invalidation_trigger,
-	.remote_drop_dist_ht_invalidation_trigger = remote_drop_dist_ht_invalidation_trigger,
-	.invalidation_process_hypertable_log = tsl_invalidation_process_hypertable_log,
-	.invalidation_process_cagg_log = tsl_invalidation_process_cagg_log,
+	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */
@@ -188,20 +168,16 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
-	.chunk_get_relstats = chunk_api_get_chunk_relstats,
-	.chunk_get_colstats = chunk_api_get_chunk_colstats,
 	.chunk_create_empty_table = chunk_create_empty_table,
-	.cache_syscache_invalidate = cache_syscache_invalidate,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
 		tsl_get_compressed_chunk_index_for_recompression,
+	.preprocess_query_tsl = tsl_preprocess_query,
 };
 
 static void
 ts_module_cleanup_on_pg_exit(int code, Datum arg)
 {
-	_remote_dist_txn_fini();
-	_remote_connection_cache_fini();
 	_continuous_aggs_cache_inval_fini();
 }
 
@@ -218,8 +194,6 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
 	_skip_scan_init();
-	_remote_connection_cache_init();
-	_remote_dist_txn_init();
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);
@@ -242,6 +216,4 @@ _PG_init(void)
 	 * relative to the other libraries.
 	 */
 	ts_license_enable_module_loading();
-
-	_remote_connection_init();
 }

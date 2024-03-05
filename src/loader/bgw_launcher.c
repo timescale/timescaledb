@@ -741,7 +741,7 @@ ts_bgw_cluster_launcher_main(PG_FUNCTION_ARGS)
 	pgstat_report_appname(MyBgworkerEntry->bgw_name);
 	ereport(LOG, (errmsg("TimescaleDB background worker launcher connected to shared catalogs")));
 
-	htab_storage = MemoryContextAllocZero(TopMemoryContext, sizeof(*htab_storage));
+	htab_storage = MemoryContextAllocZero(TopMemoryContext, sizeof(void *));
 
 	/*
 	 * We must setup the cleanup function _before_ initializing any state it

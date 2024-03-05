@@ -28,7 +28,7 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -73,7 +73,7 @@ jobs:
       TABLESPACE2: D:\tablespace2\
     steps:
     - name: Setup WSL
-      uses: Vampire/setup-wsl@v2
+      uses: Vampire/setup-wsl@v3
       with:
         additional-packages:
           cmake
@@ -95,7 +95,7 @@ jobs:
         git config --global core.eol lf
 
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -115,7 +115,7 @@ jobs:
       # --extract-only and launch our own test instance, which is
       # probably better anyway since it gives us more control.
     - name: Cache PostgreSQL installation
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       id: cache-postgresql
       with:
         path: ~\PostgreSQL\${{ matrix.pg }}
@@ -149,8 +149,8 @@ jobs:
         copy build_win/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postgres.log
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
         echo "PG version:"
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'
@@ -191,7 +191,7 @@ jobs:
         ~/PostgreSQL/${{ matrix.pg }}/bin/initdb -U postgres -A trust --locale=en_US --encoding=UTF8
         copy build_win/tsl/test/postgresql.conf ${{ env.PGDATA }}
         copy build_win/tsl/test/pg_hba.conf ${{ env.PGDATA }}
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postgres.log"
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log="postmaster.log"
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
 
@@ -220,24 +220,24 @@ jobs:
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
-        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: Regression ${{ matrix.pg }} diff ${{ matrix.os }} ${{ matrix.build_type }} Build
         path: |
           regression.log
           installcheck.log
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: postgres.log
+        name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
+        path: postmaster.log
 
     - name: Upload test results to the database
       if: always()

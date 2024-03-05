@@ -65,7 +65,6 @@ typedef struct CollectQualCtx
 	PlannerInfo *root;
 	RelOptInfo *rel;
 	List *restrictions;
-	FuncExpr *chunk_exclusion_func;
 	List *join_conditions;
 	List *propagate_conditions;
 	List *all_quals;
@@ -73,31 +72,6 @@ typedef struct CollectQualCtx
 } CollectQualCtx;
 
 static void propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx);
-
-static Oid chunk_exclusion_func = InvalidOid;
-
-static Oid ts_chunks_arg_types[] = { RECORDOID, INT4ARRAYOID };
-
-static void
-init_chunk_exclusion_func()
-{
-	if (!OidIsValid(chunk_exclusion_func))
-	{
-		List *l = list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CHUNK_EXCL_FUNC_NAME));
-		chunk_exclusion_func =
-			LookupFuncName(l, lengthof(ts_chunks_arg_types), ts_chunks_arg_types, false);
-	}
-	Assert(OidIsValid(chunk_exclusion_func));
-}
-
-static bool
-is_chunk_exclusion_func(Expr *node)
-{
-	if (IsA(node, FuncExpr) && castNode(FuncExpr, node)->funcid == chunk_exclusion_func)
-		return true;
-
-	return false;
-}
 
 static bool
 is_time_bucket_function(Expr *node)
@@ -353,6 +327,52 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
 									constraint->inputcollid);
 }
 
+static bool
+extract_opexpr_parts(Expr *node, OpExpr **op, FuncExpr **time_bucket, Expr **value, Oid *opno)
+{
+	if (!IsA(node, OpExpr))
+	{
+		return false;
+	}
+
+	*op = castNode(OpExpr, node);
+	if (list_length((*op)->args) != 2)
+	{
+		return false;
+	}
+
+	Expr *left = linitial((*op)->args);
+	Expr *right = lsecond((*op)->args);
+
+	if (IsA(left, FuncExpr) && IsA(right, Const))
+	{
+		*time_bucket = castNode(FuncExpr, left);
+		*value = right;
+		*opno = (*op)->opno;
+	}
+	else if (IsA(right, FuncExpr))
+	{
+		*time_bucket = castNode(FuncExpr, right);
+		*value = left;
+		*opno = get_commutator((*op)->opno);
+
+		if (!OidIsValid(opno))
+			return false;
+	}
+	else
+	{
+		return false;
+	}
+
+	if (!is_time_bucket_function((Expr *) *time_bucket) || !IsA(*value, Const) ||
+		castNode(Const, *value)->constisnull)
+	{
+		return false;
+	}
+
+	return true;
+}
+
 /*
  * Transform time_bucket calls of the following form in WHERE clause:
  *
@@ -385,56 +405,64 @@ constify_timestamptz_op_interval(PlannerInfo *root, OpExpr *constraint)
  * Expressions with value on the left side will be switched around
  * when building the expression for RestrictInfo.
  *
- * Caller must ensure that only 2 argument time_bucket versions
- * are used.
+ * If the transformation cannot be applied, returns NULL.
  */
-static OpExpr *
-transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
+Expr *
+ts_transform_time_bucket_comparison(Expr *node)
 {
-	Expr *left = linitial(op->args);
-	Expr *right = lsecond(op->args);
+	FuncExpr *time_bucket;
+	Expr *value;
+	OpExpr *op;
+	Oid opno;
 
-	FuncExpr *time_bucket = castNode(FuncExpr, (IsA(left, FuncExpr) ? left : right));
-	Expr *value = IsA(right, Const) ? right : left;
+	if (!extract_opexpr_parts(node, &op, &time_bucket, &value, &opno))
+	{
+		return NULL;
+	}
 
 	Const *width = linitial(time_bucket->args);
-	Oid opno = op->opno;
+
+	if (!IsA(width, Const) || width->constisnull)
+		return NULL;
+
+	/* 3 or more args should have Const 3rd arg */
+	if (list_length(time_bucket->args) > 2 && !IsA(lthird(time_bucket->args), Const))
+		return NULL;
+
+	/* 5 args variants should have Const 4th and 5th arg */
+	if (list_length(time_bucket->args) == 5 &&
+		(!IsA(lfourth(time_bucket->args), Const) || !IsA(lfifth(time_bucket->args), Const)))
+		return NULL;
+
+	Assert(list_length(time_bucket->args) == 2 || list_length(time_bucket->args) == 3 ||
+		   list_length(time_bucket->args) == 5);
+
 	TypeCacheEntry *tce;
 	int strategy;
-
-	if (list_length(time_bucket->args) != 2 || !IsA(value, Const) || !IsA(width, Const))
-		return op;
-
-	/*
-	 * if time_bucket call is on wrong side we switch operator
-	 */
-	if (IsA(right, FuncExpr))
-	{
-		opno = get_commutator(op->opno);
-
-		if (!OidIsValid(opno))
-			return op;
-	}
 
 	tce = lookup_type_cache(exprType((Node *) time_bucket), TYPECACHE_BTREE_OPFAMILY);
 	strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
 
 	if (strategy == BTGreaterStrategyNumber || strategy == BTGreaterEqualStrategyNumber)
 	{
-		/* column > value */
+		/* Since time_bucket will always shift the input to the left this
+		 * transformation is always safe even in the presence of offset variants.
+		 *
+		 * column > value
+		 */
 		op = copyObject(op);
 		op->args = list_make2(lsecond(time_bucket->args), value);
 
 		/*
 		 * if we switched operator we need to adjust OpExpr as well
 		 */
-		if (IsA(right, FuncExpr))
+		if (op->opno != opno)
 		{
 			op->opno = opno;
 			op->opfuncid = InvalidOid;
 		}
 
-		return op;
+		return &op->xpr;
 	}
 	else if (strategy == BTLessStrategyNumber || strategy == BTLessEqualStrategyNumber)
 	{
@@ -443,26 +471,28 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		Datum datum;
 		int64 integralValue, integralWidth;
 
-		if (castNode(Const, value)->constisnull || width->constisnull)
-			return op;
-
 		switch (tce->type_id)
 		{
 			case INT2OID:
 			case INT4OID:
 			case INT8OID:
+				/* We can support the offset variants of time_bucket as the
+				 * amount of shifting they do is never bigger than the bucketing
+				 * width.
+				 */
 				integralValue = const_datum_get_int(castNode(Const, value));
 				integralWidth = const_datum_get_int(width);
 
 				if (integralValue >= ts_time_get_max(tce->type_id) - integralWidth)
-					return op;
+					return NULL;
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
-				 * and we have a less than constraint we can skip adding the
-				 * full bucket.
+				 * and we have a less than constraint and no offset  we can skip
+				 * adding the full bucket.
 				 */
-				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+				if (strategy == BTLessStrategyNumber && list_length(time_bucket->args) == 2 &&
+					integralValue % integralWidth == 0)
 					datum = int_get_datum(integralValue, tce->type_id);
 				else
 					datum = int_get_datum(integralValue + integralWidth, tce->type_id);
@@ -478,6 +508,10 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 
 			case DATEOID:
 			{
+				/* We can support the offset/origin variants of time_bucket
+				 * as the amount of shifting they do is never bigger than the
+				 * bucketing width.
+				 */
 				Assert(width->consttype == INTERVALOID);
 				Interval *interval = DatumGetIntervalP(width->constvalue);
 
@@ -485,25 +519,26 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
-					return op;
+					return NULL;
 
 				/* bail out if interval->time can't be exactly represented as a double */
-				if (interval->time >= 0x3FFFFFFFFFFFFFll)
-					return op;
+				if (interval->time >= 0x3FFFFFFFFFFFFFLL)
+					return NULL;
 
 				integralValue = const_datum_get_int(castNode(Const, value));
 				integralWidth =
 					interval->day + ceil((double) interval->time / (double) USECS_PER_DAY);
 
 				if (integralValue >= (TS_DATE_END - integralWidth))
-					return op;
+					return NULL;
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
-				 * and we have a less than constraint we can skip adding the
-				 * full bucket.
+				 * and we have a less than constraint and no offset or origin we can
+				 * skip adding the full bucket.
 				 */
-				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+				if (strategy == BTLessStrategyNumber && list_length(time_bucket->args) == 2 &&
+					integralValue % integralWidth == 0)
 					datum = DateADTGetDatum(integralValue);
 				else
 					datum = DateADTGetDatum(integralValue + integralWidth);
@@ -521,6 +556,10 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			case TIMESTAMPOID:
 			case TIMESTAMPTZOID:
 			{
+				/* We can support the offset/origin/timezone variants of time_bucket
+				 * as the amount of shifting they do is never bigger than the
+				 * bucketing width.
+				 */
 				Assert(width->consttype == INTERVALOID);
 				Interval *interval = DatumGetIntervalP(width->constvalue);
 
@@ -528,7 +567,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				 * Optimization can't be applied when interval has month component.
 				 */
 				if (interval->month != 0)
-					return op;
+					return NULL;
 
 				/*
 				 * If width interval has day component we merge it with time component
@@ -541,7 +580,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 					 * if our transformed restriction would overflow we skip adding it
 					 */
 					if (interval->time >= TS_TIMESTAMP_END - interval->day * USECS_PER_DAY)
-						return op;
+						return NULL;
 
 					integralWidth += interval->day * USECS_PER_DAY;
 				}
@@ -549,14 +588,15 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				integralValue = const_datum_get_int(castNode(Const, value));
 
 				if (integralValue >= (TS_TIMESTAMP_END - integralWidth))
-					return op;
+					return NULL;
 
 				/*
 				 * When the time_bucket constraint matches the start of the bucket
-				 * and we have a less than constraint we can skip adding the
-				 * full bucket.
+				 * and we have a less than constraint and no other modifying arguments
+				 * we can skip adding the full bucket.
 				 */
-				if (strategy == BTLessStrategyNumber && integralValue % integralWidth == 0)
+				if (strategy == BTLessStrategyNumber && list_length(time_bucket->args) == 2 &&
+					integralValue % integralWidth == 0)
 					datum = int_get_datum(integralValue, tce->type_id);
 				else
 					datum = int_get_datum(integralValue + integralWidth, tce->type_id);
@@ -573,8 +613,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 			}
 
 			default:
-				return op;
-				break;
+				return NULL;
 		}
 
 		/*
@@ -587,7 +626,7 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 				ts_get_operator(get_opname(opno), PG_CATALOG_NAMESPACE, tce->type_id, tce->type_id);
 
 			if (!OidIsValid(opno))
-				return op;
+				return NULL;
 		}
 
 		op = copyObject(op);
@@ -604,21 +643,15 @@ transform_time_bucket_comparison(PlannerInfo *root, OpExpr *op)
 		op->args = list_make2(lsecond(time_bucket->args), subst);
 	}
 
-	return op;
+	return &op->xpr;
 }
 
-/* Since baserestrictinfo is not yet set by the planner, we have to derive
+/*
+ * Since baserestrictinfo is not yet set by the planner, we have to derive
  * it ourselves. It's safe for us to miss some restrict info clauses (this
  * will just result in more chunks being included) so this does not need
  * to be as comprehensive as the PG native derivation. This is inspired
  * by the derivation in `deconstruct_recurse` in PG
- *
- * When we detect explicit chunk exclusion with the chunks_in function
- * we stop further processing and do an early exit.
- *
- * This function removes chunks_in from the list of quals, because chunks_in is
- * just used as marker function to trigger explicit chunk exclusion and the function
- * will throw an error when executed.
  */
 static Node *
 process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
@@ -638,53 +671,40 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
 			continue;
 
-		if (is_chunk_exclusion_func(qual))
-		{
-			FuncExpr *func_expr = (FuncExpr *) qual;
-
-			/* validation */
-			Assert(func_expr->args->length == 2);
-			if (!IsA(linitial(func_expr->args), Var))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("first parameter for chunks_in function needs to be record")));
-
-			ctx->chunk_exclusion_func = func_expr;
-			ctx->restrictions = NIL;
-			return quals;
-		}
-
 		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
 		{
 			OpExpr *op = castNode(OpExpr, qual);
 			Expr *left = linitial(op->args);
 			Expr *right = lsecond(op->args);
 
-			/*
-			 * check for constraints with TIMESTAMPTZ OP INTERVAL calculations
-			 */
 			if ((IsA(left, Var) && is_timestamptz_op_interval(right)) ||
 				(IsA(right, Var) && is_timestamptz_op_interval(left)))
-				qual = (Expr *) constify_timestamptz_op_interval(ctx->root, op);
-
-			/*
-			 * check for time_bucket comparisons
-			 * time_bucket(Const, time_colum) > Const
-			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
 			{
-				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
 				/*
-				 * if we could transform the expression we add it to the list of
-				 * quals so it can be used as an index condition
+				 * check for constraints with TIMESTAMPTZ OP INTERVAL calculations
 				 */
-				if (qual != (Expr *) op)
-					additional_quals = lappend(additional_quals, qual);
+				qual = (Expr *) constify_timestamptz_op_interval(ctx->root, op);
+			}
+			else
+			{
+				/*
+				 * check for time_bucket comparisons
+				 * time_bucket(Const, time_colum) > Const
+				 */
+				Expr *transformed = ts_transform_time_bucket_comparison(qual);
+				if (transformed != NULL)
+				{
+					/*
+					 * if we could transform the expression we add it to the list of
+					 * quals so it can be used as an index condition
+					 */
+					additional_quals = lappend(additional_quals, transformed);
+
+					/*
+					 * Also use the transformed qual for chunk exclusion.
+					 */
+					qual = transformed;
+				}
 			}
 		}
 
@@ -696,35 +716,6 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 				lappend(ctx->restrictions, make_simple_restrictinfo_compat(ctx->root, qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
-}
-
-static List *
-remove_exclusion_fns(List *restrictinfo)
-{
-	ListCell *lc = list_head(restrictinfo);
-
-	while (lc != NULL)
-	{
-		RestrictInfo *rinfo = lfirst(lc);
-		Expr *qual = rinfo->clause;
-
-		if (is_chunk_exclusion_func(qual))
-		{
-			FuncExpr *func_expr = (FuncExpr *) qual;
-
-			/* validation */
-			Assert(func_expr->args->length == 2);
-			if (!IsA(linitial(func_expr->args), Var))
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("first parameter for chunks_in function needs to be record")));
-
-			restrictinfo = list_delete_cell(restrictinfo, lc);
-			return restrictinfo;
-		}
-		lc = lnext(restrictinfo, lc);
-	}
-	return restrictinfo;
 }
 
 static Node *
@@ -743,31 +734,23 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 		if (num_rels != 1 || !bms_is_member(ctx->rel->relid, relids))
 			continue;
 
-		if (IsA(qual, OpExpr) && list_length(castNode(OpExpr, qual)->args) == 2)
+		/*
+		 * check for time_bucket comparisons
+		 * time_bucket(Const, time_colum) > Const
+		 */
+		Expr *transformed = ts_transform_time_bucket_comparison(qual);
+		if (transformed != NULL)
 		{
-			OpExpr *op = castNode(OpExpr, qual);
-			Expr *left = linitial(op->args);
-			Expr *right = lsecond(op->args);
+			/*
+			 * if we could transform the expression we add it to the list of
+			 * quals so it can be used as an index condition
+			 */
+			additional_quals = lappend(additional_quals, transformed);
 
 			/*
-			 * check for time_bucket comparisons
-			 * time_bucket(Const, time_colum) > Const
+			 * Also use the transformed qual for chunk exclusion.
 			 */
-			if ((IsA(left, FuncExpr) && IsA(right, Const) &&
-				 list_length(castNode(FuncExpr, left)->args) == 2 &&
-				 is_time_bucket_function(left)) ||
-				(IsA(left, Const) && IsA(right, FuncExpr) &&
-				 list_length(castNode(FuncExpr, right)->args) == 2 &&
-				 is_time_bucket_function(right)))
-			{
-				qual = (Expr *) transform_time_bucket_comparison(ctx->root, op);
-				/*
-				 * if we could transform the expression we add it to the list of
-				 * quals so it can be used as an index condition
-				 */
-				if (qual != (Expr *) op)
-					additional_quals = lappend(additional_quals, qual);
-			}
+			qual = transformed;
 		}
 
 		ctx->restrictions =
@@ -869,47 +852,25 @@ collect_quals_walker(Node *node, CollectQualCtx *ctx)
 		}
 	}
 
-	/* skip processing if we found a chunks_in call for current relation */
-	if (ctx->chunk_exclusion_func != NULL)
-		return true;
-
 	return expression_tree_walker(node, collect_quals_walker, ctx);
 }
 
 static int
 chunk_cmp_chunk_reloid(const void *c1, const void *c2)
 {
-	return (*(Chunk **) c1)->table_id - (*(Chunk **) c2)->table_id;
+	Oid lhs = (*(Chunk **) c1)->table_id;
+	Oid rhs = (*(Chunk **) c2)->table_id;
+
+	if (lhs < rhs)
+		return -1;
+	if (lhs > rhs)
+		return 1;
+	return 0;
 }
 
 static Chunk **
 find_children_chunks(HypertableRestrictInfo *hri, Hypertable *ht, unsigned int *num_chunks)
 {
-	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
-	{
-		/*
-		 * Chunk lookup doesn't work for internal compression tables, have to
-		 * fall back to the regular postgres method.
-		 */
-		List *chunk_oids = find_inheritance_children(ht->main_table_relid, AccessShareLock);
-		if (chunk_oids == NIL)
-		{
-			*num_chunks = 0;
-			return 0;
-		}
-
-		*num_chunks = list_length(chunk_oids);
-		Chunk **chunks = (Chunk **) palloc(sizeof(Chunk *) * *num_chunks);
-
-		for (unsigned int i = 0; i < *num_chunks; i++)
-		{
-			chunks[i] = ts_chunk_get_by_relid(list_nth_oid(chunk_oids, i),
-											  /* fail_if_not_found = */ true);
-		}
-
-		return chunks;
-	}
-
 	/*
 	 * Unlike find_all_inheritors we do not include parent because if there
 	 * are restrictions the parent table cannot fulfill them and since we do
@@ -947,155 +908,8 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
 	return ts_ordered_append_should_optimize(root, rel, ht, join_conditions, order_attno, reverse);
 }
 
-/*
- *  get chunk oids specified by explicit chunk exclusion function
- *
- *  Similar to the regular get_chunk_oids, we also populate the fdw_private
- *  structure appropriately if ordering info is present.
- */
-static Chunk **
-get_explicit_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *ht,
-					unsigned int *num_chunks)
-{
-	Const *chunks_arg;
-	ArrayIterator chunk_id_iterator;
-	ArrayType *chunk_id_arr;
-	unsigned int chunk_id_arr_size;
-	Datum elem = (Datum) NULL;
-	bool isnull;
-	Expr *expr;
-	bool reverse;
-	int order_attno;
-	Chunk **unlocked_chunks = NULL;
-	Chunk **chunks = NULL;
-	int unlocked_chunk_count = 0;
-	Oid prev_chunk_oid = InvalidOid;
-	bool chunk_sort_needed = false;
-	int i;
-
-	*num_chunks = 0;
-
-	Assert(ctx->chunk_exclusion_func->args->length == 2);
-	expr = lsecond(ctx->chunk_exclusion_func->args);
-	if (!IsA(expr, Const))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("second argument to chunk_in should contain only integer consts")));
-
-	chunks_arg = (Const *) expr;
-
-	/* function marked as STRICT so argument can't be NULL */
-	Assert(!chunks_arg->constisnull);
-
-	chunk_id_arr = DatumGetArrayTypeP(chunks_arg->constvalue);
-	if (ARR_NDIM(chunk_id_arr) != 1)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid number of array dimensions for chunks_in")));
-
-	chunk_id_arr_size = ts_array_length(chunk_id_arr);
-
-	if (chunk_id_arr_size == 0)
-		return NULL;
-
-	/* allocate an array of "Chunk *" and set it up below */
-	unlocked_chunks = (Chunk **) palloc(sizeof(Chunk *) * chunk_id_arr_size);
-
-	chunk_id_iterator = array_create_iterator(chunk_id_arr, 0, NULL);
-	while (array_iterate(chunk_id_iterator, &elem, &isnull))
-	{
-		if (!isnull)
-		{
-			int32 chunk_id = DatumGetInt32(elem);
-			Chunk *chunk = ts_chunk_get_by_id(chunk_id, false);
-
-			if (chunk == NULL)
-				ereport(ERROR, (errmsg("chunk id %d not found", chunk_id)));
-
-			if (chunk->fd.hypertable_id != ht->fd.id)
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("chunk id %d does not belong to hypertable \"%s\"",
-								chunk_id,
-								NameStr(ht->fd.table_name))));
-
-			if (OidIsValid(prev_chunk_oid) && prev_chunk_oid > chunk->table_id)
-				chunk_sort_needed = true;
-
-			prev_chunk_oid = chunk->table_id;
-			unlocked_chunks[unlocked_chunk_count++] = chunk;
-		}
-		else
-			elog(ERROR, "chunk id can't be NULL");
-	}
-	array_free_iterator(chunk_id_iterator);
-
-	/*
-	 * Sort chunks if needed for locking in Oid order in order to avoid
-	 * deadlocks. In most cases, the access node sends the chunk ID array in
-	 * Oid order, so no sorting is needed. (Note that chunk ID and Oid are
-	 * different, but often result in the same order.)
-	 */
-	if (unlocked_chunk_count > 1 && chunk_sort_needed)
-		qsort(unlocked_chunks, unlocked_chunk_count, sizeof(Chunk *), ts_chunk_oid_cmp);
-
-	chunks = palloc(sizeof(Chunk *) * unlocked_chunk_count);
-
-	for (i = 0; i < unlocked_chunk_count; i++)
-	{
-		if (ts_chunk_lock_if_exists(unlocked_chunks[i]->table_id, AccessShareLock))
-			chunks[(*num_chunks)++] = unlocked_chunks[i];
-	}
-
-	pfree(unlocked_chunks);
-
-	/*
-	 * Chunks could have been concurrently removed or locking was not
-	 * successful. If no chunks could be locked, then return.
-	 */
-	if (*num_chunks == 0)
-	{
-		pfree(chunks);
-		return NULL;
-	}
-
-	/*
-	 * If fdw_private has not been setup by caller there is no point checking
-	 * for ordered append as we can't pass the required metadata in fdw_private
-	 * to signal that this is safe to transform in ordered append plan in
-	 * set_rel_pathlist.
-	 */
-	if (rel->fdw_private != NULL &&
-		should_order_append(root, rel, ht, ctx->join_conditions, &order_attno, &reverse))
-	{
-		TimescaleDBPrivate *priv = ts_get_private_reloptinfo(rel);
-		List **nested_oids = NULL;
-
-		priv->appends_ordered = true;
-		priv->order_attno = order_attno;
-
-		/*
-		 * for space partitioning we need extra information about the
-		 * time slices of the chunks
-		 */
-		if (ht->space->num_dimensions > 1)
-			nested_oids = &priv->nested_oids;
-
-		/* we don't need "hri" here since we already have the chunks */
-		return ts_hypertable_restrict_info_get_chunks_ordered(NULL,
-															  ht,
-															  chunks,
-															  reverse,
-															  nested_oids,
-															  num_chunks);
-	}
-
-	return chunks;
-}
-
 /**
- * Get chunks from either restrict info or explicit chunk exclusion. Explicit chunk exclusion
- * takes precedence.
+ * Get chunks from restrict info.
  *
  * If appends are returned in order appends_ordered on rel->fdw_private is set to true.
  * To make verifying pathkeys easier in set_rel_pathlist the attno of the column ordered by
@@ -1109,11 +923,6 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 {
 	bool reverse;
 	int order_attno;
-
-	if (ctx->chunk_exclusion_func != NULL)
-	{
-		return get_explicit_chunks(ctx, root, rel, ht, num_chunks);
-	}
 
 	HypertableRestrictInfo *hri = ts_hypertable_restrict_info_create(rel, ht);
 
@@ -1157,106 +966,6 @@ get_chunks(CollectQualCtx *ctx, PlannerInfo *root, RelOptInfo *rel, Hypertable *
 	return find_children_chunks(hri, ht, num_chunks);
 }
 
-/*
- * Create partition expressions for a hypertable.
- *
- * Build an array of partition expressions where each element represents valid
- * expressions on a particular partitioning key.
- *
- * The partition expressions are used by, e.g., group_by_has_partkey() to check
- * whether a GROUP BY clause covers all partitioning dimensions.
- *
- * For dimensions with a partitioning function, we can support either
- * expressions on the plain key (column) or the partitioning function applied
- * to the key. For instance, the queries
- *
- * SELECT time, device, avg(temp)
- * FROM hypertable
- * GROUP BY 1, 2;
- *
- * and
- *
- * SELECT time_func(time), device, avg(temp)
- * FROM hypertable
- * GROUP BY 1, 2;
- *
- * are both amenable to aggregate push down if "time" is supported by the
- * partitioning function "time_func" and "device" is also a partitioning
- * dimension.
- */
-static List **
-get_hypertable_partexprs(Hypertable *ht, Query *parse, Index varno)
-{
-	int i;
-	List **partexprs;
-
-	Assert(NULL != ht->space);
-
-	partexprs = palloc0(sizeof(List *) * ht->space->num_dimensions);
-
-	for (i = 0; i < ht->space->num_dimensions; i++)
-	{
-		Dimension *dim = &ht->space->dimensions[i];
-
-		partexprs[i] = ts_dimension_get_partexprs(dim, varno);
-	}
-
-	return partexprs;
-}
-
-#define PARTITION_STRATEGY_MULTIDIM 'm'
-
-/*
- * Partition info for hypertables.
- *
- * Build a "fake" partition scheme for a hypertable that makes the planner
- * believe this is a PostgreSQL partitioned table for planning purposes. In
- * particular, this will make the planner consider partitionwise aggregations
- * when applicable.
- *
- * Partitionwise aggregation can either be FULL or PARTIAL. The former means
- * that the aggregation can be performed independently on each partition
- * (chunk) without a finalize step which is needed in PARTIAL. FULL requires
- * that the GROUP BY clause contains all hypertable partitioning
- * dimensions. This requirement is enforced by creating a partitioning scheme
- * that covers multiple attributes, i.e., one per dimension. This works well
- * since the "shallow" (one-level hierarchy) of a multi-dimensional hypertable
- * is similar to a one-level partitioned PostgreSQL table where the
- * partitioning key covers multiple attributes.
- *
- * Note that we use a partition scheme with a strategy that does not exist in
- * PostgreSQL. This makes PostgreSQL raise errors when this partition scheme is
- * used in places that require a valid partition scheme with a supported
- * strategy.
- */
-static void
-build_hypertable_partition_info(Hypertable *ht, PlannerInfo *root, RelOptInfo *hyper_rel,
-								int nparts)
-{
-	PartitionScheme part_scheme = palloc0(sizeof(PartitionSchemeData));
-	PartitionBoundInfo boundinfo = palloc0(sizeof(PartitionBoundInfoData));
-
-	/* We only set the info needed for planning */
-	part_scheme->partnatts = ht->space->num_dimensions;
-	part_scheme->strategy = PARTITION_STRATEGY_MULTIDIM;
-	hyper_rel->nparts = nparts;
-	part_scheme->partopfamily = palloc0(part_scheme->partnatts * sizeof(Oid));
-	part_scheme->partopcintype = palloc0(part_scheme->partnatts * sizeof(Oid));
-	part_scheme->partcollation = palloc0(part_scheme->partnatts * sizeof(Oid));
-	hyper_rel->part_scheme = part_scheme;
-	hyper_rel->partexprs = get_hypertable_partexprs(ht, root->parse, hyper_rel->relid);
-	hyper_rel->nullable_partexprs = (List **) palloc0(sizeof(List *) * part_scheme->partnatts);
-
-	/* PartitionBoundInfo is used for ordered append. We use a strategy that
-	 * will avoid triggering an ordered append. */
-	boundinfo->strategy = PARTITION_STRATEGY_MULTIDIM;
-	boundinfo->default_index = -1;
-	boundinfo->null_index = -1;
-
-	hyper_rel->boundinfo = boundinfo;
-	hyper_rel->part_rels = palloc0(sizeof(*hyper_rel->part_rels) * nparts);
-}
-
 static bool
 timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 {
@@ -1274,10 +983,6 @@ timebucket_annotate_walker(Node *node, CollectQualCtx *ctx)
 		j->quals = timebucket_annotate(j->quals, ctx);
 	}
 
-	/* skip processing if we found a chunks_in call for current relation */
-	if (ctx->chunk_exclusion_func != NULL)
-		return true;
-
 	return expression_tree_walker(node, timebucket_annotate_walker, ctx);
 }
 
@@ -1288,13 +993,10 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 		.root = root,
 		.rel = rel,
 		.restrictions = NIL,
-		.chunk_exclusion_func = NULL,
 		.all_quals = NIL,
 		.join_conditions = NIL,
 		.propagate_conditions = NIL,
 	};
-
-	init_chunk_exclusion_func();
 
 	/* Walk the tree and find restrictions or chunk exclusion functions */
 	timebucket_annotate_walker((Node *) root->parse->jointree, &ctx);
@@ -1308,7 +1010,6 @@ ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel)
 void
 ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel)
 {
-	TimescaleDBPrivate *priv = rel->fdw_private;
 	RangeTblEntry *rte = rt_fetch(rel->relid, root->parse->rtable);
 	Oid parent_oid = rte->relid;
 	List *inh_oids = NIL;
@@ -1322,7 +1023,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 		.root = root,
 		.rel = rel,
 		.restrictions = NIL,
-		.chunk_exclusion_func = NULL,
 		.all_quals = NIL,
 		.join_conditions = NIL,
 		.propagate_conditions = NIL,
@@ -1338,14 +1038,10 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	if (oldrc && RowMarkRequiresRowShareLock(oldrc->markType))
 		elog(ERROR, "unexpected permissions requested");
 
-	init_chunk_exclusion_func();
-
-	/* Walk the tree and find restrictions or chunk exclusion functions */
+	/* Walk the tree and find restrictions */
 	collect_quals_walker((Node *) root->parse->jointree, &ctx);
 	/* check join_level bookkeeping is balanced */
 	Assert(ctx.join_level == 0);
-
-	rel->baserestrictinfo = remove_exclusion_fns(rel->baserestrictinfo);
 
 	if (ctx.propagate_conditions != NIL)
 		propagate_join_quals(root, rel, &ctx);
@@ -1368,7 +1064,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	/* nothing to do here if we have no chunks and no data nodes */
-	if (list_length(inh_oids) + list_length(ht->data_nodes) == 0)
+	if (list_length(inh_oids) == 0)
 		return;
 
 	oldrelation = table_open(parent_oid, NoLock);
@@ -1378,15 +1074,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	 * children to them. We include potential data node rels we might need to
 	 * create in case of a distributed hypertable.
 	 */
-	expand_planner_arrays(root, list_length(inh_oids) + list_length(ht->data_nodes));
-
-	/* Adding partition info will make PostgreSQL consider the inheritance
-	 * children as part of a partitioned relation. This will enable
-	 * partitionwise aggregation for distributed queries. */
-	if (hypertable_is_distributed(ht))
-	{
-		build_hypertable_partition_info(ht, root, rel, list_length(inh_oids));
-	}
+	expand_planner_arrays(root, list_length(inh_oids));
 
 	foreach (l, inh_oids)
 	{
@@ -1428,7 +1116,7 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 #if PG16_LT
 		childrte->requiredPerms = 0;
 #else
-		/* Since PG16, the permission info is maintained separetely. Unlink
+		/* Since PG16, the permission info is maintained separately. Unlink
 		 * the old perminfo from the RTE to disable permission checking.
 		 */
 		childrte->perminfoindex = 0;
@@ -1459,44 +1147,6 @@ ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *
 	}
 
 	table_close(oldrelation, NoLock);
-
-	priv->serverids = ts_hypertable_get_data_node_serverids_list(ht);
-
-	/* For distributed hypertables, we'd like to turn per-chunk plans into
-	 * per-data_node plans. We proactively add RTEs for the per-data_node rels here
-	 * because the PostgreSQL planning code that we call to replan the
-	 * per-data_node queries assumes there are RTEs for each rel that is considered
-	 * a "partition."
-	 *
-	 * Note that each per-data_node RTE reuses the relid (OID) of the parent
-	 * hypertable relation. This makes sense since each data node's
-	 * hypertable is an identical (albeit partial) version of the access node's
-	 * hypertable. The upside of this is that the planner can plan remote
-	 * queries to take into account the indexes on the hypertable to produce
-	 * more efficient remote queries. In contrast, chunks are foreign tables so
-	 * they do not have indexes.
-	 */
-	foreach (l, priv->serverids)
-	{
-		RangeTblEntry *data_node_rte = copyObject(rte);
-
-		data_node_rte->inh = false;
-		data_node_rte->ctename = NULL;
-		data_node_rte->securityQuals = NIL;
-#if PG16_LT
-		data_node_rte->requiredPerms = 0;
-#else
-		/* Since PG16, the permission info is maintained separetely. Unlink
-		 * the old perminfo from the RTE to disable permission checking.
-		 */
-		data_node_rte->perminfoindex = 0;
-#endif
-		parse->rtable = lappend(parse->rtable, data_node_rte);
-		rti = list_length(parse->rtable);
-		root->simple_rte_array[rti] = data_node_rte;
-		root->simple_rel_array[rti] = NULL;
-		priv->server_relids = bms_add_member(priv->server_relids, rti);
-	}
 
 	ts_add_append_rel_infos(root, appinfos);
 

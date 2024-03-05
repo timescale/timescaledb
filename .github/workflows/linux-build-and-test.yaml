@@ -27,7 +27,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build matrix
       id: set-matrix
@@ -70,11 +70,16 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install gawk
+        # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
 
+    - name: Setup macOS coredump directory
+      if: runner.os == 'macOS'
+      run: sudo chmod 777 /cores
+
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -96,7 +101,7 @@ jobs:
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
       if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
@@ -125,10 +130,11 @@ jobs:
       run: |
         make -C ~/$PG_SRC_DIR install
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -138,7 +144,8 @@ jobs:
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
@@ -147,7 +154,8 @@ jobs:
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DLINTER_STRICT=ON
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C build
         make -C build install
 
@@ -157,10 +165,11 @@ jobs:
     - name: make installcheck
       id: installcheck
       run: |
+        ulimit -c unlimited
         set -o pipefail
         make -k -C build installcheck IGNORES="${{ join(matrix.ignored_tests, ' ') }}" \
             SKIPS="${{ join(matrix.skipped_tests, ' ') }}" ${{ matrix.installcheck_args }} \
-            PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
+            | tee installcheck.log
 
     - name: pginstallcheck
       if: matrix.pginstallcheck
@@ -172,13 +181,13 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./build/codecov/timescaledb-codecov.info
 
     - name: Save LCOV coverage report
       if: matrix.coverage
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ./build/codecov/codecov-report
@@ -188,21 +197,23 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name postmaster.log -exec cat {} + > postgres.log
+
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
           if coredumpctl -q list >/dev/null; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
           # print OOM killer information
           sudo journalctl --system -q --facility=kern --grep "Killed process" || true
+        elif [[ "${{ runner.os }}" == "macOS" ]] ; then
+           if [ $(find /cores -type f | wc -l) -gt 0 ]; then echo "coredumps=true" >>$GITHUB_OUTPUT; fi
         fi
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
-        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
@@ -211,13 +222,13 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.*
 
-    - name: Stack trace
-      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+    - name: Stack trace Linux
+      if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'Linux'
       run: |
         sudo coredumpctl debug --debugger=gdb --debugger-arguments='' <<<"
           set verbose on
@@ -239,18 +250,22 @@ jobs:
           info locals
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
+
+    - name: Stack trace macOS
+      if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
+      run: |
+        ~/$PG_SRC_DIR/src/tools/ci/cores_backtrace.sh macos /cores
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: Save TAP test logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |

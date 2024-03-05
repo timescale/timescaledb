@@ -10,26 +10,26 @@
 #include <utils/builtins.h>
 
 #include "compression_api.h"
-#include "errors.h"
-#include "hypertable.h"
-#include "hypertable_cache.h"
-#include "policy_utils.h"
-#include "utils.h"
-#include "guc.h"
-#include "jsonb_utils.h"
-#include "bgw/job.h"
-#include "bgw_policy/job.h"
+
 #include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/job_api.h"
+#include "bgw_policy/job.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw/job_stat.h"
+#include "bgw/job.h"
 #include "bgw/timer.h"
+#include "errors.h"
+#include "guc.h"
+#include "hypertable_cache.h"
+#include "hypertable.h"
+#include "jsonb_utils.h"
+#include "policy_utils.h"
+#include "utils.h"
 
 /* Default max runtime is unlimited for compress chunks */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
 
-/* Right now, there is an infinite number of retries for compress_chunks jobs */
-#define DEFAULT_MAX_RETRIES (-1)
 /* Default retry period for reorder_jobs is currently 1 hour */
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("1 hour"), InvalidOid, -1))
@@ -212,7 +212,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 															POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER,
 															partitioning_type,
 															compress_after_type,
-															compress_after_datum);
+															compress_after_datum,
+															false /* isnull */);
 		else
 		{
 			Assert(created_before != NULL);
@@ -221,7 +222,8 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 				POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE,
 				partitioning_type,
 				INTERVALOID,
-				IntervalPGetDatum(created_before));
+				IntervalPGetDatum(created_before),
+				false /* isnull */);
 		}
 
 		if (is_equal)
@@ -348,7 +350,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										default_schedule_interval,
 										DEFAULT_MAX_RUNTIME,
-										DEFAULT_MAX_RETRIES,
+										JOB_RETRY_UNLIMITED,
 										DEFAULT_RETRY_PERIOD,
 										&proc_schema,
 										&proc_name,

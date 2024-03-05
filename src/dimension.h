@@ -12,7 +12,6 @@
 #include <catalog/pg_type.h>
 
 #include "ts_catalog/catalog.h"
-#include "ts_catalog/dimension_partition.h"
 #include "export.h"
 #include "time_utils.h"
 
@@ -34,7 +33,6 @@ typedef struct Dimension
 	AttrNumber column_attno;
 	Oid main_table_relid;
 	PartitioningInfo *partitioning;
-	DimensionPartitionInfo *dimension_partitions;
 } Dimension;
 
 #define IS_OPEN_DIMENSION(d) ((d)->type == DIMENSION_TYPE_OPEN)
@@ -95,6 +93,11 @@ typedef struct Hypertable Hypertable;
  */
 typedef struct DimensionInfo
 {
+	/* We declare the SQL type dimension_info with INTERNALLENGTH = VARIABLE.
+	 * So, PostgreSQL expects a proper length info field (varlena header).
+	 */
+	int32 vl_len_;
+
 	Oid table_relid;
 	int32 dimension_id;
 	NameData colname;
@@ -137,7 +140,6 @@ extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
 extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
 extern int ts_dimension_set_compress_interval(Dimension *dim, int64 compress_interval);
-extern TSDLLEXPORT int ts_dimension_set_number_of_slices(Dimension *dim, int16 num_slices);
 extern Datum ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value,
 										  Oid const_datum_type, Oid *restype);
 extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
@@ -157,7 +159,6 @@ extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData
 											DimensionType dimtype, Datum *interval,
 											Oid *intervaltype, int16 *num_slices,
 											Oid *integer_now_func);
-extern TSDLLEXPORT List *ts_dimension_get_partexprs(const Dimension *dim, Index hyper_varno);
 extern TSDLLEXPORT Point *ts_point_create(int16 num_dimensions);
 extern TSDLLEXPORT bool ts_is_equality_operator(Oid opno, Oid left, Oid right);
 extern TSDLLEXPORT Datum ts_dimension_info_in(PG_FUNCTION_ARGS);

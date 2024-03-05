@@ -44,7 +44,6 @@
 #include "create.h"
 #include "api.h"
 #include "compression.h"
-#include "compat/compat.h"
 #include "scanner.h"
 #include "scan_iterator.h"
 #include "utils.h"
@@ -53,10 +52,12 @@
 typedef struct CompressChunkCxt
 {
 	Hypertable *srcht;
-	CompressionSettings *settings;
 	Chunk *srcht_chunk;		 /* chunk from srcht */
 	Hypertable *compress_ht; /*compressed table for srcht */
 } CompressChunkCxt;
+
+static Oid get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk);
+static Oid recompress_chunk_segmentwise_impl(Chunk *chunk);
 
 static void
 compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
@@ -272,7 +273,7 @@ get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 		namestrcpy(objname, NameStr(ht->fd.table_name));
 	else if (status == HypertableIsMaterialization)
 	{
-		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
 		namestrcpy(objname, NameStr(cagg->data.user_view_name));
 	}
 	else
@@ -293,8 +294,6 @@ compresschunkcxt_init(CompressChunkCxt *cxt, Cache *hcache, Oid hypertable_relid
 	Chunk *srcchunk;
 
 	ts_hypertable_permissions_check(srcht->main_table_relid, GetUserId());
-
-	cxt->settings = ts_compression_settings_get(srcht->main_table_relid);
 
 	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(srcht))
 	{
@@ -389,6 +388,13 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		compressed_chunk_interval + current_chunk_interval > max_chunk_interval)
 		return NULL;
 
+	/* Get reloid of the previous compressed chunk */
+	Oid prev_comp_reloid = ts_chunk_get_relid(previous_chunk->fd.compressed_chunk_id, false);
+	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
+	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
+	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
+		return NULL;
+
 	return previous_chunk;
 }
 
@@ -406,7 +412,7 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	const DimensionSlice *mergable_slice =
 		ts_hypercube_get_slice_by_dimension_id(mergable_chunk->cube, time_dim->fd.id);
 	if (!mergable_slice)
-		elog(ERROR, "mergable chunk has no time dimension slice");
+		elog(ERROR, "mergeable chunk has no time dimension slice");
 	const DimensionSlice *compressed_slice =
 		ts_hypercube_get_slice_by_dimension_id(cxt->srcht_chunk->cube, time_dim->fd.id);
 	if (!compressed_slice)
@@ -418,8 +424,11 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 		return true;
 	}
 
+	CompressionSettings *ht_settings =
+		ts_compression_settings_get(mergable_chunk->hypertable_relid);
+
 	char *attname = get_attname(cxt->srcht->main_table_relid, time_dim->column_attno, false);
-	int index = ts_array_position(cxt->settings->fd.orderby, attname);
+	int index = ts_array_position(ht_settings->fd.orderby, attname);
 
 	/* Primary dimension column should be first compress_orderby column. */
 	if (index != 1)
@@ -430,7 +439,7 @@ check_is_chunk_order_violated_by_merge(CompressChunkCxt *cxt, const Dimension *t
 	 * NULLS FIRST/LAST here because partitioning columns have NOT NULL
 	 * constraint.
 	 */
-	if (ts_array_get_element_bool(cxt->settings->fd.orderby_desc, index))
+	if (ts_array_get_element_bool(ht_settings->fd.orderby_desc, index))
 		return true;
 
 	return false;
@@ -451,12 +460,20 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	compresschunkcxt_init(&cxt, hcache, hypertable_relid, chunk_relid);
 
 	/* acquire locks on src and compress hypertable and src chunk */
+	ereport(LOG,
+			(errmsg("acquiring locks for compressing \"%s.%s\"",
+					get_namespace_name(get_rel_namespace(chunk_relid)),
+					get_rel_name(chunk_relid))));
 	LockRelationOid(cxt.srcht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.srcht_chunk->table_id, ExclusiveLock);
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+	ereport(LOG,
+			(errmsg("locks acquired for compressing \"%s.%s\"",
+					get_namespace_name(get_rel_namespace(chunk_relid)),
+					get_rel_name(chunk_relid))));
 
 	DEBUG_WAITPOINT("compress_chunk_impl_start");
 
@@ -478,12 +495,20 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
 		new_compressed_chunk = true;
+		ereport(LOG,
+				(errmsg("new compressed chunk \"%s.%s\" created",
+						NameStr(compress_ht_chunk->fd.schema_name),
+						NameStr(compress_ht_chunk->fd.table_name))));
 	}
 	else
 	{
 		/* use an existing compressed chunk to compress into */
 		compress_ht_chunk = ts_chunk_get_by_id(mergable_chunk->fd.compressed_chunk_id, true);
 		result_chunk_id = mergable_chunk->table_id;
+		ereport(LOG,
+				(errmsg("merge into existing compressed chunk \"%s.%s\"",
+						NameStr(compress_ht_chunk->fd.schema_name),
+						NameStr(compress_ht_chunk->fd.table_name))));
 	}
 
 	/* Since the compressed relation is created in the same transaction as the tuples that will be
@@ -501,16 +526,13 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 *
 	 * In contrast, when the compressed chunk part is created in the same transaction as the tuples
 	 * are written, the compressed chunk (i.e., the catalog entry) becomes visible to other
-	 * transactions only after the transaction that performs the compression is commited and
+	 * transactions only after the transaction that performs the compression is committed and
 	 * the uncompressed chunk is truncated.
 	 */
 	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
-	cstat = compress_chunk(cxt.srcht,
-						   cxt.srcht_chunk->table_id,
-						   compress_ht_chunk->table_id,
-						   insert_options);
+	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
 
 	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
 	 * cascading deleted data in FK-referenced tables, while blocking deleting data
@@ -557,7 +579,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 		if (chunk_unordered)
 		{
 			ts_chunk_set_unordered(mergable_chunk);
-			tsl_recompress_chunk_wrapper(mergable_chunk);
+			tsl_compress_chunk_wrapper(mergable_chunk, true, false);
 		}
 	}
 
@@ -565,31 +587,28 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	return result_chunk_id;
 }
 
-static bool
-decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_relid,
-					  bool if_compressed)
+static void
+decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 {
 	Cache *hcache;
 	Hypertable *uncompressed_hypertable =
-		ts_hypertable_cache_get_cache_and_entry(uncompressed_hypertable_relid,
+		ts_hypertable_cache_get_cache_and_entry(uncompressed_chunk->hypertable_relid,
 												CACHE_FLAG_NONE,
 												&hcache);
 	Hypertable *compressed_hypertable;
-	Chunk *uncompressed_chunk;
 	Chunk *compressed_chunk;
 
 	ts_hypertable_permissions_check(uncompressed_hypertable->main_table_relid, GetUserId());
+
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(uncompressed_hypertable))
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("decompress_chunk must not be called on the internal compressed chunk")));
 
 	compressed_hypertable =
 		ts_hypertable_get_by_id(uncompressed_hypertable->fd.compressed_hypertable_id);
 	if (compressed_hypertable == NULL)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
-
-	uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
-	if (uncompressed_chunk == NULL)
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("table \"%s\" is not a chunk", get_rel_name(uncompressed_chunk_relid))));
 
 	if (uncompressed_chunk->fd.hypertable_id != uncompressed_hypertable->fd.id)
 		elog(ERROR, "hypertable and chunk do not match");
@@ -599,13 +618,18 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 		ts_cache_release(hcache);
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_relid))));
-		return false;
+				 errmsg("chunk \"%s\" is not compressed",
+						get_rel_name(uncompressed_chunk->table_id))));
+		return;
 	}
 
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
+	ereport(LOG,
+			(errmsg("acquiring locks for decompressing \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
 	/* acquire locks on src and compress hypertable and src chunk */
 	LockRelationOid(uncompressed_hypertable->main_table_relid, AccessShareLock);
 	LockRelationOid(compressed_hypertable->main_table_relid, AccessShareLock);
@@ -629,6 +653,10 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 
 	/* acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
+	ereport(LOG,
+			(errmsg("locks acquired for decompressing \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
 
 	DEBUG_WAITPOINT("decompress_chunk_impl_start");
 
@@ -638,7 +666,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	 * already performed the decompression while we were waiting for the locks to be
 	 * acquired.
 	 */
-	Chunk *chunk_state_after_lock = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
+	Chunk *chunk_state_after_lock = ts_chunk_get_by_id(uncompressed_chunk->fd.id, true);
 
 	/* Throw error if chunk has invalid status for operation */
 	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_DECOMPRESS, true);
@@ -651,6 +679,7 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
+	ts_compression_settings_delete(compressed_chunk->table_id);
 
 	/*
 	 * Lock the compressed chunk that is going to be deleted. At this point,
@@ -664,26 +693,6 @@ decompress_chunk_impl(Oid uncompressed_hypertable_relid, Oid uncompressed_chunk_
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 	ts_cache_release(hcache);
-	return true;
-}
-
-/*
- * Set if_not_compressed to true for idempotent operation. Aborts transaction if the chunk is
- * already compressed, unless it is running in idempotent mode.
- */
-
-Oid
-tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed)
-{
-	if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-	{
-		ereport((if_not_compressed ? NOTICE : ERROR),
-				(errcode(ERRCODE_DUPLICATE_OBJECT),
-				 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
-		return chunk->table_id;
-	}
-
-	return compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 }
 
 /*
@@ -726,7 +735,7 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	LockRelationOid(cxt.compress_ht->main_table_relid, AccessShareLock);
 	LockRelationOid(cxt.srcht_chunk->table_id, ShareLock);
 
-	/* Aquire locks on catalog tables to keep till end of txn */
+	/* Acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
 	/* Create compressed chunk using existing table */
@@ -769,56 +778,95 @@ Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	bool if_not_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
+	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-	uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed);
+	uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
+}
+
+Oid
+tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress)
+{
+	Oid uncompressed_chunk_id = chunk->table_id;
+
+	if (ts_chunk_is_compressed(chunk))
+	{
+		if (recompress)
+		{
+			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
+			Oid compressed_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, true);
+			CompressionSettings *chunk_settings =
+				ts_compression_settings_get(compressed_chunk_relid);
+
+			if (!ts_compression_settings_equal(ht_settings, chunk_settings))
+			{
+				decompress_chunk_impl(chunk, false);
+				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+				return uncompressed_chunk_id;
+			}
+		}
+		if (!ts_chunk_needs_recompression(chunk))
+		{
+			ereport((if_not_compressed ? NOTICE : ERROR),
+					(errcode(ERRCODE_DUPLICATE_OBJECT),
+					 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
+			return uncompressed_chunk_id;
+		}
+
+		if (get_compressed_chunk_index_for_recompression(chunk))
+		{
+			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
+		}
+		else
+		{
+			decompress_chunk_impl(chunk, false);
+			compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+		}
+	}
+	else
+	{
+		uncompressed_chunk_id = compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+	}
+
+	return uncompressed_chunk_id;
 }
 
 Datum
 tsl_decompress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	bool if_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	bool if_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-	if (NULL == uncompressed_chunk)
-		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
 
-	if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
-							   uncompressed_chunk_id,
-							   if_compressed))
+	if (!ht->fd.compressed_hypertable_id)
+		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
+
+	if (!ts_chunk_is_compressed(uncompressed_chunk))
+	{
+		ereport((if_compressed ? NOTICE : ERROR),
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("chunk \"%s\" is not compressed", get_rel_name(uncompressed_chunk_id))));
+
 		PG_RETURN_NULL();
+	}
+
+	decompress_chunk_impl(uncompressed_chunk, if_compressed);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
-}
-
-bool
-tsl_recompress_chunk_wrapper(Chunk *uncompressed_chunk)
-{
-	Oid uncompressed_chunk_relid = uncompressed_chunk->table_id;
-
-	if (ts_chunk_is_unordered(uncompressed_chunk))
-	{
-		if (!decompress_chunk_impl(uncompressed_chunk->hypertable_relid,
-								   uncompressed_chunk_relid,
-								   false))
-			return false;
-	}
-	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_relid, true);
-	Assert(!ts_chunk_is_compressed(chunk));
-	tsl_compress_chunk_wrapper(chunk, false);
-	return true;
 }
 
 /* Sort the tuples and recompress them */
@@ -830,7 +878,8 @@ recompress_segment(Tuplesortstate *tuplesortstate, Relation compressed_chunk_rel
 	row_compressor_reset(row_compressor);
 	row_compressor_append_sorted_rows(row_compressor,
 									  tuplesortstate,
-									  RelationGetDescr(compressed_chunk_rel));
+									  RelationGetDescr(compressed_chunk_rel),
+									  compressed_chunk_rel);
 	tuplesort_end(tuplesortstate);
 	CommandCounterIncrement();
 }
@@ -904,53 +953,40 @@ decompress_segment_changed_group(CompressedSegmentInfo **current_segment, TupleT
 extern Datum
 tsl_get_compressed_chunk_index_for_recompression(PG_FUNCTION_ARGS)
 {
+	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
-	if (NULL == uncompressed_chunk)
-		elog(ERROR, "unknown chunk id %d", uncompressed_chunk_id);
+	Oid index_oid = get_compressed_chunk_index_for_recompression(uncompressed_chunk);
 
-	int32 srcht_id = uncompressed_chunk->fd.hypertable_id;
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-
-	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
-	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
-
-	Hypertable *ht = ts_hypertable_get_by_id(srcht_id);
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
-
-	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
-	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
-
-	RowCompressor row_compressor;
-	row_compressor_init(settings,
-						&row_compressor,
-						uncompressed_rel_tupdesc,
-						compressed_chunk_rel,
-						compressed_rel_tupdesc->natts,
-						true /*need_bistate*/,
-						true /*reset_sequence*/,
-						0 /*insert options*/);
-
-	/*
-	 * Keep the ExclusiveLock on the compressed chunk. This lock will be requested
-	 * by recompression later on, both in the case of segmentwise recompression, and
-	 * in the case of decompress-compress. This implicitly locks the index too, so
-	 * it cannot be dropped in another session, which is what we want to prevent by
-	 * locking the compressed chunk here
-	 */
-	table_close(compressed_chunk_rel, NoLock);
-	table_close(uncompressed_chunk_rel, NoLock);
-
-	row_compressor_finish(&row_compressor);
-
-	if (OidIsValid(row_compressor.index_oid))
+	if (OidIsValid(index_oid))
 	{
-		PG_RETURN_OID(uncompressed_chunk_id);
+		PG_RETURN_OID(index_oid);
 	}
 	else
 		PG_RETURN_NULL();
+}
+
+static Oid
+get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
+{
+	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+
+	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ShareLock);
+	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ShareLock);
+
+	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
+
+	ResultRelInfo *indstate = ts_catalog_open_indexes(compressed_chunk_rel);
+	Oid index_oid = get_compressed_chunk_index(indstate, settings);
+
+	ts_catalog_close_indexes(indstate);
+
+	table_close(compressed_chunk_rel, NoLock);
+	table_close(uncompressed_chunk_rel, NoLock);
+
+	return index_oid;
 }
 
 /*
@@ -1082,24 +1118,32 @@ Datum
 tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
-	bool if_not_compressed = PG_ARGISNULL(1) ? false : PG_GETARG_BOOL(1);
+	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
-	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-	int32 status = uncompressed_chunk->fd.status;
-
-	if (status == CHUNK_STATUS_DEFAULT)
-		elog(ERROR, "call compress_chunk instead of recompress_chunk");
-	if (status == CHUNK_STATUS_COMPRESSED)
+	if (!ts_chunk_needs_recompression(chunk))
 	{
 		int elevel = if_not_compressed ? NOTICE : ERROR;
 		elog(elevel,
 			 "nothing to recompress in chunk %s.%s",
-			 NameStr(uncompressed_chunk->fd.schema_name),
-			 NameStr(uncompressed_chunk->fd.table_name));
+			 NameStr(chunk->fd.schema_name),
+			 NameStr(chunk->fd.table_name));
 	}
+	else
+	{
+		uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
+	}
+
+	PG_RETURN_OID(uncompressed_chunk_id);
+}
+
+static Oid
+recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
+{
+	Oid uncompressed_chunk_id = uncompressed_chunk->table_id;
 
 	/*
 	 * only proceed if status in (3, 9, 11)
@@ -1108,19 +1152,17 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	 * 4: frozen
 	 * 8: compressed_partial
 	 */
-	if (!(ts_chunk_is_compressed(uncompressed_chunk) &&
-		  (ts_chunk_is_unordered(uncompressed_chunk) || ts_chunk_is_partial(uncompressed_chunk))))
+	if (!ts_chunk_is_compressed(uncompressed_chunk) &&
+		ts_chunk_needs_recompression(uncompressed_chunk))
 		elog(ERROR,
 			 "unexpected chunk status %d in chunk %s.%s",
-			 status,
+			 uncompressed_chunk->fd.status,
 			 NameStr(uncompressed_chunk->fd.schema_name),
 			 NameStr(uncompressed_chunk->fd.table_name));
 
 	/* need it to find the segby cols from the catalog */
-	int32 srcht_id = uncompressed_chunk->fd.hypertable_id;
-	Hypertable *ht = ts_hypertable_get_by_id(srcht_id);
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
+	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
 
 	int nsegmentby_cols = ts_array_length(settings->fd.segmentby);
 
@@ -1132,7 +1174,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	ts_chunk_clear_status(uncompressed_chunk,
 						  CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL);
 
-	/* lock both chunks, compresssed and uncompressed */
+	/* lock both chunks, compressed and uncompressed */
 	/* TODO: Take RowExclusive locks instead of AccessExclusive */
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
@@ -1194,15 +1236,11 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	/******************** row decompressor **************/
 
 	RowDecompressor decompressor = build_decompressor(compressed_chunk_rel, uncompressed_chunk_rel);
-	/* do not need the indexes on the uncompressed chunk as we do not write to it anymore */
-	ts_catalog_close_indexes(decompressor.indexstate);
-	/* also do not need estate because we don't insert into indexes */
-	FreeExecutorState(decompressor.estate);
 	/********** row compressor *******************/
 	RowCompressor row_compressor;
 	row_compressor_init(settings,
 						&row_compressor,
-						uncompressed_rel_tupdesc,
+						uncompressed_chunk_rel,
 						compressed_chunk_rel,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
@@ -1240,7 +1278,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	Snapshot snapshot = RegisterSnapshot(GetTransactionSnapshot());
 
 	/* Index scan */
-	Relation index_rel = index_open(row_compressor.index_oid, AccessExclusiveLock);
+	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
 
 	index_scan = index_beginscan(compressed_chunk_rel, index_rel, snapshot, 0, 0);
 	TupleTableSlot *slot = table_slot_create(compressed_chunk_rel, NULL);
@@ -1373,7 +1411,8 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 		row_compressor_reset(&row_compressor);
 		row_compressor_append_sorted_rows(&row_compressor,
 										  segment_tuplesortstate,
-										  RelationGetDescr(uncompressed_chunk_rel));
+										  RelationGetDescr(uncompressed_chunk_rel),
+										  uncompressed_chunk_rel);
 		tuplesort_end(segment_tuplesortstate);
 
 		/* make changes visible */
@@ -1392,20 +1431,12 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 													   row_compressor.rowcnt_pre_compression,
 													   row_compressor.num_compressed_rows);
 
-	row_compressor_finish(&row_compressor);
-	FreeBulkInsertState(decompressor.bistate);
+	row_compressor_close(&row_compressor);
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
-	index_close(index_rel, AccessExclusiveLock);
-
-#if PG14_LT
-	int options = 0;
-#else
-	ReindexParams params = { 0 };
-	ReindexParams *options = &params;
-#endif
-	reindex_relation(compressed_chunk->table_id, 0, options);
+	index_close(index_rel, ExclusiveLock);
+	row_decompressor_close(&decompressor);
 
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);

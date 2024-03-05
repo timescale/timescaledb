@@ -10,6 +10,8 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 #include <parser/parsetree.h>
+#include <storage/lmgr.h>
+#include <storage/lockdefs.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
 #include <catalog/pg_type.h>
@@ -22,7 +24,6 @@
 #include "dimension.h"
 #include "guc.h"
 #include "nodes/hypertable_modify.h"
-#include "ts_catalog/chunk_data_node.h"
 #include "hypercube.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
@@ -141,19 +142,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		if (!chunk)
 			elog(ERROR, "no chunk found or created");
 
-		cis = ts_chunk_insert_state_create(chunk, dispatch);
-
-		/*
-		 * We might have been blocked by a compression operation
-		 * while trying to fetch the above lock so lets update the
-		 * chunk catalog data because the status might have changed.
-		 *
-		 * This works even in higher levels of isolation since
-		 * catalog data is always read from latest snapshot.
-		 */
-		chunk = ts_chunk_get_by_relid(chunk->table_id, true);
-		ts_set_compression_status(cis, chunk);
-
+		cis = ts_chunk_insert_state_create(chunk->table_id, dispatch);
 		ts_subspace_store_add(dispatch->cache, chunk->cube, cis, destroy_chunk_insert_state);
 	}
 	else if (cis->rel->rd_id == dispatch->prev_cis_oid && cis == dispatch->prev_cis)
@@ -164,7 +153,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 
 	if (found)
 	{
-		if (cis->chunk_compressed && cis->chunk_data_nodes == NIL)
+		if (cis->chunk_compressed)
 		{
 			/*
 			 * If this is an INSERT into a compressed chunk with UNIQUE or
@@ -174,13 +163,7 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 			 */
 			if (ts_cm_functions->decompress_batches_for_insert)
 			{
-				/* Get the chunk if its not already been loaded.
-				 * It's needed for decompress_batches_for_insert
-				 * which only uses some ids from it.
-				 */
-				if (chunk == NULL)
-					chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
-				ts_cm_functions->decompress_batches_for_insert(cis, chunk, slot);
+				ts_cm_functions->decompress_batches_for_insert(cis, slot);
 				OnConflictAction onconflict_action =
 					chunk_dispatch_get_on_conflict_action(dispatch);
 				/* mark rows visible */
@@ -433,6 +416,22 @@ chunk_dispatch_exec(CustomScanState *node)
 												   slot,
 												   on_chunk_insert_state_changed,
 												   state);
+
+	if (ts_guc_max_tuples_decompressed_per_dml > 0)
+	{
+		if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+					 errmsg("tuple decompression limit exceeded by operation"),
+					 errdetail("current limit: %d, tuples decompressed: %lld",
+							   ts_guc_max_tuples_decompressed_per_dml,
+							   (long long int) cis->cds->tuples_decompressed),
+					 errhint("Consider increasing "
+							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
+							 "to 0 (unlimited).")));
+		}
+	}
 
 	/*
 	 * Set the result relation in the executor state to the target chunk.

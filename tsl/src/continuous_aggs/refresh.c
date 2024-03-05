@@ -66,7 +66,6 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   const InternalTimeRange *refresh_window,
 											   const InvalidationStore *invalidations,
 											   const int64 bucket_width, int32 chunk_id,
-											   const bool is_raw_ht_distributed,
 											   const bool do_merged_refresh,
 											   const InternalTimeRange merged_refresh_window);
 static ContinuousAgg *get_cagg_by_relid(const Oid cagg_relid);
@@ -351,7 +350,7 @@ materialization_per_refresh_window(void)
 {
 #define DEFAULT_MATERIALIZATIONS_PER_REFRESH_WINDOW 10
 #define MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME                                               \
-	"timescaledb.materializations_per_refresh_window"
+	MAKE_EXTOPTION("materializations_per_refresh_window")
 
 	const char *max_materializations_setting =
 		GetConfigOption(MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME, true, false);
@@ -481,7 +480,7 @@ continuous_agg_scan_refresh_window_ranges(const InternalTimeRange *refresh_windo
  * Invalid ranges:           [-----] [-]   [--] [-] [---]
  * Merged range:             [---------------------------)
  *
- * The maximum number of individual (non-mergable) ranges are
+ * The maximum number of individual (non-mergeable) ranges are
  * #buckets_in_window/2 (i.e., every other bucket is invalid).
  *
  * Since it might not be efficient to materialize a lot buckets separately
@@ -500,18 +499,12 @@ static void
 continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 								   const InternalTimeRange *refresh_window,
 								   const InvalidationStore *invalidations, const int64 bucket_width,
-								   int32 chunk_id, const bool is_raw_ht_distributed,
-								   const bool do_merged_refresh,
+								   int32 chunk_id, const bool do_merged_refresh,
 								   const InternalTimeRange merged_refresh_window)
 {
 	CaggRefreshState refresh;
-	bool old_per_data_node_queries = ts_guc_enable_per_data_node_queries;
 
 	continuous_agg_refresh_init(&refresh, cagg, refresh_window);
-
-	/* Disable per-data-node optimization so that 'tableoid' system column is evaluated in the
-	 * Access Node to generate Access Node chunk-IDs for the materialization table. */
-	ts_guc_enable_per_data_node_queries = false;
 
 	/*
 	 * If we're refreshing a finalized CAgg then we should force
@@ -551,7 +544,6 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 														  (void *) &chunk_id /* arg2 */);
 		Assert(count);
 	}
-	ts_guc_enable_per_data_node_queries = old_per_data_node_queries;
 }
 
 static ContinuousAgg *
@@ -694,36 +686,16 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	 * windows.
 	 */
 	LockRelationOid(hyper_relid, ExclusiveLock);
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	bool is_raw_ht_distributed = hypertable_is_distributed(ht);
 	const CaggsInfo all_caggs_info =
 		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
 	max_materializations = materialization_per_refresh_window();
-	if (is_raw_ht_distributed)
-	{
-		invalidations = NULL;
-		/* Force to always merge the refresh ranges in the distributed raw HyperTable case.
-		 * Session variable MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME was checked for
-		 * validity in materialization_per_refresh_window().
-		 */
-		max_materializations = 0;
-		remote_invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
-											 cagg->data.raw_hypertable_id,
-											 refresh_window,
-											 &all_caggs_info,
-											 &do_merged_refresh,
-											 &merged_refresh_window);
-	}
-	else
-	{
-		invalidations = invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
-													  cagg->data.raw_hypertable_id,
-													  refresh_window,
-													  &all_caggs_info,
-													  max_materializations,
-													  &do_merged_refresh,
-													  &merged_refresh_window);
-	}
+	invalidations = invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
+												  cagg->data.raw_hypertable_id,
+												  refresh_window,
+												  &all_caggs_info,
+												  max_materializations,
+												  &do_merged_refresh,
+												  &merged_refresh_window);
 
 	if (invalidations != NULL || do_merged_refresh)
 	{
@@ -745,7 +717,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 										   invalidations,
 										   bucket_width,
 										   chunk_id,
-										   is_raw_ht_distributed,
 										   do_merged_refresh,
 										   merged_refresh_window);
 		if (invalidations)
@@ -765,11 +736,10 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	int32 mat_id = cagg->data.mat_hypertable_id;
 	InternalTimeRange refresh_window = *refresh_window_arg;
 	int64 invalidation_threshold;
-	bool is_raw_ht_distributed;
-	int rc;
 
 	/* Connect to SPI manager due to the underlying SPI calls */
-	if ((rc = SPI_connect_ext(SPI_OPT_NONATOMIC) != SPI_OK_CONNECT))
+	int rc = SPI_connect_ext(SPI_OPT_NONATOMIC);
+	if (rc != SPI_OK_CONNECT)
 		elog(ERROR, "SPI_connect failed: %s", SPI_result_code_string(rc));
 
 	/* Lock down search_path */
@@ -793,9 +763,6 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	 * still take a long time and it is probably best for consistency to always
 	 * prevent transaction blocks.  */
 	PreventInTransactionBlock(true, REFRESH_FUNCTION_NAME);
-
-	Hypertable *ht = cagg_get_hypertable_or_fail(cagg->data.raw_hypertable_id);
-	is_raw_ht_distributed = hypertable_is_distributed(ht);
 
 	/* No bucketing when open ended */
 	if (!(start_isnull && end_isnull))
@@ -857,13 +824,23 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (refresh_window.end > invalidation_threshold)
 		refresh_window.end = invalidation_threshold;
 
-	/* Capping the end might have made the window 0, or negative, so
-	 * nothing to refresh in that case */
-	if (refresh_window.start >= refresh_window.end)
+	/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
+	 * case.
+	 *
+	 * For variable width buckets we use a refresh_window.start value that is lower than the
+	 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in the
+	 * following if statement is not enough. If the invalidation_threshold returns the min_value for
+	 * the data type, we end up with [nobegin, min_value] which is an invalid time interval.
+	 * Therefore, we have also to check if the invalidation_threshold is defined. If not, no refresh
+	 * is needed.  */
+	if ((refresh_window.start >= refresh_window.end) ||
+		(IS_TIMESTAMP_TYPE(refresh_window.type) &&
+		 invalidation_threshold == ts_time_get_min(refresh_window.type)))
 	{
 		emit_up_to_date_notice(cagg, callctx);
 
-		if ((rc = SPI_finish()) != SPI_OK_FINISH)
+		rc = SPI_finish();
+		if (rc != SPI_OK_FINISH)
 			elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 
 		return;
@@ -872,29 +849,20 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Process invalidations in the hypertable invalidation log */
 	const CaggsInfo all_caggs_info =
 		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	if (is_raw_ht_distributed)
-	{
-		remote_invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-												   cagg->data.raw_hypertable_id,
-												   refresh_window.type,
-												   &all_caggs_info);
-	}
-	else
-	{
-		invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-											cagg->data.raw_hypertable_id,
-											refresh_window.type,
-											&all_caggs_info);
-	}
+	invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
+										cagg->data.raw_hypertable_id,
+										refresh_window.type,
+										&all_caggs_info);
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
 
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);
 
-	if ((rc = SPI_finish()) != SPI_OK_FINISH)
+	rc = SPI_finish();
+	if (rc != SPI_OK_FINISH)
 		elog(ERROR, "SPI_finish failed: %s", SPI_result_code_string(rc));
 }

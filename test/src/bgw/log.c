@@ -47,7 +47,7 @@ bgw_log_insert_relation(Relation rel, char *msg)
 
 /* Insert a new entry into public.bgw_log
  * This table is used for testing as a way for mock background jobs
- * to insert messges into a log that could then be output into the golden file
+ * to insert messages into a log that could then be output into the golden file
  */
 static void
 bgw_log_insert(char *msg)

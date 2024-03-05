@@ -9,6 +9,7 @@
 #include <catalog/pg_type.h>
 
 #include "ts_catalog/catalog.h"
+#include "hypertable.h"
 
 typedef struct CompressionSettings
 {
@@ -20,7 +21,13 @@ TSDLLEXPORT CompressionSettings *ts_compression_settings_create(Oid relid, Array
 																ArrayType *orderby_desc,
 																ArrayType *orderby_nullsfirst);
 TSDLLEXPORT CompressionSettings *ts_compression_settings_get(Oid relid);
+TSDLLEXPORT CompressionSettings *ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid);
 TSDLLEXPORT bool ts_compression_settings_delete(Oid relid);
+TSDLLEXPORT bool ts_compression_settings_equal(const CompressionSettings *left,
+											   const CompressionSettings *right);
+
 TSDLLEXPORT int ts_compression_settings_update(CompressionSettings *settings);
 
 TSDLLEXPORT void ts_compression_settings_rename_column(Oid relid, char *old, char *new);
+TSDLLEXPORT void ts_compression_settings_rename_column_hypertable(Hypertable *ht, char *old,
+																  char *new);

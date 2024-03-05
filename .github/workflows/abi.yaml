@@ -32,52 +32,55 @@ jobs:
 
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
 
   abi_test:
-    name: ABI Test PG${{ matrix.test }}
+    name: ABI Test ${{ matrix.dir }} PG${{ matrix.pg }}
     runs-on: ubuntu-latest
     needs: config
     strategy:
       fail-fast: false
       matrix:
-        test: [ "13backward", "13forward", "14backward", "14forward",
-          "15backward", "15forward", "16backward", "16forward" ]
+        dir: [ "forward", "backward" ]
+        pg: [ 13, 14, 15 ]
         os: [ windows-2019 ]
         include:
-          - test: 13backward
+          - dir: backward
             pg: 13
             builder: ${{ fromJson(needs.config.outputs.pg13_latest) }}-alpine3.18
             tester: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}-alpine
-          - test: 13forward
+          - dir: forward
             pg: 13
             builder: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg13_latest) }}-alpine3.18
-          - test: 14backward
+          - dir: backward
             pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.18
             tester: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}-alpine
             ignores: memoize
-          - test: 14forward
+          - dir: forward
             pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.18
-          - test: 15backward
+          - dir: backward
             pg: 15
             builder: ${{ fromJson(needs.config.outputs.pg15_latest) }}-alpine3.18
             tester: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}-alpine
-          - test: 15forward
+          - dir: forward
             pg: 15
             builder: ${{ fromJson(needs.config.outputs.pg15_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg15_latest) }}-alpine3.18
-          - test: 16backward
+          - dir: backward
             pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.18
             tester: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
-          - test: 16forward
+            # this test has issues with 16.0 version of pg_dump binary
+            # which affects backwards test only 
+            ignores: pg_dump_unprivileged
+          - dir: forward
             pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
             tester: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.18
@@ -85,7 +88,7 @@ jobs:
     steps:
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build extension
       run: |
@@ -134,23 +137,23 @@ jobs:
       id: collectlogs
       run: |
         sudo chmod a+rw .
-        sudo find . -name regression.diffs -exec cat {} + > regression.log
-        sudo find . -name postmaster.log -exec cat {} + > postgres.log
+        sudo find build_abi -name regression.diffs -exec cat {} + > regression.log
+        sudo find build_abi -name postmaster.log -exec cat {} + > postmaster.log
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
-        grep -e 'FAILED' -e 'failed (ignored)' installcheck.log || true
+        grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: Regression diff ABI Breakage ${{ matrix.type }} PG${{ matrix.pg }}
+        name: Regression diff ABI Breakage ${{ matrix.dir }} PG${{ matrix.pg }}
         path: regression.log
 
     - name: Save postmaster.log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: PostgreSQL log ABI Breakage ${{ matrix.type }} PG${{ matrix.pg }}
-        path: postgres.log
+        name: PostgreSQL log ABI Breakage ${{ matrix.dir }} PG${{ matrix.pg }}
+        path: postmaster.log
 

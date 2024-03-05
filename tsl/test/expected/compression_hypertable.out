@@ -134,21 +134,13 @@ SELECT DISTINCT attname, attstattarget
  WHERE attrelid = '_timescaledb_internal._compressed_hypertable_2'::REGCLASS
    AND attnum > 0
  ORDER BY attname;
-        attname        | attstattarget 
------------------------+---------------
- Time                  |             0
- _ts_meta_count        |          1000
- _ts_meta_max_1        |          1000
- _ts_meta_min_1        |          1000
- _ts_meta_sequence_num |          1000
- b                     |             0
- i                     |             0
- t                     |             0
-(8 rows)
+ attname | attstattarget 
+---------+---------------
+(0 rows)
 
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_2'))
+  WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 2)
     AND attnum > 0
   ORDER BY attname;
         attname        | attstattarget 
@@ -172,7 +164,7 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: true
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
-         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
+         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
 (5 rows)
 
 set timescaledb.enable_bulk_decompression to false;
@@ -184,7 +176,7 @@ select * from _timescaledb_internal._hyper_1_10_chunk;
    Output: _hyper_1_10_chunk."Time", _hyper_1_10_chunk.i, _hyper_1_10_chunk.b, _hyper_1_10_chunk.t
    Bulk Decompression: false
    ->  Seq Scan on _timescaledb_internal.compress_hyper_2_55_chunk (actual rows=1 loops=1)
-         Output: compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t, compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1
+         Output: compress_hyper_2_55_chunk._ts_meta_count, compress_hyper_2_55_chunk._ts_meta_sequence_num, compress_hyper_2_55_chunk._ts_meta_min_1, compress_hyper_2_55_chunk._ts_meta_max_1, compress_hyper_2_55_chunk."Time", compress_hyper_2_55_chunk.i, compress_hyper_2_55_chunk.b, compress_hyper_2_55_chunk.t
 (5 rows)
 
 reset timescaledb.enable_bulk_decompression;
@@ -197,17 +189,15 @@ SELECT * FROM test1;
 
 /* nor compressed table */
 SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
- Time | i | b | t | _ts_meta_count | _ts_meta_sequence_num | _ts_meta_min_1 | _ts_meta_max_1 
-------+---+---+---+----------------+-----------------------+----------------+----------------
+--
 (0 rows)
 
-/* the compressed table should have not chunks */
-EXPLAIN (costs off) SELECT * FROM _timescaledb_internal._compressed_hypertable_2;
-        QUERY PLAN        
---------------------------
- Result
-   One-Time Filter: false
-(2 rows)
+/* the compressed table should not have chunks */
+SELECT count(*) FROM _timescaledb_catalog.chunk WHERE hypertable_id = 2;
+ count 
+-------
+     0
+(1 row)
 
 --add test for altered hypertable
 CREATE TABLE test2 ("Time" timestamptz, i integer, b bigint, t text);
@@ -407,22 +397,13 @@ SELECT DISTINCT attname, attstattarget
  WHERE attrelid = '_timescaledb_internal._compressed_hypertable_6'::REGCLASS
    AND attnum > 0
  ORDER BY attname;
-        attname        | attstattarget 
------------------------+---------------
- _ts_meta_count        |          1000
- _ts_meta_max_1        |          1000
- _ts_meta_min_1        |          1000
- _ts_meta_sequence_num |          1000
- humidity              |             0
- location              |          1000
- location2             |             0
- temperature           |             0
- timec                 |             0
-(9 rows)
+ attname | attstattarget 
+---------+---------------
+(0 rows)
 
 SELECT DISTINCT attname, attstattarget
   FROM pg_attribute
-  WHERE attrelid in (SELECT "Child" FROM test.show_subtables('_timescaledb_internal._compressed_hypertable_6'))
+  WHERE attrelid in (SELECT format('%I.%I', schema_name, table_name)::regclass FROM _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = 6)
     AND attnum > 0
   ORDER BY attname;
         attname        | attstattarget 

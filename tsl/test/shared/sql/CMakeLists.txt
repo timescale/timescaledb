@@ -7,6 +7,7 @@ set(TEST_FILES_SHARED
     constraint_exclusion_prepared.sql
     decompress_join.sql
     decompress_placeholdervar.sql
+    security_barrier.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
@@ -15,8 +16,8 @@ set(TEST_TEMPLATES_SHARED
     space_constraint.sql.in)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES_SHARED compression_dml.sql decompress_tracking.sql
-       memoize.sql)
+  list(APPEND TEST_FILES_SHARED compress_unique_index.sql compression_dml.sql
+       decompress_tracking.sql memoize.sql)
 endif()
 
 # this test was changing the contents of tables in shared_setup.sql thus causing

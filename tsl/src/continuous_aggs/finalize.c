@@ -46,21 +46,12 @@ makeMaterializeColumnName(char *colbuf, const char *type, int original_query_res
 void
 finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo *mattblinfo)
 {
-	AggPartCxt cxt;
 	ListCell *lc;
 	int resno = 1;
 
 	inp->final_userquery = copyObject(orig_query);
 	inp->final_seltlist = NIL;
 	inp->final_havingqual = NULL;
-
-	/* Set up the final_seltlist and final_havingqual entries */
-	cxt.mattblinfo = mattblinfo;
-	cxt.ignore_aggoid = InvalidOid;
-
-	/* Set up the left over variable mapping lists */
-	cxt.orig_vars = NIL;
-	cxt.mapped_vars = NIL;
 
 	/*
 	 * We want all the entries in the targetlist (resjunk or not)
@@ -75,21 +66,18 @@ finalizequery_init(FinalizeQueryInfo *inp, Query *orig_query, MatTableColumnInfo
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
 		TargetEntry *modte = copyObject(tle);
-		cxt.added_aggref_col = false;
-		cxt.var_outside_of_aggref = false;
-		cxt.original_query_resno = resno;
 
 		/*
 		 * We need columns for non-aggregate targets.
 		 * If it is not a resjunk OR appears in the grouping clause.
 		 */
-		if (cxt.added_aggref_col == false && (tle->resjunk == false || tle->ressortgroupref > 0))
+		if (tle->resjunk == false || tle->ressortgroupref > 0)
 		{
 			Var *var;
 			bool skip_adding = false;
-			var = mattablecolumninfo_addentry(cxt.mattblinfo,
+			var = mattablecolumninfo_addentry(mattblinfo,
 											  (Node *) tle,
-											  cxt.original_query_resno,
+											  resno,
 											  inp->finalized,
 											  &skip_adding);
 
@@ -261,7 +249,7 @@ finalizequery_get_select_query(FinalizeQueryInfo *inp, List *matcollist,
 	{
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
 		/*
-		 * In case when this is a cagg wth joins, the Var from the normal table
+		 * In case when this is a cagg with joins, the Var from the normal table
 		 * already has resorigtbl populated and we need to use that to resolve
 		 * the Var. Hence only modify the tle when resorigtbl is unset
 		 * which means it is Var of the Hypertable

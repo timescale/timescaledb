@@ -25,16 +25,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.calculate_chunk_interval(
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_status(REGCLASS) RETURNS INT
 AS '@MODULE_PATHNAME@', 'ts_chunk_status' LANGUAGE C;
 
--- Function for explicit chunk exclusion. Supply a record and an array
--- of chunk ids as input.
--- Intended to be used in WHERE clause.
--- An example: SELECT * FROM hypertable WHERE _timescaledb_functions.chunks_in(hypertable, ARRAY[1,2]);
---
--- Use it with care as this function directly affects what chunks are being scanned for data.
--- This is a marker function and should never be executed (we remove it from the plan)
-CREATE OR REPLACE FUNCTION _timescaledb_functions.chunks_in(record RECORD, chunks INTEGER[]) RETURNS BOOL
-AS '@MODULE_PATHNAME@', 'ts_chunks_in' LANGUAGE C STABLE STRICT PARALLEL SAFE;
-
 --given a chunk's relid, return the id. Error out if not a chunk relid.
 CREATE OR REPLACE FUNCTION _timescaledb_functions.chunk_id_from_relid(relid OID) RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_chunk_id_from_relid' LANGUAGE C STABLE STRICT PARALLEL SAFE;
@@ -58,17 +48,6 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.create_chunk(
 	   chunk_table REGCLASS = NULL)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, schema_name NAME, table_name NAME, relkind "char", slices JSONB, created BOOLEAN)
 AS '@MODULE_PATHNAME@', 'ts_chunk_create' LANGUAGE C VOLATILE;
-
--- Get chunk stats.
-CREATE OR REPLACE FUNCTION _timescaledb_functions.get_chunk_relstats(relid REGCLASS)
-RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, num_pages INTEGER, num_tuples REAL, num_allvisible INTEGER)
-AS '@MODULE_PATHNAME@', 'ts_chunk_get_relstats' LANGUAGE C VOLATILE;
-
-CREATE OR REPLACE FUNCTION _timescaledb_functions.get_chunk_colstats(relid REGCLASS)
-RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, att_num INTEGER, nullfrac REAL, width INTEGER, distinctval REAL, slotkind INTEGER[], slotopstrings CSTRING[], slotcollations OID[],
-slot1numbers FLOAT4[], slot2numbers FLOAT4[], slot3numbers FLOAT4[], slot4numbers FLOAT4[], slot5numbers FLOAT4[],
-slotvaluetypetrings CSTRING[], slot1values CSTRING[], slot2values CSTRING[], slot3values CSTRING[], slot4values CSTRING[], slot5values CSTRING[])
-AS '@MODULE_PATHNAME@', 'ts_chunk_get_colstats' LANGUAGE C VOLATILE;
 
 CREATE OR REPLACE FUNCTION _timescaledb_functions.create_chunk_table(
        hypertable REGCLASS,

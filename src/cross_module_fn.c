@@ -82,18 +82,12 @@ CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
 CROSSMODULE_WRAPPER(continuous_agg_refresh);
 CROSSMODULE_WRAPPER(continuous_agg_validate_query);
-CROSSMODULE_WRAPPER(invalidation_cagg_log_add_entry);
-CROSSMODULE_WRAPPER(invalidation_hyper_log_add_entry);
-CROSSMODULE_WRAPPER(drop_dist_ht_invalidation_trigger);
-CROSSMODULE_WRAPPER(invalidation_process_hypertable_log);
-CROSSMODULE_WRAPPER(invalidation_process_cagg_log);
+CROSSMODULE_WRAPPER(continuous_agg_get_bucket_function);
 CROSSMODULE_WRAPPER(cagg_try_repair);
 
 CROSSMODULE_WRAPPER(chunk_freeze_chunk);
 CROSSMODULE_WRAPPER(chunk_unfreeze_chunk);
 
-CROSSMODULE_WRAPPER(chunk_get_relstats);
-CROSSMODULE_WRAPPER(chunk_get_colstats);
 CROSSMODULE_WRAPPER(chunk_create_empty_table);
 
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
@@ -219,12 +213,6 @@ process_cagg_try_repair(PG_FUNCTION_ARGS)
 	pg_unreachable();
 }
 
-static void
-cache_syscache_invalidate_default(Datum arg, int cacheid, uint32 hashvalue)
-{
-	/* The default is a no-op */
-}
-
 static DDLResult
 process_cagg_viewstmt_default(Node *stmt, const char *query_string, void *pstmt,
 							  WithClauseResult *with_clause_options)
@@ -257,9 +245,7 @@ continuous_agg_invalidate_mat_ht_all_default(const Hypertable *raw_ht, const Hyp
 static void
 continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation chunk_rel,
 												 HeapTuple chunk_tuple, HeapTuple chunk_newtuple,
-												 bool update,
-												 bool is_distributed_hypertable_trigger,
-												 int32 parent_hypertable_id)
+												 bool update)
 {
 	error_no_default_fn_community();
 	pg_unreachable();
@@ -271,6 +257,12 @@ PGDLLEXPORT Datum
 ts_tsl_loaded(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_BOOL(ts_cm_functions != &ts_cm_functions_default);
+}
+
+static void
+preprocess_query_tsl_default_fn_community(Query *parse)
+{
+	/* No op in community licensed code */
 }
 
 /*
@@ -343,11 +335,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht_all_default,
 	.continuous_agg_update_options = continuous_agg_update_options_default,
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
-	.invalidation_cagg_log_add_entry = error_no_default_fn_pg_community,
-	.invalidation_hyper_log_add_entry = error_no_default_fn_pg_community,
-	.drop_dist_ht_invalidation_trigger = error_no_default_fn_pg_community,
-	.invalidation_process_hypertable_log = error_no_default_fn_pg_community,
-	.invalidation_process_cagg_log = error_no_default_fn_pg_community,
+	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
 
 	/* compression */
@@ -374,12 +362,10 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.create_chunk = error_no_default_fn_pg_community,
 	.chunk_freeze_chunk = error_no_default_fn_pg_community,
 	.chunk_unfreeze_chunk = error_no_default_fn_pg_community,
-	.cache_syscache_invalidate = cache_syscache_invalidate_default,
-	.chunk_get_relstats = error_no_default_fn_pg_community,
-	.chunk_get_colstats = error_no_default_fn_pg_community,
 	.chunk_create_empty_table = error_no_default_fn_pg_community,
 	.recompress_chunk_segmentwise = error_no_default_fn_pg_community,
 	.get_compressed_chunk_index_for_recompression = error_no_default_fn_pg_community,
+	.preprocess_query_tsl = preprocess_query_tsl_default_fn_community,
 };
 
 TSDLLEXPORT CrossModuleFunctions *ts_cm_functions = &ts_cm_functions_default;

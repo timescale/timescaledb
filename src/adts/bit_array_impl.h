@@ -45,12 +45,12 @@ static inline void bit_array_wrap_internal(BitArray *array, uint32 num_buckets,
  ************************/
 
 static inline void
-bit_array_init(BitArray *array)
+bit_array_init(BitArray *array, int expected_bits)
 {
 	*array = (BitArray){
 		.bits_used_in_last_bucket = 0,
 	};
-	uint64_vec_init(&array->buckets, CurrentMemoryContext, 0);
+	uint64_vec_init(&array->buckets, CurrentMemoryContext, expected_bits / 64);
 }
 
 /* This initializes the bit array by wrapping buckets. Note, that the bit array will
@@ -347,8 +347,6 @@ bit_array_append_bucket(BitArray *array, uint8 bits_used, uint64 bucket)
 static uint64
 bit_array_low_bits_mask(uint8 bits_used)
 {
-	if (bits_used >= 64)
-		return PG_UINT64_MAX;
-	else
-		return (UINT64CONST(1) << bits_used) - UINT64CONST(1);
+	Assert(bits_used > 0);
+	return -1ULL >> (64 - bits_used);
 }

@@ -14,7 +14,6 @@
 #include "hypertable.h"
 #include "guc.h"
 
-#define CHUNK_EXCL_FUNC_NAME "chunks_in"
 /*
  * Constraints created during planning to improve chunk exclusion
  * will be marked with this value as location so they can be easily
@@ -25,7 +24,6 @@
 
 typedef struct Chunk Chunk;
 typedef struct Hypertable Hypertable;
-typedef struct TsFdwRelInfo TsFdwRelInfo;
 typedef struct TimescaleDBPrivate
 {
 	bool appends_ordered;
@@ -33,9 +31,6 @@ typedef struct TimescaleDBPrivate
 	int order_attno;
 	List *nested_oids;
 	List *chunk_oids;
-	List *serverids;
-	Relids server_relids;
-	TsFdwRelInfo *fdw_relation_info;
 
 	/* Cached chunk data for the chunk relinfo. */
 	Chunk *cached_chunk_struct;
@@ -44,11 +39,10 @@ typedef struct TimescaleDBPrivate
 	List *compressed_ec_em_pairs;
 } TimescaleDBPrivate;
 
-extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte, bool *isdistributed);
+extern TSDLLEXPORT bool ts_rte_is_hypertable(const RangeTblEntry *rte);
 extern TSDLLEXPORT bool ts_rte_is_marked_for_expansion(const RangeTblEntry *rte);
-extern TSDLLEXPORT bool ts_contain_param(Node *node);
-
-extern TSDLLEXPORT DataFetcherType ts_data_node_fetcher_scan_type;
+extern TSDLLEXPORT bool ts_contains_external_param(Node *node);
+extern TSDLLEXPORT bool ts_contains_join_param(Node *node);
 
 static inline TimescaleDBPrivate *
 ts_create_private_reloptinfo(RelOptInfo *rel)
@@ -104,6 +98,7 @@ extern void ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOpt
 extern void ts_preprocess_first_last_aggregates(PlannerInfo *root, List *tlist);
 extern void ts_plan_expand_hypertable_chunks(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel);
 extern void ts_plan_expand_timebucket_annotate(PlannerInfo *root, RelOptInfo *rel);
+extern Expr *ts_transform_time_bucket_comparison(Expr *);
 extern Node *ts_constify_now(PlannerInfo *root, List *rtable, Node *node);
 extern void ts_planner_constraint_cleanup(PlannerInfo *root, RelOptInfo *rel);
 extern Node *ts_add_space_constraints(PlannerInfo *root, List *rtable, Node *node);

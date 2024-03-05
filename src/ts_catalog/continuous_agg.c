@@ -27,18 +27,19 @@
 #include "compat/compat.h"
 
 #include "bgw/job.h"
-#include "ts_catalog/continuous_agg.h"
-#include "ts_catalog/continuous_aggs_watermark.h"
+#include "compression_with_clause.h"
 #include "cross_module_fn.h"
+#include "errors.h"
+#include "func_cache.h"
 #include "hypercube.h"
-#include "hypertable.h"
 #include "hypertable_cache.h"
+#include "hypertable.h"
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
-#include "errors.h"
-#include "compression_with_clause.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
 
 #define BUCKET_FUNCTION_SERIALIZE_VERSION 1
@@ -124,7 +125,7 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
 		if (!input->is_default)
 		{
 			Node *value = (Node *) makeString(ts_with_clause_result_deparse_value(input));
-			DefElem *elem = makeDefElemExtended("timescaledb",
+			DefElem *elem = makeDefElemExtended(EXTENSION_NAMESPACE,
 												(char *) def.arg_name,
 												value,
 												DEFELEM_UNSPEC,
@@ -282,24 +283,6 @@ hypertable_invalidation_log_delete(int32 raw_hypertable_id)
 	}
 }
 
-TS_FUNCTION_INFO_V1(ts_hypertable_invalidation_log_delete);
-/**
- * Delete hypertable invalidation log entries for all the CAGGs that belong to the
- * distributed hypertable with hypertable ID 'raw_hypertable_id' in the Access Node.
- *
- * @param raw_hypertable_id - The hypertable ID of the original distributed hypertable in the
- *                            Access Node.
- */
-Datum
-ts_hypertable_invalidation_log_delete(PG_FUNCTION_ARGS)
-{
-	int32 raw_hypertable_id = PG_GETARG_INT32(0);
-
-	elog(DEBUG1, "invalidation log delete for hypertable %d", raw_hypertable_id);
-	hypertable_invalidation_log_delete(raw_hypertable_id);
-	PG_RETURN_VOID();
-}
-
 void
 ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 {
@@ -316,22 +299,6 @@ ts_materialization_invalidation_log_delete_inner(int32 mat_hypertable_id)
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
-}
-
-TS_FUNCTION_INFO_V1(ts_materialization_invalidation_log_delete);
-/**
- * Delete materialization invalidation log entries for the CAGG that belong to the
- * materialized hypertable with ID 'mat_hypertable_id' in the Access Node.
- *
- * @param mat_hypertable_id The hypertable ID of the CAGG materialized hypertable in the Access
- *                          Node.
- */
-Datum
-ts_materialization_invalidation_log_delete(PG_FUNCTION_ARGS)
-{
-	int32 mat_hypertable_id = PG_GETARG_INT32(0);
-	ts_materialization_invalidation_log_delete_inner(mat_hypertable_id);
-	PG_RETURN_VOID();
 }
 
 static HeapTuple
@@ -402,29 +369,29 @@ continuous_agg_formdata_fill(FormData_continuous_agg *fd, const TupleInfo *ti)
 		fd->parent_mat_hypertable_id = DatumGetInt32(
 			values[AttrNumberGetAttrOffset(Anum_continuous_agg_parent_mat_hypertable_id)]);
 
-	memcpy(&fd->user_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->user_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->user_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_schema)]));
+	namestrcpy(&fd->user_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_user_view_name)]));
 
-	memcpy(&fd->partial_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->partial_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->partial_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_schema)]));
+	namestrcpy(&fd->partial_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)]));
 
 	fd->bucket_width =
 		DatumGetInt64(values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)]);
 
-	memcpy(&fd->direct_view_schema,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)]),
-		   NAMEDATALEN);
-	memcpy(&fd->direct_view_name,
-		   DatumGetName(values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)]),
-		   NAMEDATALEN);
+	namestrcpy(&fd->direct_view_schema,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)]));
+	namestrcpy(&fd->direct_view_name,
+			   DatumGetCString(
+				   values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)]));
 
 	fd->materialized_only =
 		DatumGetBool(values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)]);
@@ -446,12 +413,10 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 	init_scan_cagg_bucket_function_by_mat_hypertable_id(&iterator, mat_hypertable_id);
 	ts_scanner_foreach(&iterator)
 	{
-		const char *bucket_width_str;
-		const char *origin_str;
 		Datum values[Natts_continuous_aggs_bucket_function];
 		bool isnull[Natts_continuous_aggs_bucket_function];
-
 		bool should_free;
+
 		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
 
 		/*
@@ -460,38 +425,53 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 		 */
 		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, isnull);
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_experimental - 1]);
-		bf->experimental =
-			DatumGetBool(values[Anum_continuous_aggs_bucket_function_experimental - 1]);
+		/* Bucket function */
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
+		bf->bucket_function = DatumGetObjectId(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_name - 1]);
-		bf->name = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_name - 1]);
+		Assert(OidIsValid(bf->bucket_function));
 
 		/*
-		 * So far bucket_width is stored as TEXT for flexibility, but it's type
-		 * most likely is going to change to Interval when the variable-sized
-		 * buckets feature will stabilize.
+		 * bucket_width
+		 *
+		 * The value is stored as TEXT since we have to store the interval value of time
+		 * buckets and also the number value of integer based buckets.
 		 */
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
-		bucket_width_str =
-			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_bucket_width - 1]);
+		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
+		const char *bucket_width_str = TextDatumGetCString(
+			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)]);
 		Assert(strlen(bucket_width_str) > 0);
 		bf->bucket_width = DatumGetIntervalP(
 			DirectFunctionCall3(interval_in, CStringGetDatum(bucket_width_str), InvalidOid, -1));
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_origin - 1]);
-		origin_str = TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_origin - 1]);
-		if (strlen(origin_str) == 0)
-			TIMESTAMP_NOBEGIN(bf->origin);
+		/* Bucket origin */
+		if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)])
+		{
+			const char *origin_str = TextDatumGetCString(values[AttrNumberGetAttrOffset(
+				Anum_continuous_aggs_bucket_function_bucket_origin)]);
+			bf->bucket_origin = DatumGetTimestamp(DirectFunctionCall3(timestamptz_in,
+																	  CStringGetDatum(origin_str),
+																	  ObjectIdGetDatum(InvalidOid),
+																	  Int32GetDatum(-1)));
+		}
 		else
-			bf->origin = DatumGetTimestamp(DirectFunctionCall3(timestamp_in,
-															   CStringGetDatum(origin_str),
-															   ObjectIdGetDatum(InvalidOid),
-															   Int32GetDatum(-1)));
+		{
+			TIMESTAMP_NOBEGIN(bf->bucket_origin);
+		}
 
-		Assert(!isnull[Anum_continuous_aggs_bucket_function_timezone - 1]);
-		bf->timezone =
-			TextDatumGetCString(values[Anum_continuous_aggs_bucket_function_timezone - 1]);
+		/* Bucket timezone */
+		if (!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)])
+		{
+			bf->timezone = TextDatumGetCString(values[AttrNumberGetAttrOffset(
+				Anum_continuous_aggs_bucket_function_bucket_timezone)]);
+		}
+
+		/* Bucket fixed width */
+		Assert(!isnull[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
+		bf->bucket_fixed_interval = DatumGetBool(values[AttrNumberGetAttrOffset(
+			Anum_continuous_aggs_bucket_function_bucket_fixed_width)]);
 
 		count++;
 
@@ -571,222 +551,6 @@ ts_continuous_agg_get_all_caggs_info(int32 raw_hypertable_id)
 	return all_caggs_info;
 }
 
-/*
- * Serializes ContinuousAggsBucketFunction* into a string like:
- *
- *     ver;bucket_width;origin;timezone;
- *
- * ... where ver is a version of the serialization format. This particular format
- * was chosen because of it's simplicity and good performance. Future versions
- * of the procedure can use other format (like key=value or JSON) and/or add
- * extra fields. NULL pointer is serialized to an empty string.
- *
- * Note that the schema and the name of the function are not serialized. This
- * is intentional since this information is currently not used for anything.
- * We can serialize the name of the function as well when and if this would be
- * necessary.
- */
-static const char *
-bucket_function_serialize(const ContinuousAggsBucketFunction *bf)
-{
-	const char *bucket_width_str;
-	const char *origin_str = "";
-	StringInfo str;
-
-	if (NULL == bf)
-		return "";
-
-	str = makeStringInfo();
-
-	/* We are pretty sure that user can't place ';' character in this field */
-	Assert(strstr(bf->timezone, ";") == NULL);
-
-	bucket_width_str =
-		DatumGetCString(DirectFunctionCall1(interval_out, IntervalPGetDatum(bf->bucket_width)));
-
-	if (!TIMESTAMP_NOT_FINITE(bf->origin))
-	{
-		origin_str =
-			DatumGetCString(DirectFunctionCall1(timestamp_out, TimestampGetDatum(bf->origin)));
-	}
-
-	appendStringInfo(str,
-					 "%d;%s;%s;%s;",
-					 BUCKET_FUNCTION_SERIALIZE_VERSION,
-					 bucket_width_str,
-					 origin_str,
-					 bf->timezone);
-
-	return str->data;
-}
-
-/*
- * Deserielizes a string into a palloc'ated ContinuousAggsBucketFunction*. Note
- * that NULL is also a valid return value.
- *
- * See bucket_function_serialize() for more details.
- */
-static const ContinuousAggsBucketFunction *
-bucket_function_deserialize(const char *str)
-{
-	char *begin, *end, *strings[4];
-	ContinuousAggsBucketFunction *bf;
-
-	/* empty string stands for serialized NULL */
-	if (*str == '\0')
-		return NULL;
-
-	begin = pstrdup(str);
-	for (size_t i = 0; i < lengthof(strings); i++)
-	{
-		end = strstr(begin, ";");
-		if (end == NULL)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("failed to deserialize \"%s\" into a bucketing function", str),
-					 errdetail("separator not found")));
-		}
-
-		*end = '\0';
-		strings[i] = begin;
-		begin = end + 1;
-	}
-
-	/* end of string was reached */
-	Assert(*begin == '\0');
-
-	if (atoi(strings[0]) != 1)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("failed to deserialize \"%s\" into a bucketing function", str),
-				 errdetail("unsupported format version")));
-	}
-
-	bf = palloc(sizeof(ContinuousAggsBucketFunction));
-	bf->experimental = true;
-	bf->name = "time_bucket_ng";
-	Assert(strlen(strings[1]) > 0);
-	bf->bucket_width = DatumGetIntervalP(
-		DirectFunctionCall3(interval_in, CStringGetDatum(strings[1]), InvalidOid, -1));
-
-	if (strlen(strings[2]) == 0)
-		TIMESTAMP_NOBEGIN(bf->origin);
-	else
-		bf->origin = DatumGetTimestamp(DirectFunctionCall3(timestamp_in,
-														   CStringGetDatum(strings[2]),
-														   ObjectIdGetDatum(InvalidOid),
-														   Int32GetDatum(-1)));
-
-	bf->timezone = strings[3];
-	return bf;
-}
-
-/*
- * Does not do deep copy of Datums For performance reasons. Make sure the arrays are not deallocated
- * before CaggsInfo.
- */
-TSDLLEXPORT void
-ts_populate_caggs_info_from_arrays(ArrayType *mat_hypertable_ids, ArrayType *bucket_widths,
-								   ArrayType *bucket_functions, CaggsInfo *all_caggs)
-{
-	all_caggs->mat_hypertable_ids = NIL;
-	all_caggs->bucket_widths = NIL;
-	all_caggs->bucket_functions = NIL;
-
-	Assert(ARR_NDIM(mat_hypertable_ids) > 0 && ARR_NDIM(bucket_widths) > 0 &&
-		   ARR_NDIM(bucket_functions) > 0);
-	Assert(ARR_NDIM(mat_hypertable_ids) == ARR_NDIM(bucket_widths) &&
-		   ARR_NDIM(bucket_functions) == ARR_NDIM(bucket_widths));
-
-	ArrayIterator it_htids, it_widths, it_bfs;
-	Datum array_datum1, array_datum2, array_datum3;
-	bool isnull1, isnull2, isnull3;
-
-	it_htids = array_create_iterator(mat_hypertable_ids, 0, NULL);
-	it_widths = array_create_iterator(bucket_widths, 0, NULL);
-	it_bfs = array_create_iterator(bucket_functions, 0, NULL);
-	while (array_iterate(it_htids, &array_datum1, &isnull1) &&
-		   array_iterate(it_widths, &array_datum2, &isnull2) &&
-		   array_iterate(it_bfs, &array_datum3, &isnull3))
-	{
-		Assert(!isnull1 && !isnull2 && !isnull3);
-		int32 mat_hypertable_id = DatumGetInt32(array_datum1);
-		all_caggs->mat_hypertable_ids =
-			lappend_int(all_caggs->mat_hypertable_ids, mat_hypertable_id);
-
-		Datum bucket_width;
-		bucket_width = array_datum2;
-		all_caggs->bucket_widths = lappend(all_caggs->bucket_widths, DatumGetPointer(bucket_width));
-
-		const ContinuousAggsBucketFunction *bucket_function =
-			bucket_function_deserialize(TextDatumGetCString(array_datum3));
-		/* bucket_function is cast to non-const type to make Visual Studio happy */
-		all_caggs->bucket_functions =
-			lappend(all_caggs->bucket_functions, (ContinuousAggsBucketFunction *) bucket_function);
-	}
-	array_free_iterator(it_htids);
-	array_free_iterator(it_widths);
-	array_free_iterator(it_bfs);
-}
-
-/*
- * Does not do deep copy of Datums For performance reasons. Make sure the Caggsinfo is not
- * deallocated before the arrays.
- */
-TSDLLEXPORT void
-ts_create_arrays_from_caggs_info(const CaggsInfo *all_caggs, ArrayType **mat_hypertable_ids,
-								 ArrayType **bucket_widths, ArrayType **bucket_functions)
-{
-	ListCell *lc1, *lc2, *lc3;
-	unsigned i;
-
-	Datum *matiddatums = palloc(sizeof(Datum) * list_length(all_caggs->mat_hypertable_ids));
-	Datum *widthdatums = palloc(sizeof(Datum) * list_length(all_caggs->bucket_widths));
-	Datum *bucketfunctions = palloc(sizeof(Datum) * list_length(all_caggs->bucket_functions));
-
-	i = 0;
-	forthree (lc1,
-			  all_caggs->mat_hypertable_ids,
-			  lc2,
-			  all_caggs->bucket_widths,
-			  lc3,
-			  all_caggs->bucket_functions)
-	{
-		int32 cagg_hyper_id = lfirst_int(lc1);
-		matiddatums[i] = Int32GetDatum(cagg_hyper_id);
-
-		widthdatums[i] = PointerGetDatum(lfirst(lc2));
-
-		const ContinuousAggsBucketFunction *bucket_function = lfirst(lc3);
-		bucketfunctions[i] = CStringGetTextDatum(bucket_function_serialize(bucket_function));
-
-		++i;
-	}
-
-	*mat_hypertable_ids = construct_array(matiddatums,
-										  list_length(all_caggs->mat_hypertable_ids),
-										  INT4OID,
-										  4,
-										  true,
-										  TYPALIGN_INT);
-
-	*bucket_widths = construct_array(widthdatums,
-									 list_length(all_caggs->bucket_widths),
-									 INT8OID,
-									 8,
-									 FLOAT8PASSBYVAL,
-									 TYPALIGN_DOUBLE);
-
-	*bucket_functions = construct_array(bucketfunctions,
-										list_length(all_caggs->bucket_functions),
-										TEXTOID,
-										-1,
-										false,
-										TYPALIGN_INT);
-}
-
 TSDLLEXPORT ContinuousAggHypertableStatus
 ts_continuous_agg_hypertable_status(int32 hypertable_id)
 {
@@ -814,6 +578,33 @@ ts_continuous_agg_hypertable_status(int32 hypertable_id)
 	}
 
 	return status;
+}
+
+TSDLLEXPORT bool
+ts_continuous_agg_hypertable_all_finalized(int32 raw_hypertable_id)
+{
+	ScanIterator iterator =
+		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
+	bool all_finalized = true;
+
+	init_scan_by_raw_hypertable_id(&iterator, raw_hypertable_id);
+	ts_scanner_foreach(&iterator)
+	{
+		FormData_continuous_agg data;
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+
+		continuous_agg_formdata_fill(&data, ti);
+
+		if (!data.finalized)
+		{
+			all_finalized = false;
+			break;
+		}
+	}
+
+	ts_scan_iterator_close(&iterator);
+
+	return all_finalized;
 }
 
 TSDLLEXPORT List *
@@ -845,7 +636,7 @@ ts_continuous_aggs_find_by_raw_table_id(int32 raw_hypertable_id)
 
 /* Find a continuous aggregate by the materialized hypertable id */
 ContinuousAgg *
-ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)
+ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id, bool missing_ok)
 {
 	ContinuousAgg *ca = NULL;
 	ScanIterator iterator =
@@ -868,6 +659,13 @@ ts_continuous_agg_find_by_mat_hypertable_id(int32 mat_hypertable_id)
 		Assert(ca && ca->data.mat_hypertable_id == mat_hypertable_id);
 	}
 	ts_scan_iterator_close(&iterator);
+
+	if (ca == NULL && !missing_ok)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid materialized hypertable ID: %d", mat_hypertable_id)));
+	}
 
 	return ca;
 }
@@ -1176,8 +974,6 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	if (OidIsValid(raw_hypertable_trig.objectId))
 	{
 		ts_hypertable_drop_trigger(raw_hypertable.objectId, CAGGINVAL_TRIGGER_NAME);
-		if (ts_cm_functions->remote_drop_dist_ht_invalidation_trigger)
-			ts_cm_functions->remote_drop_dist_ht_invalidation_trigger(cadata->raw_hypertable_id);
 	}
 
 	if (OidIsValid(mat_hypertable.objectId))
@@ -1470,17 +1266,6 @@ ts_continuous_agg_rename_view(const char *old_schema, const char *old_name, cons
 	ts_scanner_scan(&scanctx);
 }
 
-TSDLLEXPORT int32
-ts_number_of_continuous_aggs()
-{
-	int32 count = 0;
-	ScanIterator iterator =
-		ts_scan_iterator_create(CONTINUOUS_AGG, AccessShareLock, CurrentMemoryContext);
-	ts_scanner_foreach(&iterator) { count++; }
-
-	return count;
-}
-
 static int32
 find_raw_hypertable_for_materialization(int32 mat_hypertable_id)
 {
@@ -1572,14 +1357,15 @@ ts_continuous_agg_bucket_width(const ContinuousAgg *agg)
 static Datum
 generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 {
-	/* bf->timezone can't be NULL. If timezone is not specified, "" is stored */
-	Assert(bf->timezone != NULL);
+	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bf->bucket_function);
+	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bf->bucket_function);
+	bool is_experimental = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
 
-	if (!bf->experimental)
+	if (!is_experimental)
 	{
-		if (strlen(bf->timezone) > 0)
+		if (bf->timezone != NULL)
 		{
-			if (TIMESTAMP_NOT_FINITE(bf->origin))
+			if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 			{
 				/* using default origin */
 				return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
@@ -1594,11 +1380,11 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 										   IntervalPGetDatum(bf->bucket_width),
 										   timestamp,
 										   CStringGetTextDatum(bf->timezone),
-										   TimestampTzGetDatum((TimestampTz) bf->origin));
+										   TimestampTzGetDatum(bf->bucket_origin));
 			}
 		}
 
-		if (TIMESTAMP_NOT_FINITE(bf->origin))
+		if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 		{
 			/* using default origin */
 			return DirectFunctionCall2(ts_timestamp_bucket,
@@ -1611,14 +1397,14 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 			return DirectFunctionCall3(ts_timestamp_bucket,
 									   IntervalPGetDatum(bf->bucket_width),
 									   timestamp,
-									   TimestampGetDatum(bf->origin));
+									   TimestampTzGetDatum(bf->bucket_origin));
 		}
 	}
 	else
 	{
-		if (strlen(bf->timezone) > 0)
+		if (bf->timezone != NULL)
 		{
-			if (TIMESTAMP_NOT_FINITE(bf->origin))
+			if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 			{
 				/* using default origin */
 				return DirectFunctionCall3(ts_time_bucket_ng_timezone,
@@ -1632,12 +1418,12 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 				return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
 										   IntervalPGetDatum(bf->bucket_width),
 										   timestamp,
-										   TimestampTzGetDatum((TimestampTz) bf->origin),
+										   TimestampTzGetDatum(bf->bucket_origin),
 										   CStringGetTextDatum(bf->timezone));
 			}
 		}
 
-		if (TIMESTAMP_NOT_FINITE(bf->origin))
+		if (TIMESTAMP_NOT_FINITE(bf->bucket_origin))
 		{
 			/* using default origin */
 			return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
@@ -1650,7 +1436,7 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 			return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
 									   IntervalPGetDatum(bf->bucket_width),
 									   timestamp,
-									   TimestampGetDatum(bf->origin));
+									   TimestampTzGetDatum(bf->bucket_origin));
 		}
 	}
 }
@@ -1666,12 +1452,7 @@ static Datum
 generic_add_interval(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 {
 	Datum tzname = 0;
-	bool has_timezone;
-
-	/* bf->timezone can't be NULL. If timezone is not specified, "" is stored */
-	Assert(bf->timezone != NULL);
-
-	has_timezone = (strlen(bf->timezone) > 0);
+	bool has_timezone = (bf->timezone != NULL);
 
 	if (has_timezone)
 	{

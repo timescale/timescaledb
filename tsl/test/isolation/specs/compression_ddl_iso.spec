@@ -72,7 +72,7 @@ step "C1"   {
   SET LOCAL lock_timeout = '500ms';
   SET LOCAL deadlock_timeout = '10ms';
   SELECT
-    CASE WHEN compress_chunk(format('%I.%I',ch.schema_name, ch.table_name)) IS NOT NULL THEN true ELSE false END AS compress
+    compress_chunk(format('%I.%I',ch.schema_name, ch.table_name)) IS NOT NULL AS compress
   FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch
   WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'
   ORDER BY ch.id LIMIT 1;
@@ -88,7 +88,7 @@ step "D1"   {
   BEGIN;
   SET LOCAL client_min_messages TO WARNING;
   SELECT
-    CASE WHEN decompress_chunk(ch, true) IS NOT NULL THEN true ELSE false END AS decompress
+    decompress_chunk(ch) IS NOT NULL AS decompress
   FROM show_chunks('ts_device_table') AS ch
   ORDER BY ch::text LIMIT 1;
 }
@@ -98,7 +98,7 @@ session "CompressAll"
 step "CA1" {
   BEGIN;
   SELECT
-    CASE WHEN compress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+    compress_chunk(ch) IS NOT NULL AS compress
   FROM show_chunks('ts_device_table') AS ch
   ORDER BY ch::text;
 }
@@ -114,7 +114,7 @@ step "RC1" {
       SELECT ch FROM show_chunks('ts_device_table') ch
       LIMIT 1
      LOOP
-         CALL recompress_chunk(chunk_name);
+         PERFORM compress_chunk(chunk_name);
      END LOOP;
   END;
   $$;
@@ -130,7 +130,7 @@ step "RC2" {
       SELECT ch FROM show_chunks('ts_device_table') ch
        ORDER BY ch::text LIMIT 1
      LOOP
-         CALL recompress_chunk(chunk_name);
+         PERFORM compress_chunk(chunk_name, false);
      END LOOP;
   END;
   $$;

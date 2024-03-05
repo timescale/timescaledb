@@ -1,11 +1,6 @@
 set(SOURCES
     chunk_api.c
     chunk.c
-    data_node.c
-    deparse.c
-    dist_util.c
-    dist_backup.c
-    hypertable.c
     init.c
     partialize_agg.c
     partialize_finalize.c
@@ -17,14 +12,13 @@ set(SOURCES
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   set(TS_DEBUG 1)
   set(DEBUG 1)
-  list(APPEND SOURCES debug.c)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 set(TSL_LIBRARY_NAME ${PROJECT_NAME}-tsl)
 
 include(build-defs.cmake)
 
-if(CMAKE_BUILD_TYPE MATCHES Debug)
+if(CMAKE_BUILD_TYPE MATCHES Debug OR COMPRESSION_FUZZING)
   add_library(${TSL_LIBRARY_NAME} MODULE
               ${SOURCES} $<TARGET_OBJECTS:${TSL_TESTS_LIB_NAME}>)
 else()
@@ -58,4 +52,3 @@ add_subdirectory(bgw_policy)
 add_subdirectory(compression)
 add_subdirectory(continuous_aggs)
 add_subdirectory(nodes)
-add_subdirectory(remote)

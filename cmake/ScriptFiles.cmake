@@ -31,7 +31,6 @@ set(SOURCE_FILES
     util_time.sql
     util_internal_table_ddl.sql
     chunk_constraint.sql
-    hypertable_constraint.sql
     partitioning.sql
     ddl_api.sql
     ddl_triggers.sql
@@ -55,9 +54,14 @@ set(SOURCE_FILES
     cagg_utils.sql
     cagg_migrate.sql
     job_error_log_retention.sql
-    osm_api.sql)
+    osm_api.sql
+    compression_defaults.sql)
 
 if(ENABLE_DEBUG_UTILS AND CMAKE_BUILD_TYPE MATCHES Debug)
+  list(APPEND SOURCE_FILES debug_build_utils.sql)
+endif()
+
+if(ENABLE_DEBUG_UTILS)
   list(APPEND SOURCE_FILES debug_utils.sql)
 endif()
 
@@ -77,7 +81,8 @@ list(APPEND SOURCE_FILES
 
 # These files should be pre-pended to update scripts so that they are executed
 # before anything else during updates
-set(PRE_UPDATE_FILES updates/pre-update.sql)
+set(PRE_UPDATE_FILES updates/pre-version-change.sql updates/pre-update.sql)
+set(PRE_DOWNGRADE_FILES updates/pre-version-change.sql)
 
 # The POST_UPDATE_FILES should be executed as the last part of the update
 # script. sets state for executing POST_UPDATE_FILES during ALTER EXTENSION

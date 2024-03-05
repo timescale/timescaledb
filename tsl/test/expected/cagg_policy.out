@@ -273,9 +273,73 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 \set ON_ERROR_STOP 0
 \set VERBOSITY default
 SELECT add_continuous_aggregate_policy('mat_m1', 20, 10, '1h'::interval, if_not_exists=>true);
-ERROR:  could not find start_offset in config for existing job
+WARNING:  continuous aggregate policy already exists for "mat_m1"
+DETAIL:  A policy already exists with different arguments.
+HINT:  Remove the existing policy before adding a new one.
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
 SELECT remove_continuous_aggregate_policy('int_tab');
 ERROR:  "int_tab" is not a continuous aggregate
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+-- add with NULL offset, readd with NULL offset
+SELECT add_continuous_aggregate_policy('mat_m1', 20, NULL, '1h'::interval, if_not_exists=>true);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1010
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_m1', 20, NULL, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
+NOTICE:  continuous aggregate policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
+WARNING:  continuous aggregate policy already exists for "mat_m1"
+DETAIL:  A policy already exists with different arguments.
+HINT:  Remove the existing policy before adding a new one.
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
+SELECT remove_continuous_aggregate_policy('mat_m1');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 20, '1h'::interval, if_not_exists=>true);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1011
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, 20, '1h'::interval, if_not_exists=>true);
+NOTICE:  continuous aggregate policy already exists for "mat_m1", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
+SELECT add_continuous_aggregate_policy('mat_m1', NULL, NULL, '1h'::interval, if_not_exists=>true);
+WARNING:  continuous aggregate policy already exists for "mat_m1"
+DETAIL:  A policy already exists with different arguments.
+HINT:  Remove the existing policy before adding a new one.
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
 SELECT remove_continuous_aggregate_policy('mat_m1');
  remove_continuous_aggregate_policy 
 ------------------------------------
@@ -523,7 +587,7 @@ SELECT timescaledb_experimental.show_policies('max_mat_view_date');
 SELECT add_retention_policy('continuous_agg_max_mat_date', '25 days'::interval);
  add_retention_policy 
 ----------------------
-                 1025
+                 1027
 (1 row)
 
 SELECT timescaledb_experimental.alter_policies('max_mat_view_date', refresh_start_offset =>'25 days'::interval);
@@ -613,13 +677,13 @@ SELECT add_job('custom_func','1h', config:='{"type":"function"}'::jsonb, initial
 SELECT _timescaledb_functions.alter_job_set_hypertable_id( :job_id, 'max_mat_view_date'::regclass);
  alter_job_set_hypertable_id 
 -----------------------------
-                        1027
+                        1029
 (1 row)
 
 SELECT * FROM timescaledb_information.jobs WHERE job_id != 1 ORDER BY 1;
  job_id |      application_name      | schedule_interval | max_runtime | max_retries | retry_period | proc_schema |  proc_name  |       owner       | scheduled | fixed_schedule |        config        |          next_start          |        initial_start         |   hypertable_schema   |      hypertable_name       | check_schema | check_name 
 --------+----------------------------+-------------------+-------------+-------------+--------------+-------------+-------------+-------------------+-----------+----------------+----------------------+------------------------------+------------------------------+-----------------------+----------------------------+--------------+------------
-   1027 | User-Defined Action [1027] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | t              | {"type": "function"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | _timescaledb_internal | _materialized_hypertable_6 |              | 
+   1029 | User-Defined Action [1029] | @ 1 hour          | @ 0         |          -1 | @ 5 mins     | public      | custom_func | default_perm_user | t         | t              | {"type": "function"} | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:00 1999 PST | _timescaledb_internal | _materialized_hypertable_6 |              | 
 (1 row)
 
 SELECT timescaledb_experimental.remove_all_policies('max_mat_view_date', true); -- ignore custom job
@@ -665,7 +729,7 @@ DETAIL:  The start and end offsets must cover at least two buckets in the valid 
 SELECT add_continuous_aggregate_policy('max_mat_view_date', '13 days', '-1 day', '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1028
+                            1030
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -678,7 +742,7 @@ SELECT remove_continuous_aggregate_policy('max_mat_view_date');
 SELECT add_continuous_aggregate_policy('max_mat_view_date', NULL, NULL, '1 day'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1029
+                            1031
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_date');
@@ -721,7 +785,7 @@ CREATE MATERIALIZED VIEW max_mat_view_timestamp
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '1000000 years', '1 day' , '1 h'::interval);
  add_continuous_aggregate_policy 
 ---------------------------------
-                            1031
+                            1033
 (1 row)
 
 SELECT remove_continuous_aggregate_policy('max_mat_view_timestamp');
@@ -767,7 +831,12 @@ SELECT config FROM _timescaledb_config.bgw_job where id = :job_id;
 
 \set ON_ERROR_STOP 0
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', '15 day', '1 day', '1h'::interval, if_not_exists=>true);
-ERROR:  could not find start_offset in config for job
+WARNING:  continuous aggregate policy already exists for "max_mat_view_timestamp"
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
 SELECT add_continuous_aggregate_policy('max_mat_view_timestamp', 'xyz', '1 day', '1h'::interval, if_not_exists=>true);
 ERROR:  invalid input syntax for type interval: "xyz"
 \set ON_ERROR_STOP 1
@@ -1086,13 +1155,13 @@ ERROR:  compress_after value for compression policy should be greater than the s
 SELECT add_compression_policy('mat_smallint', 5::smallint);
  add_compression_policy 
 ------------------------
-                   1051
+                   1053
 (1 row)
 
 SELECT add_compression_policy('mat_bigint', 20::bigint);
  add_compression_policy 
 ------------------------
-                   1052
+                   1054
 (1 row)
 
 -- end of coverage tests
@@ -1137,6 +1206,52 @@ SELECT time_bucket('1 day', time) as dayb, device_id,
 FROM metrics
 GROUP BY 1, 2
 WITH NO DATA;
+-- this was previously crashing
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, NULL, '1 h'::interval, if_not_exists => true);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1055
+(1 row)
+
+SELECT add_continuous_aggregate_policy('metrics_cagg', '7 day'::interval, '1 day'::interval, '1 h'::interval, if_not_exists => true);
+WARNING:  continuous aggregate policy already exists for "metrics_cagg"
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
+SELECT remove_continuous_aggregate_policy('metrics_cagg');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
+SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true);
+ add_continuous_aggregate_policy 
+---------------------------------
+                            1056
+(1 row)
+
+SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, '1 day'::interval, '1h'::interval, if_not_exists=>true); -- same param values, so we get a NOTICE
+NOTICE:  continuous aggregate policy already exists for "metrics_cagg", skipping
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
+SELECT add_continuous_aggregate_policy('metrics_cagg', NULL, NULL, '1h'::interval, if_not_exists=>true); -- different values, so we get a WARNING
+WARNING:  continuous aggregate policy already exists for "metrics_cagg"
+ add_continuous_aggregate_policy 
+---------------------------------
+                              -1
+(1 row)
+
+SELECT remove_continuous_aggregate_policy('metrics_cagg');
+ remove_continuous_aggregate_policy 
+------------------------------------
+ 
+(1 row)
+
 --can set compression policy only after setting up refresh policy --
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('metrics_cagg', '1 day'::interval);
@@ -1155,7 +1270,7 @@ ERROR:  cannot use "compress_created_before" with continuous aggregate "metrics_
 SELECT add_compression_policy('metrics_cagg', '8 day'::interval) AS "COMP_JOB" ;
  COMP_JOB 
 ----------
-     1054
+     1058
 (1 row)
 
 SELECT remove_compression_policy('metrics_cagg');
@@ -1297,7 +1412,7 @@ SELECT set_integer_now_func('t', 'unix_now');
 SELECT add_retention_policy('t', 20);
  add_retention_policy 
 ----------------------
-                 1056
+                 1060
 (1 row)
 
 CREATE MATERIALIZED VIEW cagg(a, sumb) WITH (timescaledb.continuous)

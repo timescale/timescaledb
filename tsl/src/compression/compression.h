@@ -15,6 +15,7 @@
 typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "compat/compat.h"
+#include "nodes/decompress_chunk/detoaster.h"
 #include "hypertable.h"
 #include "segment_meta.h"
 #include "ts_catalog/compression_settings.h"
@@ -148,6 +149,8 @@ typedef struct RowDecompressor
 	int64 tuples_decompressed;
 
 	TupleTableSlot **decompressed_slots;
+
+	Detoaster detoaster;
 } RowDecompressor;
 
 /*
@@ -274,10 +277,15 @@ typedef struct BatchFilter
 	NameData column_name;
 	/* Filter operation used */
 	StrategyNumber strategy;
+	/* Collation to be used by the operator */
+	Oid collation;
+	/* Operator code used */
+	RegProcedure opcode;
 	/* Value to compare with */
 	Const *value;
 	/* IS NULL or IS NOT NULL */
 	bool is_null_check;
+	bool is_null;
 } BatchFilter;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
@@ -292,7 +300,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 {
 	/* make sure not too many compression algorithms   */
 	StaticAssertStmt(_END_COMPRESSION_ALGORITHMS <= _MAX_NUM_COMPRESSION_ALGORITHMS,
-					 "Too many compression algorthims, make sure a decision on variable-length "
+					 "Too many compression algorithms, make sure a decision on variable-length "
 					 "version field has been made.");
 
 	/* existing indexes that MUST NEVER CHANGE */
@@ -313,19 +321,18 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
 
-extern CompressionStats compress_chunk(Hypertable *ht, Oid in_table, Oid out_table,
-									   int insert_options);
+extern CompressionStats compress_chunk(Oid in_table, Oid out_table, int insert_options);
 extern void decompress_chunk(Oid in_table, Oid out_table);
 
 extern DecompressionIterator *(*tsl_get_decompression_iterator_init(
 	CompressionAlgorithm algorithm, bool reverse))(Datum, Oid element_type);
 
-extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithm algorithm);
+extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorithm algorithm,
+															 Oid type);
 
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
-extern void decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk,
-										  TupleTableSlot *slot);
+extern void decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot);
 #if PG14_GE
 typedef struct HypertableModifyState HypertableModifyState;
 extern bool decompress_target_segments(HypertableModifyState *ht_state);
@@ -348,17 +355,21 @@ extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *se
 														 Oid *sort_operator, Oid *collation,
 														 bool *nulls_first);
 extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
-								TupleDesc uncompressed_tuple_desc, Relation compressed_table,
+								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								bool reset_sequence, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
-extern void row_compressor_finish(RowCompressor *row_compressor);
+extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
-											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc);
+											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
+											  Relation in_rel);
+extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings);
+
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 
 extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 
+extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
@@ -366,22 +377,21 @@ extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
  * to pollute the logs.
  */
 #ifndef TS_COMPRESSION_FUZZING
-#define CORRUPT_DATA_MESSAGE                                                                       \
-	(errmsg("the compressed data is corrupt"), errcode(ERRCODE_DATA_CORRUPTED))
+#define CORRUPT_DATA_MESSAGE(X)                                                                    \
+	(errmsg("the compressed data is corrupt"), errdetail("%s", X), errcode(ERRCODE_DATA_CORRUPTED))
 #else
-#define CORRUPT_DATA_MESSAGE (errcode(ERRCODE_DATA_CORRUPTED))
+#define CORRUPT_DATA_MESSAGE(X) (errcode(ERRCODE_DATA_CORRUPTED))
 #endif
 
 #define CheckCompressedData(X)                                                                     \
 	if (unlikely(!(X)))                                                                            \
-	ereport(ERROR, CORRUPT_DATA_MESSAGE)
+	ereport(ERROR, CORRUPT_DATA_MESSAGE(#X))
 
 inline static void *
 consumeCompressedData(StringInfo si, int bytes)
 {
 	CheckCompressedData(bytes >= 0);
-	CheckCompressedData(bytes < PG_INT32_MAX / 2);
-	CheckCompressedData(si->cursor + bytes >= 0);
+	CheckCompressedData(si->cursor + bytes >= si->cursor); /* Check for overflow. */
 	CheckCompressedData(si->cursor + bytes <= si->len);
 
 	void *result = si->data + si->cursor;
@@ -394,3 +404,5 @@ consumeCompressedData(StringInfo si, int bytes)
  * We use this limit for sanity checks in case the compressed data is corrupt.
  */
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION 1015
+
+const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);

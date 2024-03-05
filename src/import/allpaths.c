@@ -348,17 +348,6 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 	set_cheapest(rel);
 }
 
-/*
- * Exported version of set_dummy_rel_pathlist.
- *
- * Note that in PostgreSQLs prior to PG12, set_dummy_rel_pathlist was public.
- */
-void
-ts_set_dummy_rel_pathlist(RelOptInfo *rel)
-{
-	set_dummy_rel_pathlist(rel);
-}
-
 /* copied from allpaths.c */
 static void
 set_rel_consider_parallel(PlannerInfo *root, RelOptInfo *rel, RangeTblEntry *rte)

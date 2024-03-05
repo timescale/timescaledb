@@ -12,37 +12,58 @@
 #include "nodes/decompress_chunk/batch_queue.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 
+typedef struct
+{
+	Datum value;
+	bool null;
+} HeapEntryColumn;
+
 typedef struct BatchQueueHeap
 {
-	BatchQueue bq;
+	BatchQueue queue;
 	binaryheap *merge_heap; /* Binary heap of slot indices */
-	TupleTableSlot *last_batch_first_tuple;
-	SortSupport sortkeys;
+
+	/*
+	 * Requested sort order of the heap.
+	 */
 	int nkeys;
+	SortSupport sortkeys;
+
+	/*
+	 * This is the actual entries of the heap we're going to compare. We're using
+	 * these minimal structures for better memory locality instead of addressing
+	 * the entire compressed batches. Would be even better to put them into the
+	 * heap inline, but unfortunately the Postgres binary heap doesn't support
+	 * this.
+	 *
+	 * For each batch, we have nkeys of HeapEntryColumn values, which contain
+	 * the latest decompressed values.
+	 */
+	HeapEntryColumn *heap_entries;
+
+	/*
+	 * We use this to check when we have to ask for the next input batch.
+	 */
+	TupleTableSlot *last_batch_first_tuple_slot;
+	HeapEntryColumn *last_batch_first_tuple_entry;
 } BatchQueueHeap;
 
 /*
- * Compare the tuples of two given slots.
+ * Compare heap entries for two batches. This function is used for comparing the
+ * first tuple of the last batch to the current top tuple, so it is only called
+ * once per input tuple, and optimized specializations for it are less important.
  */
 static int32
-decompress_binaryheap_compare_slots(TupleTableSlot *tupleA, TupleTableSlot *tupleB,
-									const SortSupport sortkeys, int nkeys)
+compare_entries(HeapEntryColumn *entryA, HeapEntryColumn *entryB, const SortSupport sortkeys,
+				int nkeys)
 {
-	Assert(!TupIsNull(tupleA));
-	Assert(!TupIsNull(tupleB));
-
-	for (int nkey = 0; nkey < nkeys; nkey++)
+	for (int key = 0; key < nkeys; key++)
 	{
-		SortSupport sortKey = &sortkeys[nkey];
-		Assert(sortKey != NULL);
-		AttrNumber attno = sortKey->ssup_attno;
-
-		bool isNullA, isNullB;
-
-		Datum datumA = slot_getattr(tupleA, attno, &isNullA);
-		Datum datumB = slot_getattr(tupleB, attno, &isNullB);
-
-		int compare = ApplySortComparator(datumA, isNullA, datumB, isNullB, sortKey);
+		int compare = ApplySortComparator(entryA[key].value,
+										  entryA[key].null,
+										  entryB[key].value,
+										  entryB[key].null,
+										  &sortkeys[key]);
 
 		if (compare != 0)
 		{
@@ -55,24 +76,77 @@ decompress_binaryheap_compare_slots(TupleTableSlot *tupleA, TupleTableSlot *tupl
 }
 
 /*
- * Compare top tuples of two given batch array slots.
+ * Compare top tuples of two given batch array slots. We support specializations
+ * for comparison of the first tuple, like tuplesort.
  */
-static int32
-decompress_binaryheap_compare_heap_pos(Datum a, Datum b, void *arg)
+static pg_attribute_always_inline int32
+compare_heap_pos_impl(Datum a, Datum b, void *arg,
+					  int32 (*apply_first_datum_comparator)(Datum, bool, Datum, bool, SortSupport))
 {
-	BatchQueueHeap *bqh = (BatchQueueHeap *) arg;
-	BatchArray *batch_array = &bqh->bq.batch_array;
+	BatchQueueHeap *queue = (BatchQueueHeap *) arg;
+	PG_USED_FOR_ASSERTS_ONLY BatchArray *batch_array = &queue->queue.batch_array;
 	int batchA = DatumGetInt32(a);
 	Assert(batchA <= batch_array->n_batch_states);
 
 	int batchB = DatumGetInt32(b);
 	Assert(batchB <= batch_array->n_batch_states);
 
-	TupleTableSlot *tupleA = batch_array_get_at(batch_array, batchA)->decompressed_scan_slot;
-	TupleTableSlot *tupleB = batch_array_get_at(batch_array, batchB)->decompressed_scan_slot;
+	const int nkeys = queue->nkeys;
+	SortSupport sortkeys = queue->sortkeys;
 
-	return decompress_binaryheap_compare_slots(tupleA, tupleB, bqh->sortkeys, bqh->nkeys);
+	HeapEntryColumn *entryA = &queue->heap_entries[batchA * nkeys];
+	HeapEntryColumn *entryB = &queue->heap_entries[batchB * nkeys];
+
+	int compare = apply_first_datum_comparator(entryA[0].value,
+											   entryA[0].null,
+											   entryB[0].value,
+											   entryB[0].null,
+											   &sortkeys[0]);
+	if (compare != 0)
+	{
+		INVERT_COMPARE_RESULT(compare);
+		return compare;
+	}
+
+	for (int key = 1; key < nkeys; key++)
+	{
+		int compare = ApplySortComparator(entryA[key].value,
+										  entryA[key].null,
+										  entryB[key].value,
+										  entryB[key].null,
+										  &sortkeys[key]);
+
+		if (compare != 0)
+		{
+			INVERT_COMPARE_RESULT(compare);
+			return compare;
+		}
+	}
+
+	return 0;
 }
+
+static int32
+compare_heap_pos_generic(Datum a, Datum b, void *arg)
+{
+	return compare_heap_pos_impl(a, b, arg, ApplySortComparator);
+}
+
+#if PG15_GE
+static int32
+compare_heap_pos_int32(Datum a, Datum b, void *arg)
+{
+	return compare_heap_pos_impl(a, b, arg, ApplyInt32SortComparator);
+}
+
+#if SIZEOF_DATUM >= 8
+static int32
+compare_heap_pos_signed(Datum a, Datum b, void *arg)
+{
+	return compare_heap_pos_impl(a, b, arg, ApplySignedSortComparator);
+}
+#endif
+#endif
 
 /* Add a new datum to the heap and perform an automatic resizing if needed. In contrast to
  * the binaryheap_add_unordered() function, the capacity of the heap is automatically
@@ -98,52 +172,68 @@ binaryheap_add_unordered_autoresize(binaryheap *heap, Datum d)
 static void
 batch_queue_heap_pop(BatchQueue *bq, DecompressContext *dcontext)
 {
-	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
+	BatchQueueHeap *queue = (BatchQueueHeap *) bq;
 	BatchArray *batch_array = &bq->batch_array;
 
-	if (binaryheap_empty(bqh->merge_heap))
+	if (binaryheap_empty(queue->merge_heap))
 	{
 		/* Allow this function to be called on the initial empty heap. */
 		return;
 	}
 
-	const int top_batch_index = DatumGetInt32(binaryheap_first(bqh->merge_heap));
+	const int top_batch_index = DatumGetInt32(binaryheap_first(queue->merge_heap));
 	DecompressBatchState *top_batch = batch_array_get_at(batch_array, top_batch_index);
 
 	compressed_batch_advance(dcontext, top_batch);
 
-	if (TupIsNull(top_batch->decompressed_scan_slot))
+	TupleTableSlot *top_tuple = compressed_batch_current_tuple(top_batch);
+	if (TupIsNull(top_tuple))
 	{
 		/* Batch is exhausted, recycle batch_state */
-		(void) binaryheap_remove_first(bqh->merge_heap);
+		(void) binaryheap_remove_first(queue->merge_heap);
 		batch_array_clear_at(batch_array, top_batch_index);
 	}
 	else
 	{
-		/* Put the next tuple from this batch on the heap */
-		binaryheap_replace_first(bqh->merge_heap, Int32GetDatum(top_batch_index));
+		/*
+		 * Update the heap entries for this batch with the current decompressed
+		 * tuple values.
+		 */
+		for (int key = 0; key < queue->nkeys; key++)
+		{
+			SortSupport sortKey = &queue->sortkeys[key];
+			const AttrNumber attr = AttrNumberGetAttrOffset(sortKey->ssup_attno);
+			/*
+			 * We're working with virtual tuple slots so no need for slot_getattr().
+			 */
+			Assert(TTS_IS_VIRTUAL(top_tuple));
+			queue->heap_entries[top_batch_index * queue->nkeys + key].value =
+				top_tuple->tts_values[attr];
+			queue->heap_entries[top_batch_index * queue->nkeys + key].null =
+				top_tuple->tts_isnull[attr];
+		}
+
+		/* Place this batch on the heap according to its new decompressed tuple. */
+		binaryheap_replace_first(queue->merge_heap, Int32GetDatum(top_batch_index));
 	}
 }
 
 static bool
-batch_queue_heap_needs_next_batch(BatchQueue *bq)
+batch_queue_heap_needs_next_batch(BatchQueue *_queue)
 {
-	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
-	BatchArray *batch_array = &bq->batch_array;
+	BatchQueueHeap *queue = (BatchQueueHeap *) _queue;
 
-	if (binaryheap_empty(bqh->merge_heap))
+	if (binaryheap_empty(queue->merge_heap))
 	{
 		return true;
 	}
 
-	const int top_batch_index = DatumGetInt32(binaryheap_first(bqh->merge_heap));
-	DecompressBatchState *top_batch = batch_array_get_at(batch_array, top_batch_index);
-
+	const int top_batch_index = DatumGetInt32(binaryheap_first(queue->merge_heap));
 	const int comparison_result =
-		decompress_binaryheap_compare_slots(top_batch->decompressed_scan_slot,
-											bqh->last_batch_first_tuple,
-											bqh->sortkeys,
-											bqh->nkeys);
+		compare_entries(&queue->heap_entries[queue->nkeys * top_batch_index],
+						queue->last_batch_first_tuple_entry,
+						queue->sortkeys,
+						queue->nkeys);
 
 	/*
 	 * The invariant we have to preserve is that either:
@@ -160,28 +250,74 @@ batch_queue_heap_needs_next_batch(BatchQueue *bq)
 }
 
 static void
-batch_queue_heap_push_batch(BatchQueue *bq, DecompressContext *dcontext,
+batch_queue_heap_push_batch(BatchQueue *_queue, DecompressContext *dcontext,
 							TupleTableSlot *compressed_slot)
 {
-	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
-	BatchArray *batch_array = &bq->batch_array;
+	BatchQueueHeap *queue = (BatchQueueHeap *) _queue;
+	BatchArray *batch_array = &queue->queue.batch_array;
 
 	Assert(!TupIsNull(compressed_slot));
 
+	const int old_size = batch_array->n_batch_states;
 	const int new_batch_index = batch_array_get_unused_slot(batch_array);
+	if (batch_array->n_batch_states != old_size)
+	{
+		queue->heap_entries =
+			repalloc(queue->heap_entries,
+					 sizeof(HeapEntryColumn) * queue->nkeys * batch_array->n_batch_states);
+	}
 	DecompressBatchState *batch_state = batch_array_get_at(batch_array, new_batch_index);
 
 	compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
-	compressed_batch_save_first_tuple(dcontext, batch_state, bqh->last_batch_first_tuple);
+	compressed_batch_save_first_tuple(dcontext, batch_state, queue->last_batch_first_tuple_slot);
 
-	if (TupIsNull(batch_state->decompressed_scan_slot))
+	/*
+	 * Update the heap entries for the first tuple of the last batch.
+	 */
+	for (int key = 0; key < queue->nkeys; key++)
+	{
+		SortSupport sortKey = &queue->sortkeys[key];
+		const AttrNumber attr = AttrNumberGetAttrOffset(sortKey->ssup_attno);
+		/*
+		 * We're working with virtual tuple slots so no need for slot_getattr().
+		 */
+		Assert(TTS_IS_VIRTUAL(queue->last_batch_first_tuple_slot));
+		queue->last_batch_first_tuple_entry[key].value =
+			queue->last_batch_first_tuple_slot->tts_values[attr];
+		queue->last_batch_first_tuple_entry[key].null =
+			queue->last_batch_first_tuple_slot->tts_isnull[attr];
+	}
+
+	TupleTableSlot *current_tuple = compressed_batch_current_tuple(batch_state);
+	if (TupIsNull(current_tuple))
 	{
 		/* Might happen if there are no tuples in the batch that pass the quals. */
 		batch_array_clear_at(batch_array, new_batch_index);
 		return;
 	}
 
-	bqh->merge_heap = binaryheap_add_unordered_autoresize(bqh->merge_heap, new_batch_index);
+	/*
+	 * Update the heap entries for this batch with the first decompressed tuple
+	 * values.
+	 */
+	for (int key = 0; key < queue->nkeys; key++)
+	{
+		SortSupport sortKey = &queue->sortkeys[key];
+		const AttrNumber attr = AttrNumberGetAttrOffset(sortKey->ssup_attno);
+		/*
+		 * We're working with virtual tuple slots so no need for slot_getattr().
+		 */
+		Assert(TTS_IS_VIRTUAL(current_tuple));
+		queue->heap_entries[new_batch_index * queue->nkeys + key].value =
+			current_tuple->tts_values[attr];
+		queue->heap_entries[new_batch_index * queue->nkeys + key].null =
+			current_tuple->tts_isnull[attr];
+	}
+
+	/*
+	 * Put the batch on the heap.
+	 */
+	queue->merge_heap = binaryheap_add_unordered_autoresize(queue->merge_heap, new_batch_index);
 }
 
 static TupleTableSlot *
@@ -197,8 +333,9 @@ batch_queue_heap_top_tuple(BatchQueue *bq)
 
 	const int top_batch_index = DatumGetInt32(binaryheap_first(bqh->merge_heap));
 	DecompressBatchState *top_batch = batch_array_get_at(batch_array, top_batch_index);
-	Assert(!TupIsNull(top_batch->decompressed_scan_slot));
-	return top_batch->decompressed_scan_slot;
+	TupleTableSlot *top_tuple = compressed_batch_current_tuple(top_batch);
+	Assert(!TupIsNull(top_tuple));
+	return top_tuple;
 }
 
 static void
@@ -212,20 +349,22 @@ batch_queue_heap_reset(BatchQueue *bq)
  * Free the binary heap.
  */
 static void
-batch_queue_heap_free(BatchQueue *bq)
+batch_queue_heap_free(BatchQueue *_queue)
 {
-	BatchQueueHeap *bqh = (BatchQueueHeap *) bq;
-	BatchArray *batch_array = &bq->batch_array;
+	BatchQueueHeap *queue = (BatchQueueHeap *) _queue;
+	BatchArray *batch_array = &queue->queue.batch_array;
 
-	elog(DEBUG3, "heap has capacity of %d", bqh->merge_heap->bh_space);
+	elog(DEBUG3, "heap has capacity of %d", queue->merge_heap->bh_space);
 	elog(DEBUG3, "created batch states %d", batch_array->n_batch_states);
-	batch_array_clear_all(&bq->batch_array);
-	binaryheap_free(bqh->merge_heap);
-	bqh->merge_heap = NULL;
-	pfree(bqh->sortkeys);
-	ExecDropSingleTupleTableSlot(bqh->last_batch_first_tuple);
+	batch_array_clear_all(batch_array);
+	pfree(queue->heap_entries);
+	binaryheap_free(queue->merge_heap);
+	queue->merge_heap = NULL;
+	pfree(queue->sortkeys);
+	ExecDropSingleTupleTableSlot(queue->last_batch_first_tuple_slot);
+	pfree(queue->last_batch_first_tuple_entry);
 	batch_array_destroy(batch_array);
-	pfree(bq);
+	pfree(queue);
 }
 
 const struct BatchQueueFunctions BatchQueueFunctionsHeap = {
@@ -285,18 +424,42 @@ batch_queue_heap_create(int num_compressed_cols, Size batch_memory_context_bytes
 						const List *sortinfo, const TupleDesc result_tupdesc,
 						const BatchQueueFunctions *funcs)
 {
-	BatchQueueHeap *bqh = palloc0(sizeof(BatchQueueHeap));
+	BatchQueueHeap *queue = palloc0(sizeof(BatchQueueHeap));
 
-	batch_array_init(&bqh->bq.batch_array,
+	batch_array_init(&queue->queue.batch_array,
 					 INITIAL_BATCH_CAPACITY,
 					 num_compressed_cols,
 					 batch_memory_context_bytes);
 
-	bqh->sortkeys = build_batch_sorted_merge_info(sortinfo, &bqh->nkeys);
-	bqh->merge_heap =
-		binaryheap_allocate(INITIAL_BATCH_CAPACITY, decompress_binaryheap_compare_heap_pos, bqh);
-	bqh->last_batch_first_tuple = MakeSingleTupleTableSlot(result_tupdesc, &TTSOpsVirtual);
-	bqh->bq.funcs = funcs;
+	queue->sortkeys = build_batch_sorted_merge_info(sortinfo, &queue->nkeys);
 
-	return &bqh->bq;
+	queue->heap_entries = palloc(sizeof(HeapEntryColumn) * queue->nkeys * INITIAL_BATCH_CAPACITY);
+
+	/*
+	 * Choose a specialization for faster comparison of the first column. This is
+	 * the approach that tuplesort uses, see e.g. qsort_tuple_signed().
+	 * The ssup_datum_unsigned_cmp is used only for abbreviated keys which the
+	 * batch sorted merge doesn't use, so we use a generic comparator in this
+	 * case.
+	 */
+	binaryheap_comparator comparator = compare_heap_pos_generic;
+#if PG15_GE
+	if (queue->sortkeys[0].comparator == ssup_datum_int32_cmp)
+	{
+		comparator = compare_heap_pos_int32;
+	}
+#if SIZEOF_DATUM >= 8
+	else if (queue->sortkeys[0].comparator == ssup_datum_signed_cmp)
+	{
+		comparator = compare_heap_pos_signed;
+	}
+#endif
+#endif
+
+	queue->merge_heap = binaryheap_allocate(INITIAL_BATCH_CAPACITY, comparator, queue);
+	queue->last_batch_first_tuple_slot = MakeSingleTupleTableSlot(result_tupdesc, &TTSOpsVirtual);
+	queue->last_batch_first_tuple_entry = palloc(sizeof(HeapEntryColumn) * queue->nkeys);
+	queue->queue.funcs = funcs;
+
+	return &queue->queue;
 }

@@ -1,0 +1,72 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_lock_invalidation s1_run_update s2_run_update s3_release_invalidation s3_check_watermarks
+step s3_lock_invalidation: 
+   SELECT debug_waitpoint_enable('invalidation_threshold_scan_update_enter');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s1_run_update: 
+   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
+ <waiting ...>
+step s2_run_update: 
+   CALL refresh_continuous_aggregate('cagg_2', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
+ <waiting ...>
+step s3_release_invalidation: 
+   SELECT debug_waitpoint_release('invalidation_threshold_scan_update_enter');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s1_run_update: <... completed>
+step s2_run_update: <... completed>
+step s3_check_watermarks: 
+  SELECT _timescaledb_functions.to_timestamp(watermark)
+      FROM _timescaledb_catalog.continuous_aggs_watermark
+      ORDER BY mat_hypertable_id;
+
+to_timestamp                
+----------------------------
+Wed Jan 01 16:00:00 2020 PST
+Wed Jan 01 16:00:00 2020 PST
+(2 rows)
+
+
+starting permutation: s2_insert_new_data_2022 s3_lock_invalidation_tuple_found s2_insert_new_data_2023 s1_run_update s3_release_invalidation_tuple_found
+step s2_insert_new_data_2022: 
+  INSERT INTO temperature
+    SELECT time, ceil(random() * 100)::int
+      FROM generate_series('2022-01-01 0:00:00+0'::timestamptz,
+                          '2022-01-01 23:59:59+0','1m') time;
+
+step s3_lock_invalidation_tuple_found: 
+   SELECT debug_waitpoint_enable('invalidation_tuple_found_done');
+
+debug_waitpoint_enable
+----------------------
+                      
+(1 row)
+
+step s2_insert_new_data_2023: 
+  INSERT INTO temperature
+    SELECT time, ceil(random() * 100)::int
+      FROM generate_series('2023-01-01 0:00:00+0'::timestamptz,
+                          '2023-01-01 23:59:59+0','1m') time;
+ <waiting ...>
+step s1_run_update: 
+   CALL refresh_continuous_aggregate('cagg_1', '2020-01-01 00:00:00', '2025-01-01 00:00:00');
+
+step s3_release_invalidation_tuple_found: 
+   SELECT debug_waitpoint_release('invalidation_tuple_found_done');
+
+debug_waitpoint_release
+-----------------------
+                       
+(1 row)
+
+step s2_insert_new_data_2023: <... completed>

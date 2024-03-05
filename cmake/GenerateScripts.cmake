@@ -158,19 +158,11 @@ function(generate_downgrade_script)
   include(
     ${CMAKE_BINARY_DIR}/v${_downgrade_TARGET_VERSION}/cmake/ScriptFiles.cmake)
 
-  set(_downgrade_PRE_FILES ${PRE_UPDATE_FILES})
+  set(_downgrade_PRE_FILES ${PRE_DOWNGRADE_FILES})
   set(_downgrade_POST_FILES "${PRE_INSTALL_FUNCTION_FILES};${SOURCE_FILES}" ${SET_POST_UPDATE_STAGE}
                             ${POST_UPDATE_FILES} ${UNSET_UPDATE_STAGE})
 
-  # Fetch prolog and epilog from target version.
-  git_versioned_get(
-    VERSION
-    ${_downgrade_TARGET_VERSION}
-    FILES
-    ${_downgrade_PRE_FILES}
-    RESULT_FILES
-    _prolog_files
-    IGNORE_ERRORS)
+  # Fetch epilog from target version.
   git_versioned_get(
     VERSION
     ${_downgrade_TARGET_VERSION}
@@ -180,7 +172,11 @@ function(generate_downgrade_script)
     _epilog_files
     IGNORE_ERRORS)
 
-  set(_files ${_prolog_files})
+  foreach(_downgrade_file ${_downgrade_PRE_FILES})
+    get_filename_component(_downgrade_filename ${_downgrade_file} NAME)
+    configure_file(${_downgrade_file} ${_downgrade_INPUT_DIRECTORY}/${_downgrade_filename} COPYONLY)
+    list(APPEND _files ${_downgrade_INPUT_DIRECTORY}/${_downgrade_filename})
+  endforeach()
   foreach(_downgrade_file ${_downgrade_FILES})
     list(APPEND _files ${_downgrade_INPUT_DIRECTORY}/${_downgrade_file})
   endforeach()
@@ -189,9 +185,9 @@ function(generate_downgrade_script)
   # Save the current PROJECT_VERSION_MOD
   set(SAVED_PROJECT_VERSION_MOD ${PROJECT_VERSION_MOD})
   # To use PROJECT_VERSION_MOD variable as a target version in downgrade scripts
-  # we should set it as the UPDATE_FROM_VERSION because it means the target version
+  # we should set it as the DOWNGRADE_TO_VERSION because it means the target version
   # when executing the downgrade scripts
-  set(PROJECT_VERSION_MOD ${UPDATE_FROM_VERSION})
+  set(PROJECT_VERSION_MOD ${DOWNGRADE_TO_VERSION})
   generate_script(
     VERSION
     ${_downgrade_TARGET_VERSION}

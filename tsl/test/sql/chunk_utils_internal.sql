@@ -325,6 +325,9 @@ SELECT create_hypertable('ht_try', 'timec', chunk_time_interval => interval '1 d
 INSERT INTO ht_try VALUES ('2022-05-05 01:00', 222, 222);
 
 SELECT * FROM child_fdw_table;
+-- test size functions on foreign table
+SELECT * FROM _timescaledb_functions.relation_approximate_size('child_fdw_table');
+SELECT * FROM _timescaledb_functions.relation_size('child_fdw_table');
 
 -- error should be thrown as the hypertable does not yet have an associated tiered chunk
 \set ON_ERROR_STOP 0
@@ -395,6 +398,9 @@ SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2020-01-02 
 -- error when range overlaps
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2022-05-05 01:00'::timestamptz, '2022-05-06');
 \set ON_ERROR_STOP 1
+
+-- test that approximate size function works when a osm chunk is present
+SELECT * FROM hypertable_approximate_size('ht_try');
 
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
@@ -703,6 +709,15 @@ DELETE FROM test_chunkapp_fdw;
 SELECT _timescaledb_functions.hypertable_osm_range_update('test_chunkapp', NULL::timestamptz, NULL, empty => true);
 EXPLAIN SELECT * FROM test_chunkapp ORDER BY 1;
 SELECT * FROM test_chunkapp ORDER BY 1;
+
+\set ON_ERROR_STOP 0
+-- test adding constraint directly on OSM chunk is blocked
+ALTER TABLE test_chunkapp_fdw_child ADD CHECK (a > 0); -- non-dimensional
+ALTER TABLE test_chunkapp_fdw_child ADD CHECK (time > '1600-01-01'::timestamptz); -- dimensional
+-- but on hypertable, it is allowed
+ALTER TABLE test_chunkapp ADD CHECK (a > 0);
+\d+ test_chunkapp_fdw_child
+\set ON_ERROR_STOP 1
 
 -- test error is triggered when time dimension not found
 CREATE TABLE test2(time timestamptz not null, a int);

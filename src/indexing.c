@@ -274,10 +274,33 @@ indexing_create_and_verify_hypertable_indexes(const Hypertable *ht, bool create_
 bool TSDLLEXPORT
 ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
 {
-	Bitmapset *key_attrs = RelationGetIndexAttrBitmap(htrel, INDEX_ATTR_BITMAP_KEY);
-	bool result = bms_num_members(key_attrs) > 0;
+	List *indexoidlist = RelationGetIndexList(htrel);
+	ListCell *lc;
+	bool result = false;
 
-	bms_free(key_attrs);
+	if (OidIsValid(htrel->rd_pkindex))
+		return true;
+
+	foreach (lc, indexoidlist)
+	{
+		Oid indexoid = lfirst_oid(lc);
+		HeapTuple index_tuple;
+		Form_pg_index index;
+
+		index_tuple = SearchSysCache1(INDEXRELID, ObjectIdGetDatum(indexoid));
+		if (!HeapTupleIsValid(index_tuple)) /* should not happen */
+			elog(ERROR,
+				 "cache lookup failed for index %u in \"%s\" ",
+				 indexoid,
+				 RelationGetRelationName(htrel));
+		index = (Form_pg_index) GETSTRUCT(index_tuple);
+		result = index->indisunique;
+		ReleaseSysCache(index_tuple);
+		if (result)
+			break;
+	}
+
+	list_free(indexoidlist);
 	return result;
 }
 
@@ -289,7 +312,7 @@ ts_indexing_relation_has_primary_or_unique_index(Relation htrel)
  */
 extern ObjectAddress
 ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
-									bool is_multitransaction, bool is_distributed)
+									bool is_multitransaction)
 {
 	Oid relid;
 	LOCKMODE lockmode;
@@ -324,7 +347,7 @@ ts_indexing_root_table_create_index(IndexStmt *stmt, const char *queryString,
 	 * table, i.e., we do not recurse to chunks. Therefore, there is no need to
 	 * take locks on the chunks here.
 	 */
-	if (!is_multitransaction && !is_distributed)
+	if (!is_multitransaction)
 	{
 		ListCell *lc;
 		List *inheritors = NIL;

@@ -24,17 +24,23 @@ typedef enum CompressHypertableOption
 
 typedef struct
 {
-	short index;
 	NameData colname;
 	bool nullsfirst;
-	bool asc;
+	bool desc;
 } CompressedParsedCol;
 
+typedef struct
+{
+	ArrayType *orderby;
+	ArrayType *orderby_desc;
+	ArrayType *orderby_nullsfirst;
+} OrderBySettings;
+
 extern TSDLLEXPORT WithClauseResult *ts_compress_hypertable_set_clause_parse(const List *defelems);
-extern TSDLLEXPORT List *ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options,
-																 Hypertable *hypertable);
-extern TSDLLEXPORT List *ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options,
-															   Hypertable *hypertable);
+extern TSDLLEXPORT ArrayType *
+ts_compress_hypertable_parse_segment_by(WithClauseResult *parsed_options, Hypertable *hypertable);
+extern TSDLLEXPORT OrderBySettings
+ts_compress_hypertable_parse_order_by(WithClauseResult *parsed_options, Hypertable *hypertable);
 extern TSDLLEXPORT Interval *
 ts_compress_hypertable_parse_chunk_time_interval(WithClauseResult *parsed_options,
 												 Hypertable *hypertable);

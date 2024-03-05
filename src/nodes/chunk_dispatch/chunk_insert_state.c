@@ -19,6 +19,7 @@
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
+#include <utils/inval.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/rel.h>
@@ -28,11 +29,10 @@
 #include "errors.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
-#include "ts_catalog/chunk_data_node.h"
+#include "debug_point.h"
 #include "ts_catalog/continuous_agg.h"
 #include "chunk_index.h"
 #include "indexing.h"
-#include <utils/inval.h>
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
@@ -67,7 +67,7 @@ chunk_dispatch_get_arbiter_indexes(const ChunkDispatch *dispatch)
 static bool
 chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 {
-	if (!dispatch->dispatch_state)
+	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
 		return false;
 	return get_modifytable(dispatch)->returningLists != NIL;
 }
@@ -87,7 +87,7 @@ chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 OnConflictAction
 chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
-	if (!dispatch->dispatch_state)
+	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
 		return ONCONFLICT_NONE;
 	return get_modifytable(dispatch)->onConflictAction;
 }
@@ -95,8 +95,9 @@ chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 static CmdType
 chunk_dispatch_get_cmd_type(const ChunkDispatch *dispatch)
 {
-	return dispatch->dispatch_state == NULL ? CMD_INSERT :
-											  dispatch->dispatch_state->mtstate->operation;
+	return (dispatch->dispatch_state == NULL || dispatch->dispatch_state->mtstate == NULL) ?
+			   CMD_INSERT :
+			   dispatch->dispatch_state->mtstate->operation;
 }
 
 /*
@@ -136,7 +137,7 @@ create_chunk_rri_constraint_expr(ResultRelInfo *rri, Relation rel)
  * The Hypertable ResultRelInfo is used as a template for the chunk's new ResultRelInfo.
  */
 static inline ResultRelInfo *
-create_chunk_result_relation_info(ChunkDispatch *dispatch, Relation rel)
+create_chunk_result_relation_info(const ChunkDispatch *dispatch, Relation rel)
 {
 	ResultRelInfo *rri;
 	ResultRelInfo *rri_orig = dispatch->hypertable_result_rel_info;
@@ -331,7 +332,7 @@ adjust_chunk_colnos(List *colnos, ResultRelInfo *chunk_rri)
  * columns, etc.
  */
 static void
-setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
+setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 						TupleConversionMap *chunk_map)
 {
 	TupleConversionMap *map = state->hyper_to_chunk_map;
@@ -368,7 +369,7 @@ setup_on_conflict_state(ChunkInsertState *state, ChunkDispatch *dispatch,
 
 	/*
 	 * If the chunk's tuple descriptor matches exactly the hypertable
-	 * (the common case), we can re-use most of the parent's ON
+	 * (the common case), we can reuse most of the parent's ON
 	 * CONFLICT SET state, skipping a bunch of work.  Otherwise, we
 	 * need to create state specific to this partition.
 	 */
@@ -485,7 +486,7 @@ destroy_on_conflict_state(ChunkInsertState *state)
 
 /* Translate hypertable indexes to chunk indexes in the arbiter clause */
 static void
-set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch)
+set_arbiter_indexes(ChunkInsertState *state, const ChunkDispatch *dispatch)
 {
 	List *arbiter_indexes = chunk_dispatch_get_arbiter_indexes(dispatch);
 	ListCell *lc;
@@ -509,12 +510,7 @@ set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch)
 					 errmsg("could not find arbiter index for hypertable index \"%s\" on chunk "
 							"\"%s\"",
 							get_rel_name(hypertable_index),
-							get_rel_name(RelationGetRelid(state->rel))),
-					 hypertable_is_distributed(dispatch->hypertable) ?
-						 errhint(
-							 "Omit the index inference specification for the distributed hypertable"
-							 " in the ON CONFLICT clause.") :
-						 0));
+							get_rel_name(RelationGetRelid(state->rel)))));
 		}
 
 		state->arbiter_indexes = lappend_oid(state->arbiter_indexes, cim.indexoid);
@@ -524,7 +520,7 @@ set_arbiter_indexes(ChunkInsertState *state, ChunkDispatch *dispatch)
 
 /* Change the projections to work with chunks instead of hypertables */
 static void
-adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
+adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid rowtype)
 {
 	ResultRelInfo *chunk_rri = cis->result_relation_info;
 	Relation hyper_rel = dispatch->hypertable_result_rel_info->ri_RelationDesc;
@@ -569,7 +565,7 @@ adjust_projections(ChunkInsertState *cis, ChunkDispatch *dispatch, Oid rowtype)
  * ResultRelInfo should be similar to ExecInitModifyTable().
  */
 extern ChunkInsertState *
-ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
+ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 {
 	ChunkInsertState *state;
 	Relation rel, parent_rel;
@@ -578,17 +574,33 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 													  ALLOCSET_DEFAULT_SIZES);
 	OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
 	ResultRelInfo *relinfo;
+	const Chunk *chunk;
 
 	/* permissions NOT checked here; were checked at hypertable level */
-	if (check_enable_rls(chunk->table_id, InvalidOid, false) == RLS_ENABLED)
+	if (check_enable_rls(chunk_relid, InvalidOid, false) == RLS_ENABLED)
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("hypertables do not support row-level security")));
+
+	/*
+	 * Since we insert data and won't modify metadata, a RowExclusiveLock
+	 * should be sufficient. This should conflict with any metadata-modifying
+	 * operations as they should take higher-level locks (ShareLock and
+	 * above).
+	 */
+	DEBUG_WAITPOINT("chunk_insert_before_lock");
+	rel = table_open(chunk_relid, RowExclusiveLock);
+
+	/*
+	 * A concurrent chunk operation (e.g., compression) might have changed the
+	 * chunk metadata before we got a lock, so re-read it.
+	 *
+	 * This works even in higher levels of isolation since catalog data is
+	 * always read from latest snapshot.
+	 */
+	chunk = ts_chunk_get_by_relid(chunk_relid, true);
 	Assert(chunk->relkind == RELKIND_RELATION || chunk->relkind == RELKIND_FOREIGN_TABLE);
-
 	ts_chunk_validate_chunk_status_for_operation(chunk, CHUNK_INSERT, true);
-
-	rel = table_open(chunk->table_id, RowExclusiveLock);
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);
@@ -647,7 +659,9 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 										   table_slot_callbacks(relinfo->ri_RelationDesc));
 	table_close(parent_rel, AccessShareLock);
 
+	state->hypertable_relid = chunk->hypertable_relid;
 	state->chunk_id = chunk->fd.id;
+	state->compressed_chunk_id = chunk->fd.compressed_chunk_id;
 
 	if (chunk->relkind == RELKIND_FOREIGN_TABLE)
 	{
@@ -661,7 +675,6 @@ ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch)
 #else
 		state->user_id = ExecGetResultRelCheckAsUser(relinfo, state->estate);
 #endif
-		state->chunk_data_nodes = ts_chunk_data_nodes_copy(chunk);
 	}
 
 	if (dispatch->hypertable_result_rel_info->ri_usesFdwDirectModify)

@@ -12,6 +12,8 @@
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/nodes.h>
+#include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/paths.h>
 #include <optimizer/plancat.h>
@@ -30,6 +32,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/chunk_append/transform.h"
 #include "vector_predicates.h"
 #include "ts_catalog/array_utils.h"
 
@@ -211,14 +214,22 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 			lappend_int(path->decompression_map, destination_attno_in_uncompressed_chunk);
 		path->is_segmentby_column = lappend_int(path->is_segmentby_column, is_segment);
 
+		/*
+		 * Determine if we can use bulk decompression for this column.
+		 */
 		Oid typoid = get_atttype(path->info->chunk_rte->relid, chunk_attno);
 		const bool bulk_decompression_possible =
 			!is_segment && destination_attno_in_uncompressed_chunk > 0 &&
-			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid)) != NULL;
+			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
+				NULL;
 		path->have_bulk_decompression_columns |= bulk_decompression_possible;
 		path->bulk_decompression_column =
 			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
 
+		/*
+		 * Save information about decompressed columns in uncompressed chunk
+		 * for planning of vectorized filters.
+		 */
 		if (destination_attno_in_uncompressed_chunk > 0)
 		{
 			path->uncompressed_chunk_attno_to_compression_info
@@ -364,15 +375,24 @@ is_not_runtime_constant_walker(Node *node, void *context)
 	{
 		case T_Var:
 		case T_PlaceHolderVar:
-		case T_Param:
 			/*
-			 * We might want to support these nodes to have vectorizable
-			 * join clauses (T_Var), join clauses referencing a variable that is
-			 * above outer join (T_PlaceHolderVar) or initplan parameters and
-			 * prepared statement parameters (T_Param). We don't support them at
-			 * the moment.
+			 * We might want to support these nodes to have vectorizable join
+			 * clauses (T_Var) or join clauses referencing a variable that is
+			 * above outer join (T_PlaceHolderVar). We don't support them at the
+			 * moment.
 			 */
 			return true;
+		case T_Param:
+			/*
+			 * We support external query parameters (e.g. from parameterized
+			 * prepared statements), because they are constant for the duration
+			 * of the query.
+			 *
+			 * Join and initplan parameters are passed as PARAM_EXEC and require
+			 * support in the Rescan functions of the custom scan node. We don't
+			 * support them at the moment.
+			 */
+			return castNode(Param, node)->paramkind != PARAM_EXTERN;
 		default:
 			if (check_functions_in_node(node,
 										contains_volatile_functions_checker,
@@ -411,37 +431,91 @@ static Node *
 make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 {
 	/*
-	 * Currently we vectorize some "Var op Const" binary predicates,
-	 * and scalar array operations with these predicates.
+	 * We can vectorize BoolExpr (AND/OR/NOT).
 	 */
-	if (!IsA(qual, OpExpr) && !IsA(qual, ScalarArrayOpExpr))
+	if (IsA(qual, BoolExpr))
 	{
-		return NULL;
+		BoolExpr *boolexpr = castNode(BoolExpr, qual);
+
+		if (boolexpr->boolop == NOT_EXPR)
+		{
+			/*
+			 * NOT should be removed by Postgres for all operators we can
+			 * vectorize (see prepqual.c), so we don't support it.
+			 */
+			return NULL;
+		}
+
+		bool need_copy = false;
+		List *vectorized_args = NIL;
+		ListCell *lc;
+		foreach (lc, boolexpr->args)
+		{
+			Node *arg = lfirst(lc);
+			Node *vectorized_arg = make_vectorized_qual(path, arg);
+			if (vectorized_arg == NULL)
+			{
+				return NULL;
+			}
+
+			if (vectorized_arg != arg)
+			{
+				need_copy = true;
+			}
+
+			vectorized_args = lappend(vectorized_args, vectorized_arg);
+		}
+
+		if (!need_copy)
+		{
+			return (Node *) boolexpr;
+		}
+
+		BoolExpr *boolexpr_copy = (BoolExpr *) copyObject(boolexpr);
+		boolexpr_copy->args = vectorized_args;
+		return (Node *) boolexpr_copy;
 	}
 
-	List *args = NIL;
+	/*
+	 * Among the simple predicates, we vectorize some "Var op Const" binary
+	 * predicates, scalar array operations with these predicates, and null test.
+	 */
+	NullTest *nulltest = NULL;
 	OpExpr *opexpr = NULL;
-	Oid opno = InvalidOid;
 	ScalarArrayOpExpr *saop = NULL;
+	Node *arg1 = NULL;
+	Node *arg2 = NULL;
+	Oid opno = InvalidOid;
 	if (IsA(qual, OpExpr))
 	{
 		opexpr = castNode(OpExpr, qual);
-		args = opexpr->args;
 		opno = opexpr->opno;
+		if (list_length(opexpr->args) != 2)
+		{
+			return NULL;
+		}
+		arg1 = (Node *) linitial(opexpr->args);
+		arg2 = (Node *) lsecond(opexpr->args);
 	}
-	else
+	else if (IsA(qual, ScalarArrayOpExpr))
 	{
 		saop = castNode(ScalarArrayOpExpr, qual);
-		args = saop->args;
 		opno = saop->opno;
+		Assert(list_length(saop->args) == 2);
+		arg1 = (Node *) linitial(saop->args);
+		arg2 = (Node *) lsecond(saop->args);
 	}
-
-	if (list_length(args) != 2)
+	else if (IsA(qual, NullTest))
+	{
+		nulltest = castNode(NullTest, qual);
+		arg1 = (Node *) nulltest->arg;
+	}
+	else
 	{
 		return NULL;
 	}
 
-	if (opexpr && IsA(lsecond(args), Var))
+	if (opexpr && IsA(arg2, Var))
 	{
 		/*
 		 * Try to commute the operator if we have Var on the right.
@@ -459,22 +533,37 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		 * CommuteOpExpr() does.
 		 */
 		opexpr->opfuncid = InvalidOid;
-		args = list_make2(lsecond(args), linitial(args));
-		opexpr->args = args;
+		opexpr->args = list_make2(arg2, arg1);
+		Node *tmp = arg1;
+		arg1 = arg2;
+		arg2 = tmp;
 	}
 
 	/*
-	 * We can vectorize the operation where the left side is a Var and the right
-	 * side is a constant or can be evaluated to a constant at run time (e.g.
-	 * contains stable functions).
+	 * We can vectorize the operation where the left side is a Var.
 	 */
-	if (!IsA(linitial(args), Var) || is_not_runtime_constant(lsecond(args)))
+	if (!IsA(arg1, Var))
 	{
 		return NULL;
 	}
 
-	Var *var = castNode(Var, linitial(args));
-	Assert((Index) var->varno == path->info->chunk_rel->relid);
+	Var *var = castNode(Var, arg1);
+	if ((Index) var->varno != path->info->chunk_rel->relid)
+	{
+		/*
+		 * We have a Var from other relation (join clause), can't vectorize it
+		 * at the moment.
+		 */
+		return NULL;
+	}
+
+	if (var->varattno <= 0)
+	{
+		/*
+		 * Can't vectorize operators with special variables such as whole-row var.
+		 */
+		return NULL;
+	}
 
 	/*
 	 * ExecQual is performed before ExecProject and operates on the decompressed
@@ -487,26 +576,56 @@ make_vectorized_qual(DecompressChunkPath *path, Node *qual)
 		return NULL;
 	}
 
+	if (nulltest)
+	{
+		/*
+		 * The checks we've done to this point is all that is required for null
+		 * test.
+		 */
+		return (Node *) nulltest;
+	}
+
+	/*
+	 * We can vectorize the operation where the right side is a constant or can
+	 * be evaluated to a constant at run time (e.g. contains stable functions).
+	 */
+	Assert(arg2);
+	if (is_not_runtime_constant(arg2))
+	{
+		return NULL;
+	}
+
 	Oid opcode = get_opcode(opno);
 	if (!get_vector_const_predicate(opcode))
 	{
 		return NULL;
 	}
 
-#if PG14_GE
-	if (saop)
+	if (opexpr)
 	{
-		if (saop->hashfuncid)
-		{
-			/*
-			 * Don't vectorize if the planner decided to build a hash table.
-			 */
-			return NULL;
-		}
+		/*
+		 * The checks we've done to this point is all that is required for
+		 * OpExpr.
+		 */
+		return (Node *) opexpr;
+	}
+
+	/*
+	 * The only option that is left is a ScalarArrayOpExpr.
+	 */
+	Assert(saop != NULL);
+
+#if PG14_GE
+	if (saop->hashfuncid)
+	{
+		/*
+		 * Don't vectorize if the planner decided to build a hash table.
+		 */
+		return NULL;
 	}
 #endif
 
-	return opexpr ? (Node *) opexpr : (Node *) saop;
+	return (Node *) saop;
 }
 
 /*
@@ -521,7 +640,17 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 	foreach (lc, qual_list)
 	{
 		Node *source_qual = lfirst(lc);
-		Node *vectorized_qual = make_vectorized_qual(path, source_qual);
+
+		/*
+		 * We can't vectorize the stable cross-type operators (for example
+		 * timestamp > timestamptz), so try to cast the constant to the same
+		 * type to convert it to the same-type operator. We do the same thing
+		 * for chunk exclusion.
+		 */
+		Node *transformed_comparison =
+			(Node *) ts_transform_cross_datatype_comparison((Expr *) source_qual);
+
+		Node *vectorized_qual = make_vectorized_qual(path, transformed_comparison);
 		if (vectorized_qual)
 		{
 			*vectorized = lappend(*vectorized, vectorized_qual);
@@ -531,6 +660,46 @@ find_vectorized_quals(DecompressChunkPath *path, List *qual_list, List **vectori
 			*nonvectorized = lappend(*nonvectorized, source_qual);
 		}
 	}
+}
+
+/*
+ * Copy of the Postgres' static function from createplan.c.
+ *
+ * Some places in this file build Sort nodes that don't have a directly
+ * corresponding Path node.  The cost of the sort is, or should have been,
+ * included in the cost of the Path node we're working from, but since it's
+ * not split out, we have to re-figure it using cost_sort().  This is just
+ * to label the Sort node nicely for EXPLAIN.
+ *
+ * limit_tuples is as for cost_sort (in particular, pass -1 if no limit)
+ */
+static void
+ts_label_sort_with_costsize(PlannerInfo *root, Sort *plan, double limit_tuples)
+{
+	Plan *lefttree = plan->plan.lefttree;
+	Path sort_path; /* dummy for result of cost_sort */
+
+	/*
+	 * This function shouldn't have to deal with IncrementalSort plans because
+	 * they are only created from corresponding Path nodes.
+	 */
+	Assert(IsA(plan, Sort));
+
+	cost_sort(&sort_path,
+			  root,
+			  NIL,
+			  lefttree->total_cost,
+			  lefttree->plan_rows,
+			  lefttree->plan_width,
+			  0.0,
+			  work_mem,
+			  limit_tuples);
+	plan->plan.startup_cost = sort_path.startup_cost;
+	plan->plan.total_cost = sort_path.total_cost;
+	plan->plan.plan_rows = lefttree->plan_rows;
+	plan->plan.plan_width = lefttree->plan_width;
+	plan->plan.parallel_aware = false;
+	plan->plan.parallel_safe = lefttree->parallel_safe;
 }
 
 Plan *
@@ -662,7 +831,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				   &chunk_attrs_needed);
 
 	/*
-	 * Determine which compressed colum goes to which output column.
+	 * Determine which compressed column goes to which output column.
 	 */
 	build_decompression_map(root, dcpath, compressed_scan->plan.targetlist, chunk_attrs_needed);
 
@@ -721,7 +890,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 				}
 
 				Ensure(IsA(em->em_expr, Var),
-					   "non-Var pathkey not expected for compressed batch sorted mege");
+					   "non-Var pathkey not expected for compressed batch sorted merge");
 
 				/*
 				 * We found a Var equivalence member that belongs to the
@@ -826,6 +995,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 								  sortOperators,
 								  collations,
 								  nullsFirst);
+
+		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ 0);
 
 		decompress_plan->custom_plans = list_make1(sort);
 	}

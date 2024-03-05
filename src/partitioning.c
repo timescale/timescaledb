@@ -146,12 +146,6 @@ partitioning_func_set_func_fmgr(PartitioningFunc *pf, Oid argtype, DimensionType
 	fmgr_info_cxt(funcoid, &pf->func_fmgr, CurrentMemoryContext);
 }
 
-List *
-ts_partitioning_func_qualified_name(PartitioningFunc *pf)
-{
-	return list_make2(makeString(NameStr(pf->schema)), makeString(NameStr(pf->name)));
-}
-
 static Oid
 find_text_coercion_func(Oid type)
 {
@@ -264,7 +258,7 @@ ts_partitioning_func_apply(PartitioningInfo *pinfo, Oid collation, Datum value)
  * Helper function to find the right partition value from a tuple,
  * for space partitioned hypertables. Since attributes in tuple can
  * be of different order when compared to physical table columns order,
- * we pass partition_col_idx which points to correct space parititioned
+ * we pass partition_col_idx which points to correct space partitioned
  * column in the given tuple.
  */
 TSDLLEXPORT Datum

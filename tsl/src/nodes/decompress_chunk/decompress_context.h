@@ -13,6 +13,7 @@
 #include <nodes/pg_list.h>
 
 #include "batch_array.h"
+#include "detoaster.h"
 
 typedef enum CompressionColumnType
 {
@@ -62,6 +63,7 @@ typedef struct DecompressContext
 	MemoryContext bulk_decompression_context;
 
 	TupleTableSlot *decompressed_slot;
+
 	/*
 	 * Make non-refcounted copies of the tupdesc for reuse across all batch states
 	 * and avoid spending CPU in ResourceOwner when creating a big number of table
@@ -69,11 +71,17 @@ typedef struct DecompressContext
 	 * PinTupleDesc, and for reference-counting tuples this involves adding a new
 	 * reference to ResourceOwner, which is not very efficient for a large number of
 	 * references.
+	 *
+	 * We don't have to do this for the decompressed slot tuple descriptor,
+	 * because there we use custom tuple slot (de)initialization functions, which
+	 * don't use reference counting and just use a raw pointer to the tuple
+	 * descriptor.
 	 */
-	TupleDesc decompressed_slot_scan_tdesc;
 	TupleDesc compressed_slot_tdesc;
 
 	PlanState *ps; /* Set for filtering and instrumentation */
+
+	Detoaster detoaster;
 } DecompressContext;
 
 #endif /* TIMESCALEDB_DECOMPRESS_CONTEXT_H */

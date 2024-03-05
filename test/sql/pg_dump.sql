@@ -81,8 +81,8 @@ SELECT * FROM _timescaledb_internal._hyper_1_2_chunk ORDER BY "timeCustom", devi
 SELECT * FROM _timescaledb_catalog.chunk_index;
 SELECT * FROM _timescaledb_catalog.chunk_constraint;
 
---force a value to exist for exported_uuid
 INSERT INTO _timescaledb_catalog.metadata VALUES ('exported_uuid', 'original_uuid', true);
+INSERT INTO _timescaledb_catalog.metadata VALUES ('metadata_test', 'FOO', false);
 
 \c postgres :ROLE_SUPERUSER
 -- We shell out to a script in order to grab the correct hostname from the
@@ -105,7 +105,6 @@ SHOW timescaledb.restoring;
 SHOW timescaledb.restoring;
 
 \! utils/pg_dump_aux_restore.sh dump/pg_dump.sql
-
 
 -- Inserting with restoring ON in current session causes tuples to be
 -- inserted on main table, but this should be protected by the insert
@@ -131,6 +130,9 @@ SELECT count(*) = :num_dependent_objects as dependent_objects_match
 --we should have the original uuid from the backed up db set as the exported_uuid
 SELECT value = 'original_uuid' FROM _timescaledb_catalog.metadata  WHERE key='exported_uuid';
 SELECT count(*) = 1 FROM _timescaledb_catalog.metadata WHERE key LIKE 'exported%';
+
+--we should have the original value of metadata_test
+SELECT * FROM _timescaledb_catalog.metadata  WHERE key='metadata_test';
 
 --main table and chunk schemas should be the same
 SELECT * FROM test.show_columns('"test_schema"."two_Partitions"');
@@ -162,7 +164,8 @@ INSERT INTO "test_schema"."two_Partitions"("timeCustom", device_id, series_0, se
 
 SELECT * FROM ONLY "test_schema"."two_Partitions";
 
---query for the extension tables/sequences that will not be dumped by pg_dump (should be empty except for views)
+--query for the extension tables/sequences that will not be dumped by pg_dump (should
+--be empty except for views and explicitly excluded tables)
 SELECT objid::regclass
 FROM pg_catalog.pg_depend
 WHERE   refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass AND
@@ -200,14 +203,18 @@ SELECT timescaledb_pre_restore();
 SELECT bgw_wait(:'TEST_DBNAME', 60, FALSE);
 
 -- Force other sessions connected to the TEST_DBNAME to be finished
+\c postgres :ROLE_SUPERUSER
+REVOKE CONNECT ON DATABASE :TEST_DBNAME FROM public;
+ALTER DATABASE :TEST_DBNAME allow_connections = off;
 SET client_min_messages TO ERROR;
 SELECT COUNT(pg_catalog.pg_terminate_backend(pid))>=0
 FROM pg_stat_activity
-WHERE pid <> pg_backend_pid()
-AND datname = ':TEST_DBNAME';
+WHERE datname = ':TEST_DBNAME';
 RESET client_min_messages;
 
 CREATE DATABASE :TEST_DBNAME_EXTRA WITH TEMPLATE :TEST_DBNAME;
+ALTER DATABASE :TEST_DBNAME allow_connections = on;
+GRANT CONNECT ON DATABASE :TEST_DBNAME TO public;
 
 -- Connect to the database and do some basic stuff to check that the
 -- extension works.
@@ -225,6 +232,15 @@ INSERT INTO test_tz VALUES('Mon Mar 20 09:37:00.936242 2017', 30, 'dev3');
 SELECT * FROM test_tz ORDER BY time;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
+
+-- make sure nobody is using it
+SET client_min_messages TO ERROR;
+REVOKE CONNECT ON DATABASE :TEST_DBNAME_EXTRA FROM public;
+SELECT count(pg_terminate_backend(pg_stat_activity.pid)) AS TERMINATED
+FROM pg_stat_activity
+WHERE pg_stat_activity.datname = :'TEST_DBNAME_EXTRA'
+AND pg_stat_activity.pid <> pg_backend_pid() \gset
+RESET client_min_messages;
 
 DROP DATABASE :TEST_DBNAME_EXTRA WITH (FORCE);
 

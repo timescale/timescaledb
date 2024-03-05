@@ -73,11 +73,11 @@ SELECT count(*) FROM _timescaledb_catalog.chunk
 WHERE hypertable_id =  ( SELECT id FROM _timescaledb_catalog.hypertable
                          WHERE table_name = 'test1' );
 
-SELECT count(*)
-FROM ( SELECT attrelid::regclass, attname FROM pg_attribute
-       WHERE attrelid in (SELECT inhrelid::regclass from pg_inherits
-                          where inhparent = 'test1'::regclass)
-       and attname = 'bigintcol' ) q;
+SELECT count(*) FROM pg_attribute att
+INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = ch.hypertable_id AND ht.table_name = 'test1'
+WHERE
+  attname = 'bigintcol';
 
 --check count on internal compression table too i.e. all the chunks have
 --the correct column name
@@ -85,11 +85,11 @@ SELECT format('%I.%I', cht.schema_name, cht.table_name) AS "COMPRESSION_TBLNM"
 FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.hypertable cht
 WHERE ht.table_name = 'test1' and cht.id = ht.compressed_hypertable_id \gset
 
-SELECT count(*)
-FROM ( SELECT attrelid::regclass, attname FROM pg_attribute
-       WHERE attrelid in (SELECT inhrelid::regclass from pg_inherits
-                          where inhparent = :'COMPRESSION_TBLNM'::regclass )
-       and attname = 'bigintcol' ) q;
+SELECT count(*) FROM pg_attribute att
+INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.hypertable ht ON ht.compressed_hypertable_id = ch.hypertable_id AND ht.table_name = 'test1'
+WHERE
+  attname = 'bigintcol';
 
 -- check column name truncation with renames
 -- check if the name change is reflected for settings
@@ -100,11 +100,11 @@ SELECT * from _timescaledb_catalog.compression_settings WHERE relid = 'test1'::r
 SELECT * from timescaledb_information.compression_settings
 WHERE hypertable_name = 'test1' and attname like 'ccc%';
 
-SELECT count(*)
-FROM ( SELECT attrelid::regclass, attname FROM pg_attribute
-       WHERE attrelid in (SELECT inhrelid::regclass from pg_inherits
-                          where inhparent = :'COMPRESSION_TBLNM'::regclass )
-       and attname like 'ccc%a' ) q;
+SELECT count(*) FROM pg_attribute att
+INNER JOIN _timescaledb_catalog.chunk ch ON att.attrelid = format('%I.%I', ch.schema_name, ch.table_name)::regclass
+INNER JOIN _timescaledb_catalog.hypertable ht ON ht.compressed_hypertable_id = ch.hypertable_id AND ht.table_name = 'test1'
+WHERE
+  attname like 'ccc%a';
 
 ALTER TABLE test1 RENAME
 ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccabdeeeeeeccccccccccccc
@@ -133,7 +133,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 -- try insert into compressed and recompress
 INSERT INTO test_defaults SELECT '2000-01-01', 2;
 SELECT * FROM test_defaults ORDER BY 1,2;
-CALL recompress_all_chunks('test_defaults', 1, false);
+SELECT compress_chunk(ch) FROM show_chunks('test_defaults') ch LIMIT 1;
 SELECT * FROM test_defaults ORDER BY 1,2;
 
 -- timescale/timescaledb#5412

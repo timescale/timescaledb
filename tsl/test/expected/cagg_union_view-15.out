@@ -354,23 +354,22 @@ SELECT _timescaledb_functions.cagg_watermark(:boundary_view_id);
 
 -- first UNION child should have no rows because no materialization has happened yet and 2nd child should have 4 rows
 :PREFIX SELECT * FROM boundary_view;
-                                                            QUERY PLAN                                                             
------------------------------------------------------------------------------------------------------------------------------------
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
  HashAggregate (actual rows=4 loops=1)
-   Group Key: time_bucket(10, boundary_test."time")
+   Group Key: time_bucket(10, _hyper_5_5_chunk."time")
    Batches: 1 
    ->  Result (actual rows=4 loops=1)
-         ->  Custom Scan (ChunkAppend) on boundary_test (actual rows=4 loops=1)
-               Chunks excluded during startup: 0
+         ->  Append (actual rows=4 loops=1)
                ->  Index Scan Backward using _hyper_5_5_chunk_boundary_test_time_idx on _hyper_5_5_chunk (actual rows=1 loops=1)
-                     Index Cond: ("time" >= COALESCE((_timescaledb_functions.cagg_watermark(6))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= '-2147483648'::integer)
                ->  Index Scan Backward using _hyper_5_6_chunk_boundary_test_time_idx on _hyper_5_6_chunk (actual rows=1 loops=1)
-                     Index Cond: ("time" >= COALESCE((_timescaledb_functions.cagg_watermark(6))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= '-2147483648'::integer)
                ->  Index Scan Backward using _hyper_5_7_chunk_boundary_test_time_idx on _hyper_5_7_chunk (actual rows=1 loops=1)
-                     Index Cond: ("time" >= COALESCE((_timescaledb_functions.cagg_watermark(6))::integer, '-2147483648'::integer))
+                     Index Cond: ("time" >= '-2147483648'::integer)
                ->  Index Scan Backward using _hyper_5_8_chunk_boundary_test_time_idx on _hyper_5_8_chunk (actual rows=1 loops=1)
-                     Index Cond: ("time" >= COALESCE((_timescaledb_functions.cagg_watermark(6))::integer, '-2147483648'::integer))
-(14 rows)
+                     Index Cond: ("time" >= '-2147483648'::integer)
+(13 rows)
 
 -- result should have 4 rows
 SELECT * FROM boundary_view ORDER BY time_bucket;
@@ -394,24 +393,21 @@ SELECT _timescaledb_functions.cagg_watermark(:boundary_view_id);
 
 -- both sides of the UNION should return 2 rows
 :PREFIX SELECT * FROM boundary_view;
-                                                               QUERY PLAN                                                                
------------------------------------------------------------------------------------------------------------------------------------------
+                                                              QUERY PLAN                                                               
+---------------------------------------------------------------------------------------------------------------------------------------
  Append (actual rows=4 loops=1)
-   ->  Custom Scan (ChunkAppend) on _materialized_hypertable_6 (actual rows=2 loops=1)
-         Chunks excluded during startup: 0
-         ->  Index Scan using _hyper_6_9_chunk__materialized_hypertable_6_time_bucket_idx on _hyper_6_9_chunk (actual rows=2 loops=1)
-               Index Cond: (time_bucket < COALESCE((_timescaledb_functions.cagg_watermark(6))::integer, '-2147483648'::integer))
+   ->  Index Scan using _hyper_6_9_chunk__materialized_hypertable_6_time_bucket_idx on _hyper_6_9_chunk (actual rows=2 loops=1)
+         Index Cond: (time_bucket < 30)
    ->  HashAggregate (actual rows=2 loops=1)
-         Group Key: time_bucket(10, boundary_test."time")
+         Group Key: time_bucket(10, _hyper_5_7_chunk."time")
          Batches: 1 
          ->  Result (actual rows=2 loops=1)
-               ->  Custom Scan (ChunkAppend) on boundary_test (actual rows=2 loops=1)
-                     Chunks excluded during startup: 2
+               ->  Append (actual rows=2 loops=1)
                      ->  Index Scan Backward using _hyper_5_7_chunk_boundary_test_time_idx on _hyper_5_7_chunk (actual rows=1 loops=1)
-                           Index Cond: ("time" >= COALESCE((_timescaledb_functions.cagg_watermark(6))::integer, '-2147483648'::integer))
+                           Index Cond: ("time" >= 30)
                      ->  Index Scan Backward using _hyper_5_8_chunk_boundary_test_time_idx on _hyper_5_8_chunk (actual rows=1 loops=1)
-                           Index Cond: ("time" >= COALESCE((_timescaledb_functions.cagg_watermark(6))::integer, '-2147483648'::integer))
-(15 rows)
+                           Index Cond: ("time" >= 30)
+(12 rows)
 
 -- result should have 4 rows
 SELECT * FROM boundary_view ORDER BY time_bucket;
@@ -581,35 +577,32 @@ ORDER by 1;
 
 -- plan output
 :PREFIX SELECT * FROM mat_m1 ORDER BY 1;
-                                                                  QUERY PLAN                                                                  
-----------------------------------------------------------------------------------------------------------------------------------------------
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
  Sort (actual rows=3 loops=1)
-   Sort Key: _materialized_hypertable_9.time_bucket
+   Sort Key: _hyper_9_15_chunk.time_bucket
    Sort Method: quicksort 
    ->  Append (actual rows=3 loops=1)
-         ->  Custom Scan (ChunkAppend) on _materialized_hypertable_9 (actual rows=1 loops=1)
-               Chunks excluded during startup: 0
-               ->  Index Scan using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
-                     Index Cond: (time_bucket < COALESCE((_timescaledb_functions.cagg_watermark(9))::integer, '-2147483648'::integer))
+         ->  Index Scan using _hyper_9_15_chunk__materialized_hypertable_9_time_bucket_idx on _hyper_9_15_chunk (actual rows=1 loops=1)
+               Index Cond: (time_bucket < 25)
          ->  HashAggregate (actual rows=2 loops=1)
-               Group Key: time_bucket(5, ht_intdata.a)
-               Filter: ((sum(ht_intdata.c) > 50) AND ((avg(ht_intdata.b))::integer > 12))
+               Group Key: time_bucket(5, _hyper_7_11_chunk.a)
+               Filter: ((sum(_hyper_7_11_chunk.c) > 50) AND ((avg(_hyper_7_11_chunk.b))::integer > 12))
                Batches: 1 
                Rows Removed by Filter: 1
                ->  Result (actual rows=6 loops=1)
-                     ->  Custom Scan (ChunkAppend) on ht_intdata (actual rows=6 loops=1)
-                           Chunks excluded during startup: 1
+                     ->  Append (actual rows=6 loops=1)
                            ->  Index Scan Backward using _hyper_7_11_chunk_ht_intdata_a_idx on _hyper_7_11_chunk (actual rows=2 loops=1)
-                                 Index Cond: (a >= COALESCE((_timescaledb_functions.cagg_watermark(9))::integer, '-2147483648'::integer))
+                                 Index Cond: (a >= 25)
                                  Filter: ((b < 16) AND (c > 20))
                            ->  Index Scan Backward using _hyper_7_13_chunk_ht_intdata_a_idx on _hyper_7_13_chunk (actual rows=3 loops=1)
-                                 Index Cond: (a >= COALESCE((_timescaledb_functions.cagg_watermark(9))::integer, '-2147483648'::integer))
+                                 Index Cond: (a >= 25)
                                  Filter: ((b < 16) AND (c > 20))
                            ->  Index Scan Backward using _hyper_7_14_chunk_ht_intdata_a_idx on _hyper_7_14_chunk (actual rows=1 loops=1)
-                                 Index Cond: (a >= COALESCE((_timescaledb_functions.cagg_watermark(9))::integer, '-2147483648'::integer))
+                                 Index Cond: (a >= 25)
                                  Filter: ((b < 16) AND (c > 20))
                                  Rows Removed by Filter: 2
-(26 rows)
+(23 rows)
 
 -- Test caggs with different time types
 CREATE TABLE smallint_table (time smallint, value int);

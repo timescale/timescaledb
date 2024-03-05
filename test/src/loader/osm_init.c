@@ -10,6 +10,7 @@
 
 #include "compat/compat.h"
 #include "export.h"
+#include "loader/lwlocks.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -25,11 +26,24 @@ static void osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString
 									 QueryEnvironment *queryEnv, DestReceiver *dest,
 									 QueryCompletion *qc);
 
+#if PG16_LT
 extern void PGDLLEXPORT _PG_init(void);
+#endif
+
 void
 _PG_init(void)
 {
 	elog(WARNING, "OSM-%s _PG_init", OSM_VERSION_MOD);
+	void *osm_lock_pointer = (LWLock **) find_rendezvous_variable(RENDEZVOUS_OSM_PARALLEL_LWLOCK);
+	if (osm_lock_pointer != NULL)
+	{
+		elog(WARNING, "got lwlock osm lock");
+	}
+	else
+	{
+		elog(WARNING, "NO lwlock osm lock");
+	}
+
 	prev_ProcessUtility_hook = ProcessUtility_hook;
 	ProcessUtility_hook = osm_process_utility_hook;
 }
@@ -71,14 +85,15 @@ osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString,
 		}
 	}
 
-	prev_ProcessUtility_hook(pstmt,
-							 queryString,
+	if (prev_ProcessUtility_hook)
+		prev_ProcessUtility_hook(pstmt,
+								 queryString,
 #if PG14_GE
-							 readOnlyTree,
+								 readOnlyTree,
 #endif
-							 context,
-							 params,
-							 queryEnv,
-							 dest,
-							 qc);
+								 context,
+								 params,
+								 queryEnv,
+								 dest,
+								 qc);
 }

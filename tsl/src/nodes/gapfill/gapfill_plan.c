@@ -78,19 +78,6 @@ gapfill_function_walker(Node *node, gapfill_walker_context *context)
 }
 
 /*
- * Check if the given expression contains call to time_bucket_gapfill
- */
-bool
-gapfill_in_expression(Expr *node)
-{
-	gapfill_walker_context context = { .call.node = NULL, .count = 0 };
-
-	gapfill_function_walker((Node *) node, &context);
-
-	return context.count > 0;
-}
-
-/*
  * Find locf/interpolate function call
  */
 static bool
@@ -336,7 +323,7 @@ gapfill_build_pathtarget(PathTarget *pt_upper, PathTarget *pt_path, PathTarget *
  * Create a Gapfill Path node.
  *
  * The gap fill node needs rows to be sorted by time ASC
- * so we insert sort pathes if the query order does not match
+ * so we insert sort paths if the query order does not match
  * that
  */
 static Path *

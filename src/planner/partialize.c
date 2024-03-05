@@ -269,13 +269,14 @@ get_subpaths_from_append_path(Path *path, bool handle_gather_path)
  * Copy an AppendPath and set new subpaths.
  */
 static AppendPath *
-copy_append_path(AppendPath *path, List *subpaths)
+copy_append_path(AppendPath *path, List *subpaths, PathTarget *pathtarget)
 {
 	AppendPath *newPath = makeNode(AppendPath);
 	memcpy(newPath, path, sizeof(AppendPath));
 
 	Assert(list_length(newPath->subpaths) == list_length(subpaths));
 	newPath->subpaths = subpaths;
+	newPath->path.pathtarget = copy_pathtarget(pathtarget);
 
 	/*
 	 * Note that we can't just call cost_append here, because when there is only
@@ -309,7 +310,8 @@ copy_append_path(AppendPath *path, List *subpaths)
  * Copy a MergeAppendPath and set new subpaths.
  */
 static MergeAppendPath *
-copy_merge_append_path(PlannerInfo *root, MergeAppendPath *path, List *subpaths)
+copy_merge_append_path(PlannerInfo *root, MergeAppendPath *path, List *subpaths,
+					   PathTarget *pathtarget)
 {
 	MergeAppendPath *newPath = create_merge_append_path_compat(root,
 															   path->path.parent,
@@ -323,6 +325,7 @@ copy_merge_append_path(PlannerInfo *root, MergeAppendPath *path, List *subpaths)
 #endif
 
 	newPath->path.param_info = path->path.param_info;
+	newPath->path.pathtarget = copy_pathtarget(pathtarget);
 
 	return newPath;
 }
@@ -352,21 +355,23 @@ copy_append_like_path(PlannerInfo *root, Path *path, List *new_subpaths, PathTar
 	if (IsA(path, AppendPath))
 	{
 		AppendPath *append_path = castNode(AppendPath, path);
-		append_path->path.pathtarget = pathtarget;
-		return (Path *) copy_append_path(append_path, new_subpaths);
+		AppendPath *new_append_path = copy_append_path(append_path, new_subpaths, pathtarget);
+		return &new_append_path->path;
 	}
 	else if (IsA(path, MergeAppendPath))
 	{
 		MergeAppendPath *merge_append_path = castNode(MergeAppendPath, path);
-		merge_append_path->path.pathtarget = pathtarget;
-		return (Path *) copy_merge_append_path(root, merge_append_path, new_subpaths);
+		MergeAppendPath *new_merge_append_path =
+			copy_merge_append_path(root, merge_append_path, new_subpaths, pathtarget);
+		return &new_merge_append_path->path;
 	}
 	else if (ts_is_chunk_append_path(path))
 	{
 		CustomPath *custom_path = castNode(CustomPath, path);
 		ChunkAppendPath *chunk_append_path = (ChunkAppendPath *) custom_path;
-		chunk_append_path->cpath.path.pathtarget = pathtarget;
-		return (Path *) ts_chunk_append_path_copy(chunk_append_path, new_subpaths);
+		ChunkAppendPath *new_chunk_append_path =
+			ts_chunk_append_path_copy(chunk_append_path, new_subpaths, pathtarget);
+		return &new_chunk_append_path->cpath.path;
 	}
 
 	/* Should never happen, already checked by caller */
@@ -841,14 +846,14 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	Query *parse = root->parse;
 
 	/* We are only interested in hypertables */
-	if (ht == NULL || hypertable_is_distributed(ht))
+	if (!ht)
 		return;
 
 	/* Perform partial aggregation planning only if there is an aggregation is requested */
 	if (!parse->hasAggs)
 		return;
 
-	/* Groupting sets are not supported by the partial aggregation pushdown */
+	/* Grouping sets are not supported by the partial aggregation pushdown */
 	if (parse->groupingSets)
 		return;
 

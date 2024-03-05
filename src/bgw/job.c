@@ -243,8 +243,7 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 		job->fd.id = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_bgw_job_id)]);
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)])
 		namestrcpy(&job->fd.application_name,
-				   NameStr(*DatumGetName(
-					   values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)])));
+				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_application_name)]));
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)])
 		job->fd.schedule_interval =
 			*DatumGetIntervalP(values[AttrNumberGetAttrOffset(Anum_bgw_job_schedule_interval)]);
@@ -279,19 +278,16 @@ bgw_job_from_tupleinfo(TupleInfo *ti, size_t alloc_size)
 
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)])
 		namestrcpy(&job->fd.proc_schema,
-				   NameStr(
-					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)])));
+				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_schema)]));
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)])
 		namestrcpy(&job->fd.proc_name,
-				   NameStr(*DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)])));
+				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_proc_name)]));
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)])
 		namestrcpy(&job->fd.check_schema,
-				   NameStr(
-					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)])));
+				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_schema)]));
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)])
 		namestrcpy(&job->fd.check_name,
-				   NameStr(
-					   *DatumGetName(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)])));
+				   DatumGetCString(values[AttrNumberGetAttrOffset(Anum_bgw_job_check_name)]));
 	if (!nulls[AttrNumberGetAttrOffset(Anum_bgw_job_owner)])
 		job->fd.owner = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_bgw_job_owner)]);
 
@@ -605,8 +601,8 @@ ts_bgw_job_find_with_lock(int32 bgw_job_id, MemoryContext mctx, LOCKMODE tuple_l
 	LOCKTAG tag;
 
 	/* take advisory lock before relation lock */
-	if (!(*got_lock =
-			  ts_lock_job_id(bgw_job_id, tuple_lock_mode, lock_type == SESSION_LOCK, &tag, block)))
+	*got_lock = ts_lock_job_id(bgw_job_id, tuple_lock_mode, lock_type == SESSION_LOCK, &tag, block);
+	if (!*got_lock)
 	{
 		/* return NULL if lock could not be acquired */
 		Assert(!block);
@@ -989,7 +985,7 @@ ts_bgw_job_check_max_retries(BgwJob *job)
 	job_stat = ts_bgw_job_stat_find(job->fd.id);
 
 	/* stop to execute failing jobs after reached the "max_retries" option */
-	if (job->fd.max_retries > 0 && job_stat->fd.consecutive_failures >= job->fd.max_retries)
+	if (job->fd.max_retries >= 0 && job_stat->fd.consecutive_failures >= job->fd.max_retries)
 	{
 		ereport(WARNING,
 				(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),

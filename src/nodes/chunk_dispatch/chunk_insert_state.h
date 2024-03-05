@@ -47,8 +47,9 @@ typedef struct ChunkInsertState
 	TupleConversionMap *hyper_to_chunk_map;
 	MemoryContext mctx;
 	EState *estate;
-	List *chunk_data_nodes; /* List of data nodes for the chunk (ChunkDataNode objects) */
+	Oid hypertable_relid;
 	int32 chunk_id;
+	int32 compressed_chunk_id;
 	Oid user_id;
 
 	/* for tracking compressed chunks */
@@ -58,7 +59,8 @@ typedef struct ChunkInsertState
 
 typedef struct ChunkDispatch ChunkDispatch;
 
-extern ChunkInsertState *ts_chunk_insert_state_create(const Chunk *chunk, ChunkDispatch *dispatch);
+extern ChunkInsertState *ts_chunk_insert_state_create(Oid chunk_relid,
+													  const ChunkDispatch *dispatch);
 extern void ts_chunk_insert_state_destroy(ChunkInsertState *state);
 
 OnConflictAction chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch);

@@ -6,89 +6,88 @@ name: Test Update and Downgrade
       - prerelease_test
   pull_request:
 jobs:
-  config:
-    runs-on: ubuntu-latest
-    outputs:
-      pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
-    steps:
-    - name: Checkout source code
-      uses: actions/checkout@v3
-    - name: Read configuration
-      id: setter
-      run: python .github/gh_config_reader.py
-
   update_test:
     name: Update test PG${{ matrix.pg }}
     runs-on: 'ubuntu-latest'
-    needs: config
     strategy:
       matrix:
-        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
+        pg: [13, 14, 15, 16]
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}
       POSTGRES_HOST_AUTH_METHOD: trust
     steps:
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Update tests ${{ matrix.pg }}
+    - name: Install Dependencies
       run: |
-        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-        ./scripts/test_updates_pg${PG_MAJOR}.sh
+        sudo apt-get update
+        sudo apt-get install gnupg systemd-coredump gdb postgresql-common libkrb5-dev
+        yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+        echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" | sudo tee /etc/apt/sources.list.d/timescaledb.list
+        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | sudo apt-key add -
+        sudo apt-get update
+        sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
+        sudo apt-get install -y --no-install-recommends timescaledb-2-postgresql-${{ matrix.pg }}
+        git fetch --tags
+
+    - name: Update tests PG${{ matrix.pg }}
+      run: |
+        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
+        ./scripts/test_updates.sh
+
+    - name: Downgrade tests PG${{ matrix.pg }}
+      if: always()
+      run: |
+        PATH="/usr/lib/postgresql/${{ matrix.pg }}/bin:$PATH"
+        ./scripts/test_downgrade.sh
 
     - name: Update diff
       if: failure()
       run: |
-        find . -name "update_test.*.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
+        find update_test -name "*.diff" | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
+
+    - name: Check for coredumps
+      if: always()
+      id: collectlogs
+      run: |
+        # wait for in progress coredumps
+        sleep 10
+        if coredumpctl list; then
+          echo "coredumps=true" >>$GITHUB_OUTPUT
+          false
+        fi
+
+    - name: Stack trace
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      run: |
+        sudo coredumpctl gdb <<<"
+          set verbose on
+          set trace-commands on
+          show debug-file-directory
+          printf "'"'"query = '%s'\n\n"'"'", (char *) debug_query_string
+          frame function ExceptionalCondition
+          printf "'"'"condition = '%s'\n"'"'", (char *) conditionName
+          up 1
+          l
+          info args
+          info locals
+          bt full
+        " 2>&1 | tee stacktrace.log
+        ./scripts/bundle_coredumps.sh
+        false
+
+    - name: Upload Coredumps
+      if: always() && steps.collectlogs.outputs.coredumps == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
+        path: coredumps
 
     - name: Upload Artifacts
       if: failure()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: Extension update diff ${{ matrix.pg }}
-        path: update_test.*.diff.*
-
-  downgrade_test:
-    name: Downgrade test PG${{ matrix.pg }}
-    runs-on: 'ubuntu-latest'
-    needs: config
-    strategy:
-      matrix:
-        pg: ${{ fromJson(needs.config.outputs.pg_latest) }}
-      fail-fast: false
-    env:
-      PG_VERSION: ${{ matrix.pg }}
-      POSTGRES_HOST_AUTH_METHOD: trust
-      GENERATE_DOWNGRADE_SCRIPT: ON
-    steps:
-    - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
-
-    # We need the tags to be able to build a downgrade script.
-    - name: Fetch all tags
-      run: git fetch --tags && git tag
-
-    - name: Downgrade tests ${{ matrix.pg }}
-      env:
-        TEST_VERSION: v7
-      run: |
-        DOWNGRADE_TO=$(grep '^downgrade_to_version = ' version.config | sed -e 's!^[^=]\+ = !!')
-        PG_MAJOR=$(echo "${{ matrix.pg }}" | sed -e 's![.].*!!')
-        UPDATE_FROM_TAG=${DOWNGRADE_TO}-pg${PG_MAJOR}
-        export UPDATE_FROM_TAG
-        # We need to use same libssl version used in the latest official TimescaleDB container images.
-        # So we will use the fixed alpine version, this will guarantee that libssl version wont change.
-        PG_IMAGE_TAG="${PG_VERSION}-alpine3.17" scripts/test_downgrade_from_tag.sh
-
-    - name: Downgrade diff
-      if: failure()
-      run: |
-        find . -name "downgrade_test.*.diff.*" -maxdepth 1 | xargs -IFILE sh -c "echo '\nFILE\n';cat FILE"
-
-    - name: Upload Artifacts
-      if: failure()
-      uses: actions/upload-artifact@v3
-      with:
-        name: Extension downgrade diff ${{ matrix.pg }}
-        path: downgrade_test.*.diff.*
+        name: Update test PG${{ matrix.pg }}
+        path: update_test

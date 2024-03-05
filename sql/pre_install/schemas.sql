@@ -11,6 +11,15 @@ CREATE SCHEMA _timescaledb_cache;
 CREATE SCHEMA _timescaledb_config;
 CREATE SCHEMA timescaledb_experimental;
 CREATE SCHEMA timescaledb_information;
+CREATE SCHEMA _timescaledb_debug;
 
-GRANT USAGE ON SCHEMA _timescaledb_cache, _timescaledb_catalog, _timescaledb_functions, _timescaledb_internal, _timescaledb_config, timescaledb_information, timescaledb_experimental TO PUBLIC;
+GRANT USAGE ON SCHEMA
+      _timescaledb_cache,
+      _timescaledb_catalog,
+      _timescaledb_functions,
+      _timescaledb_internal,
+      _timescaledb_config,
+      timescaledb_information,
+      timescaledb_experimental
+TO PUBLIC;
 

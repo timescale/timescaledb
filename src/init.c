@@ -15,7 +15,6 @@
 #include "extension.h"
 #include "bgw/launcher_interface.h"
 #include "guc.h"
-#include "debug_guc.h"
 #include "ts_catalog/catalog.h"
 #include "version.h"
 #include "compat/compat.h"
@@ -60,7 +59,9 @@ extern void _conn_mock_fini();
 
 extern void _chunk_append_init();
 
+#if PG16_LT
 extern void TSDLLEXPORT _PG_init(void);
+#endif
 
 TS_FUNCTION_INFO_V1(ts_post_load_init);
 
@@ -79,7 +80,6 @@ cleanup_on_pg_proc_exit(int code, Datum arg)
 	_conn_ssl_fini();
 #endif
 	_conn_plain_fini();
-	_guc_fini();
 	_process_utility_fini();
 	_event_trigger_fini();
 	_planner_fini();
@@ -114,7 +114,6 @@ _PG_init(void)
 #endif
 #ifdef TS_DEBUG
 	_conn_mock_init();
-	ts_debug_init();
 #endif
 
 	/* Register a cleanup function to be called when the backend exits */

@@ -18,14 +18,14 @@ batch_queue_fifo_free(BatchQueue *bq)
 static inline bool
 batch_queue_fifo_needs_next_batch(BatchQueue *bq)
 {
-	return TupIsNull(batch_array_get_at(&bq->batch_array, 0)->decompressed_scan_slot);
+	return TupIsNull(compressed_batch_current_tuple(batch_array_get_at(&bq->batch_array, 0)));
 }
 
 static inline void
 batch_queue_fifo_pop(BatchQueue *bq, DecompressContext *dcontext)
 {
 	DecompressBatchState *batch_state = batch_array_get_at(&bq->batch_array, 0);
-	if (TupIsNull(batch_state->decompressed_scan_slot))
+	if (TupIsNull(compressed_batch_current_tuple(batch_state)))
 	{
 		/* Allow this function to be called on the initial empty queue. */
 		return;
@@ -40,7 +40,7 @@ batch_queue_fifo_push_batch(BatchQueue *bq, DecompressContext *dcontext,
 {
 	BatchArray *batch_array = &bq->batch_array;
 	DecompressBatchState *batch_state = batch_array_get_at(batch_array, 0);
-	Assert(TupIsNull(batch_array_get_at(batch_array, 0)->decompressed_scan_slot));
+	Assert(TupIsNull(compressed_batch_current_tuple(batch_array_get_at(batch_array, 0))));
 	compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
 	compressed_batch_advance(dcontext, batch_state);
 }
@@ -54,7 +54,7 @@ batch_queue_fifo_reset(BatchQueue *bq)
 static inline TupleTableSlot *
 batch_queue_fifo_top_tuple(BatchQueue *bq)
 {
-	return batch_array_get_at(&bq->batch_array, 0)->decompressed_scan_slot;
+	return compressed_batch_current_tuple(batch_array_get_at(&bq->batch_array, 0));
 }
 
 static const struct BatchQueueFunctions BatchQueueFunctionsFifo = {

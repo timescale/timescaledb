@@ -101,36 +101,42 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 
 		tree = pg_parse_query(sql);
 
-		if (list_length(tree) > 1)
+		if (tree == NIL)
+		{
+			edata->elevel = ERROR;
+			edata->sqlerrcode = ERRCODE_INTERNAL_ERROR;
+			edata->message = "failed to parse query";
+		}
+		else if (list_length(tree) > 1)
 		{
 			edata->elevel = WARNING;
 			edata->sqlerrcode = ERRCODE_FEATURE_NOT_SUPPORTED;
 			edata->message = "multiple statements are not supported";
-
-			PG_RETURN_DATUM(create_cagg_validate_query_datum(tupdesc, is_valid_query, edata));
 		}
-
-		node = linitial(tree);
-		rawstmt = (RawStmt *) node;
-		pstate = make_parsestate(NULL);
-
-		Assert(IsA(node, RawStmt));
-
-		if (!IsA(rawstmt->stmt, SelectStmt))
+		else
 		{
-			edata->elevel = WARNING;
-			edata->sqlerrcode = ERRCODE_FEATURE_NOT_SUPPORTED;
-			edata->message = "only select statements are supported";
+			node = linitial(tree);
+			rawstmt = (RawStmt *) node;
+			pstate = make_parsestate(NULL);
 
-			PG_RETURN_DATUM(create_cagg_validate_query_datum(tupdesc, is_valid_query, edata));
+			Assert(IsA(node, RawStmt));
+
+			if (!IsA(rawstmt->stmt, SelectStmt))
+			{
+				edata->elevel = WARNING;
+				edata->sqlerrcode = ERRCODE_FEATURE_NOT_SUPPORTED;
+				edata->message = "only select statements are supported";
+			}
+			else
+			{
+				pstate->p_sourcetext = sql;
+				query = transformTopLevelStmt(pstate, rawstmt);
+				free_parsestate(pstate);
+
+				(void) cagg_validate_query(query, true, "public", "cagg_validate", false);
+				is_valid_query = true;
+			}
 		}
-
-		pstate->p_sourcetext = sql;
-		query = transformTopLevelStmt(pstate, rawstmt);
-		free_parsestate(pstate);
-
-		(void) cagg_validate_query(query, true, "public", "cagg_validate", false);
-		is_valid_query = true;
 	}
 	PG_CATCH();
 	{

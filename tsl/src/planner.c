@@ -14,8 +14,7 @@
 #include "nodes/skip_scan/skip_scan.h"
 #include "chunk.h"
 #include "compat/compat.h"
-#include "debug_guc.h"
-#include "debug.h"
+#include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"
@@ -186,5 +185,20 @@ tsl_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntr
 		 * to be empty.
 		 */
 		return;
+	}
+}
+
+/*
+ * Run preprocess query optimizations
+ */
+void
+tsl_preprocess_query(Query *parse)
+{
+	Assert(parse != NULL);
+
+	/* Check if constification of watermark values is enabled */
+	if (ts_guc_enable_cagg_watermark_constify)
+	{
+		constify_cagg_watermark(parse);
 	}
 }

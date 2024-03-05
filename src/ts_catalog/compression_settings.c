@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <utils/builtins.h>
 
+#include "chunk.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "ts_catalog/catalog.h"
@@ -17,6 +18,29 @@
 static ScanTupleResult compression_settings_tuple_update(TupleInfo *ti, void *data);
 static HeapTuple compression_settings_formdata_make_tuple(const FormData_compression_settings *fd,
 														  TupleDesc desc);
+
+bool
+ts_compression_settings_equal(const CompressionSettings *left, const CompressionSettings *right)
+{
+	return ts_array_equal(left->fd.segmentby, right->fd.segmentby) &&
+		   ts_array_equal(left->fd.orderby, right->fd.orderby) &&
+		   ts_array_equal(left->fd.orderby_desc, right->fd.orderby_desc) &&
+		   ts_array_equal(left->fd.orderby_nullsfirst, right->fd.orderby_nullsfirst);
+}
+
+CompressionSettings *
+ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid)
+{
+	CompressionSettings *src = ts_compression_settings_get(ht_relid);
+	Assert(src);
+	CompressionSettings *dst = ts_compression_settings_create(dst_relid,
+															  src->fd.segmentby,
+															  src->fd.orderby,
+															  src->fd.orderby_desc,
+															  src->fd.orderby_nullsfirst);
+
+	return dst;
+}
 
 CompressionSettings *
 ts_compression_settings_create(Oid relid, ArrayType *segmentby, ArrayType *orderby,
@@ -155,6 +179,22 @@ ts_compression_settings_delete(Oid relid)
 }
 
 TSDLLEXPORT void
+ts_compression_settings_rename_column_hypertable(Hypertable *ht, char *old, char *new)
+{
+	ts_compression_settings_rename_column(ht->main_table_relid, old, new);
+	if (ht->fd.compressed_hypertable_id)
+	{
+		ListCell *lc;
+		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+		foreach (lc, chunks)
+		{
+			Chunk *chunk = lfirst(lc);
+			ts_compression_settings_rename_column(chunk->table_id, old, new);
+		}
+	}
+}
+
+TSDLLEXPORT void
 ts_compression_settings_rename_column(Oid relid, char *old, char *new)
 {
 	CompressionSettings *settings = ts_compression_settings_get(relid);
@@ -175,6 +215,24 @@ ts_compression_settings_update(CompressionSettings *settings)
 	Catalog *catalog = ts_catalog_get();
 	FormData_compression_settings *fd = &settings->fd;
 	ScanKeyData scankey[1];
+
+	if (settings->fd.orderby && settings->fd.segmentby)
+	{
+		Datum datum;
+		bool isnull;
+
+		ArrayIterator it = array_create_iterator(settings->fd.orderby, 0, NULL);
+		while (array_iterate(it, &datum, &isnull))
+		{
+			if (ts_array_is_member(settings->fd.segmentby, TextDatumGetCString(datum)))
+				ereport(ERROR,
+						(errcode(ERRCODE_SYNTAX_ERROR),
+						 errmsg("cannot use column \"%s\" for both ordering and segmenting",
+								TextDatumGetCString(datum)),
+						 errhint("Use separate columns for the timescaledb.compress_orderby and"
+								 " timescaledb.compress_segmentby options.")));
+		}
+	}
 
 	/*
 	 * The default compression settings will always have orderby settings but the user may have

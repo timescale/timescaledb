@@ -586,6 +586,9 @@ BEGIN
     -- execute the migration plan
     CALL _timescaledb_functions.cagg_migrate_execute_plan(_cagg_data);
 
+    -- Remove chunk metadata when marked as dropped
+    PERFORM _timescaledb_functions.remove_dropped_chunk_metadata(_cagg_data.raw_hypertable_id);
+
     -- finish the migration plan
     UPDATE _timescaledb_catalog.continuous_agg_migrate_plan
     SET end_ts = pg_catalog.clock_timestamp()

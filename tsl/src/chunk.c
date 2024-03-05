@@ -25,12 +25,10 @@
 #include <utils/snapmgr.h>
 #include <executor/executor.h>
 #include <parser/parse_func.h>
-#include <storage/lmgr.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <fmgr.h>
 #ifdef USE_ASSERT_CHECKING
-#include <funcapi.h>
 #endif
 
 #include <compat/compat.h>
@@ -42,11 +40,7 @@
 
 #include "chunk.h"
 #include "chunk_api.h"
-#include "data_node.h"
-#include "deparse.h"
 #include "debug_point.h"
-#include "dist_util.h"
-#include "ts_catalog/chunk_data_node.h"
 #include "utils.h"
 
 /* Data in a frozen chunk cannot be modified. So any operation
@@ -64,7 +58,7 @@ chunk_freeze_chunk(PG_FUNCTION_ARGS)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("operation not supported on distributed chunk or foreign table \"%s\"",
+				 errmsg("operation not supported on tiered chunk \"%s\"",
 						get_rel_name(chunk_relid))));
 	}
 	if (ts_chunk_is_frozen(chunk))

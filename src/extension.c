@@ -31,7 +31,7 @@
 #include "extension_utils.c"
 #include "compat/compat.h"
 
-#define TS_UPDATE_SCRIPT_CONFIG_VAR "timescaledb.update_script_stage"
+#define TS_UPDATE_SCRIPT_CONFIG_VAR MAKE_EXTOPTION("update_script_stage")
 #define POST_UPDATE "post"
 /*
  * The name of the experimental schema.
@@ -66,18 +66,12 @@ static enum ExtensionState extstate = EXTENSION_STATE_UNKNOWN;
  */
 static Oid ts_extension_oid = InvalidOid;
 
-Oid
-ts_extension_get_oid(void)
-{
-	if (OidIsValid(ts_extension_oid))
-	{
-		Assert(ts_extension_oid == get_extension_oid(EXTENSION_NAME, true));
-		return ts_extension_oid;
-	}
-
-	ts_extension_oid = get_extension_oid(EXTENSION_NAME, false);
-	return ts_extension_oid;
-}
+static const char *extstate_str[] = {
+	[EXTENSION_STATE_UNKNOWN] = "unknown",
+	[EXTENSION_STATE_TRANSITIONING] = "transitioning",
+	[EXTENSION_STATE_CREATED] = "created",
+	[EXTENSION_STATE_NOT_INSTALLED] = "not installed",
+};
 
 static bool
 extension_loader_present()
@@ -163,6 +157,10 @@ extension_set_state(enum ExtensionState newstate)
 			ts_catalog_reset();
 			break;
 	}
+	elog(DEBUG1,
+		 "extension state changed: %s to %s",
+		 extstate_str[extstate],
+		 extstate_str[newstate]);
 	extstate = newstate;
 	return true;
 }
@@ -274,6 +272,10 @@ ts_experimental_schema_name(void)
 void
 ts_extension_invalidate(void)
 {
+	elog(DEBUG1,
+		 "extension state invalidated: %s to %s",
+		 extstate_str[extstate],
+		 extstate_str[EXTENSION_STATE_UNKNOWN]);
 	extstate = EXTENSION_STATE_UNKNOWN;
 	extension_proxy_oid = InvalidOid;
 }
@@ -341,28 +343,11 @@ ts_extension_get_so_name(void)
 	return EXTENSION_NAME "-" TIMESCALEDB_VERSION_MOD;
 }
 
-/*
- * Get the currently installed extension version.
- */
-const char *
-ts_extension_get_version(void)
-{
-	return extension_version(EXTENSION_NAME);
-}
-
 bool
 ts_extension_is_proxy_table_relid(Oid relid)
 {
 	return relid == extension_proxy_oid;
 }
-
-#ifdef TS_DEBUG
-static const char *extstate_str[] = {
-	[EXTENSION_STATE_UNKNOWN] = "unknown",
-	[EXTENSION_STATE_TRANSITIONING] = "transitioning",
-	[EXTENSION_STATE_CREATED] = "created",
-	[EXTENSION_STATE_NOT_INSTALLED] = "not installed",
-};
 
 TS_FUNCTION_INFO_V1(ts_extension_get_state);
 
@@ -371,4 +356,3 @@ ts_extension_get_state(PG_FUNCTION_ARGS)
 {
 	PG_RETURN_TEXT_P(cstring_to_text(extstate_str[extstate]));
 }
-#endif

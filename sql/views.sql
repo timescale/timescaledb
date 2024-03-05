@@ -18,14 +18,6 @@ SELECT ht.schema_name AS hypertable_schema,
     ELSE
       FALSE
     END) AS compression_enabled,
-  (
-    CASE WHEN ht.replication_factor > 0 THEN
-      TRUE
-    ELSE
-      FALSE
-    END) AS is_distributed,
-  ht.replication_factor,
-  dn.node_list AS data_nodes,
   srchtbs.tablespace_list AS tablespaces
 FROM _timescaledb_catalog.hypertable ht
   INNER JOIN pg_tables t ON ht.table_name = t.tablename
@@ -36,11 +28,6 @@ FROM _timescaledb_catalog.hypertable ht
       array_agg(tablespace_name ORDER BY id) AS tablespace_list
     FROM _timescaledb_catalog.tablespace
     GROUP BY hypertable_id) srchtbs ON ht.id = srchtbs.hypertable_id
-  LEFT OUTER JOIN (
-  SELECT hypertable_id,
-    array_agg(node_name ORDER BY node_name) AS node_list
-  FROM _timescaledb_catalog.hypertable_data_node
-  GROUP BY hypertable_id) dn ON ht.id = dn.hypertable_id
 WHERE ht.compression_state != 2 --> no internal compression tables
   AND ca.mat_hypertable_id IS NULL;
 
@@ -146,19 +133,6 @@ FROM _timescaledb_catalog.continuous_agg cagg,
     WHERE cagg.mat_hypertable_id = id) mat_ht
 WHERE cagg.raw_hypertable_id = ht.id;
 
-CREATE OR REPLACE VIEW timescaledb_information.data_nodes AS
-SELECT s.node_name,
-  s.owner,
-  s.options
-FROM (
-  SELECT srvname AS node_name,
-    srvowner::regrole::name AS owner,
-    srvoptions AS options
-  FROM pg_catalog.pg_foreign_server AS srv,
-    pg_catalog.pg_foreign_data_wrapper AS fdw
-  WHERE srv.srvfdw = fdw.oid
-    AND fdw.fdwname = 'timescaledb_fdw') AS s;
-
 -- chunks metadata view, shows information about the primary dimension column
 -- query plans with CTEs are not always optimized by PG. So use in-line
 -- tables.
@@ -176,7 +150,6 @@ SELECT hypertable_schema,
   integer_range_end AS range_end_integer,
   is_compressed,
   chunk_table_space AS chunk_tablespace,
-  node_list AS data_nodes,
   creation_time AS chunk_creation_time
 FROM (
   SELECT ht.schema_name AS hypertable_schema,
@@ -186,41 +159,31 @@ FROM (
     dim.column_name AS primary_dimension,
     dim.column_type AS primary_dimension_type,
     row_number() OVER (PARTITION BY chcons.chunk_id ORDER BY dim.id) AS chunk_dimension_num,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_start)
     ELSE
       NULL
     END AS range_start,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       _timescaledb_functions.to_timestamp(dimsl.range_end)
     ELSE
       NULL
     END AS range_end,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_start
     END AS integer_range_start,
-    CASE WHEN (dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype) THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       NULL
     ELSE
       dimsl.range_end
     END AS integer_range_end,
-    CASE WHEN (srcch.status & 1 = 1) THEN --distributed compress_chunk() has definitely been called
-                                          --remote chunk compression status still uncertain
+    CASE WHEN (srcch.status & 1 = 1) THEN
         TRUE
-    ELSE FALSE --remote chunk compression status uncertain
+    ELSE FALSE
     END AS is_compressed,
     pgtab.spcname AS chunk_table_space,
-    chdn.node_list,
 	srcch.creation_time AS creation_time
   FROM _timescaledb_catalog.chunk srcch
     INNER JOIN _timescaledb_catalog.hypertable ht ON ht.id = srcch.hypertable_id
@@ -237,11 +200,6 @@ FROM (
       WHERE pg_class.relnamespace = pg_namespace.oid) cl ON srcch.table_name = cl.relname
       AND srcch.schema_name = cl.schema_name
     LEFT OUTER JOIN pg_tablespace pgtab ON pgtab.oid = reltablespace
-  LEFT OUTER JOIN (
-    SELECT chunk_id,
-      array_agg(node_name ORDER BY node_name) AS node_list
-    FROM _timescaledb_catalog.chunk_data_node
-    GROUP BY chunk_id) chdn ON srcch.id = chdn.chunk_id
   WHERE srcch.dropped IS FALSE AND srcch.osm_chunk IS FALSE
     AND ht.compression_state != 2 ) finalq
 WHERE chunk_dimension_num = 1;
@@ -262,18 +220,14 @@ SELECT ht.schema_name AS hypertable_schema,
     'Time'
   END AS dimension_type,
   CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       _timescaledb_functions.to_interval(dim.interval_length)
     ELSE
       NULL
     END
   END AS time_interval,
   CASE WHEN dim.interval_length IS NOT NULL THEN
-    CASE WHEN dim.column_type = 'TIMESTAMP'::regtype
-      OR dim.column_type = 'TIMESTAMPTZ'::regtype
-      OR dim.column_type = 'DATE'::regtype THEN
+    CASE WHEN dim.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
       NULL
     ELSE
       dim.interval_length
@@ -359,4 +313,54 @@ WHERE
 			   'MEMBER') IS TRUE
     OR pg_catalog.pg_has_role(current_user, owner, 'MEMBER') IS TRUE;
 
+CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings AS
+	SELECT
+		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
+		array_to_string(segmentby,',') AS segmentby,
+		un.orderby,
+    d.compress_interval_length
+  FROM _timescaledb_catalog.hypertable ht
+  JOIN LATERAL (
+    SELECT
+      CASE WHEN d.column_type = ANY(ARRAY['timestamp','timestamptz','date']::regtype[]) THEN
+        _timescaledb_functions.to_interval(d.compress_interval_length)::text
+      ELSE
+        d.compress_interval_length::text
+      END AS compress_interval_length
+    FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = ht.id ORDER BY id LIMIT 1
+  ) d ON true
+  LEFT JOIN _timescaledb_catalog.compression_settings s ON format('%I.%I',ht.schema_name,ht.table_name)::regclass = s.relid
+	LEFT JOIN LATERAL (
+		SELECT
+			string_agg(
+				format('%I%s%s',orderby,
+					CASE WHEN "desc" THEN ' DESC' ELSE '' END,
+					CASE WHEN nullsfirst AND NOT "desc" THEN ' NULLS FIRST' WHEN NOT nullsfirst AND "desc" THEN ' NULLS LAST' ELSE '' END
+				)
+			,',') AS orderby
+		FROM unnest(s.orderby, s.orderby_desc, s.orderby_nullsfirst) un(orderby, "desc", nullsfirst)
+	) un ON true;
+
+CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
+	SELECT
+		format('%I.%I',ht.schema_name,ht.table_name)::regclass AS hypertable,
+		format('%I.%I',ch.schema_name,ch.table_name)::regclass AS chunk,
+		array_to_string(segmentby,',') AS segmentby,
+		un.orderby
+	FROM _timescaledb_catalog.hypertable ht
+	INNER JOIN _timescaledb_catalog.chunk ch ON ch.hypertable_id = ht.id
+  INNER JOIN _timescaledb_catalog.chunk ch2 ON ch2.id = ch.compressed_chunk_id
+  LEFT JOIN _timescaledb_catalog.compression_settings s ON format('%I.%I',ch2.schema_name,ch2.table_name)::regclass = s.relid
+	LEFT JOIN LATERAL (
+		SELECT
+			string_agg(
+				format('%I%s%s',orderby,
+					CASE WHEN "desc" THEN ' DESC' ELSE '' END,
+					CASE WHEN nullsfirst AND NOT "desc" THEN ' NULLS FIRST' WHEN NOT nullsfirst AND "desc" THEN ' NULLS LAST' ELSE '' END
+				)
+			,',') AS orderby
+		FROM unnest(s.orderby, s.orderby_desc, s.orderby_nullsfirst) un(orderby, "desc", nullsfirst)
+	) un ON true;
+
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
+

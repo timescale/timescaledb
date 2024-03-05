@@ -50,7 +50,7 @@ ts_cache_init(Cache *cache)
 
 	/*
 	 * We always want to be explicit about the memory context our hash table
-	 * ends up in to ensure it's not accidently put in TopMemoryContext.
+	 * ends up in to ensure it's not accidentally put in TopMemoryContext.
 	 */
 	Assert(cache->flags & HASH_CONTEXT);
 	cache->htab = hash_create(cache->name, cache->numelements, &cache->hctl, cache->flags);
@@ -202,27 +202,6 @@ ts_cache_fetch(Cache *cache, CacheQuery *query)
 	}
 
 	return query->result;
-}
-
-bool
-ts_cache_remove(Cache *cache, void *key)
-{
-	bool found;
-
-	if (cache->remove_entry != NULL)
-	{
-		/* In case we want to free the removing entry we must do it beforehand
-		 * because HASH_REMOVE call returns dangling pointer, which cannot be used */
-		void *entry = hash_search(cache->htab, key, HASH_FIND, &found);
-		if (found)
-			cache->remove_entry(entry);
-	}
-
-	hash_search(cache->htab, key, HASH_REMOVE, &found);
-	if (found)
-		cache->stats.numelements--;
-
-	return found;
 }
 
 static void

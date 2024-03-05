@@ -714,7 +714,6 @@ ALTER TABLE trigger_test ADD COLUMN addcoli integer;
 INSERT INTO trigger_test(time, device, value, addcolv, addcoli)
 VALUES ( '2010-01-01', 10, 10, 'ten', 222);
 SELECT compress_chunk(c, true) FROM show_chunks('trigger_test') c;
-NOTICE:  chunk "_hyper_11_15_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_15_chunk
@@ -866,7 +865,6 @@ INSERT INTO test_ordering VALUES (23), (24), (115) RETURNING tableoid::regclass,
 (3 rows)
 
 SELECT compress_chunk(format('%I.%I',chunk_schema,chunk_name), true) FROM timescaledb_information.chunks WHERE hypertable_name = 'test_ordering';
-NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
               compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_20_chunk
@@ -875,24 +873,19 @@ NOTICE:  chunk "_hyper_13_20_chunk" is already compressed
 
 -- should be ordered append
 :PREFIX SELECT * FROM test_ordering ORDER BY 1;
-                                     QUERY PLAN                                      
--------------------------------------------------------------------------------------
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on test_ordering
    Order: test_ordering."time"
-   ->  Merge Append
-         Sort Key: _hyper_13_20_chunk."time"
-         ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_14_21_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_14_21_chunk
-         ->  Sort
-               Sort Key: _hyper_13_20_chunk."time"
-               ->  Seq Scan on _hyper_13_20_chunk
-   ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_13_20_chunk
          ->  Sort
                Sort Key: compress_hyper_14_23_chunk._ts_meta_sequence_num DESC
                ->  Seq Scan on compress_hyper_14_23_chunk
-(15 rows)
+   ->  Custom Scan (DecompressChunk) on _hyper_13_22_chunk
+         ->  Sort
+               Sort Key: compress_hyper_14_24_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_14_24_chunk
+(10 rows)
 
 SET timescaledb.enable_decompression_sorted_merge = 1;
 -- TEST cagg triggers with insert into compressed chunk
@@ -926,7 +919,7 @@ ALTER TABLE conditions SET (timescaledb.compress);
 SELECT  compress_chunk(ch) FROM show_chunks('conditions') ch;
               compress_chunk              
 ------------------------------------------
- _timescaledb_internal._hyper_15_24_chunk
+ _timescaledb_internal._hyper_15_25_chunk
 (1 row)
 
 SELECT chunk_name, range_start, range_end, is_compressed
@@ -934,7 +927,7 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions';
      chunk_name     |         range_start          |          range_end           | is_compressed 
 --------------------+------------------------------+------------------------------+---------------
- _hyper_15_24_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
+ _hyper_15_25_chunk | Wed Dec 30 16:00:00 2009 PST | Wed Jan 06 16:00:00 2010 PST | t
 (1 row)
 
 --now insert into compressed chunk
@@ -1042,3 +1035,40 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
 
 \copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
 DROP TABLE test_copy;
+-- Text limitting decompressed tuple during an insert
+CREATE TABLE test_limit (
+    timestamp int not null,
+    id bigint
+);
+SELECT * FROM create_hypertable('test_limit', 'timestamp', chunk_time_interval=>1000);
+ hypertable_id | schema_name | table_name | created 
+---------------+-------------+------------+---------
+            24 | public      | test_limit | t
+(1 row)
+
+INSERT INTO test_limit SELECT t, i FROM generate_series(1,10000,1) t CROSS JOIN generate_series(1,3,1) i;
+CREATE UNIQUE INDEX timestamp_id_idx ON test_limit(timestamp, id);
+ALTER TABLE test_limit SET (
+    timescaledb.compress,
+    timescaledb.compress_orderby = 'timestamp'
+);
+WARNING:  column "id" should be used for segmenting or ordering
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
+ count 
+-------
+    11
+(1 row)
+
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+\set VERBOSITY default
+\set ON_ERROR_STOP 0
+-- Inserting in the same period should decompress tuples
+INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+ERROR:  tuple decompression limit exceeded by operation
+DETAIL:  current limit: 5000, tuples decompressed: 6000
+HINT:  Consider increasing timescaledb.max_tuples_decompressed_per_dml_transaction or set to 0 (unlimited).
+-- Setting to 0 should remove the limit.
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
+INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+\set ON_ERROR_STOP 1
+DROP TABLE test_limit;

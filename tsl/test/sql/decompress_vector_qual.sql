@@ -4,6 +4,8 @@
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
+create function stable_identity(x anyelement) returns anyelement as $$ select x $$ language sql stable;
+
 create table vectorqual(metric1 int8, ts timestamp, metric2 int8, device int8);
 select create_hypertable('vectorqual', 'ts');
 alter table vectorqual set (timescaledb.compress, timescaledb.compress_segmentby = 'device');
@@ -38,8 +40,26 @@ set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where device = 1 /* can't apply vector ops to the segmentby column */;
 
 
+-- Test various combinations of arithmetic types.
+create table arithmetic(ts int, a int2, b int4, c int8, d float4, e float8,
+    ax int2, bx int4, cx int8, dx float4, ex float8);
+select create_hypertable('arithmetic', 'ts');
+alter table arithmetic set (timescaledb.compress);
+insert into arithmetic values (100, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1),
+    (101, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+select count(compress_chunk(x, true)) from show_chunks('arithmetic') x;
+set timescaledb.debug_require_vector_qual to 'only';
+select * from arithmetic where
+        a > 1::int2 and a > 1::int4 and a > 1::int8
+    and b > 1::int2 and b > 1::int4 and b > 1::int8
+    and c > 1::int2 and c > 1::int4 and c > 1::int8
+    and d > 1::int2 and d > 1::int4 and d > 1::int8 and d > 1::float4 and d > 1::float8
+    and e > 1::int2 and e > 1::int4 and e > 1::int8 and e > 1::float4 and e > 1::float8
+;
+
+
 -- Test columns that don't support bulk decompression.
-alter table vectorqual add column tag text;
+alter table vectorqual add column tag name;
 insert into vectorqual(ts, device, metric2, metric3, metric4, tag) values ('2025-01-01 00:00:00', 5, 52, 53, 54, 'tag5');
 select count(compress_chunk(x, true)) from show_chunks('vectorqual') x;
 
@@ -47,7 +67,37 @@ set timescaledb.debug_require_vector_qual to 'only';
 select tag from vectorqual where metric2 > 0;
 
 
+-- Can't vectorize parameterized join clauses for now.
+set timescaledb.debug_require_vector_qual to 'forbid';
+set enable_hashjoin to off;
+set enable_mergejoin to off;
+with values(x) as materialized(select distinct metric2 from vectorqual)
+    select x, (select metric2 from vectorqual where metric2 = x) from values order by 1;
+reset enable_hashjoin;
+reset enable_mergejoin;
+
+-- Can't vectorize initplan parameters either.
+select count(*) from vectorqual where metric2
+    = (select metric2 from vectorqual order by 1 limit 1);
+
+-- Can vectorize clauses with query parameters.
+set timescaledb.debug_require_vector_qual to 'only';
+set plan_cache_mode to 'force_generic_plan';
+
+prepare p as select count(*) from vectorqual where metric3 = $1;
+execute p(33);
+deallocate p;
+
+-- Also try query parameter in combination with a stable function.
+prepare p(int4) as select count(*) from vectorqual where metric3 = stable_identity($1);
+execute p(33);
+deallocate p;
+
+reset plan_cache_mode;
+
+
 -- Queries without aggregation.
+set timescaledb.debug_require_vector_qual to 'only';
 select * from vectorqual where ts > '2021-01-01 00:00:00' order by vectorqual;
 select * from vectorqual where metric4 >= 0 order by vectorqual;
 
@@ -60,14 +110,42 @@ select metric4 from vectorqual where ts > '2021-01-01 00:00:00' order by 1;
 select * from vectorqual where ts > '2021-01-01 00:00:00' and metric3 > 40 order by vectorqual;
 
 
--- ORed constrainst on multiple columns (not vectorized for now).
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- ORed constrainst on multiple columns.
+set timescaledb.debug_require_vector_qual to 'only';
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+-- set timescaledb.enable_bulk_decompression to off;
+
 select * from vectorqual where ts > '2021-01-01 00:00:00' or metric3 > 40 order by vectorqual;
+
+-- Some more tests for boolean operations.
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00';
+
+select count(*) from vectorqual where 40 < metric3;
+
+select count(*) from vectorqual where metric2 < 0;
+
+select count(*) from vectorqual where ts > '2021-01-01 00:00:00' or 40 < metric3;
+
+select count(*) from vectorqual where not (ts <= '2021-01-01 00:00:00' and 40 >= metric3);
+
+-- early exit inside AND BoolExpr
+select count(*) from vectorqual where metric2 < 0 or (metric4 < -1 and 40 >= metric3);
+
+-- early exit after OR BoolExpr
+select count(*) from vectorqual where metric2 < 0 or metric3  < -1;
+
+-- expression evaluated to null at run time
+select count(*) from vectorqual where metric3 = 777
+    or metric3 > case when now() > now() - interval '1s' then null else 1 end;
+
+reset timescaledb.enable_bulk_decompression;
 
 
 -- Test with unary operator.
+set timescaledb.debug_require_vector_qual to 'forbid';
 create operator !! (function = 'bool', rightarg = int4);
 select count(*) from vectorqual where !!metric3;
+select count(*) from vectorqual where not !!metric3;
 
 
 -- Custom operator on column that supports bulk decompression is not vectorized.
@@ -76,15 +154,49 @@ create function int4eqq(int4, int4) returns bool as 'int4eq' language internal;
 create operator === (function = 'int4eqq', rightarg = int4, leftarg = int4);
 select count(*) from vectorqual where metric3 === 777;
 select count(*) from vectorqual where metric3 === any(array[777, 888]);
+select count(*) from vectorqual where not metric3 === 777;
+select count(*) from vectorqual where metric3 = 777 or metric3 === 777;
 
--- It also doesn't have a commutator.
-select count(*) from vectorqual where 777 === metric3;
+-- Custom operator that can be vectorized but doesn't have a negator.
+create operator !!! (function = 'int4ne', rightarg = int4, leftarg = int4);
+set timescaledb.debug_require_vector_qual to 'only';
+select count(*) from vectorqual where metric3 !!! 777;
+select count(*) from vectorqual where metric3 !!! any(array[777, 888]);
+select count(*) from vectorqual where metric3 !!! 777 or metric3 !!! 888;
+select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! 888);
+select count(*) from vectorqual where metric3 !!! 666 and (metric3 !!! 777 or metric3 !!! stable_identity(888));
 
-
--- NullTest is not vectorized.
 set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where not metric3 !!! 777;
+select count(*) from vectorqual where metric3 !!! 666 or (metric3 !!! 777 and not metric3 !!! 888);
+select count(*) from vectorqual where metric3 !!! 666 or not (metric3 !!! 777 and not metric3 !!! 888);
+
+set timescaledb.debug_require_vector_qual to 'allow';
+select count(*) from vectorqual where metric3 !!! 777 or not metric3 !!! 888;
+select count(*) from vectorqual where metric3 !!! 777 and not metric3 !!! 888;
+select count(*) from vectorqual where not(metric3 !!! 666 or not (metric3 !!! 777 and not metric3 !!! 888));
+
+-- These operators don't have a commutator.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from vectorqual where 777 === metric3;
+select count(*) from vectorqual where 777 !!! metric3;
+
+
+-- NullTest is vectorized.
+set timescaledb.debug_require_vector_qual to 'only';
 select count(*) from vectorqual where metric4 is null;
 select count(*) from vectorqual where metric4 is not null;
+select count(*) from vectorqual where metric3 = 777 or metric4 is not null;
+select count(*) from vectorqual where metric3 = stable_identity(777) or metric4 is null;
+
+
+-- Can't vectorize conditions on system columns. Have to check this on a single
+-- chunk, otherwise the whole-row var will be masked by ConvertRowType.
+select show_chunks('vectorqual') chunk1 limit 1 \gset
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*) from :chunk1 t where t is null;
+select count(*) from :chunk1 t where t.* is null;
+select count(*) from :chunk1 t where tableoid is null;
 
 
 -- Scalar array operators are vectorized if the operator is vectorizable.
@@ -159,6 +271,51 @@ select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 0]) 
 select count(*) from singlebatch where metric2 <= all(array[12, 0, 12, 12, 12]) and metric3 != 777;
 select count(*) from singlebatch where metric2 <= all(array[12, 12, 12, 12, 12]) and metric3 != 777;
 
+
+-- Also check early exit for AND/OR. Top-level clause must be OR, because top-level
+-- AND is flattened into a list.
+select count(*) from singlebatch where (metric2 < 20 and metric2 < 30) or metric3 = 777;
+select count(*) from singlebatch where (metric2 < 30 and metric2 < 20) or metric3 = 777;
+select count(*) from singlebatch where metric3 = 777 or (metric2 < 20 and metric2 < 30);
+select count(*) from singlebatch where metric3 = 777 or (metric2 < 30 and metric2 < 20);
+
+select count(*) from vectorqual where (metric2 < 20 and metric2 < 30) or metric3 = 777;
+select count(*) from vectorqual where (metric2 < 30 and metric2 < 20) or metric3 = 777;
+select count(*) from vectorqual where metric3 = 777 or (metric2 < 20 and metric2 < 30);
+select count(*) from vectorqual where metric3 = 777 or (metric2 < 30 and metric2 < 20);
+
+select count(*) from singlebatch where metric2 < 20 or metric3 < 50 or metric3 > 50;
+select count(*) from singlebatch where metric2 < 20 or metric3 > 50 or metric3 < 50;
+select count(*) from singlebatch where metric3 < 50 or metric2 < 20 or metric3 > 50;
+select count(*) from singlebatch where metric3 > 50 or metric3 < 50 or metric2 < 20;
+
+select count(*) from vectorqual where metric2 < 20 or metric3 < 50 or metric3 > 50;
+select count(*) from vectorqual where metric2 < 20 or metric3 > 50 or metric3 < 50;
+select count(*) from vectorqual where metric3 < 50 or metric2 < 20 or metric3 > 50;
+select count(*) from vectorqual where metric3 > 50 or metric3 < 50 or metric2 < 20;
+
+select count(*) from singlebatch where metric2 = 12 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 22 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 32 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 42 or metric3 = 888;
+select count(*) from singlebatch where metric2 = 52 or metric3 = 888;
+
+select count(*) from vectorqual where metric2 = 12 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 22 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 32 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 42 or metric3 = 888;
+select count(*) from vectorqual where metric2 = 52 or metric3 = 888;
+
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
+select count(*) from singlebatch where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
+
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 12);
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and metric2 = 666);
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
+select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
+
 reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;
 
@@ -176,16 +333,18 @@ select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz::t
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamp - interval '1 day';
 -- Expression that evaluates to Null.
 select count(*) from vectorqual where ts > case when '2021-01-01'::timestamp < '2022-01-01'::timestamptz then null else '2021-01-01 00:00:00'::timestamp end;
+select count(*) from vectorqual where ts < LOCALTIMESTAMP + '3 years'::interval;
 
--- This filter is not vectorized because the 'timestamp > timestamptz'
--- operator is stable, not immutable, because it uses the current session
--- timezone. We could transform it to something like
--- 'timestamp > timestamptz::timestamp' to allow our stable function evaluation
--- to handle this case, but we don't do it at the moment.
-set timescaledb.debug_require_vector_qual to 'forbid';
+-- These filters are not vectorizable as written, because the 'timestamp > timestamptz'
+-- operator is stable, not immutable. We will try to cast the constant to the
+-- same type in this case.
+set timescaledb.debug_require_vector_qual to 'only';
 select count(*) from vectorqual where ts > '2021-01-01 00:00:00'::timestamptz;
+select count(*) from vectorqual where ts < LOCALTIMESTAMP at time zone 'UTC' + '3 years'::interval;
+
 
 -- Can't vectorize comparison with a volatile function.
+set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric3 > random()::int - 100;
 select count(*) from vectorqual where ts > case when random() < 10 then null else '2021-01-01 00:00:00'::timestamp end;
 
@@ -202,7 +361,7 @@ set timescaledb.enable_bulk_decompression to on;
 set timescaledb.debug_require_vector_qual to 'forbid';
 select count(*) from vectorqual where metric4 > 4;
 set timescaledb.debug_require_vector_qual to 'only';
-select count(*) from vectorqual where metric4 is null;
+select count(*) from vectorqual where metric3 === 4;
 \set ON_ERROR_STOP 1
 
 
@@ -220,3 +379,42 @@ select * from date_table where ts >= '2021-01-02';
 select * from date_table where ts =  '2021-01-02';
 select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
+select * from date_table where ts <  CURRENT_DATE;
+
+-- Text columns. Only tests bulk decompression for now.
+create table text_table(ts int, d int);
+select create_hypertable('text_table', 'ts');
+alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
+
+insert into text_table select x, 0 /*, default */ from generate_series(1, 1000) x;
+select count(compress_chunk(x, true)) from show_chunks('text_table') x;
+alter table text_table add column a text default 'default';
+
+insert into text_table select x, 1, '' from generate_series(1, 1000) x;
+insert into text_table select x, 2, 'same' from generate_series(1, 1000) x;
+insert into text_table select x, 3, 'different' || x from generate_series(1, 1000) x;
+insert into text_table select x, 4, case when x % 2 = 0 then null else 'same-with-nulls' end from generate_series(1, 1000) x;
+insert into text_table select x, 5, case when x % 2 = 0 then null else 'different-with-nulls' || x end from generate_series(1, 1000) x;
+insert into text_table select x, 6, 'одинаковый' from generate_series(1, 1000) x;
+insert into text_table select x, 7, '異なる' || x from generate_series(1, 1000) x;
+
+-- Some text values with varying lengths in a single batch. They are all different
+-- to prevent dictionary compression, because we want to test particular orders
+-- here as well.
+insert into text_table select x,       8, repeat(        x::text || 'a',         x) from generate_series(1, 100) x;
+insert into text_table select x + 100, 8, repeat((101 - x)::text || 'b', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 200, 8, repeat((101 - x)::text || 'c', (101 - x)) from generate_series(1, 100) x;
+insert into text_table select x + 300, 8, repeat(        x::text || 'd',         x) from generate_series(1, 100) x;
+
+set timescaledb.debug_require_vector_qual to 'forbid';
+select sum(length(a)) from text_table;
+select count(distinct a) from text_table;
+
+select count(compress_chunk(x, true)) from show_chunks('text_table') x;
+select compress_chunk(x) from show_chunks('text_table') x;
+
+set timescaledb.enable_bulk_decompression to on;
+set timescaledb.debug_require_vector_qual to 'forbid';
+
+select sum(length(a)) from text_table;
+select count(distinct a) from text_table;

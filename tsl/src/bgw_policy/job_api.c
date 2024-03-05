@@ -25,8 +25,6 @@
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0
 
-/* Right now, there is an infinite number of retries for custom jobs */
-#define DEFAULT_MAX_RETRIES (-1)
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD (5 * USECS_PER_MINUTE)
 
@@ -176,7 +174,7 @@ job_add(PG_FUNCTION_ARGS)
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										schedule_interval,
 										&max_runtime,
-										DEFAULT_MAX_RETRIES,
+										JOB_RETRY_UNLIMITED,
 										&retry_period,
 										&proc_schema,
 										&proc_name,

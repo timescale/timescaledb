@@ -36,7 +36,6 @@
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
 #include "loader/lwlocks.h"
-#include "loader/seclabel.h"
 
 /*
  * Loading process:
@@ -84,7 +83,7 @@ PG_MODULE_MAGIC;
 #endif
 
 #define POST_LOAD_INIT_FN "ts_post_load_init"
-#define GUC_LAUNCHER_POLL_TIME_MS "timescaledb.bgw_launcher_poll_time"
+#define GUC_LAUNCHER_POLL_TIME_MS MAKE_EXTOPTION("bgw_launcher_poll_time")
 
 /*
  * The loader really shouldn't load if we're in a parallel worker as there is a
@@ -96,7 +95,10 @@ PG_MODULE_MAGIC;
 
 #define CalledInParallelWorker()                                                                   \
 	(MyBgworkerEntry != NULL && (MyBgworkerEntry->bgw_flags & BGWORKER_CLASS_PARALLEL) != 0)
+
+#if PG16_LT
 extern void TSDLLEXPORT _PG_init(void);
+#endif
 
 /* was the versioned-extension loaded*/
 static bool loader_present = true;
@@ -109,7 +111,6 @@ static shmem_startup_hook_type prev_shmem_startup_hook;
 #if PG15_GE
 static shmem_request_hook_type prev_shmem_request_hook;
 #endif
-static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
 typedef struct TsExtension
 {
@@ -145,10 +146,10 @@ TsExtension extensions[] = {
 	/* Redundant default initializers are here because we compile with
 	 * `-Werror -Wmissing-field-initializers` for our PG13 build... */
 	{
-		.name = "timescaledb",
+		.name = EXTENSION_NAME,
 		.schema_name = CACHE_SCHEMA_NAME,
 		.table_name = EXTENSION_PROXY_TABLE,
-		.guc_disable_load_name = "timescaledb.disable_load",
+		.guc_disable_load_name = MAKE_EXTOPTION("disable_load"),
 		.guc_disable_load = false,
 		.soversion = "",
 		.post_parse_analyze_hook = NULL,
@@ -164,13 +165,14 @@ TsExtension extensions[] = {
 	},
 };
 
-inline static void extension_check(TsExtension *);
+inline static void extension_check(TsExtension * /*ext*/);
 #if PG14_LT
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 												   TsExtension const *);
 #else
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-												   TsExtension const *, JumbleState *jstate);
+												   TsExtension const * /*ext*/,
+												   JumbleState *jstate);
 #endif
 
 static bool
@@ -549,115 +551,6 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 	}
 }
 
-/*
- * Check if a string is an UUID and error out otherwise.
- */
-static void
-check_uuid(const char *label)
-{
-	const MemoryContext oldcontext = CurrentMemoryContext;
-	/* Volatile is to work around the incorrect GCC -Wclobbered diagnostics. */
-	const char *volatile uuid = strchr(label, SECLABEL_DIST_TAG_SEPARATOR);
-	if (!uuid || strncmp(label, SECLABEL_DIST_TAG, uuid - label) != 0)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_TEXT_REPRESENTATION),
-				 errmsg("TimescaleDB label is for internal use only"),
-				 errdetail("Security label is \"%s\".", label),
-				 errhint("Security label has to be of format \"dist_uuid:<UUID>\".")));
-
-	PG_TRY();
-	{
-		DirectFunctionCall1(uuid_in, CStringGetDatum(&uuid[1]));
-	}
-	PG_CATCH();
-	{
-		ErrorData *edata;
-		MemoryContextSwitchTo(oldcontext);
-		edata = CopyErrorData();
-		if (edata->sqlerrcode == ERRCODE_INVALID_TEXT_REPRESENTATION)
-		{
-			FlushErrorState();
-			edata->detail = edata->message;
-			edata->hint = psprintf("Security label has to be of format \"dist_uuid:<UUID>\".");
-			edata->message = psprintf("TimescaleDB label is for internal use only");
-		}
-		ReThrowError(edata);
-	}
-	PG_END_TRY();
-}
-
-static void
-loader_process_utility_hook(PlannedStmt *pstmt, const char *query_string,
-#if PG14_GE
-							bool readonly_tree,
-#endif
-							ProcessUtilityContext context, ParamListInfo params,
-							QueryEnvironment *queryEnv, DestReceiver *dest,
-							QueryCompletion *completion_tag
-
-)
-{
-	bool is_distributed_database = false;
-	char *dist_uuid = NULL;
-	ProcessUtility_hook_type process_utility;
-
-	/* Check if we are dropping a distributed database and get its uuid */
-	switch (nodeTag(pstmt->utilityStmt))
-	{
-		case T_DropdbStmt:
-		{
-			DropdbStmt *stmt = castNode(DropdbStmt, pstmt->utilityStmt);
-			Oid dboid = get_database_oid(stmt->dbname, stmt->missing_ok);
-
-			if (OidIsValid(dboid))
-				is_distributed_database = ts_seclabel_get_dist_uuid(dboid, &dist_uuid);
-			break;
-		}
-		case T_SecLabelStmt:
-		{
-			SecLabelStmt *stmt = castNode(SecLabelStmt, pstmt->utilityStmt);
-
-			/*
-			 * Since this statement can be in a dump output, we only print an
-			 * error on anything that doesn't looks like a sane distributed
-			 * UUID.
-			 */
-			if (stmt->provider && strcmp(stmt->provider, SECLABEL_DIST_PROVIDER) == 0)
-				check_uuid(stmt->label);
-			break;
-		}
-		default:
-			break;
-	}
-
-	/* Process the command */
-	if (prev_ProcessUtility_hook)
-		process_utility = prev_ProcessUtility_hook;
-	else
-		process_utility = standard_ProcessUtility;
-
-	process_utility(pstmt,
-					query_string,
-#if PG14_GE
-					readonly_tree,
-#endif
-					context,
-					params,
-					queryEnv,
-					dest,
-					completion_tag);
-
-	/*
-	 * Show a NOTICE warning message in case of dropping a
-	 * distributed database
-	 */
-	if (is_distributed_database)
-		ereport(NOTICE,
-				(errmsg("TimescaleDB distributed database might require "
-						"additional cleanup on the data nodes"),
-				 errdetail("Distributed database UUID is \"%s\".", dist_uuid)));
-}
-
 static void
 timescaledb_shmem_startup_hook(void)
 {
@@ -714,7 +607,6 @@ _PG_init(void)
 	ts_bgw_cluster_launcher_register();
 	ts_bgw_counter_setup_gucs();
 	ts_bgw_interface_register_api_version();
-	ts_seclabel_init();
 
 	/* This is a safety-valve variable to prevent loading the full extension */
 	for (size_t i = 0; i < sizeof(extensions) / sizeof(TsExtension); ++i)
@@ -763,10 +655,6 @@ _PG_init(void)
 	prev_shmem_request_hook = shmem_request_hook;
 	shmem_request_hook = timescaledb_shmem_request_hook;
 #endif
-
-	/* register utility hook to handle a distributed database drop */
-	prev_ProcessUtility_hook = ProcessUtility_hook;
-	ProcessUtility_hook = loader_process_utility_hook;
 }
 
 inline static void
@@ -811,9 +699,9 @@ do_load(TsExtension *const ext)
 	 * loader was preloaded, newer versions use rendezvous variables instead.
 	 */
 	if ((strcmp(version, "0.9.0") == 0 || strcmp(version, "0.9.1") == 0) &&
-		strcmp(ext->name, "timescaledb") == 0)
+		strcmp(ext->name, EXTENSION_NAME) == 0)
 	{
-		SetConfigOption("timescaledb.loader_present", "on", PGC_USERSET, PGC_S_SESSION);
+		SetConfigOption(MAKE_EXTOPTION("loader_present"), "on", PGC_USERSET, PGC_S_SESSION);
 	}
 
 	/*

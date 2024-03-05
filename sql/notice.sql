@@ -17,7 +17,7 @@ BEGIN
     telemetry_string = E'';
   END CASE;
 
-  RAISE WARNING E'%\n%\n',
+  RAISE NOTICE E'%\n%\n',
     E'\nWELCOME TO\n' ||
     E' _____ _                               _     ____________  \n' ||
     E'|_   _(_)                             | |    |  _  \\ ___ \\ \n' ||

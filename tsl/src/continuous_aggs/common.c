@@ -16,7 +16,6 @@ static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClaus
 									bool is_cagg_create);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								 const bool finalized);
-static Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
 static FuncExpr *build_boundary_call(int32 ht_id, Oid type);
 static Const *cagg_boundary_make_lower_bound(Oid type);
@@ -113,7 +112,7 @@ RemoveRangeTableEntries(Query *query)
  * Extract the final view from the UNION ALL query.
  *
  * q1 is the query on the materialization hypertable with the finalize call
- * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
+ * q2 is the query on the raw hypertable which was supplied in the initial CREATE VIEW statement
  * returns q1 from:
  * SELECT * from (  SELECT * from q1 where <coale_qual>
  *                  UNION ALL
@@ -799,7 +798,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			if (status == HypertableIsMaterialization ||
 				status == HypertableIsMaterializationAndRaw)
 			{
-				const ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id);
+				const ContinuousAgg *cagg =
+					ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
 				Assert(cagg != NULL);
 
 				ts_cache_release(hcache);
@@ -985,7 +985,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
  * Get oid of function to convert from our internal representation
  * to postgres representation.
  */
-static Oid
+Oid
 cagg_get_boundary_converter_funcoid(Oid typoid)
 {
 	char *function_name;
@@ -1079,20 +1079,31 @@ build_conversion_call(Oid type, FuncExpr *boundary)
 }
 
 /*
- * Build function call that returns boundary for a hypertable
- * wrapped in type conversion calls when required.
+ * Return the Oid of the cagg_watermark function
  */
-static FuncExpr *
-build_boundary_call(int32 ht_id, Oid type)
+Oid
+get_watermark_function_oid(void)
 {
 	Oid argtyp[] = { INT4OID };
-	FuncExpr *boundary;
 
 	Oid boundary_func_oid =
 		LookupFuncName(list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(BOUNDARY_FUNCTION)),
 					   lengthof(argtyp),
 					   argtyp,
 					   false);
+
+	return boundary_func_oid;
+}
+
+/*
+ * Build function call that returns boundary for a hypertable
+ * wrapped in type conversion calls when required.
+ */
+static FuncExpr *
+build_boundary_call(int32 ht_id, Oid type)
+{
+	FuncExpr *boundary;
+	Oid boundary_func_oid = get_watermark_function_oid();
 	List *func_args =
 		list_make1(makeConst(INT4OID, -1, InvalidOid, 4, Int32GetDatum(ht_id), false, true));
 
@@ -1173,7 +1184,7 @@ makeRangeTblEntry(Query *query, const char *aliasname)
  * Build union query combining the materialized data with data from the raw data hypertable.
  *
  * q1 is the query on the materialization hypertable with the finalize call
- * q2 is the query on the raw hypertable which was supplied in the inital CREATE VIEW statement
+ * q2 is the query on the raw hypertable which was supplied in the initial CREATE VIEW statement
  * returns a query as
  * SELECT * from (  SELECT * from q1 where <coale_qual>
  *                  UNION ALL

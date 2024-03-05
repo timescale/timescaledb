@@ -8,7 +8,8 @@ then
     exit 0
 fi
 
-PSQL=(psql "${CI_STATS_DB}" -qtAX "--set=ON_ERROR_STOP=1")
+PSQL=${PSQL:-psql}
+PSQL=("${PSQL}" "${CI_STATS_DB}" -qtAX "--set=ON_ERROR_STOP=1")
 
 # The tables we are going to use. This schema is here just as a reminder, you'll
 # have to create them manually. After you manually change the actual DB schema,
@@ -55,6 +56,15 @@ create table log(
 create unique index on log(job_date, test_name);
 
 select create_hypertable('log', 'job_date');
+
+create table ipe(
+    job_date timestamptz,
+    error text,
+    location text,
+    statement text
+);
+
+select create_hypertable('ipe', 'job_date');
 "
 
 # Create the job record.
@@ -148,8 +158,18 @@ do
     mv "$x.tmp" "$x"
 done
 
+# Save a snippet of logs where a backend was terminated by signal.
+grep -C40 "was terminated by signal" postmaster.log > postgres-failure.log ||:
+
+# Find internal program errors in Postgres logs.
+jq 'select(.state_code == "XX000" and .error_severity != "LOG")
+    | [env.JOB_DATE, .message, .func_name,  .statement] | @tsv
+' -r postmaster.json > ipe.tsv ||:
+"${PSQL[@]}" -c "\copy ipe from ipe.tsv"
+
 # Upload the logs.
-for x in sanitizer/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff
+# Note that the sanitizer setting log_path means "write logs to 'log_path.pid'".
+for x in sanitizer* sanitizer/* {sqlsmith/sqlsmith,sanitizer,stacktrace,postgres-failure}.log *.diff
 do
     if ! [ -e "$x" ]; then continue ; fi
     "${PSQL[@]}" <<<"

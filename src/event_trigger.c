@@ -11,6 +11,7 @@
 #include <catalog/pg_trigger.h>
 #include <commands/event_trigger.h>
 #include <executor/executor.h>
+#include <utils/array.h>
 #include <utils/builtins.h>
 
 #include "compat/compat.h"
@@ -143,7 +144,7 @@ make_event_trigger_drop_index(const char *index_name, const char *schema)
 }
 
 static EventTriggerDropRelation *
-make_event_trigger_drop_table(const char *table_name, const char *schema, char relkind)
+make_event_trigger_drop_table(Oid relid, const char *table_name, const char *schema, char relkind)
 {
 	EventTriggerDropRelation *obj = palloc(sizeof(EventTriggerDropRelation));
 
@@ -151,6 +152,7 @@ make_event_trigger_drop_table(const char *table_name, const char *schema, char r
 		.obj = {
 			.type = (relkind == RELKIND_RELATION) ? EVENT_TRIGGER_DROP_TABLE : EVENT_TRIGGER_DROP_FOREIGN_TABLE,
 		},
+    .relid = relid,
 		.name = table_name,
 		.schema = schema,
 	};
@@ -278,9 +280,12 @@ ts_event_trigger_dropped_objects(void)
 					eventobj =
 						make_event_trigger_drop_index(lsecond(addrnames), linitial(addrnames));
 				else if (strcmp(objtype, "table") == 0)
-					eventobj = make_event_trigger_drop_table(lsecond(addrnames),
+				{
+					eventobj = make_event_trigger_drop_table(DatumGetInt32(values[1]),
+															 lsecond(addrnames),
 															 linitial(addrnames),
 															 RELKIND_RELATION);
+				}
 				else if (strcmp(objtype, "view") == 0)
 				{
 					List *addrnames = extract_addrnames(DatumGetArrayTypeP(values[10]));
@@ -290,7 +295,8 @@ ts_event_trigger_dropped_objects(void)
 																   linitial(addrnames)));
 				}
 				else if (strcmp(objtype, "foreign table") == 0)
-					eventobj = make_event_trigger_drop_table(lsecond(addrnames),
+					eventobj = make_event_trigger_drop_table(DatumGetInt32(values[1]),
+															 lsecond(addrnames),
 															 linitial(addrnames),
 															 RELKIND_FOREIGN_TABLE);
 				break;

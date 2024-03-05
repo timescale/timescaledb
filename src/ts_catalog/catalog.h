@@ -33,14 +33,11 @@
 typedef enum CatalogTable
 {
 	HYPERTABLE = 0,
-	HYPERTABLE_DATA_NODE,
 	DIMENSION,
-	DIMENSION_PARTITION,
 	DIMENSION_SLICE,
 	CHUNK,
 	CHUNK_CONSTRAINT,
 	CHUNK_INDEX,
-	CHUNK_DATA_NODE,
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
@@ -52,8 +49,6 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
-	REMOTE_TXN,
-	CHUNK_COPY_OPERATION,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	JOB_ERRORS,
 	CONTINUOUS_AGGS_WATERMARK,
@@ -74,6 +69,8 @@ typedef struct TableIndexDef
 	char **names;
 } TableIndexDef;
 
+#define TS_CAGG_CATALOG_IDX "continuous_agg_pkey"
+
 #define INVALID_CATALOG_TABLE _MAX_CATALOG_TABLES
 #define INVALID_INDEXID -1
 
@@ -91,7 +88,7 @@ typedef struct TableIndexDef
 typedef enum InternalFunction
 {
 	DDL_ADD_CHUNK_CONSTRAINT,
-	DDL_ADD_HYPERTABLE_FK_CONSTRAINT,
+	DDL_CONSTRAINT_CLONE,
 	_MAX_INTERNAL_FUNCTIONS,
 } InternalFunction;
 
@@ -117,7 +114,6 @@ enum Anum_hypertable
 	Anum_hypertable_chunk_target_size,
 	Anum_hypertable_compression_state,
 	Anum_hypertable_compressed_hypertable_id,
-	Anum_hypertable_replication_factor,
 	Anum_hypertable_status,
 	_Anum_hypertable_max,
 };
@@ -137,7 +133,6 @@ typedef struct FormData_hypertable
 	int64 chunk_target_size;
 	int16 compression_state;
 	int32 compressed_hypertable_id;
-	int16 replication_factor;
 	int32 status;
 } FormData_hypertable;
 
@@ -167,62 +162,6 @@ enum
 	HYPERTABLE_ID_INDEX = 0,
 	HYPERTABLE_NAME_INDEX,
 	_MAX_HYPERTABLE_INDEX,
-};
-
-#define HYPERTABLE_DATA_NODE_TABLE_NAME "hypertable_data_node"
-
-enum Anum_hypertable_data_node
-{
-	Anum_hypertable_data_node_hypertable_id = 1,
-	Anum_hypertable_data_node_node_hypertable_id,
-	Anum_hypertable_data_node_node_name,
-	Anum_hypertable_data_node_block_chunks,
-	_Anum_hypertable_data_node_max,
-};
-
-#define Natts_hypertable_data_node (_Anum_hypertable_data_node_max - 1)
-
-typedef struct FormData_hypertable_data_node
-{
-	int32 hypertable_id;
-	int32 node_hypertable_id;
-	NameData node_name;
-	bool block_chunks;
-} FormData_hypertable_data_node;
-
-typedef FormData_hypertable_data_node *Form_hypertable_data_node;
-
-enum
-{
-	HYPERTABLE_DATA_NODE_HYPERTABLE_ID_NODE_NAME_IDX,
-	HYPERTABLE_DATA_NODE_NODE_HYPERTABLE_ID_NODE_NAME_IDX,
-	_MAX_HYPERTABLE_DATA_NODE_INDEX,
-};
-
-enum Anum_hypertable_data_node_hypertable_id_node_name_idx
-{
-	Anum_hypertable_data_node_hypertable_id_node_name_idx_hypertable_id = 1,
-	Anum_hypertable_data_node_hypertable_id_node_name_idx_node_name,
-	_Anum_hypertable_data_node_hypertable_id_node_name_idx_max,
-};
-
-struct FormData_hypertable_data_node_hypertable_id_node_name_idx
-{
-	int32 hypertable_id;
-	NameData node_name;
-};
-
-enum Anum_hypertable_data_node_node_hypertable_id_node_name_idx
-{
-	Anum_hypertable_data_node_node_hypertable_id_node_name_idx_hypertable_id = 1,
-	Anum_hypertable_data_node_node_hypertable_id_node_name_idx_node_name,
-	_Anum_hypertable_data_node_node_hypertable_id_node_name_idx_max,
-};
-
-struct FormData_hypertable_data_node_node_hypertable_id_node_name_idx
-{
-	int32 node_hypertable_id;
-	NameData node_name;
 };
 
 /******************************
@@ -294,51 +233,6 @@ enum
 	DIMENSION_ID_IDX = 0,
 	DIMENSION_HYPERTABLE_ID_COLUMN_NAME_IDX,
 	_MAX_DIMENSION_INDEX,
-};
-
-/******************************
- *
- * Dimension partition table definitions
- *
- ******************************/
-
-#define DIMENSION_PARTITION_TABLE_NAME "dimension_partition"
-
-enum Anum_dimension_partition
-{
-	Anum_dimension_partition_dimension_id = 1,
-	Anum_dimension_partition_range_start,
-	Anum_dimension_partition_data_nodes,
-	_Anum_dimension_partition_max,
-};
-
-#define Natts_dimension_partition (_Anum_dimension_partition_max - 1)
-
-typedef struct FormData_dimension_partition
-{
-	int32 dimension_id;
-	int64 range_start;
-	/* Variable-length fields start here. The first variable-length field can
-	 * still be accessed directly via the C struct */
-	ArrayType *data_nodes;
-} FormData_dimension_partition;
-
-typedef FormData_dimension_partition *Form_dimension_partition;
-
-enum Anum_dimension_partition_dimension_id_range_start_idx
-{
-	Anum_dimension_partition_dimension_id_range_start_idx_dimension_id = 1,
-	Anum_dimension_partition_dimension_id_range_start_idx_range_start,
-	_Anum_dimension_partition_dimension_id_range_start_idx_max,
-};
-
-#define Natts_dimension_partition_dimension_id_range_start_idx                                     \
-	(_Anum_dimension_partition_dimension_id_range_start_idx_max - 1)
-
-enum
-{
-	DIMENSION_PARTITION_DIMENSION_ID_RANGE_START_IDX = 0,
-	_MAX_DIMENSION_PARTITION_INDEX,
 };
 
 /******************************
@@ -577,78 +471,6 @@ enum Anum_chunk_index_hypertable_id_hypertable_index_name_idx
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_id = 1,
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
 	Anum_chunk_index_hypertable_id_hypertable_index_name_idx_max,
-};
-
-/************************************
- *
- * Chunk data node table definitions
- *
- ************************************/
-
-#define CHUNK_DATA_NODE_TABLE_NAME "chunk_data_node"
-
-enum Anum_chunk_data_node
-{
-	Anum_chunk_data_node_chunk_id = 1,
-	Anum_chunk_data_node_node_chunk_id,
-	Anum_chunk_data_node_node_name,
-	_Anum_chunk_data_node_max,
-};
-
-#define Natts_chunk_data_node (_Anum_chunk_data_node_max - 1)
-
-typedef struct FormData_chunk_data_node
-{
-	int32 chunk_id;
-	int32 node_chunk_id;
-	NameData node_name;
-} FormData_chunk_data_node;
-
-typedef FormData_chunk_data_node *Form_chunk_data_node;
-
-enum
-{
-	CHUNK_DATA_NODE_CHUNK_ID_NODE_NAME_IDX,
-	CHUNK_DATA_NODE_NODE_CHUNK_ID_NODE_NAME_IDX,
-	CHUNK_DATA_NODE_NODE_NAME_IDX,
-	_MAX_CHUNK_DATA_NODE_INDEX,
-};
-
-enum Anum_chunk_data_node_chunk_id_node_name_idx
-{
-	Anum_chunk_data_node_chunk_id_node_name_idx_chunk_id = 1,
-	Anum_chunk_data_node_chunk_id_node_name_idx_node_name,
-	_Anum_chunk_data_node_chunk_id_node_name_idx_max,
-};
-
-struct FormData_chunk_data_node_chunk_id_node_name_idx
-{
-	int32 chunk_id;
-	NameData node_name;
-};
-
-enum Anum_chunk_data_node_node_chunk_id_node_name_idx
-{
-	Anum_chunk_data_node_node_chunk_id_node_name_idx_chunk_id = 1,
-	Anum_chunk_data_node_node_chunk_id_node_name_idx_node_name,
-	_Anum_chunk_data_node_node_chunk_id_node_name_idx_max,
-};
-
-struct FormData_chunk_data_node_node_chunk_id_node_name_idx
-{
-	int32 node_chunk_id;
-	NameData node_name;
-};
-
-enum Anum_chunk_data_node_node_name_idx
-{
-	Anum_chunk_data_node_name_idx_node_name = 1,
-	_Anum_chunk_data_node_node_name_idx_max,
-};
-
-struct FormData_chunk_data_node_node_name_idx
-{
-	NameData node_name;
 };
 
 /************************************
@@ -1062,11 +884,12 @@ typedef enum Anum_continuous_agg_raw_hypertable_id_idx
 typedef enum Anum_continuous_aggs_bucket_function
 {
 	Anum_continuous_aggs_bucket_function_mat_hypertable_id = 1,
-	Anum_continuous_aggs_bucket_function_experimental,
-	Anum_continuous_aggs_bucket_function_name,
+	Anum_continuous_aggs_bucket_function_function,
 	Anum_continuous_aggs_bucket_function_bucket_width,
-	Anum_continuous_aggs_bucket_function_origin,
-	Anum_continuous_aggs_bucket_function_timezone,
+	Anum_continuous_aggs_bucket_function_bucket_origin,
+	Anum_continuous_aggs_bucket_function_bucket_offset,
+	Anum_continuous_aggs_bucket_function_bucket_timezone,
+	Anum_continuous_aggs_bucket_function_bucket_fixed_width,
 	_Anum_continuous_aggs_bucket_function_max,
 } Anum_continuous_aggs_bucket_function;
 
@@ -1326,98 +1149,6 @@ typedef enum Anum_compression_chunk_size_pkey
  * This needs to be bumped in case of new catalog tables that have more indexes.
  */
 #define _MAX_TABLE_INDEXES 6
-/************************************
- *
- * Remote txn table of 2pc commits
- *
- ************************************/
-
-#define REMOTE_TXN_TABLE_NAME "remote_txn"
-
-enum Anum_remote_txn
-{
-	Anum_remote_txn_data_node_name = 1,
-	Anum_remote_txn_remote_transaction_id,
-	_Anum_remote_txn_max,
-};
-
-#define Natts_remote_txn (_Anum_remote_txn_max - 1)
-
-typedef struct FormData_remote_txn
-{
-	NameData data_node_name;
-	text *remote_transaction_id;
-} FormData_remote_txn;
-
-typedef FormData_remote_txn *Form_remote_txn;
-
-enum
-{
-	REMOTE_TXN_PKEY_IDX = 0,
-	REMOTE_TXN_DATA_NODE_NAME_IDX,
-	_MAX_REMOTE_TXN_INDEX,
-};
-
-enum Anum_remote_txn_pkey_idx
-{
-	Anum_remote_txn_pkey_idx_remote_transaction_id = 1,
-	_Anum_remote_txn_pkey_idx_max,
-};
-
-enum Anum_remote_data_node_name_idx
-{
-	Anum_remote_txn_data_node_name_idx_data_node_name = 1,
-	_Anum_remote_txn_data_node_name_idx_max,
-};
-
-/********************************************
- *
- * table to track chunk copy/move operations
- *
- ********************************************/
-
-#define CHUNK_COPY_OPERATION_TABLE_NAME "chunk_copy_operation"
-
-enum Anum_chunk_copy_operation
-{
-	Anum_chunk_copy_operation_operation_id = 1,
-	Anum_chunk_copy_operation_backend_pid,
-	Anum_chunk_copy_operation_completed_stage,
-	Anum_chunk_copy_operation_time_start,
-	Anum_chunk_copy_operation_chunk_id,
-	Anum_chunk_copy_operation_compressed_chunk_name,
-	Anum_chunk_copy_operation_source_node_name,
-	Anum_chunk_copy_operation_dest_node_name,
-	Anum_chunk_copy_operation_delete_on_src_node,
-	_Anum_chunk_copy_operation_max,
-};
-
-#define Natts_chunk_copy_operation (_Anum_chunk_copy_operation_max - 1)
-
-typedef struct FormData_chunk_copy_operation
-{
-	NameData operation_id;
-	int32 backend_pid;
-	NameData completed_stage;
-	TimestampTz time_start;
-	int32 chunk_id;
-	NameData compressed_chunk_name;
-	NameData source_node_name;
-	NameData dest_node_name;
-	bool delete_on_src_node;
-} FormData_chunk_copy_operation;
-
-enum
-{
-	CHUNK_COPY_OPERATION_PKEY_IDX = 0,
-	_MAX_CHUNK_COPY_OPERATION_INDEX,
-};
-
-enum Anum_chunk_copy_operation_pkey_idx
-{
-	Anum_chunk_copy_operation_idx_operation_id = 1,
-	_Anum_chunk_copy_operation_pkey_idx_max,
-};
 
 typedef enum CacheType
 {

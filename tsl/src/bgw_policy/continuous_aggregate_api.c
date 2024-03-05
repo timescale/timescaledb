@@ -13,28 +13,26 @@
 
 #include <jsonb_utils.h>
 #include <utils/builtins.h>
+
 #include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/job_api.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/policies_v2.h"
 #include "bgw_policy/policy_utils.h"
+#include "bgw/job_stat.h"
 #include "bgw/job.h"
-#include "ts_catalog/continuous_agg.h"
+#include "bgw/timer.h"
 #include "continuous_aggs/materialize.h"
 #include "dimension.h"
+#include "guc.h"
 #include "hypertable_cache.h"
-#include "time_utils.h"
 #include "policy_utils.h"
 #include "time_utils.h"
-#include "guc.h"
-#include "bgw_policy/policies_v2.h"
-#include "bgw/job_stat.h"
-#include "bgw/timer.h"
+#include "ts_catalog/continuous_agg.h"
 
 /* Default max runtime for a continuous aggregate jobs is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
-
-/* infinite number of retries for continuous aggregate jobs */
-#define DEFAULT_MAX_RETRIES (-1)
 
 int32
 policy_continuous_aggregate_get_mat_hypertable_id(const Jsonb *config)
@@ -113,13 +111,20 @@ get_time_from_config(const Dimension *dim, const Jsonb *config, const char *json
 }
 
 int64
-policy_refresh_cagg_get_refresh_start(const Dimension *dim, const Jsonb *config, bool *start_isnull)
+policy_refresh_cagg_get_refresh_start(const ContinuousAgg *cagg, const Dimension *dim,
+									  const Jsonb *config, bool *start_isnull)
 {
 	int64 res = get_time_from_config(dim, config, POL_REFRESH_CONF_KEY_START_OFFSET, start_isnull);
 
 	/* interpret NULL as min value for that type */
 	if (*start_isnull)
-		return ts_time_get_min(ts_dimension_get_partition_type(dim));
+	{
+		Oid type = ts_dimension_get_partition_type(dim);
+
+		return ts_continuous_agg_bucket_width_variable(cagg) ? ts_time_get_nobegin_or_min(type) :
+															   ts_time_get_min(type);
+	}
+
 	return res;
 }
 
@@ -572,12 +577,14 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 														POL_REFRESH_CONF_KEY_START_OFFSET,
 														cagg->partition_type,
 														policyconf.offset_start.type,
-														policyconf.offset_start.value) &&
+														policyconf.offset_start.value,
+														policyconf.offset_start.isnull) &&
 			policy_config_check_hypertable_lag_equality(existing->fd.config,
 														POL_REFRESH_CONF_KEY_END_OFFSET,
 														cagg->partition_type,
 														policyconf.offset_end.type,
-														policyconf.offset_end.value))
+														policyconf.offset_end.value,
+														policyconf.offset_end.isnull))
 		{
 			/* If all arguments are the same, do nothing */
 			ereport(NOTICE,
@@ -629,7 +636,7 @@ policy_refresh_cagg_add_internal(Oid cagg_oid, Oid start_offset_type, NullableDa
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&refresh_interval,
 										DEFAULT_MAX_RUNTIME,
-										DEFAULT_MAX_RETRIES,
+										JOB_RETRY_UNLIMITED,
 										&refresh_interval,
 										&proc_schema,
 										&proc_name,

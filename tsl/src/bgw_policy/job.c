@@ -8,6 +8,7 @@
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
+#include <commands/defrem.h>
 #include <funcapi.h>
 #include <hypertable_cache.h>
 #include <nodes/makefuncs.h>
@@ -51,8 +52,6 @@
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "errors.h"
-#include "job.h"
 #include "reorder.h"
 #include "utils.h"
 
@@ -349,7 +348,7 @@ policy_retention_read_and_validate_config(Jsonb *config, PolicyRetentionData *po
 	/* We need to do a reverse lookup here since the given hypertable might be
 	   a materialized hypertable, and thus need to call drop_chunks on the
 	   continuous aggregate instead. */
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hypertable->fd.id);
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(hypertable->fd.id, true);
 	if (cagg)
 	{
 		object_relid = ts_get_relation_relid(NameStr(cagg->data.user_view_schema),
@@ -402,9 +401,11 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 				 errmsg("configuration materialization hypertable id %d not found",
 						materialization_id)));
 
+	ContinuousAgg *cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id, false);
+
 	open_dim = get_open_dimension_for_hypertable(mat_ht, true);
 	dim_type = ts_dimension_get_partition_type(open_dim);
-	refresh_start = policy_refresh_cagg_get_refresh_start(open_dim, config, &start_isnull);
+	refresh_start = policy_refresh_cagg_get_refresh_start(cagg, open_dim, config, &start_isnull);
 	refresh_end = policy_refresh_cagg_get_refresh_end(open_dim, config, &end_isnull);
 
 	if (refresh_start >= refresh_end)
@@ -421,66 +422,10 @@ policy_refresh_cagg_read_and_validate_config(Jsonb *config, PolicyContinuousAggD
 		policy_data->refresh_window.type = dim_type;
 		policy_data->refresh_window.start = refresh_start;
 		policy_data->refresh_window.end = refresh_end;
-		policy_data->cagg = ts_continuous_agg_find_by_mat_hypertable_id(materialization_id);
+		policy_data->cagg = cagg;
 		policy_data->start_is_null = start_isnull;
 		policy_data->end_is_null = end_isnull;
 	}
-}
-
-/*
- * Invoke recompress_chunk via fmgr so that the call can be deparsed and sent to
- * remote data nodes.
- */
-static void
-policy_invoke_recompress_chunk(Chunk *chunk)
-{
-	EState *estate;
-	ExprContext *econtext;
-	FuncExpr *fexpr;
-	Oid relid = chunk->table_id;
-	Oid restype;
-	Oid func_oid;
-	List *args = NIL;
-	bool isnull;
-	Const *argarr[RECOMPRESS_CHUNK_NARGS] = {
-		makeConst(REGCLASSOID,
-				  -1,
-				  InvalidOid,
-				  sizeof(relid),
-				  ObjectIdGetDatum(relid),
-				  false,
-				  false),
-		castNode(Const, makeBoolConst(true, false)),
-	};
-	Oid type_id[RECOMPRESS_CHUNK_NARGS] = { REGCLASSOID, BOOLOID };
-	char *schema_name = ts_extension_schema_name();
-	List *fqn = list_make2(makeString(schema_name), makeString(RECOMPRESS_CHUNK_FUNCNAME));
-
-	StaticAssertStmt(lengthof(type_id) == lengthof(argarr),
-					 "argarr and type_id should have matching lengths");
-
-	func_oid = LookupFuncName(fqn, lengthof(type_id), type_id, false);
-	Assert(func_oid); /* LookupFuncName should not return an invalid OID */
-
-	/* Prepare the function expr with argument list */
-	get_func_result_type(func_oid, &restype, NULL);
-
-	for (size_t i = 0; i < lengthof(argarr); i++)
-		args = lappend(args, argarr[i]);
-
-	fexpr = makeFuncExpr(func_oid, restype, args, InvalidOid, InvalidOid, COERCE_EXPLICIT_CALL);
-	fexpr->funcretset = false;
-
-	estate = CreateExecutorState();
-	econtext = CreateExprContext(estate);
-
-	ExprState *exprstate = ExecInitExpr(&fexpr->xpr, NULL);
-
-	ExecEvalExprSwitchContext(exprstate, econtext, &isnull);
-
-	/* Cleanup */
-	FreeExprContext(econtext, false);
-	FreeExecutorState(estate);
 }
 
 /* Read configuration for compression job from config object. */
@@ -521,12 +466,11 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 	ListCell *lc;
 	const Dimension *dim;
 	PolicyCompressionData policy_data;
-	bool distributed, used_portalcxt = false;
+	bool used_portalcxt = false;
 	MemoryContext saved_cxt, multitxn_cxt;
 
 	policy_recompression_read_and_validate_config(config, &policy_data);
 	dim = hyperspace_get_open_dimension(policy_data.hypertable->space, 0);
-	distributed = hypertable_is_distributed(policy_data.hypertable);
 	/* we want the chunk id list to survive across transactions. So alloc in
 	 * a different context
 	 */
@@ -568,12 +512,11 @@ policy_recompression_execute(int32 job_id, Jsonb *config)
 		StartTransactionCommand();
 		int32 chunkid = lfirst_int(lc);
 		Chunk *chunk = ts_chunk_get_by_id(chunkid, true);
-		if (!chunk || !ts_chunk_is_unordered(chunk))
+		Assert(chunk);
+		if (!ts_chunk_needs_recompression(chunk))
 			continue;
-		if (distributed)
-			policy_invoke_recompress_chunk(chunk);
-		else
-			tsl_recompress_chunk_wrapper(chunk);
+
+		tsl_compress_chunk_wrapper(chunk, true, false);
 
 		elog(LOG,
 			 "completed recompressing chunk \"%s.%s\"",

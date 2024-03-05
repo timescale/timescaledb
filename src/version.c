@@ -12,7 +12,6 @@
 #include <storage/fd.h>
 #include <utils/timestamp.h>
 
-#include "fmgr.h"
 #include "compat/compat.h"
 #include "annotations.h"
 #include "gitcommit.h"

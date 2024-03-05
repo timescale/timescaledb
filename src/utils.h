@@ -41,14 +41,6 @@
 /* find the length of a statically sized array */
 #define TS_ARRAY_LEN(array) (sizeof(array) / sizeof(*array))
 
-/* Use condition to check if out of memory */
-#define TS_OOM_CHECK(COND, FMT, ...)                                                               \
-	do                                                                                             \
-	{                                                                                              \
-		if (!(COND))                                                                               \
-			ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg(FMT, ##__VA_ARGS__)));          \
-	} while (0)
-
 extern TSDLLEXPORT bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
 typedef enum TimevalInfinity
@@ -211,8 +203,6 @@ extern TSDLLEXPORT void ts_alter_table_with_event_trigger(Oid relid, Node *cmd, 
 														  bool recurse);
 extern TSDLLEXPORT void ts_copy_relation_acl(const Oid source_relid, const Oid target_relid,
 											 const Oid owner_id);
-extern TSDLLEXPORT bool ts_data_node_is_available_by_server(const ForeignServer *server);
-extern TSDLLEXPORT bool ts_data_node_is_available(const char *node_name);
 
 extern TSDLLEXPORT bool ts_relation_has_tuples(Relation rel);
 extern TSDLLEXPORT bool ts_table_has_tuples(Oid table_relid, LOCKMODE lockmode);
@@ -248,3 +238,5 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 		return InvalidOid;
 	}
 }
+
+void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);

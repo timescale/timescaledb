@@ -515,6 +515,19 @@ SELECT * FROM child_fdw_table;
  Wed Jan 01 01:00:00 2020 PST |    100 |  1000
 (1 row)
 
+-- test size functions on foreign table
+SELECT * FROM _timescaledb_functions.relation_approximate_size('child_fdw_table');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+          0 |         0 |          0 |          0
+(1 row)
+
+SELECT * FROM _timescaledb_functions.relation_size('child_fdw_table');
+ total_size | heap_size | index_size | toast_size 
+------------+-----------+------------+------------
+          0 |         0 |          0 |          0
+(1 row)
+
 -- error should be thrown as the hypertable does not yet have an associated tiered chunk
 \set ON_ERROR_STOP 0
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try','2020-01-01 01:00'::timestamptz, '2020-01-01 03:00');
@@ -707,6 +720,13 @@ ERROR:  dimension slice range_end cannot be less than range_start
 SELECT _timescaledb_functions.hypertable_osm_range_update('ht_try', '2022-05-05 01:00'::timestamptz, '2022-05-06');
 ERROR:  attempting to set overlapping range for tiered chunk of public.ht_try
 \set ON_ERROR_STOP 1
+-- test that approximate size function works when a osm chunk is present
+SELECT * FROM hypertable_approximate_size('ht_try');
+ hypertable_approximate_size 
+-----------------------------
+                       32768
+(1 row)
+
 --TEST GUC variable to enable/disable OSM chunk
 SET timescaledb.enable_tiered_reads=false;
 EXPLAIN (COSTS OFF) SELECT * from ht_try;
@@ -1330,6 +1350,27 @@ SELECT * FROM test_chunkapp ORDER BY 1;
  Thu Jan 02 01:00:00 2020 PST | 2
 (2 rows)
 
+\set ON_ERROR_STOP 0
+-- test adding constraint directly on OSM chunk is blocked
+ALTER TABLE test_chunkapp_fdw_child ADD CHECK (a > 0); -- non-dimensional
+ERROR:  operation not supported on OSM chunk tables
+ALTER TABLE test_chunkapp_fdw_child ADD CHECK (time > '1600-01-01'::timestamptz); -- dimensional
+ERROR:  operation not supported on OSM chunk tables
+-- but on hypertable, it is allowed
+ALTER TABLE test_chunkapp ADD CHECK (a > 0);
+\d+ test_chunkapp_fdw_child
+                                     Foreign table "public.test_chunkapp_fdw_child"
+ Column |           Type           | Collation | Nullable | Default | FDW options | Storage | Stats target | Description 
+--------+--------------------------+-----------+----------+---------+-------------+---------+--------------+-------------
+ time   | timestamp with time zone |           | not null |         |             | plain   |              | 
+ a      | integer                  |           |          |         |             | plain   |              | 
+Check constraints:
+    "test_chunkapp_a_check" CHECK (a > 0)
+Server: s3_server
+FDW options: (schema_name 'public', table_name 'test_chunkapp_fdw')
+Inherits: test_chunkapp
+
+\set ON_ERROR_STOP 1
 -- test error is triggered when time dimension not found
 CREATE TABLE test2(time timestamptz not null, a int);
 SELECT create_hypertable('test2', 'time');

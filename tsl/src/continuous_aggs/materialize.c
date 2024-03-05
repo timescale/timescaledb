@@ -290,7 +290,7 @@ spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 {
 	int res;
 	StringInfo command = makeStringInfo();
-	Oid out_fn, timetype;
+	Oid out_fn;
 	bool type_is_varlena;
 	char *materialization_start;
 	char *materialization_end;
@@ -332,24 +332,17 @@ spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 		int64 watermark;
 		bool isnull;
 		Datum maxdat;
-		const Dimension *dim = hyperspace_get_open_dimension(mat_ht->space, 0);
-
-		if (NULL == dim)
-			elog(ERROR, "invalid open dimension index 0");
-
-		timetype = ts_dimension_get_partition_type(dim);
 
 		resetStringInfo(command);
 		appendStringInfo(command,
-						 "SELECT pg_catalog.max(%s) FROM %s.%s AS I "
-						 "WHERE I.%s >= %s AND I.%s < %s %s;",
+						 "SELECT %s FROM %s.%s AS I "
+						 "WHERE I.%s >= %s %s "
+						 "ORDER BY 1 DESC LIMIT 1;",
 						 quote_identifier(NameStr(*time_column_name)),
-						 quote_identifier(NameStr(*partial_view.schema)),
-						 quote_identifier(NameStr(*partial_view.name)),
+						 quote_identifier(NameStr(*materialization_table.schema)),
+						 quote_identifier(NameStr(*materialization_table.name)),
 						 quote_identifier(NameStr(*time_column_name)),
 						 quote_literal_cstr(materialization_start),
-						 quote_identifier(NameStr(*time_column_name)),
-						 quote_literal_cstr(materialization_end),
 						 chunk_condition);
 
 		res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
@@ -357,15 +350,15 @@ spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 		if (res < 0)
 			elog(ERROR, "could not get the last bucket of the materialized data");
 
-		Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == timetype,
+		Ensure(SPI_gettypeid(SPI_tuptable->tupdesc, 1) == materialization_range.type,
 			   "partition types for result (%d) and dimension (%d) do not match",
 			   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
-			   ts_dimension_get_partition_type(dim));
+			   materialization_range.type);
 		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
 
 		if (!isnull)
 		{
-			watermark = ts_time_value_to_internal(maxdat, timetype);
+			watermark = ts_time_value_to_internal(maxdat, materialization_range.type);
 			ts_cagg_watermark_update(mat_ht, watermark, isnull, false);
 		}
 	}
@@ -382,83 +375,4 @@ mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *grouplist)
 	matcolinfo->mat_groupcolname_list = NIL;
 	matcolinfo->matpartcolno = -1;
 	matcolinfo->matpartcolname = NULL;
-}
-
-/*
- * Add internal columns for the materialization table.
- */
-void
-mattablecolumninfo_addinternal(MatTableColumnInfo *matcolinfo)
-{
-	Index maxRef;
-	int colno = list_length(matcolinfo->partial_seltlist) + 1;
-	ColumnDef *col;
-	Var *chunkfn_arg1;
-	FuncExpr *chunk_fnexpr;
-	Oid chunkfnoid;
-	Oid argtype[] = { OIDOID };
-	Oid rettype = INT4OID;
-	TargetEntry *chunk_te;
-	Oid sortop, eqop;
-	bool hashable;
-	ListCell *lc;
-	SortGroupClause *grpcl;
-
-	/* Add a chunk_id column for materialization table */
-	Node *vexpr = (Node *) makeVar(1, colno, INT4OID, -1, InvalidOid, 0);
-	col = makeColumnDef(CONTINUOUS_AGG_CHUNK_ID_COL_NAME,
-						exprType(vexpr),
-						exprTypmod(vexpr),
-						exprCollation(vexpr));
-	matcolinfo->matcollist = lappend(matcolinfo->matcollist, col);
-
-	/*
-	 * Need to add an entry to the target list for computing chunk_id column
-	 * : chunk_for_tuple( htid, table.*).
-	 */
-	chunkfnoid =
-		LookupFuncName(list_make2(makeString(FUNCTIONS_SCHEMA_NAME), makeString(CHUNKIDFROMRELID)),
-					   sizeof(argtype) / sizeof(argtype[0]),
-					   argtype,
-					   false);
-	chunkfn_arg1 = makeVar(1, TableOidAttributeNumber, OIDOID, -1, 0, 0);
-
-	chunk_fnexpr = makeFuncExpr(chunkfnoid,
-								rettype,
-								list_make1(chunkfn_arg1),
-								InvalidOid,
-								InvalidOid,
-								COERCE_EXPLICIT_CALL);
-	chunk_te = makeTargetEntry((Expr *) chunk_fnexpr,
-							   colno,
-							   pstrdup(CONTINUOUS_AGG_CHUNK_ID_COL_NAME),
-							   false);
-	matcolinfo->partial_seltlist = lappend(matcolinfo->partial_seltlist, chunk_te);
-	/* Any internal column needs to be added to the group-by clause as well. */
-	maxRef = 0;
-	foreach (lc, matcolinfo->partial_seltlist)
-	{
-		Index ref = ((TargetEntry *) lfirst(lc))->ressortgroupref;
-
-		if (ref > maxRef)
-			maxRef = ref;
-	}
-	chunk_te->ressortgroupref =
-		maxRef + 1; /* used by sortgroupclause to identify the targetentry */
-	grpcl = makeNode(SortGroupClause);
-	get_sort_group_operators(exprType((Node *) chunk_te->expr),
-							 false,
-							 true,
-							 false,
-							 &sortop,
-							 &eqop,
-							 NULL,
-							 &hashable);
-	grpcl->tleSortGroupRef = chunk_te->ressortgroupref;
-	grpcl->eqop = eqop;
-	grpcl->sortop = sortop;
-	grpcl->nulls_first = false;
-	grpcl->hashable = hashable;
-
-	matcolinfo->partial_grouplist = lappend(matcolinfo->partial_grouplist, grpcl);
 }

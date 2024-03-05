@@ -484,12 +484,6 @@ ts_hypertable_restrict_info_add(HypertableRestrictInfo *hri, PlannerInfo *root,
 	}
 }
 
-bool
-ts_hypertable_restrict_info_has_restrictions(HypertableRestrictInfo *hri)
-{
-	return hri->num_base_restrictions > 0;
-}
-
 /*
  * Scan for dimension slices matching query constraints.
  *
