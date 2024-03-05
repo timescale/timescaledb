@@ -875,9 +875,7 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	/* Determine the number of groups from the already planned aggregation */
 	AggPath *existing_agg_path = get_existing_agg_path(output_rel);
 	if (existing_agg_path == NULL)
-	{
 		return;
-	}
 
 	/* Skip partial aggregations already created by _timescaledb_functions.partialize_agg */
 	if (existing_agg_path->aggsplit == AGGSPLIT_INITIAL_SERIAL)

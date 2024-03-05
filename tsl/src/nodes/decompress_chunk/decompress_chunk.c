@@ -538,9 +538,7 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 
 	/* Ensure that we have path keys and the chunk is ordered */
 	if (pathkeys == NIL || ts_chunk_is_unordered(chunk))
-	{
 		return MERGE_NOT_POSSIBLE;
-	}
 
 	int nkeys = list_length(pathkeys);
 
@@ -554,16 +552,12 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 		expr = find_em_expr_for_rel(pk->pk_eclass, info->chunk_rel);
 
 		if (expr == NULL || !IsA(expr, Var))
-		{
 			return MERGE_NOT_POSSIBLE;
-		}
 
 		var = castNode(Var, expr);
 
 		if (var->varattno <= 0)
-		{
 			return MERGE_NOT_POSSIBLE;
-		}
 
 		column_name = get_attname(info->chunk_rte->relid, var->varattno, false);
 		int16 orderby_index = ts_array_position(info->settings->fd.orderby, column_name);
@@ -594,9 +588,7 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 			else if (!orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
 				merge_result = SCAN_BACKWARD;
 			else
-			{
 				return MERGE_NOT_POSSIBLE;
-			}
 		}
 		else
 		{
@@ -612,9 +604,7 @@ can_batch_sorted_merge(PlannerInfo *root, CompressionInfo *info, Chunk *chunk)
 			else if (orderby_desc && orderby_nullsfirst != pk->pk_nulls_first && pk_index == 0)
 				merge_result = SCAN_BACKWARD;
 			else
-			{
 				return MERGE_NOT_POSSIBLE;
-			}
 		}
 	}
 
@@ -680,15 +670,11 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 
 		/* No em expression found for our rel */
 		if (!em_expr)
-		{
 			return;
-		}
 
 		/* We are only interested in sorting if this is a var */
 		if (!IsA(em_expr, Var))
-		{
 			return;
-		}
 
 		useful_pathkeys = lappend(useful_pathkeys, pathkey);
 
