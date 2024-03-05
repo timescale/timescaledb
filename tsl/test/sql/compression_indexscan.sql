@@ -35,6 +35,8 @@ generate_series(1, 100, 1 ) AS g2(id)
 ORDER BY
 time;
 
+--Test with indexscan enabled
+SET timescaledb.enable_compression_indexscan = 'ON';
 --Test Set 1.1 [ Index(ASC, Null_First), Compression(ASC, Null_First) ]
 CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
@@ -163,10 +165,12 @@ SELECT decompress_chunk(show_chunks('tab1'));
 DROP INDEX idx_desc_null_last;
 
 --Test Set 5 GUC SET timescaledb.enable_compression_indexscan
--- Default this flag will be true.
-SET timescaledb.enable_compression_indexscan = 'OFF';
+-- Default this flag will be false.
+RESET timescaledb.enable_compression_indexscan;
+SHOW timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
 SELECT decompress_chunk(show_chunks('tab1'));
+--Test with this guc enabled
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab1'));
 SELECT decompress_chunk(show_chunks('tab1'));
@@ -177,7 +181,7 @@ CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 CREATE INDEX idx2_asc_null_first ON tab2(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 ALTER TABLE tab2 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
-SET timescaledb.enable_compression_indexscan = 'OFF';
+RESET timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab2'));
@@ -257,6 +261,27 @@ select count(*) from tab1;
 select compress_chunk(show_chunks('tab1'));
 select decompress_chunk(show_chunks('tab1'));
 select count(*) from tab1;
+
+-- Check compression progression messages
+SET client_min_messages TO LOG;
+select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+RESET client_min_messages;
+-- Analyze and use stats now on a larger data set
+INSERT INTO tab1
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+id,
+random() AS c1,
+random()* 100 AS c2
+FROM
+generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '5 minutes') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(id)
+ORDER BY
+time;
+ANALYZE _timescaledb_internal._hyper_1_2_chunk;
+SET client_min_messages TO LOG;
+select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+RESET client_min_messages;
 drop index predicate;
 
 --Tear down

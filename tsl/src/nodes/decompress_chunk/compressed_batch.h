@@ -13,6 +13,8 @@ typedef struct ArrowArray ArrowArray;
 /* How to obtain the decompressed datum for individual row. */
 typedef enum
 {
+	DT_ArrowTextDict = -4,
+	DT_ArrowText = -3,
 	DT_Default = -2,
 	DT_Iterator = -1,
 	DT_Invalid = 0,
@@ -36,8 +38,10 @@ typedef struct CompressedColumnValues
 	 * Depending on decompression type, they are as follows:
 	 * iterator:        iterator
 	 * arrow fixed:     validity, value
+	 * arrow text:      validity, uint32* offsets, void* bodies
+	 * arrow dict text: validity, uint32* dict offsets, void* dict bodies, int16* indices
 	 */
-	const void *restrict buffers[2];
+	const void *restrict buffers[4];
 
 	/*
 	 * The source arrow array, if any. We don't use it for building the
@@ -52,7 +56,32 @@ typedef struct CompressedColumnValues
  */
 typedef struct DecompressBatchState
 {
-	TupleTableSlot *decompressed_scan_slot; /* A slot for the decompressed data */
+	/*
+	 * The slot for the decompressed tuple.
+	 *
+	 * We embed it into the batch state as the first member (data inheritance),
+	 * so that it's easier to pass out to parent nodes, while following the usual
+	 * Postgres interface of passing the tuple table slots.
+	 * We use &batch_state->decompressed_scan_slot_data.base everywhere where we
+	 * need the TupleTableSlot*, and some parent nodes can cast this pointer to
+	 * DecompressBatchState* to use our custom interfaces.
+	 *
+	 * The slot itself follows the TTSVirtualOps tuple slot protocol, because Postgres
+	 * expression executor has special fast path for virtual tuples, and we don't
+	 * really need the custom tuple slot protocol for anything. One potential use
+	 * case for it would be late decompression by implementing custom slot_getattr().
+	 * It was actually implemented and didn't show any benefits in the preliminary
+	 * testing, compared to what we already achieve with lazy decompression after
+	 * vectorized filters. One reason is that the Postgres expression compiler
+	 * can be eager in requesting materialization. For example, it would call
+	 * slot_getattr up to the last attribute used by every filter in a qualifier,
+	 * before running any qualifiers. This might be possible to configure, but
+	 * the area needs more research.
+	 *
+	 * See the PR #6628 for context.
+	 */
+	VirtualTupleTableSlot decompressed_scan_slot_data;
+
 	/*
 	 * Compressed target slot. We have to keep a local copy when doing batch
 	 * sorted merge, because the segmentby column values might reference the
@@ -69,7 +98,7 @@ typedef struct DecompressBatchState
 	 * row. Indexed same as arrow arrays, w/o accounting for the reverse scan
 	 * direction. Initialized to all ones, i.e. all rows pass.
 	 */
-	uint64 *vector_qual_result;
+	uint64 *restrict vector_qual_result;
 
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
@@ -87,7 +116,7 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 
 #define create_bulk_decompression_mctx(parent_mctx)                                                \
 	AllocSetContextCreate(parent_mctx,                                                             \
-						  "Bulk decompression",                                                    \
+						  "DecompressBatchState bulk decompression",                               \
 						  /* minContextSize = */ 0,                                                \
 						  /* initBlockSize = */ 64 * 1024,                                         \
 						  /* maxBlockSize = */ 64 * 1024);
@@ -102,7 +131,33 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
  */
 #define create_per_batch_mctx(block_size_bytes)                                                    \
 	AllocSetContextCreate(CurrentMemoryContext,                                                    \
-						  "Per-batch decompression",                                               \
+						  "DecompressBatchState per-batch",                                        \
 						  0,                                                                       \
 						  block_size_bytes,                                                        \
 						  block_size_bytes);
+
+extern void compressed_batch_destroy(DecompressBatchState *batch_state);
+
+extern void compressed_batch_discard_tuples(DecompressBatchState *batch_state);
+
+/*
+ * Returns the current decompressed tuple in the compressed batch.
+ */
+inline static TupleTableSlot *
+compressed_batch_current_tuple(DecompressBatchState *batch_state)
+{
+	if (IsA(&batch_state->decompressed_scan_slot_data, Invalid))
+	{
+		/*
+		 * For convenience, we want a zero-initialized batch to be a valid
+		 * "empty" state, but unfortunately a zero-initialized TupleTableSlotData
+		 * is not a valid tuple slot, so here we have to work around this mismatch.
+		 */
+		Assert(batch_state->decompressed_scan_slot_data.base.tts_ops == NULL);
+		Assert(batch_state->per_batch_context == NULL);
+		return NULL;
+	}
+
+	Assert(batch_state->per_batch_context != NULL);
+	return &batch_state->decompressed_scan_slot_data.base;
+}

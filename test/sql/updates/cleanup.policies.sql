@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-APACHE for a copy of the license.
 
-PERFORM remove_reorder_policy('policy_test_timestamptz');
-PERFORM remove_retention_policy('policy_test_timestamptz');
-PERFORM remove_compression_policy('policy_test_timestamptz');
+SELECT remove_reorder_policy('policy_test_timestamptz');
+SELECT remove_retention_policy('policy_test_timestamptz');
+SELECT remove_compression_policy('policy_test_timestamptz');
 

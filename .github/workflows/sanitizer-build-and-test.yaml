@@ -56,7 +56,7 @@ jobs:
       pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -81,7 +81,7 @@ jobs:
           libtest-most-perl ${{ env.extra_packages }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -101,7 +101,7 @@ jobs:
     # leading to a tainted cache
     - name: Cache PostgreSQL ${{ matrix.pg }}
       id: cache-postgresql
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-${{ env.name }}-postgresql-${{ matrix.pg }}-${{ env.CC }}\
@@ -126,7 +126,7 @@ jobs:
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -140,7 +140,8 @@ jobs:
     - name: Build TimescaleDB
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=Debug -DPG_SOURCE_DIR=~/$PG_SRC_DIR \
-          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON -DTEST_GROUP_SIZE=5
+          -DPG_PATH=~/$PG_INSTALL_DIR -DCODECOVERAGE=OFF -DREQUIRE_ALL_TESTS=ON \
+          -DTEST_GROUP_SIZE=5 -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j$(nproc) -C build
         make -C build install
 
@@ -157,7 +158,6 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name postmaster.log -exec cat {} + > postgres.log
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
@@ -171,7 +171,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Regression diff ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: |
@@ -180,10 +180,10 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.*
 
     - name: Stack trace
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
@@ -202,21 +202,27 @@ jobs:
           bt full
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
+
+    - name: Show sanitizer logs
+      if: always()
+      run: |
+        tail -vn +1 sanitizer* || :
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Coredumps ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: coredumps
 
-    - name: sanitizer logs
+    - name: Upload sanitizer logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sanitizer logs ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
-        path: ${{ github.workspace }}/sanitizer
+        # The log_path sanitizer option means "Write logs to 'log_path.pid'".
+        # https://github.com/google/sanitizers/wiki/SanitizerCommonFlags
+        path: ${{ github.workspace }}/sanitizer*
 
     - name: Upload test results to the database
       if: always()

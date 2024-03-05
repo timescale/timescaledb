@@ -22,9 +22,11 @@
 #include "compression/compression.h"
 #include "compression/dictionary.h"
 #include "compression/simple8b_rle.h"
+#include "compression/simple8b_rle_bitmap.h"
 #include "compression/array.h"
 #include "compression/dictionary_hash.h"
 #include "compression/datum_serialize.h"
+#include "compression/arrow_c_data_interface.h"
 
 /*
  * A compression bitmap is stored as
@@ -395,6 +397,118 @@ dictionary_decompression_iterator_init(DictionaryDecompressionIterator *iter, co
 	}
 	Assert(array_decompression_iterator_try_next_forward(dictionary_iterator).is_done);
 }
+
+#define ELEMENT_TYPE int16
+#include "simple8b_rle_decompress_all.h"
+#undef ELEMENT_TYPE
+
+ArrowArray *
+tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == TEXTOID);
+
+	compressed = PointerGetDatum(PG_DETOAST_DATUM(compressed));
+
+	StringInfoData si = { .data = DatumGetPointer(compressed), .len = VARSIZE(compressed) };
+
+	const DictionaryCompressed *header = consumeCompressedData(&si, sizeof(DictionaryCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_DICTIONARY);
+	CheckCompressedData(header->element_type == TEXTOID);
+
+	Simple8bRleSerialized *indices_serialized = bytes_deserialize_simple8b_and_advance(&si);
+
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (header->has_nulls)
+	{
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
+	}
+
+	const uint16 n_notnull = indices_serialized->num_elements;
+	const uint16 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	CheckCompressedData(n_total >= n_notnull);
+	const uint16 n_padded =
+		n_total + 63; /* This is the padding requirement of simple8brle_decompress_all. */
+	int16 *restrict indices = MemoryContextAlloc(dest_mctx, sizeof(int16) * n_padded);
+
+	const uint16 n_decompressed =
+		simple8brle_decompress_all_buf_int16(indices_serialized, indices, n_padded);
+	CheckCompressedData(n_decompressed == n_notnull);
+
+	/* Check that the dictionary indices that we've just read are not out of bounds. */
+	CheckCompressedData(header->num_distinct <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	CheckCompressedData(header->num_distinct <= INT16_MAX);
+	bool have_incorrect_index = false;
+	for (int i = 0; i < n_notnull; i++)
+	{
+		have_incorrect_index |= indices[i] >= (int16) header->num_distinct;
+	}
+	CheckCompressedData(!have_incorrect_index);
+
+	/* Decompress the actual values in the dictionary. */
+	ArrowArray *dict =
+		text_array_decompress_all_serialized_no_header(&si, /* has_nulls = */ false, dest_mctx);
+	CheckCompressedData(header->num_distinct == dict->length);
+
+	/* Fill validity and indices of the array elements, reshuffling for nulls if needed. */
+	const int validity_bitmap_bytes = sizeof(uint64) * pad_to_multiple(64, n_total) / 64;
+	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+
+	if (header->has_nulls)
+	{
+		/*
+		 * We have decompressed the data with nulls skipped, reshuffle it
+		 * according to the nulls bitmap.
+		 */
+		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
+		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+
+		int current_notnull_element = n_notnull - 1;
+		for (int i = n_total - 1; i >= 0; i--)
+		{
+			Assert(i >= current_notnull_element);
+
+			if (simple8brle_bitmap_get_at(&nulls, i))
+			{
+				arrow_set_row_validity(validity_bitmap, i, false);
+				indices[i] = 0;
+			}
+			else
+			{
+				Assert(current_notnull_element >= 0);
+				indices[i] = indices[current_notnull_element];
+				current_notnull_element--;
+			}
+		}
+
+		Assert(current_notnull_element == -1);
+	}
+	else
+	{
+		/*
+		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
+		 * with zeros, because the corresponding elements are not valid.
+		 */
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+	}
+
+	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = indices;
+	result->n_buffers = 2;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
+	result->dictionary = dict;
+	return result;
+}
+
 DecompressionIterator *
 tsl_dictionary_decompression_iterator_from_datum_forward(Datum dictionary_compressed,
 														 Oid element_type)

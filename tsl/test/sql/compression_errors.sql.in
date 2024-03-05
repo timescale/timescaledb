@@ -117,7 +117,7 @@ ALTER TABLE foo DROP CONSTRAINT chk_existing;
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
 
-SELECT decompress_chunk(ch) FROM show_chunks('foo') ch limit 1;
+SELECT decompress_chunk(ch, false) FROM show_chunks('foo') ch limit 1;
 
 --test changing the segment by columns
 ALTER TABLE foo set (timescaledb.compress, timescaledb.compress_orderby = 'a', timescaledb.compress_segmentby = 'b');
@@ -127,13 +127,13 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'foo'
 ORDER BY chunk_name LIMIT 1\gset
 
+select decompress_chunk(:'CHUNK_NAME', if_compressed=>false);
 select decompress_chunk(:'CHUNK_NAME');
-select decompress_chunk(:'CHUNK_NAME', if_compressed=>true);
 
 --should succeed
 select compress_chunk(:'CHUNK_NAME');
+select compress_chunk(:'CHUNK_NAME', if_not_compressed=>false);
 select compress_chunk(:'CHUNK_NAME');
-select compress_chunk(:'CHUNK_NAME', if_not_compressed=>true);
 
 SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 
@@ -499,4 +499,15 @@ ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_s
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
 ALTER TABLE table_unique_index SET (timescaledb.compress, timescaledb.compress_segmentby = 'time,location,device_id');
 ALTER TABLE table_unique_index SET (timescaledb.compress = off);
+
+-- try compressing osm chunk
+CREATE TABLE osm_table (time timestamptz NOT NULL, device_id text, value float);
+SELECT table_name FROM create_hypertable('osm_table', 'time');
+ALTER TABLE osm_table SET (timescaledb.compress);
+
+INSERT INTO osm_table VALUES ('2022-11-11 11:11:11', 'foo', 1.0);
+
+UPDATE _timescaledb_catalog.chunk ch SET osm_chunk = true FROM _timescaledb_catalog.hypertable ht WHERE ch.hypertable_id = ht.id AND ht.table_name='osm_table';
+
+SELECT compress_chunk(show_chunks('osm_table'));
 

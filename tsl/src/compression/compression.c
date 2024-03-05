@@ -47,7 +47,6 @@
 #include "array.h"
 #include "chunk.h"
 #include "compression.h"
-#include "compression_test.h"
 #include "create.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
@@ -132,6 +131,13 @@ tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
+
+	if (type != TEXTOID &&
+		(algorithm == COMPRESSION_ALGORITHM_DICTIONARY || algorithm == COMPRESSION_ALGORITHM_ARRAY))
+	{
+		/* Bulk decompression of array and dictionary is only supported for text. */
+		return NULL;
+	}
 
 	return definitions[algorithm].decompress_all;
 }
@@ -221,6 +227,31 @@ truncate_relation(Oid table_oid)
 	table_close(rel, NoLock);
 }
 
+/*
+ * Use reltuples as an estimate for the number of rows that will get compressed. This value
+ * might be way off the mark in case analyze hasn't happened in quite a while on this input
+ * chunk. But that's the best guesstimate to start off with.
+ *
+ * We will report progress for every 10% of reltuples compressed. If rel or reltuples is not valid
+ * or it's just too low then we just assume reporting every 100K tuples for now.
+ */
+#define RELTUPLES_REPORT_DEFAULT 100000
+static int64
+calculate_reltuples_to_report(Relation rel)
+{
+	int64 report_reltuples = RELTUPLES_REPORT_DEFAULT;
+
+	if (rel != NULL && rel->rd_rel->reltuples > 0)
+	{
+		report_reltuples = (int64) (0.1 * rel->rd_rel->reltuples);
+		/* either analyze has not been done or table doesn't have a lot of rows */
+		if (report_reltuples < RELTUPLES_REPORT_DEFAULT)
+			report_reltuples = RELTUPLES_REPORT_DEFAULT;
+	}
+
+	return report_reltuples;
+}
+
 CompressionStats
 compress_chunk(Oid in_table, Oid out_table, int insert_options)
 {
@@ -235,6 +266,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
 	CompressionStats cstat;
 	CompressionSettings *settings = ts_compression_settings_get(out_table);
+	int64 report_reltuples;
 
 	/* We want to prevent other compressors from compressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our compression.
@@ -248,6 +280,10 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 * we're taking the stricter lock to prevent accidents.
 	 */
 	Relation out_rel = relation_open(out_table, ExclusiveLock);
+
+	/* Sanity check we are dealing with relations */
+	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
+	Ensure(out_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
 
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
@@ -398,17 +434,36 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	RowCompressor row_compressor;
+	/* Reset sequence is used for resetting the sequence without
+	 * having to fetch the existing sequence for an individual
+	 * sequence group. If we are rolling up an uncompressed chunk
+	 * into an existing compressed chunk, we have to fetch
+	 * sequence numbers for each batch of the segment using
+	 * the respective index. In normal compression, this is
+	 * not necessary because we start segment numbers from zero.
+	 * We distinguish these cases by insert_options being zero for rollups.
+	 *
+	 * Sequence numbers are planned to be removed in the near future,
+	 * which will render this flag obsolete.
+	 */
+	bool reset_sequence = insert_options > 0;
 	row_compressor_init(settings,
 						&row_compressor,
-						in_desc,
+						in_rel,
 						out_rel,
 						out_desc->natts,
 						true /*need_bistate*/,
-						false /*reset_sequence*/,
+						reset_sequence,
 						insert_options);
 
 	if (matched_index_rel != NULL)
 	{
+		int64 nrows_processed = 0;
+
+		/*
+		 * even though we log the information below, this debug info
+		 * is still used for INFO messages to clients and our tests.
+		 */
 		if (ts_guc_debug_compression_path_info)
 		{
 			elog(INFO,
@@ -416,16 +471,31 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 				 get_rel_name(matched_index_rel->rd_id));
 		}
 
+		elog(LOG,
+			 "using index \"%s\" to scan rows for compression",
+			 get_rel_name(matched_index_rel->rd_id));
+
 		index_scan = index_beginscan(in_rel, matched_index_rel, GetTransactionSnapshot(), 0, 0);
 		slot = table_slot_create(in_rel, NULL);
 		index_rescan(index_scan, NULL, 0, NULL, 0);
+		report_reltuples = calculate_reltuples_to_report(in_rel);
 		while (index_getnext_slot(index_scan, indexscan_direction, slot))
 		{
 			row_compressor_process_ordered_slot(&row_compressor, slot, mycid);
+			if ((++nrows_processed % report_reltuples) == 0)
+				elog(LOG,
+					 "compressed " INT64_FORMAT " rows from \"%s\"",
+					 nrows_processed,
+					 RelationGetRelationName(in_rel));
 		}
 
 		if (row_compressor.rows_compressed_into_current_value > 0)
 			row_compressor_flush(&row_compressor, mycid, true);
+
+		elog(LOG,
+			 "finished compressing " INT64_FORMAT " rows from \"%s\"",
+			 nrows_processed,
+			 RelationGetRelationName(in_rel));
 
 		ExecDropSingleTupleTableSlot(slot);
 		index_endscan(index_scan);
@@ -433,13 +503,21 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 	else
 	{
+		/*
+		 * even though we log the information below, this debug info
+		 * is still used for INFO messages to clients and our tests.
+		 */
 		if (ts_guc_debug_compression_path_info)
 		{
 			elog(INFO, "compress_chunk_tuplesort_start");
 		}
 
+		elog(LOG,
+			 "using tuplesort to scan rows from \"%s\" for compression",
+			 RelationGetRelationName(in_rel));
+
 		Tuplesortstate *sorted_rel = compress_chunk_sort_relation(settings, in_rel);
-		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc);
+		row_compressor_append_sorted_rows(&row_compressor, sorted_rel, in_desc, in_rel);
 		tuplesort_end(sorted_rel);
 	}
 
@@ -587,52 +665,42 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
  * Find segment by index for setting the correct sequence number if
  * we are trying to roll up chunks while compressing
  */
-static Oid
-get_compressed_chunk_index(ResultRelInfo *resultRelInfo, int16 *uncompressed_col_to_compressed_col,
-						   PerColumn *per_column, int n_input_columns)
+Oid
+get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings)
 {
+	int num_segmentby_columns = ts_array_length(settings->fd.segmentby);
+
 	for (int i = 0; i < resultRelInfo->ri_NumIndices; i++)
 	{
 		bool matches = true;
-		int num_segmentby_columns = 0;
+		Relation index_relation = resultRelInfo->ri_IndexRelationDescs[i];
 		IndexInfo *index_info = resultRelInfo->ri_IndexRelationInfo[i];
 
-		for (int j = 0; j < n_input_columns; j++)
+		/* the index must include all segment by columns and sequence number */
+		if (index_info->ii_NumIndexKeyAttrs != num_segmentby_columns + 1)
+			continue;
+
+		for (int j = 0; j < index_info->ii_NumIndexKeyAttrs - 1; j++)
 		{
-			if (per_column[j].segmentby_column_index < 1)
-				continue;
+			const char *attname =
+				get_attname(index_relation->rd_id, AttrOffsetGetAttrNumber(j), false);
 
-			/* Last member of the index must be the sequence number column. */
-			if (per_column[j].segmentby_column_index >= index_info->ii_NumIndexAttrs)
+			if (!ts_array_is_member(settings->fd.segmentby, attname))
 			{
 				matches = false;
 				break;
 			}
-
-			int index_att_offset = AttrNumberGetAttrOffset(per_column[j].segmentby_column_index);
-
-			if (index_info->ii_IndexAttrNumbers[index_att_offset] !=
-				AttrOffsetGetAttrNumber(uncompressed_col_to_compressed_col[j]))
-			{
-				matches = false;
-				break;
-			}
-
-			num_segmentby_columns++;
 		}
 
-		/* Check that we have the correct number of index attributes
-		 * and that the last one is the sequence number
-		 */
-		if (num_segmentby_columns != index_info->ii_NumIndexAttrs - 1 ||
-			namestrcmp((Name) &resultRelInfo->ri_IndexRelationDescs[i]
-						   ->rd_att->attrs[num_segmentby_columns]
-						   .attname,
-					   COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME) != 0)
-			matches = false;
+		if (!matches)
+			continue;
 
-		if (matches)
-			return resultRelInfo->ri_IndexRelationDescs[i]->rd_id;
+		/* Check last index column is sequence number */
+		const char *attname =
+			get_attname(index_relation->rd_id, index_info->ii_NumIndexKeyAttrs, false);
+
+		if (strncmp(attname, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME, NAMEDATALEN) == 0)
+			return index_relation->rd_id;
 	}
 
 	return InvalidOid;
@@ -790,109 +858,70 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
 	return result + SEQUENCE_NUM_GAP;
 }
 
-/********************
- ** row_compressor **
- ********************/
-void
-row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
-					TupleDesc uncompressed_tuple_desc, Relation compressed_table,
-					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
-					int insert_options)
+static void
+build_column_map(CompressionSettings *settings, Relation uncompressed_table,
+				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
 {
-	TupleDesc out_desc = RelationGetDescr(compressed_table);
-	Name count_metadata_name = DatumGetName(
-		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
-	Name sequence_num_metadata_name = DatumGetName(
-		DirectFunctionCall1(namein,
-							CStringGetDatum(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME)));
-	AttrNumber count_metadata_column_num =
-		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
-	AttrNumber sequence_num_column_num =
-		get_attnum(compressed_table->rd_id, NameStr(*sequence_num_metadata_name));
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+	TupleDesc out_desc = RelationGetDescr(compressed_table);
+	TupleDesc in_desc = RelationGetDescr(uncompressed_table);
 
-	if (count_metadata_column_num == InvalidAttrNumber)
-		elog(ERROR,
-			 "missing metadata column '%s' in compressed table",
-			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+	PerColumn *columns = palloc0(sizeof(PerColumn) * in_desc->natts);
+	int16 *map = palloc0(sizeof(int16) * in_desc->natts);
 
-	if (sequence_num_column_num == InvalidAttrNumber)
-		elog(ERROR,
-			 "missing metadata column '%s' in compressed table",
-			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-
-	*row_compressor = (RowCompressor){
-		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
-											 "compress chunk per-row",
-											 ALLOCSET_DEFAULT_SIZES),
-		.compressed_table = compressed_table,
-		.bistate = need_bistate ? GetBulkInsertState() : NULL,
-		.resultRelInfo = ts_catalog_open_indexes(compressed_table),
-		.n_input_columns = uncompressed_tuple_desc->natts,
-		.per_column = palloc0(sizeof(PerColumn) * uncompressed_tuple_desc->natts),
-		.uncompressed_col_to_compressed_col =
-			palloc0(sizeof(*row_compressor->uncompressed_col_to_compressed_col) *
-					uncompressed_tuple_desc->natts),
-		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
-		.sequence_num_metadata_column_offset = AttrNumberGetAttrOffset(sequence_num_column_num),
-		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
-		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
-		.rows_compressed_into_current_value = 0,
-		.rowcnt_pre_compression = 0,
-		.num_compressed_rows = 0,
-		.sequence_num = SEQUENCE_NUM_GAP,
-		.reset_sequence = reset_sequence,
-		.first_iteration = true,
-		.insert_options = insert_options,
-	};
-
-	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
-
-	for (int i = 0; i < uncompressed_tuple_desc->natts; i++)
+	for (int i = 0; i < in_desc->natts; i++)
 	{
-		Form_pg_attribute attr = TupleDescAttr(uncompressed_tuple_desc, i);
+		Form_pg_attribute attr = TupleDescAttr(in_desc, i);
 
 		if (attr->attisdropped)
 			continue;
 
-		PerColumn *column = &row_compressor->per_column[AttrNumberGetAttrOffset(attr->attnum)];
+		PerColumn *column = &columns[AttrNumberGetAttrOffset(attr->attnum)];
 		AttrNumber compressed_colnum = get_attnum(compressed_table->rd_id, NameStr(attr->attname));
 		Form_pg_attribute compressed_column_attr =
 			TupleDescAttr(out_desc, AttrNumberGetAttrOffset(compressed_colnum));
-		row_compressor->uncompressed_col_to_compressed_col[AttrNumberGetAttrOffset(attr->attnum)] =
-			AttrNumberGetAttrOffset(compressed_colnum);
+		map[AttrNumberGetAttrOffset(attr->attnum)] = AttrNumberGetAttrOffset(compressed_colnum);
 
 		bool is_segmentby = ts_array_is_member(settings->fd.segmentby, NameStr(attr->attname));
 		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 
 		if (!is_segmentby)
 		{
-			int16 segment_min_attr_offset = -1;
-			int16 segment_max_attr_offset = -1;
-			SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
 			if (compressed_column_attr->atttypid != compressed_data_type_oid)
 				elog(ERROR,
 					 "expected column '%s' to be a compressed data type",
 					 NameStr(attr->attname));
 
-			if (is_orderby)
+			AttrNumber segment_min_attr_number =
+				compressed_column_metadata_attno(settings,
+												 uncompressed_table->rd_id,
+												 attr->attnum,
+												 compressed_table->rd_id,
+												 "min");
+			AttrNumber segment_max_attr_number =
+				compressed_column_metadata_attno(settings,
+												 uncompressed_table->rd_id,
+												 attr->attnum,
+												 compressed_table->rd_id,
+												 "max");
+			int16 segment_min_attr_offset = segment_min_attr_number - 1;
+			int16 segment_max_attr_offset = segment_max_attr_number - 1;
+
+			SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
+			if (segment_min_attr_number != InvalidAttrNumber ||
+				segment_max_attr_number != InvalidAttrNumber)
 			{
-				int16 index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
-				char *segment_min_col_name = column_segment_min_name(index);
-				char *segment_max_col_name = column_segment_max_name(index);
-				AttrNumber segment_min_attr_number =
-					get_attnum(compressed_table->rd_id, segment_min_col_name);
-				AttrNumber segment_max_attr_number =
-					get_attnum(compressed_table->rd_id, segment_max_col_name);
-				if (segment_min_attr_number == InvalidAttrNumber)
-					elog(ERROR, "couldn't find metadata column \"%s\"", segment_min_col_name);
-				if (segment_max_attr_number == InvalidAttrNumber)
-					elog(ERROR, "couldn't find metadata column \"%s\"", segment_max_col_name);
-				segment_min_attr_offset = AttrNumberGetAttrOffset(segment_min_attr_number);
-				segment_max_attr_offset = AttrNumberGetAttrOffset(segment_max_attr_number);
+				Ensure(segment_min_attr_number != InvalidAttrNumber,
+					   "could not find the min metadata column");
+				Ensure(segment_max_attr_number != InvalidAttrNumber,
+					   "could not find the min metadata column");
 				segment_min_max_builder =
 					segment_meta_min_max_builder_create(attr->atttypid, attr->attcollation);
 			}
+
+			Ensure(!is_orderby || segment_min_max_builder != NULL,
+				   "orderby columns must have minmax metadata");
+
 			*column = (PerColumn){
 				.compressor = compressor_for_type(attr->atttypid),
 				.min_metadata_attr_offset = segment_min_attr_offset,
@@ -916,21 +945,82 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 			};
 		}
 	}
+	*pcolumns = columns;
+	*pmap = map;
+}
 
-	row_compressor->index_oid =
-		get_compressed_chunk_index(row_compressor->resultRelInfo,
-								   row_compressor->uncompressed_col_to_compressed_col,
-								   row_compressor->per_column,
-								   row_compressor->n_input_columns);
+/********************
+ ** row_compressor **
+ ********************/
+void
+row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+					Relation uncompressed_table, Relation compressed_table,
+					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
+					int insert_options)
+{
+	Name count_metadata_name = DatumGetName(
+		DirectFunctionCall1(namein, CStringGetDatum(COMPRESSION_COLUMN_METADATA_COUNT_NAME)));
+	Name sequence_num_metadata_name = DatumGetName(
+		DirectFunctionCall1(namein,
+							CStringGetDatum(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME)));
+	AttrNumber count_metadata_column_num =
+		get_attnum(compressed_table->rd_id, NameStr(*count_metadata_name));
+	AttrNumber sequence_num_column_num =
+		get_attnum(compressed_table->rd_id, NameStr(*sequence_num_metadata_name));
+
+	if (count_metadata_column_num == InvalidAttrNumber)
+		elog(ERROR,
+			 "missing metadata column '%s' in compressed table",
+			 COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+
+	if (sequence_num_column_num == InvalidAttrNumber)
+		elog(ERROR,
+			 "missing metadata column '%s' in compressed table",
+			 COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
+
+	*row_compressor = (RowCompressor){
+		.per_row_ctx = AllocSetContextCreate(CurrentMemoryContext,
+											 "compress chunk per-row",
+											 ALLOCSET_DEFAULT_SIZES),
+		.compressed_table = compressed_table,
+		.bistate = need_bistate ? GetBulkInsertState() : NULL,
+		.resultRelInfo = ts_catalog_open_indexes(compressed_table),
+		.n_input_columns = RelationGetDescr(uncompressed_table)->natts,
+		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
+		.sequence_num_metadata_column_offset = AttrNumberGetAttrOffset(sequence_num_column_num),
+		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
+		.compressed_is_null = palloc(sizeof(bool) * num_columns_in_compressed_table),
+		.rows_compressed_into_current_value = 0,
+		.rowcnt_pre_compression = 0,
+		.num_compressed_rows = 0,
+		.sequence_num = SEQUENCE_NUM_GAP,
+		.reset_sequence = reset_sequence,
+		.first_iteration = true,
+		.insert_options = insert_options,
+	};
+
+	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
+
+	build_column_map(settings,
+					 uncompressed_table,
+					 compressed_table,
+					 &row_compressor->per_column,
+					 &row_compressor->uncompressed_col_to_compressed_col);
+
+	row_compressor->index_oid = get_compressed_chunk_index(row_compressor->resultRelInfo, settings);
 }
 
 void
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
-								  TupleDesc sorted_desc)
+								  TupleDesc sorted_desc, Relation in_rel)
 {
 	CommandId mycid = GetCurrentCommandId(true);
 	TupleTableSlot *slot = MakeTupleTableSlot(sorted_desc, &TTSOpsMinimalTuple);
 	bool got_tuple;
+	int64 nrows_processed = 0;
+	int64 report_reltuples;
+
+	report_reltuples = calculate_reltuples_to_report(in_rel);
 
 	for (got_tuple = tuplesort_gettupleslot(sorted_rel,
 											true /*=forward*/,
@@ -945,10 +1035,19 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 											NULL /*=abbrev*/))
 	{
 		row_compressor_process_ordered_slot(row_compressor, slot, mycid);
+		if ((++nrows_processed % report_reltuples) == 0)
+			elog(LOG,
+				 "compressed " INT64_FORMAT " rows from \"%s\"",
+				 nrows_processed,
+				 RelationGetRelationName(in_rel));
 	}
 
 	if (row_compressor->rows_compressed_into_current_value > 0)
 		row_compressor_flush(row_compressor, mycid, true);
+	elog(LOG,
+		 "finished compressing " INT64_FORMAT " rows from \"%s\"",
+		 nrows_processed,
+		 RelationGetRelationName(in_rel));
 
 	ExecDropSingleTupleTableSlot(slot);
 }
@@ -1398,10 +1497,12 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 */
 	Relation out_rel = table_open(out_table, AccessExclusiveLock);
 	Relation in_rel = table_open(in_table, ExclusiveLock);
+	int64 nrows_processed = 0;
 
 	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
 	TupleTableSlot *slot = table_slot_create(in_rel, NULL);
 	TableScanDesc scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
+	int64 report_reltuples = calculate_reltuples_to_report(in_rel);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -1417,8 +1518,18 @@ decompress_chunk(Oid in_table, Oid out_table)
 			heap_freetuple(tuple);
 
 		row_decompressor_decompress_row_to_table(&decompressor);
+
+		if ((++nrows_processed % report_reltuples) == 0)
+			elog(LOG,
+				 "decompressed " INT64_FORMAT " rows from \"%s\"",
+				 nrows_processed,
+				 RelationGetRelationName(in_rel));
 	}
 
+	elog(LOG,
+		 "finished decompressing " INT64_FORMAT " rows from \"%s\"",
+		 nrows_processed,
+		 RelationGetRelationName(in_rel));
 	table_endscan(scan);
 	ExecDropSingleTupleTableSlot(slot);
 	row_decompressor_close(&decompressor);
@@ -2141,7 +2252,7 @@ compressed_insert_key_columns(Relation relation)
 }
 
 void
-decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlot *slot)
+decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 {
 	/* COPY operation can end up flushing an empty buffer which
 	 * could in turn send an empty slot our way. No need to decompress
@@ -2168,15 +2279,15 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 				 errmsg("inserting into compressed chunk with unique constraints disabled"),
 				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
-	Chunk *comp = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-	Relation in_rel = relation_open(comp->table_id, RowExclusiveLock);
+	Oid comp_relid = ts_chunk_get_relid(cis->compressed_chunk_id, false);
+	Relation in_rel = relation_open(comp_relid, RowExclusiveLock);
 
 	RowDecompressor decompressor = build_decompressor(in_rel, out_rel);
 	Bitmapset *key_columns = compressed_insert_key_columns(out_rel);
 	Bitmapset *null_columns = NULL;
 
 	int num_scankeys;
-	ScanKeyData *scankeys = build_scankeys(chunk->hypertable_relid,
+	ScanKeyData *scankeys = build_scankeys(cis->hypertable_relid,
 										   in_rel->rd_id,
 										   &decompressor,
 										   key_columns,
@@ -2244,6 +2355,8 @@ decompress_batches_for_insert(ChunkInsertState *cis, Chunk *chunk, TupleTableSlo
 									&tmfd,
 									false);
 		Assert(result == TM_Ok);
+
+		Assert(cis->cds != NULL);
 		cis->cds->batches_decompressed += decompressor.batches_decompressed;
 		cis->cds->tuples_decompressed += decompressor.tuples_decompressed;
 	}

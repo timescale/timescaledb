@@ -17,7 +17,10 @@
 #include "compression/array.h"
 #include "compression/compression.h"
 #include "compression/simple8b_rle.h"
+#include "compression/simple8b_rle_bitmap.h"
 #include "datum_serialize.h"
+
+#include "compression/arrow_c_data_interface.h"
 
 /* A "compressed" array
  *     uint8 has_nulls: 1 iff this has a nulls bitmap stored before the data
@@ -458,6 +461,188 @@ tsl_array_decompression_iterator_from_datum_reverse(Datum compressed_array, Oid 
 	iterator->deserializer = create_datum_deserializer(iterator->base.element_type);
 
 	return &iterator->base;
+}
+
+#define ELEMENT_TYPE uint32
+#include "simple8b_rle_decompress_all.h"
+#undef ELEMENT_TYPE
+
+ArrowArray *
+tsl_text_array_decompress_all(Datum compressed_array, Oid element_type, MemoryContext dest_mctx)
+{
+	Assert(element_type == TEXTOID);
+	void *compressed_data = PG_DETOAST_DATUM(compressed_array);
+	StringInfoData si = { .data = compressed_data, .len = VARSIZE(compressed_data) };
+	ArrayCompressed *header = consumeCompressedData(&si, sizeof(ArrayCompressed));
+
+	Assert(header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
+	CheckCompressedData(header->element_type == TEXTOID);
+
+	return text_array_decompress_all_serialized_no_header(&si, header->has_nulls, dest_mctx);
+}
+
+ArrowArray *
+text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
+											   MemoryContext dest_mctx)
+{
+	Simple8bRleSerialized *nulls_serialized = NULL;
+	if (has_nulls)
+	{
+		nulls_serialized = bytes_deserialize_simple8b_and_advance(si);
+	}
+
+	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(si);
+
+	/*
+	 * We need a quite significant padding of 63 elements, not bytes, after the
+	 * last element, because we work in Simple8B blocks which can contain up to
+	 * 64 elements.
+	 */
+	uint32 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION + 63];
+	const uint16 n_notnull =
+		simple8brle_decompress_all_buf_uint32(sizes_serialized,
+											  sizes,
+											  sizeof(sizes) / sizeof(sizes[0]));
+	const int n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
+	CheckCompressedData(n_total >= n_notnull);
+
+	uint32 *offsets =
+		(uint32 *) MemoryContextAllocZero(dest_mctx,
+										  pad_to_multiple(64, sizeof(*offsets) * (n_total + 1)));
+	uint8 *arrow_bodies =
+		(uint8 *) MemoryContextAllocZero(dest_mctx, pad_to_multiple(64, si->len - si->cursor));
+
+	uint32 offset = 0;
+	for (int i = 0; i < n_notnull; i++)
+	{
+		void *unaligned = consumeCompressedData(si, sizes[i]);
+
+		/*
+		 * We start reading from the end of previous datum, but this pointer
+		 * might be not aligned as required for varlena-4b struct. We have to
+		 * align it here. Note that sizes[i] includes the alignment as well in
+		 * addition to the varlena size.
+		 *
+		 * See the corresponding row-by-row code in bytes_to_datum_and_advance().
+		 */
+		void *vardata = DatumGetPointer(att_align_pointer(unaligned, TYPALIGN_INT, -1, unaligned));
+
+		/*
+		 * Check for potentially corrupt varlena headers since we're reading them
+		 * directly from compressed data.
+		 */
+		if (VARATT_IS_4B_U(vardata))
+		{
+			/*
+			 * Full varsize must be larger or equal than the header size so that
+			 * the calculation of size without header doesn't overflow.
+			 */
+			CheckCompressedData(VARSIZE_4B(vardata) >= VARHDRSZ);
+		}
+		else if (VARATT_IS_1B(vardata))
+		{
+			/* Can't have a TOAST pointer here. */
+			CheckCompressedData(!VARATT_IS_1B_E(vardata));
+
+			/*
+			 * Full varsize must be larger or equal than the header size so that
+			 * the calculation of size without header doesn't overflow.
+			 */
+			CheckCompressedData(VARSIZE_1B(vardata) >= VARHDRSZ_SHORT);
+		}
+		else
+		{
+			/*
+			 * Can only have an uncompressed datum with 1-byte or 4-byte header
+			 * here, no TOAST or compressed data.
+			 */
+			CheckCompressedData(false);
+		}
+
+		/*
+		 * Size of varlena plus alignment must match the size stored in the
+		 * sizes array for this element.
+		 */
+		const Datum alignment_bytes = PointerGetDatum(vardata) - PointerGetDatum(unaligned);
+		CheckCompressedData(VARSIZE_ANY(vardata) + alignment_bytes == sizes[i]);
+
+		const uint32 textlen = VARSIZE_ANY_EXHDR(vardata);
+		memcpy(&arrow_bodies[offset], VARDATA_ANY(vardata), textlen);
+
+		offsets[i] = offset;
+
+		CheckCompressedData(offset <= offset + textlen); /* Check for overflow. */
+		offset += textlen;
+	}
+	offsets[n_notnull] = offset;
+
+	const int validity_bitmap_bytes = sizeof(uint64) * (pad_to_multiple(64, n_total) / 64);
+	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+
+	if (has_nulls)
+	{
+		/*
+		 * We have decompressed the data with nulls skipped, reshuffle it
+		 * according to the nulls bitmap.
+		 */
+		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
+		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
+
+		int current_notnull_element = n_notnull - 1;
+		for (int i = n_total - 1; i >= 0; i--)
+		{
+			Assert(i >= current_notnull_element);
+
+			/*
+			 * The index of the corresponding offset is higher by one than
+			 * the index of the element. The offset[0] is never affected by
+			 * this shuffling and is always 0.
+			 * Note that unlike the usual null reshuffling in other algorithms,
+			 * for offsets, even if all elements are null, the starting offset
+			 * is well-defined and we can do this assignment. This case is only
+			 * accessible through fuzzing. Through SQL, all-null batches result
+			 * in a null compressed value.
+			 */
+			Assert(current_notnull_element + 1 >= 0);
+			offsets[i + 1] = offsets[current_notnull_element + 1];
+
+			if (simple8brle_bitmap_get_at(&nulls, i))
+			{
+				arrow_set_row_validity(validity_bitmap, i, false);
+			}
+			else
+			{
+				Assert(current_notnull_element >= 0);
+				current_notnull_element--;
+			}
+		}
+
+		Assert(current_notnull_element == -1);
+	}
+	else
+	{
+		/*
+		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
+		 * with zeros, because the corresponding elements are not valid.
+		 */
+		if (n_total % 64)
+		{
+			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+			validity_bitmap[n_total / 64] &= tail_mask;
+		}
+	}
+
+	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 3);
+	const void **buffers = (const void **) &result[1];
+	buffers[0] = validity_bitmap;
+	buffers[1] = offsets;
+	buffers[2] = arrow_bodies;
+	result->n_buffers = 3;
+	result->buffers = buffers;
+	result->length = n_total;
+	result->null_count = n_total - n_notnull;
+	return result;
 }
 
 DecompressResult

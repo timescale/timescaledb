@@ -10,6 +10,9 @@
 /*
  * Specialization of bulk simple8brle decompression for a data type specified by
  * ELEMENT_TYPE macro.
+ *
+ * The buffer must have a padding of 63 elements after the last one, because
+ * decompression is performed always in full blocks.
  */
 static uint16
 FUNCTION_NAME(simple8brle_decompress_all_buf,
@@ -17,6 +20,11 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 							ELEMENT_TYPE *restrict decompressed_values, uint16 n_buffer_elements)
 {
 	const uint16 n_total_values = compressed->num_elements;
+
+	/*
+	 * Caller must have allocated a properly sized buffer, see the comment above.
+	 */
+	Assert(n_buffer_elements >= n_total_values + 63);
 
 	const uint16 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);

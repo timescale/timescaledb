@@ -70,9 +70,11 @@ SELECT bucket_width
 FROM _timescaledb_catalog.continuous_agg
 WHERE mat_hypertable_id = :cagg_id;
 
-SELECT experimental, name, bucket_width, origin, timezone
+\pset null <NULL>
+SELECT *
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
+\pset null ""
 
 -- Check that the saved invalidation threshold is -infinity
 SELECT _timescaledb_functions.to_timestamp(watermark)

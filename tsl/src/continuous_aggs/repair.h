@@ -15,3 +15,4 @@
 #include "ts_catalog/continuous_agg.h"
 
 extern Datum tsl_cagg_try_repair(PG_FUNCTION_ARGS);
+extern Datum continuous_agg_get_bucket_function(PG_FUNCTION_ARGS);

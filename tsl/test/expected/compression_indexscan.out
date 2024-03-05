@@ -37,6 +37,8 @@ generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '1 hour') AS 
 generate_series(1, 100, 1 ) AS g2(id)
 ORDER BY
 time;
+--Test with indexscan enabled
+SET timescaledb.enable_compression_indexscan = 'ON';
 --Test Set 1.1 [ Index(ASC, Null_First), Compression(ASC, Null_First) ]
 CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
@@ -584,8 +586,14 @@ SELECT decompress_chunk(show_chunks('tab1'));
 
 DROP INDEX idx_desc_null_last;
 --Test Set 5 GUC SET timescaledb.enable_compression_indexscan
--- Default this flag will be true.
-SET timescaledb.enable_compression_indexscan = 'OFF';
+-- Default this flag will be false.
+RESET timescaledb.enable_compression_indexscan;
+SHOW timescaledb.enable_compression_indexscan;
+ timescaledb.enable_compression_indexscan 
+------------------------------------------
+ off
+(1 row)
+
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  compress_chunk_tuplesort_start
 INFO:  compress_chunk_tuplesort_start
@@ -608,6 +616,7 @@ SELECT decompress_chunk(show_chunks('tab1'));
  _timescaledb_internal._hyper_1_4_chunk
 (4 rows)
 
+--Test with this guc enabled
 SET timescaledb.enable_compression_indexscan = 'ON';
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  compress_chunk_indexscan_start matched index "_hyper_1_1_chunk_tab1_time_idx"
@@ -637,7 +646,7 @@ CREATE INDEX idx_asc_null_first ON tab1(id, time ASC NULLS FIRST);
 CREATE INDEX idx2_asc_null_first ON tab2(id, time ASC NULLS FIRST);
 ALTER TABLE tab1 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
 ALTER TABLE tab2 SET(timescaledb.compress, timescaledb.compress_segmentby = 'id', timescaledb.compress_orderby = 'time NULLS FIRST');
-SET timescaledb.enable_compression_indexscan = 'OFF';
+RESET timescaledb.enable_compression_indexscan;
 SELECT compress_chunk(show_chunks('tab1'));
 INFO:  compress_chunk_tuplesort_start
 INFO:  compress_chunk_tuplesort_start
@@ -948,6 +957,54 @@ select count(*) from tab1;
  62400
 (1 row)
 
+-- Check compression progression messages
+SET client_min_messages TO LOG;
+select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  statement: select compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+LOG:  acquiring locks for compressing "_timescaledb_internal._hyper_1_1_chunk"
+LOG:  locks acquired for compressing "_timescaledb_internal._hyper_1_1_chunk"
+LOG:  new compressed chunk "_timescaledb_internal.compress_hyper_3_133_chunk" created
+INFO:  compress_chunk_tuplesort_start
+LOG:  using tuplesort to scan rows from "_hyper_1_1_chunk" for compression
+LOG:  finished compressing 13500 rows from "_hyper_1_1_chunk"
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
+-- Analyze and use stats now on a larger data set
+INSERT INTO tab1
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+id,
+random() AS c1,
+random()* 100 AS c2
+FROM
+generate_series('2018-03-02 1:00'::TIMESTAMPTZ, '2018-03-28 1:00', '5 minutes') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(id)
+ORDER BY
+time;
+ANALYZE _timescaledb_internal._hyper_1_2_chunk;
+SET client_min_messages TO LOG;
+select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+LOG:  statement: select compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
+LOG:  acquiring locks for compressing "_timescaledb_internal._hyper_1_2_chunk"
+LOG:  locks acquired for compressing "_timescaledb_internal._hyper_1_2_chunk"
+LOG:  new compressed chunk "_timescaledb_internal.compress_hyper_3_134_chunk" created
+INFO:  compress_chunk_tuplesort_start
+LOG:  using tuplesort to scan rows from "_hyper_1_2_chunk" for compression
+LOG:  compressed 100000 rows from "_hyper_1_2_chunk"
+LOG:  compressed 200000 rows from "_hyper_1_2_chunk"
+LOG:  finished compressing 218400 rows from "_hyper_1_2_chunk"
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_2_chunk
+(1 row)
+
+RESET client_min_messages;
+LOG:  statement: RESET client_min_messages;
 drop index predicate;
 --Tear down
 DROP TABLE tab1;

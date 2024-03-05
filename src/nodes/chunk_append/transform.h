@@ -8,4 +8,6 @@
 #include <postgres.h>
 #include <nodes/extensible.h>
 
-extern Expr *ts_transform_cross_datatype_comparison(Expr *clause);
+#include "export.h"
+
+extern TSDLLEXPORT Expr *ts_transform_cross_datatype_comparison(Expr *clause);

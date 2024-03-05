@@ -380,11 +380,6 @@ SELECT mat_hypertable_id AS cond_1_id
 FROM _timescaledb_catalog.continuous_agg
 WHERE user_view_name = 'cond_1' \gset
 
--- Test manual invalidation error
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.invalidation_cagg_log_add_entry(:cond_1_id, 1, 0);
-\set ON_ERROR_STOP 1
-
 -- Test invalidations with bucket size 1
 INSERT INTO conditions VALUES (0, 1, 1.0);
 
@@ -508,11 +503,6 @@ WHERE user_view_name = 'thresh_2' \gset
 SELECT * FROM _timescaledb_catalog.continuous_aggs_invalidation_threshold
 WHERE hypertable_id = :thresh_hyper_id
 ORDER BY 1,2;
-
--- Test manual invalidation error
-\set ON_ERROR_STOP 0
-SELECT _timescaledb_functions.invalidation_hyper_log_add_entry(:thresh_hyper_id, 1, 0);
-\set ON_ERROR_STOP 1
 
 -- Test that threshold is initilized to min value when there's no data
 -- and we specify an infinite end. Note that the min value may differ
@@ -693,7 +683,7 @@ WHERE cagg_id = :cond_10_id;
 -- should trigger two individual refreshes
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
 
--- Allow at most 5 individual invalidations per refreshe
+-- Allow at most 5 individual invalidations per refresh
 SET timescaledb.materializations_per_refresh_window=5;
 
 -- Insert into every second bucket
@@ -729,3 +719,87 @@ SET timescaledb.materializations_per_refresh_window='-';
 INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
 \set VERBOSITY terse
+RESET timescaledb.materializations_per_refresh_window;
+
+-- Test refresh with undefined invalidation threshold and variable sized buckets
+CREATE TABLE timestamp_ht (
+  time timestamptz NOT NULL,
+  value float
+);
+
+SELECT create_hypertable('timestamp_ht', 'time');
+
+CREATE MATERIALIZED VIEW temperature_4h
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+-- We also treat time_buckets with an hourly interval that uses a time-zone
+-- as a variable see caggtimebucket_validate().
+CREATE MATERIALIZED VIEW temperature_4h_2
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('4 hour', time, 'Europe/Berlin') AS bucket_4h, avg(value) AS average
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', time), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', time, 'Europe/Berlin'), avg(value)
+    FROM timestamp_ht
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month_hierarchical
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', bucket_4h), avg(average)
+    FROM temperature_4h_2
+    GROUP BY 1 ORDER BY 1;
+
+CREATE MATERIALIZED VIEW temperature_1month_hierarchical_ts
+  WITH  (timescaledb.continuous) AS
+  SELECT time_bucket('1 month', bucket_4h, 'Europe/Berlin'), avg(average)
+    FROM temperature_4h_2
+    GROUP BY 1 ORDER BY 1;
+
+---------------------------------------------------------------------
+--- Issue 5474
+---------------------------------------------------------------------
+CREATE TABLE i5474 (
+time timestamptz NOT NULL,
+sensor_id integer NOT NULL,
+cpu double precision NOT NULL,
+temperature double precision NOT NULL);
+
+SELECT create_hypertable('i5474','time');
+
+CREATE MATERIALIZED VIEW i5474_summary_daily
+    WITH (timescaledb.continuous) AS
+        SELECT
+            time_bucket('1 hour', time, 'AWST') AS bucket,
+            sensor_id,
+            avg(cpu) AS avg_cpu
+        FROM i5474
+        GROUP BY bucket, sensor_id;
+
+SELECT add_continuous_aggregate_policy('i5474_summary_daily',
+    start_offset      => NULL,
+    end_offset        => INTERVAL '10 MINUTES',
+    schedule_interval => INTERVAL '1 MINUTE'
+) new_job_id \gset
+
+-- Check that start_offset = NULL is handled properly by the refresh job...
+CALL run_job(:new_job_id);
+
+-- ...and the CAgg can be refreshed afterward
+CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-03-21 05:00:00+00');
+INSERT INTO i5474 (time, sensor_id, cpu, temperature) VALUES ('2000-01-01 05:00:00+00', 1, 1.0, 1.0);
+CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00:00+00');
+
+-- CAgg should be up-to-date now
+CALL refresh_continuous_aggregate('i5474_summary_daily', NULL, '2023-01-01 01:00:00+00');

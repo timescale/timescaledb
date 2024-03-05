@@ -109,10 +109,7 @@ typedef struct CrossModuleFunctions
 	void (*continuous_agg_update_options)(ContinuousAgg *cagg,
 										  WithClauseResult *with_clause_options);
 	PGFunction continuous_agg_validate_query;
-	PGFunction invalidation_cagg_log_add_entry;
-	PGFunction invalidation_hyper_log_add_entry;
-	PGFunction invalidation_process_hypertable_log;
-	PGFunction invalidation_process_cagg_log;
+	PGFunction continuous_agg_get_bucket_function;
 	PGFunction cagg_try_repair;
 
 	PGFunction compressed_data_send;
@@ -126,8 +123,7 @@ typedef struct CrossModuleFunctions
 	PGFunction create_compressed_chunk;
 	PGFunction compress_chunk;
 	PGFunction decompress_chunk;
-	void (*decompress_batches_for_insert)(ChunkInsertState *state, Chunk *chunk,
-										  TupleTableSlot *slot);
+	void (*decompress_batches_for_insert)(const ChunkInsertState *state, TupleTableSlot *slot);
 	bool (*decompress_target_segments)(HypertableModifyState *ht_state);
 	/* The compression functions below are not installed in SQL as part of create extension;
 	 *  They are installed and tested during testing scripts. They are exposed in cross-module
@@ -148,8 +144,6 @@ typedef struct CrossModuleFunctions
 	PGFunction create_chunk;
 	PGFunction show_chunk;
 
-	PGFunction chunk_get_relstats;
-	PGFunction chunk_get_colstats;
 	PGFunction chunk_create_empty_table;
 	PGFunction chunk_freeze_chunk;
 	PGFunction chunk_unfreeze_chunk;

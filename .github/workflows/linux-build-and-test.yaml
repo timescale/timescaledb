@@ -27,7 +27,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Build matrix
       id: set-matrix
@@ -70,14 +70,6 @@ jobs:
       if: runner.os == 'macOS'
       run: |
         brew install gawk
-
-        # Force use of OpenSSL 3.1.4, since OpenSSL 3.2.0 crashes with recent
-        # PostgreSQL versions on OS X (see https://github.com/Homebrew/homebrew-core/issues/155651)
-        brew install --overwrite python@3.12
-        brew unlink openssl@3
-        curl -L https://raw.githubusercontent.com/Homebrew/homebrew-core/e68186ba5a05a6ea9a30d6c7744de9a46bd3aadd/Formula/o/openssl@3.rb > openssl@3.rb
-        brew install openssl@3.rb
-
         # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"
@@ -87,7 +79,7 @@ jobs:
       run: sudo chmod 777 /cores
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     # We are going to rebuild Postgres daily, so that it doesn't suddenly break
     # ages after the original problem.
@@ -109,7 +101,7 @@ jobs:
     - name: Cache PostgreSQL ${{ matrix.pg }} ${{ matrix.build_type }}
       id: cache-postgresql
       if: matrix.snapshot != 'snapshot'
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/${{ env.PG_SRC_DIR }}
         key: "${{ matrix.os }}-postgresql-${{ matrix.pg }}-${{ matrix.cc }}\
@@ -142,7 +134,7 @@ jobs:
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
@@ -152,7 +144,8 @@ jobs:
       run: |
         BUILD_DIR=nossl ./bootstrap -DCMAKE_BUILD_TYPE=Debug \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} -DUSE_OPENSSL=OFF \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C nossl
         make -C nossl install
         make -C nossl regresscheck TESTS=telemetry
@@ -161,7 +154,8 @@ jobs:
       run: |
         ./bootstrap -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DPG_SOURCE_DIR=~/$PG_SRC_DIR -DPG_PATH=~/$PG_INSTALL_DIR \
-          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }}
+          ${{ matrix.tsdb_build_args }} -DCODECOVERAGE=${{ matrix.coverage }} \
+          -DTEST_PG_LOG_DIRECTORY="$(readlink -f .)"
         make -j $MAKE_JOBS -C build
         make -C build install
 
@@ -187,13 +181,13 @@ jobs:
 
     - name: Send coverage report to Codecov.io app
       if: matrix.coverage
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./build/codecov/timescaledb-codecov.info
 
     - name: Save LCOV coverage report
       if: matrix.coverage
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: LCOV coverage report ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: ./build/codecov/codecov-report
@@ -203,7 +197,7 @@ jobs:
       id: collectlogs
       run: |
         find . -name regression.diffs -exec cat {} + > regression.log
-        find . -name postmaster.log -exec cat {} + > postgres.log
+
         if [[ "${{ runner.os }}" == "Linux" ]] ; then
           # wait in case there are in-progress coredumps
           sleep 10
@@ -219,7 +213,7 @@ jobs:
 
     - name: Save regression diffs
       if: always() && steps.collectlogs.outputs.regression_diff == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Regression diff ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |
@@ -228,10 +222,10 @@ jobs:
 
     - name: Save PostgreSQL log
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.*
 
     - name: Stack trace Linux
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'Linux'
@@ -256,7 +250,6 @@ jobs:
           info locals
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
 
     - name: Stack trace macOS
       if: always() && steps.collectlogs.outputs.coredumps == 'true' && runner.os == 'macOS'
@@ -265,14 +258,14 @@ jobs:
 
     - name: Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Coredumps ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: coredumps
 
     - name: Save TAP test logs
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TAP test logs ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
         path: |

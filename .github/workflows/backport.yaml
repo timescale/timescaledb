@@ -17,6 +17,10 @@ on:
       # branches that are not main, so it's inconvenient.
       - backport/trigger
 
+# The workflow needs the permission to push branches
+permissions:
+  contents: write
+
 jobs:
   backport:
     name: Backport Bug Fixes
@@ -33,7 +37,7 @@ jobs:
           pip install PyGithub requests
 
       - name: Checkout TimescaleDB
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run the Backport Script
         env:

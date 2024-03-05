@@ -147,9 +147,8 @@ FROM conditions
 GROUP BY city, bucket
 WITH NO DATA;
 
--- experimental should be FALSE for time_bucket
--- experimental should be TRUE for time_bucket_bg
-SELECT name, bucket_width, experimental FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1;
+SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
+FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1;
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE test WITH (FORCE);

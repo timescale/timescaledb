@@ -1,0 +1,100 @@
+# Test our docker images are built with the most recent version
+# The main purpose of this test is to check the image is working
+# and the latest tag points to an image with the most recent
+# release.
+name: Test Docker images
+"on":
+  schedule:
+    # run daily 0:00 on main branch
+    - cron: '0 0 * * *'
+  push:
+    tags:
+    - '*'
+    branches:
+    - release_test
+    - trigger/package_test
+jobs:
+  docker_tests:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    services:
+      ts:
+        image: timescale/${{ matrix.image }}
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRESQL_PASSWORD: ci
+          REPMGR_PARTNER_NODES: pg-0
+          REPMGR_PRIMARY_HOST: localhost
+          REPMGR_NODE_NAME: pg-0
+          REPMGR_NODE_NETWORK_NAME: localhost
+          REPMGR_USERNAME: postgres
+          REPMGR_PASSWORD: ci
+
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ci
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [
+            "timescaledb:latest-pg13",
+            "timescaledb:latest-pg14",
+            "timescaledb:latest-pg15",
+            "timescaledb:latest-pg16",
+            "timescaledb:latest-pg13-bitnami",
+            "timescaledb:latest-pg14-bitnami",
+            "timescaledb:latest-pg15-bitnami",
+            "timescaledb:latest-pg16-bitnami",
+            "timescaledb:latest-pg13-repmgr-bitnami",
+            "timescaledb:latest-pg14-repmgr-bitnami",
+            "timescaledb:latest-pg15-repmgr-bitnami",
+            "timescaledb:latest-pg16-repmgr-bitnami",
+            "timescaledb-ha:pg13",
+            "timescaledb-ha:pg14",
+            "timescaledb-ha:pg15",
+            "timescaledb-ha:pg16",
+          ]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Read versions
+      id: versions
+      run: |
+        # read expected version from version.config
+        # version will only be a proper version in a release branch so we use update_from_version
+        # as fallback for main
+        if grep '^version = [0-9.]\+$' version.config; then
+          version=$(grep '^version = ' version.config | sed -e 's!^version = !!')
+        else
+          version=$(grep '^update_from_version = ' version.config | sed -e 's!^update_from_version = !!')
+        fi
+        echo "version=${version}" >>$GITHUB_OUTPUT
+
+    - name: Wait for services to start
+      # bitnami images have trouble using the docker builtin healthcheck so we are doing it here
+      run: |
+        sleep 10
+        pg_isready -t 30
+
+    - name: Check version
+      run: |
+        psql -c "SELECT extname,extversion,version() FROM pg_extension WHERE extname='timescaledb'"
+        installed_version=$(psql -X -t \
+          -c "SELECT extversion FROM pg_extension WHERE extname='timescaledb';" | sed -e 's! !!g')
+        if [ "${{ steps.versions.outputs.version }}" != "$installed_version" ];then
+          false
+        fi
+
+    - name: Create hypertable
+      run: |
+        psql -c "$(cat <<SQL
+          CREATE TABLE metrics(time timestamptz, device text, metric text, value float);
+          SELECT create_hypertable('metrics','time');
+        SQL
+        )"
+

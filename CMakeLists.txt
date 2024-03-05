@@ -342,14 +342,17 @@ else()
 endif()
 set(PG_VERSION "${PG_VERSION_MAJOR}.${PG_VERSION_MINOR}")
 
+message(
+  STATUS
+    "Compiling against PostgreSQL version ${PG_VERSION} using pg_config '${PG_CONFIG}'"
+)
+
 # Ensure that PostgreSQL version is supported and consistent with src/compat.h
 # version check
 if((${PG_VERSION_MAJOR} LESS "13")
    OR (${PG_VERSION_MAJOR} GREATER "16")
    AND NOT (${EXPERIMENTAL}))
   message(FATAL_ERROR "TimescaleDB only supports PostgreSQL 13, 14, 15 and 16")
-else()
-  message(STATUS "Compiling against PostgreSQL version ${PG_VERSION}")
 endif()
 
 # Get PostgreSQL configuration from pg_config
@@ -380,8 +383,17 @@ find_path(
   PATH_SUFFIXES postgres postgresql pgsql
   DOC "The path to the PostgreSQL source tree")
 
+option(PG_SOURCE_INCLUDES "Add PG source to include directories" OFF)
+
 if(PG_SOURCE_DIR)
   message(STATUS "Found PostgreSQL source in ${PG_SOURCE_DIR}")
+  if(PG_SOURCE_INCLUDES)
+    # Add the PostgreSQL source dir include directories to the build system
+    # includes BEFORE the installed PG include files. This will allow the LSP
+    # (e.g., clangd) to navigate to the PostgreSQL source instead of the install
+    # path directory that only has the headers.
+    include_directories(BEFORE SYSTEM ${PG_SOURCE_DIR}/src/include)
+  endif(PG_SOURCE_INCLUDES)
 endif(PG_SOURCE_DIR)
 
 set(EXT_CONTROL_FILE ${PROJECT_NAME}.control)

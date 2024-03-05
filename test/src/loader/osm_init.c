@@ -10,6 +10,7 @@
 
 #include "compat/compat.h"
 #include "export.h"
+#include "loader/lwlocks.h"
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -33,6 +34,16 @@ void
 _PG_init(void)
 {
 	elog(WARNING, "OSM-%s _PG_init", OSM_VERSION_MOD);
+	void *osm_lock_pointer = (LWLock **) find_rendezvous_variable(RENDEZVOUS_OSM_PARALLEL_LWLOCK);
+	if (osm_lock_pointer != NULL)
+	{
+		elog(WARNING, "got lwlock osm lock");
+	}
+	else
+	{
+		elog(WARNING, "NO lwlock osm lock");
+	}
+
 	prev_ProcessUtility_hook = ProcessUtility_hook;
 	ProcessUtility_hook = osm_process_utility_hook;
 }

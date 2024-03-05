@@ -31,7 +31,7 @@
 #include "extension_utils.c"
 #include "compat/compat.h"
 
-#define TS_UPDATE_SCRIPT_CONFIG_VAR "timescaledb.update_script_stage"
+#define TS_UPDATE_SCRIPT_CONFIG_VAR MAKE_EXTOPTION("update_script_stage")
 #define POST_UPDATE "post"
 /*
  * The name of the experimental schema.

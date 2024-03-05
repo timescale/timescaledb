@@ -350,7 +350,7 @@ materialization_per_refresh_window(void)
 {
 #define DEFAULT_MATERIALIZATIONS_PER_REFRESH_WINDOW 10
 #define MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME                                               \
-	"timescaledb.materializations_per_refresh_window"
+	MAKE_EXTOPTION("materializations_per_refresh_window")
 
 	const char *max_materializations_setting =
 		GetConfigOption(MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME, true, false);
@@ -824,9 +824,18 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	if (refresh_window.end > invalidation_threshold)
 		refresh_window.end = invalidation_threshold;
 
-	/* Capping the end might have made the window 0, or negative, so
-	 * nothing to refresh in that case */
-	if (refresh_window.start >= refresh_window.end)
+	/* Capping the end might have made the window 0, or negative, so nothing to refresh in that
+	 * case.
+	 *
+	 * For variable width buckets we use a refresh_window.start value that is lower than the
+	 * -infinity value (ts_time_get_nobegin < ts_time_get_min). Therefore, the first check in the
+	 * following if statement is not enough. If the invalidation_threshold returns the min_value for
+	 * the data type, we end up with [nobegin, min_value] which is an invalid time interval.
+	 * Therefore, we have also to check if the invalidation_threshold is defined. If not, no refresh
+	 * is needed.  */
+	if ((refresh_window.start >= refresh_window.end) ||
+		(IS_TIMESTAMP_TYPE(refresh_window.type) &&
+		 invalidation_threshold == ts_time_get_min(refresh_window.type)))
 	{
 		emit_up_to_date_notice(cagg, callctx);
 
@@ -848,7 +857,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
 
-	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id);
+	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_id, false);
 
 	if (!process_cagg_invalidations_and_refresh(cagg, &refresh_window, callctx, INVALID_CHUNK_ID))
 		emit_up_to_date_notice(cagg, callctx);

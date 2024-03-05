@@ -2819,10 +2819,14 @@ process_index_start(ProcessUtilityArgs *args)
 static int
 chunk_index_mappings_cmp(const void *p1, const void *p2)
 {
-	const ChunkIndexMapping *mapping[] = { *((ChunkIndexMapping *const *) p1),
-										   *((ChunkIndexMapping *const *) p2) };
+	const ChunkIndexMapping *lhs = *((ChunkIndexMapping *const *) p1);
+	const ChunkIndexMapping *rhs = *((ChunkIndexMapping *const *) p2);
 
-	return mapping[0]->chunkoid - mapping[1]->chunkoid;
+	if (lhs->chunkoid < rhs->chunkoid)
+		return -1;
+	if (lhs->chunkoid > rhs->chunkoid)
+		return 1;
+	return 0;
 }
 
 /*

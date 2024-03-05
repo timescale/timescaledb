@@ -56,7 +56,6 @@ extern TSDLLEXPORT char *ts_guc_license;
 extern char *ts_last_tune_time;
 extern char *ts_last_tune_version;
 extern TSDLLEXPORT bool ts_guc_enable_2pc;
-extern TSDLLEXPORT int ts_guc_max_insert_batch_size;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;

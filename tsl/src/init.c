@@ -132,10 +132,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_invalidate_mat_ht = continuous_agg_invalidate_mat_ht,
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
-	.invalidation_cagg_log_add_entry = tsl_invalidation_cagg_log_add_entry,
-	.invalidation_hyper_log_add_entry = tsl_invalidation_hyper_log_add_entry,
-	.invalidation_process_hypertable_log = tsl_invalidation_process_hypertable_log,
-	.invalidation_process_cagg_log = tsl_invalidation_process_cagg_log,
+	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */
@@ -171,8 +168,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.chunk_freeze_chunk = chunk_freeze_chunk,
 	.chunk_unfreeze_chunk = chunk_unfreeze_chunk,
 	.set_rel_pathlist = tsl_set_rel_pathlist,
-	.chunk_get_relstats = chunk_api_get_chunk_relstats,
-	.chunk_get_colstats = chunk_api_get_chunk_colstats,
 	.chunk_create_empty_table = chunk_create_empty_table,
 	.recompress_chunk_segmentwise = tsl_recompress_chunk_segmentwise,
 	.get_compressed_chunk_index_for_recompression =
