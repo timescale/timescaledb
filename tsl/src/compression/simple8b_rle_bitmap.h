@@ -73,12 +73,12 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 
 	uint16 *restrict prefix_sums = palloc(sizeof(uint16) * num_elements_padded);
 
-	uint16 current_prefix_sum = 0;
+	uint32 num_ones = 0;
 	uint32 decompressed_index = 0;
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
-		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
-		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint32 selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint32 selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
 		const uint64 slot_value = compressed->slots[selector_slot];
 		const uint8 selector_shift = selector_pos_in_slot * SIMPLE8B_BITS_PER_SELECTOR;
 		const uint64 selector_mask = 0xFULL << selector_shift;
@@ -92,10 +92,15 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			/*
 			 * RLE block.
 			 */
-			const size_t n_block_values = simple8brle_rledata_repeatcount(block_data);
+			const uint32 n_block_values = simple8brle_rledata_repeatcount(block_data);
 			CheckCompressedData(n_block_values <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
-			const bool repeated_value = simple8brle_rledata_value(block_data);
+			/*
+			 * We might get an incorrect value from the corrupt data. Explicitly
+			 * truncate it to 0/1 in case the bool is not a standard bool type
+			 * which would have done it for us.
+			 */
+			const bool repeated_value = simple8brle_rledata_value(block_data) & 1;
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
@@ -103,15 +108,16 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			{
 				for (uint32 i = 0; i < n_block_values; i++)
 				{
-					prefix_sums[decompressed_index + i] = current_prefix_sum + i + 1;
+					prefix_sums[decompressed_index + i] = num_ones + i + 1;
 				}
-				current_prefix_sum += n_block_values;
+
+				num_ones += n_block_values;
 			}
 			else
 			{
 				for (uint32 i = 0; i < n_block_values; i++)
 				{
-					prefix_sums[decompressed_index + i] = current_prefix_sum;
+					prefix_sums[decompressed_index + i] = num_ones;
 				}
 			}
 
@@ -156,9 +162,9 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			{
 				const uint16 word_prefix_sum =
 					__builtin_popcountll(block_data & (-1ULL >> (63 - i)));
-				prefix_sums[decompressed_index + i] = current_prefix_sum + word_prefix_sum;
+				prefix_sums[decompressed_index + i] = num_ones + word_prefix_sum;
 			}
-			current_prefix_sum += __builtin_popcountll(block_data);
+			num_ones += __builtin_popcountll(block_data);
 #else
 			/*
 			 * Unfortunately, we have to have this fallback for Windows.
@@ -166,8 +172,8 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 			for (uint16 i = 0; i < 64; i++)
 			{
 				const bool this_bit = (block_data >> i) & 1;
-				current_prefix_sum += this_bit;
-				prefix_sums[decompressed_index + i] = current_prefix_sum;
+				num_ones += this_bit;
+				prefix_sums[decompressed_index + i] = num_ones;
 			}
 #endif
 			decompressed_index += 64;
@@ -185,12 +191,18 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 	 * Might happen if we have stray ones in the higher unused bits of the last
 	 * block.
 	 */
-	CheckCompressedData(current_prefix_sum <= num_elements);
+	CheckCompressedData(num_ones <= num_elements);
+
+	/*
+	 * Check that the number of ones actually fits into the uint16 counters
+	 * we're using.
+	 */
+	CheckCompressedData(((typeof(*prefix_sums)) num_ones) == num_ones);
 
 	Simple8bRleBitmap result = {
 		.data = prefix_sums,
 		.num_elements = num_elements,
-		.num_ones = current_prefix_sum,
+		.num_ones = num_ones,
 	};
 
 	return result;
@@ -203,7 +215,6 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	CheckCompressedData(compressed->num_blocks <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
 	const uint32 num_elements = compressed->num_elements;
-	uint32 num_ones = 0;
 
 	const uint32 num_selector_slots =
 		simple8brle_num_selector_slots_for_num_blocks(compressed->num_blocks);
@@ -218,11 +229,12 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	const uint32 num_blocks = compressed->num_blocks;
 
 	bool *restrict bitmap_bools_ = palloc(sizeof(bool) * num_elements_padded);
+	uint32 num_ones = 0;
 	uint32 decompressed_index = 0;
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
-		const int selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
-		const int selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint32 selector_slot = block_index / SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
+		const uint32 selector_pos_in_slot = block_index % SIMPLE8B_SELECTORS_PER_SELECTOR_SLOT;
 		const uint64 slot_value = compressed->slots[selector_slot];
 		const uint8 selector_shift = selector_pos_in_slot * SIMPLE8B_BITS_PER_SELECTOR;
 		const uint64 selector_mask = 0xFULL << selector_shift;
@@ -248,10 +260,6 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 
 			CheckCompressedData(decompressed_index + n_block_values <= num_elements);
 
-			/*
-			 * Write out the loop for both true and false, so that it becomes a
-			 * simple memset.
-			 */
 			if (repeated_value)
 			{
 				for (uint32 i = 0; i < n_block_values; i++)
@@ -310,10 +318,10 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 #endif
 			for (uint16 i = 0; i < 64; i++)
 			{
-				const uint64 value = (block_data >> i) & 1;
-				bitmap_bools_[decompressed_index + i] = value;
+				const bool this_bit = (block_data >> i) & 1;
+				bitmap_bools_[decompressed_index + i] = this_bit;
 #ifndef HAVE__BUILTIN_POPCOUNT
-				num_ones += value;
+				num_ones += this_bit;
 #endif
 			}
 			decompressed_index += 64;
@@ -334,8 +342,8 @@ simple8brle_bitmap_decompress(Simple8bRleSerialized *compressed)
 	CheckCompressedData(num_ones <= num_elements);
 
 	Simple8bRleBitmap result = {
-		.num_elements = num_elements,
 		.data = bitmap_bools_,
+		.num_elements = num_elements,
 		.num_ones = num_ones,
 	};
 
