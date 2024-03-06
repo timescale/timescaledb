@@ -16,15 +16,11 @@
  * expected function struct.
  */
 BatchQueue *
-batch_queue_fifo_create(int num_compressed_cols, Size batch_memory_context_bytes,
-						const BatchQueueFunctions *funcs)
+batch_queue_fifo_create(int num_compressed_cols, const BatchQueueFunctions *funcs)
 {
 	BatchQueue *bq = palloc0(sizeof(BatchQueue));
 
-	batch_array_init(&bq->batch_array,
-					 INITIAL_BATCH_CAPACITY,
-					 num_compressed_cols,
-					 batch_memory_context_bytes);
+	batch_array_init(&bq->batch_array, INITIAL_BATCH_CAPACITY, num_compressed_cols);
 	bq->funcs = funcs;
 
 	return bq;

@@ -246,7 +246,7 @@ detoaster_close(Detoaster *detoaster)
  * the chunks saved in the toast relation.
  */
 static struct varlena *
-ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster)
+ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster, MemoryContext dest_mctx)
 {
 	struct varlena *result;
 	struct varatt_external toast_pointer;
@@ -260,7 +260,7 @@ ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster)
 
 	attrsize = VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer);
 
-	result = (struct varlena *) palloc(attrsize + VARHDRSZ);
+	result = (struct varlena *) MemoryContextAlloc(dest_mctx, attrsize + VARHDRSZ);
 
 	if (TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer))
 		SET_VARSIZE_COMPRESSED(result, attrsize + VARHDRSZ);
@@ -341,7 +341,7 @@ ts_toast_decompress_datum(struct varlena *attr)
  * and skip some cases that don't occur for the toasted compressed data.
  */
 struct varlena *
-detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
+detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster, MemoryContext dest_mctx)
 {
 	if (!VARATT_IS_EXTENDED(attr))
 	{
@@ -354,13 +354,16 @@ detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 		/*
 		 * This is an externally stored datum --- fetch it back from there.
 		 */
-		attr = ts_toast_fetch_datum(attr, detoaster);
+		attr = ts_toast_fetch_datum(attr, detoaster, dest_mctx);
 		/* If it's compressed, decompress it */
 		if (VARATT_IS_COMPRESSED(attr))
 		{
 			struct varlena *tmp = attr;
 
+			MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
 			attr = ts_toast_decompress_datum(tmp);
+			MemoryContextSwitchTo(old_context);
+
 			pfree(tmp);
 		}
 
@@ -385,7 +388,13 @@ detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 		 * occurs in practice, because we set a low toast_tuple_target = 128
 		 * for the compressed chunks, but is still technically possible.
 		 */
-		return ts_toast_decompress_datum(attr);
+		struct varlena *tmp = attr;
+
+		MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
+		attr = ts_toast_decompress_datum(tmp);
+		MemoryContextSwitchTo(old_context);
+
+		pfree(tmp);
 	}
 
 	/*
@@ -406,7 +415,7 @@ detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster)
 	Size new_size = data_size + VARHDRSZ;
 	struct varlena *new_attr;
 
-	new_attr = (struct varlena *) palloc(new_size);
+	new_attr = (struct varlena *) MemoryContextAlloc(dest_mctx, new_size);
 	SET_VARSIZE(new_attr, new_size);
 	memcpy(VARDATA(new_attr), VARDATA_SHORT(attr), data_size);
 	attr = new_attr;

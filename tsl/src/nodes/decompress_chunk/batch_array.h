@@ -25,13 +25,11 @@ typedef struct BatchArray
 	int n_batch_state_bytes;
 	int n_columns_per_batch;
 	Bitmapset *unused_batch_states; /* The unused batch states */
-	int batch_memory_context_bytes;
 } BatchArray;
 /*
  * Create states to hold information for up to n batches
  */
-void batch_array_init(BatchArray *array, int nbatches, int ncolumns_per_batch,
-					  Size memory_context_block_size_bytes);
+void batch_array_init(BatchArray *array, int nbatches, int ncolumns_per_batch);
 
 void batch_array_destroy(BatchArray *array);
 

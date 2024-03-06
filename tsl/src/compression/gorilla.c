@@ -838,14 +838,12 @@ gorilla_decompression_iterator_try_next_reverse(DecompressionIterator *iter_base
 
 #define MAX_NUM_LEADING_ZEROS_PADDED_N64 (((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * 64)
 
-uint32 unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest);
-
 /*
  * Decompress packed 6bit values in lanes that contain a round number of both
  * packed and unpacked bytes -- 4 6-bit values are packed into 3 8-bit values.
  */
-uint32
-unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
+static uint8 *
+unpack_leading_zeros_array(BitArray *bitarray, uint32 *_n)
 {
 #define LANE_INPUTS 3
 #define LANE_OUTPUTS 4
@@ -864,6 +862,7 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 	const uint32 n_lanes = (n_bytes_packed + LANE_INPUTS - 1) / LANE_INPUTS;
 	const uint32 n_outputs = n_lanes * LANE_OUTPUTS;
 	CheckCompressedData(n_outputs <= MAX_NUM_LEADING_ZEROS_PADDED_N64);
+	uint8 *restrict dest = palloc(n_outputs);
 
 	for (uint32 lane = 0; lane < n_lanes; lane++)
 	{
@@ -888,7 +887,8 @@ unpack_leading_zeros_array(BitArray *bitarray, uint8 *restrict dest)
 #undef LANE_INPUTS
 #undef LANE_OUTPUTS
 
-	return n_outputs;
+	*_n = n_outputs;
+	return dest;
 }
 
 /* Bulk gorilla decompression, specialized for supported data types. */

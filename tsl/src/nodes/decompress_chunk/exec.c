@@ -346,54 +346,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	Assert(current_not_compressed == num_total);
 
 	/*
-	 * Calculate the desired size of the batch memory context. Especially if we
-	 * use bulk decompression, the results should fit into the first page of the
-	 * context, otherwise it's going to do malloc/free on every
-	 * MemoryContextReset.
-	 *
-	 * Start with the default size.
-	 */
-	Size batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
-
-	if (dcontext->enable_bulk_decompression)
-	{
-		for (int i = 0; i < num_total; i++)
-		{
-			CompressionColumnDescription *column = &dcontext->template_columns[i];
-			if (column->bulk_decompression_supported)
-			{
-				/*
-				 * Values array, with 64 element padding (actually we have less).
-				 *
-				 * For variable-length types (we only have text) we can't
-				 * estimate the width currently.
-				 */
-				batch_memory_context_bytes += (GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) *
-											  (column->value_bytes > 0 ? column->value_bytes : 16);
-				/* Nulls bitmap, one uint64 per 64 rows. */
-				batch_memory_context_bytes +=
-					((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * sizeof(uint64);
-				/* Arrow data structure. */
-				batch_memory_context_bytes += sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
-				/* Memory context header overhead for the above parts. */
-				batch_memory_context_bytes += sizeof(void *) * 3;
-			}
-		}
-	}
-
-	/* Round up to even number of 4k pages. */
-	batch_memory_context_bytes = ((batch_memory_context_bytes + 4095) / 4096) * 4096;
-
-	/* As a precaution, limit it to 1MB. */
-	batch_memory_context_bytes = Min(batch_memory_context_bytes, 1 * 1024 * 1024);
-
-	elog(DEBUG3,
-		 "Batch memory context has initial capacity of %zu bytes",
-		 batch_memory_context_bytes);
-
-	dcontext->batch_memory_context_bytes = batch_memory_context_bytes;
-
-	/*
 	 * Choose which batch queue we are going to use: heap for batch sorted
 	 * merge, and one-element FIFO for normal decompression.
 	 */
@@ -401,7 +353,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		chunk_state->batch_queue =
 			batch_queue_heap_create(num_compressed,
-									batch_memory_context_bytes,
 									chunk_state->sortinfo,
 									dcontext->decompressed_slot->tts_tupleDescriptor,
 									&BatchQueueFunctionsHeap);
@@ -409,9 +360,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	else
 	{
-		chunk_state->batch_queue = batch_queue_fifo_create(num_compressed,
-														   batch_memory_context_bytes,
-														   &BatchQueueFunctionsFifo);
+		chunk_state->batch_queue =
+			batch_queue_fifo_create(num_compressed, &BatchQueueFunctionsFifo);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 
@@ -484,8 +434,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	/* Init per batch memory context */
 	Assert(batch_state != NULL);
 	Assert(batch_state->per_batch_context == NULL);
-	batch_state->per_batch_context =
-		create_per_batch_mctx(batch_queue->batch_array.batch_memory_context_bytes);
+	batch_state->per_batch_context = create_per_batch_mctx();
 	Assert(batch_state->per_batch_context != NULL);
 
 	/* Init bulk decompression memory context */
@@ -597,7 +546,8 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			CompressedDataHeader *header =
 				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
 																	value),
-																&dcontext->detoaster);
+																&dcontext->detoaster,
+																CurrentMemoryContext);
 
 			ArrowArray *arrow = NULL;
 

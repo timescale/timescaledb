@@ -1654,7 +1654,8 @@ decompress_batch(RowDecompressor *decompressor)
 		Datum compressed_datum = PointerGetDatum(
 			detoaster_detoast_attr((struct varlena *) DatumGetPointer(
 									   decompressor->compressed_datums[input_column]),
-								   &decompressor->detoaster));
+								   &decompressor->detoaster,
+								   CurrentMemoryContext));
 		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
 		column_info->iterator =
 			definitions[header->compression_algorithm]
