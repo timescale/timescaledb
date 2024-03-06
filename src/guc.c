@@ -62,6 +62,7 @@ bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
+TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
@@ -436,6 +437,26 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	/*
+	 * Define the limit on number of invalidation-based refreshes we allow per
+	 * refresh call. If this limit is exceeded, fall back to a single refresh that
+	 * covers the range decided by the min and max invalidated time.
+	 */
+	DefineCustomIntVariable(MAKE_EXTOPTION("materializations_per_refresh_window"),
+							"Max number of materializations per cagg refresh window",
+							"The maximal number of individual refreshes per cagg refresh. If more "
+							"refreshes need to be performed, they are merged into a larger "
+							"single refresh.",
+							&ts_guc_cagg_max_individual_materializations,
+							10,
+							0,
+							INT_MAX,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
 
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_tiered_reads"),
 							 "Enable tiered data reads",

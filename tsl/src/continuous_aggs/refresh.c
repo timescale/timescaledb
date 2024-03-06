@@ -55,7 +55,6 @@ static void continuous_agg_refresh_execute(const CaggRefreshState *refresh,
 										   const int32 chunk_id);
 static void log_refresh_window(int elevel, const ContinuousAgg *cagg,
 							   const InternalTimeRange *refresh_window, const char *msg);
-static long materialization_per_refresh_window(void);
 static void continuous_agg_refresh_execute_wrapper(const InternalTimeRange *bucketed_refresh_window,
 												   const long iteration, void *arg1_refresh,
 												   void *arg2_chunk_id);
@@ -336,53 +335,6 @@ log_refresh_window(int elevel, const ContinuousAgg *cagg, const InternalTimeRang
 		 DatumGetCString(OidFunctionCall1(outfuncid, end_ts)));
 }
 
-/*
- * Get the limit on number of invalidation-based refreshes we allow per
- * refresh call. If this limit is exceeded, fall back to a single refresh that
- * covers the range decided by the min and max invalidated time.
- *
- * Use a session variable for debugging and testing. In other words, this
- * purposefully not a user-visible GUC. Might be promoted to official GUC in
- * the future.
- */
-static long
-materialization_per_refresh_window(void)
-{
-#define DEFAULT_MATERIALIZATIONS_PER_REFRESH_WINDOW 10
-#define MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME                                               \
-	MAKE_EXTOPTION("materializations_per_refresh_window")
-
-	const char *max_materializations_setting =
-		GetConfigOption(MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME, true, false);
-	long max_materializations = DEFAULT_MATERIALIZATIONS_PER_REFRESH_WINDOW;
-
-	if (max_materializations_setting)
-	{
-		char *endptr = NULL;
-
-		/* Not using pg_strtol here since we don't want to throw error in case
-		 * of parsing issue */
-		max_materializations = strtol(max_materializations_setting, &endptr, 10);
-
-		/* Accept trailing whitespaces */
-		while (*endptr == ' ')
-			endptr++;
-
-		if (*endptr != '\0')
-		{
-			ereport(WARNING,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("invalid value for session variable \"%s\"",
-							MATERIALIZATIONS_PER_REFRESH_WINDOW_OPT_NAME),
-					 errdetail("Expected an integer but current value is \"%s\".",
-							   max_materializations_setting)));
-			max_materializations = DEFAULT_MATERIALIZATIONS_PER_REFRESH_WINDOW;
-		}
-	}
-
-	return max_materializations;
-}
-
 typedef void (*scan_refresh_ranges_funct_t)(const InternalTimeRange *bucketed_refresh_window,
 											const long iteration, /* 0 is first range */
 											void *arg1, void *arg2);
@@ -661,7 +613,6 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	Oid hyper_relid = ts_hypertable_id_to_relid(cagg->data.mat_hypertable_id, false);
 	bool do_merged_refresh = false;
 	InternalTimeRange merged_refresh_window;
-	long max_materializations;
 
 	/* Lock the continuous aggregate's materialized hypertable to protect
 	 * against concurrent refreshes. Only concurrent reads will be
@@ -674,12 +625,11 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	LockRelationOid(hyper_relid, ExclusiveLock);
 	const CaggsInfo all_caggs_info =
 		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	max_materializations = materialization_per_refresh_window();
 	invalidations = invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
 												  cagg->data.raw_hypertable_id,
 												  refresh_window,
 												  &all_caggs_info,
-												  max_materializations,
+												  ts_guc_cagg_max_individual_materializations,
 												  &do_merged_refresh,
 												  &merged_refresh_window);
 
