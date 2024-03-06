@@ -122,16 +122,19 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
  * threshold. For small queries, these contexts are basically single-shot and
  * the page faults after an mmap slow them down significantly. The threshold
  * should be 128 kiB according to the docs, but I'm seeing 64 kiB in testing.
+ *
+ * If bulk decompression is not used, use the default size for batch context.
+ * This reduces memory usage and improves performance with batch sorted merge.
  */
 #define create_bulk_decompression_mctx(parent_mctx)                                                \
 	GenerationContextCreateCompat(parent_mctx,                                                     \
 								  "DecompressBatchState bulk decompression",                       \
 								  64 * 1024);
 
-#define create_per_batch_mctx()                                                                    \
+#define create_per_batch_mctx(dcontext)                                                            \
 	GenerationContextCreateCompat(CurrentMemoryContext,                                            \
 								  "DecompressBatchState per-batch",                                \
-								  64 * 1024);
+								  dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024);
 
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 

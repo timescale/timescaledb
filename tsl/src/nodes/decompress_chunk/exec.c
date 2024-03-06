@@ -434,7 +434,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	/* Init per batch memory context */
 	Assert(batch_state != NULL);
 	Assert(batch_state->per_batch_context == NULL);
-	batch_state->per_batch_context = create_per_batch_mctx();
+	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
 	Assert(batch_state->per_batch_context != NULL);
 
 	/* Init bulk decompression memory context */

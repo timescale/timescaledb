@@ -599,7 +599,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 						   TupleTableSlot *compressed_slot)
 {
 	/* Init memory context */
-	batch_state->per_batch_context = create_per_batch_mctx();
+	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
 	Assert(batch_state->per_batch_context != NULL);
 
 	Assert(batch_state->compressed_slot == NULL);
