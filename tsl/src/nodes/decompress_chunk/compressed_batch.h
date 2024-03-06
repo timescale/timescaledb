@@ -124,18 +124,14 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
  * should be 128 kiB according to the docs, but I'm seeing 64 kiB in testing.
  */
 #define create_bulk_decompression_mctx(parent_mctx)                                                \
-	GenerationContextCreate(parent_mctx,                                                           \
-							"DecompressBatchState bulk decompression",                             \
-							/* minContextSize = */ 0,                                              \
-							/* initBlockSize = */ 64 * 1024,                                       \
-							/* maxBlockSize = */ 64 * 1024);
+	GenerationContextCreateCompat(parent_mctx,                                                     \
+								  "DecompressBatchState bulk decompression",                       \
+								  64 * 1024);
 
 #define create_per_batch_mctx()                                                                    \
-	GenerationContextCreate(CurrentMemoryContext,                                                  \
-							"DecompressBatchState per-batch",                                      \
-							0,                                                                     \
-							64 * 1024,                                                             \
-							64 * 1024);
+	GenerationContextCreateCompat(CurrentMemoryContext,                                            \
+								  "DecompressBatchState per-batch",                                \
+								  64 * 1024);
 
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 
