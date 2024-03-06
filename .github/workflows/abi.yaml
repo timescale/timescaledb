@@ -77,6 +77,9 @@ jobs:
             pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.18
             tester: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
+            # this test has issues with 16.0 version of pg_dump binary
+            # which affects backwards test only 
+            ignores: pg_dump_unprivileged
           - dir: forward
             pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
@@ -134,8 +137,8 @@ jobs:
       id: collectlogs
       run: |
         sudo chmod a+rw .
-        sudo find . -name regression.diffs -exec cat {} + > regression.log
-        sudo find . -name postmaster.log -exec cat {} + > postgres.log
+        sudo find build_abi -name regression.diffs -exec cat {} + > regression.log
+        sudo find build_abi -name postmaster.log -exec cat {} + > postmaster.log
         if [[ -s regression.log ]]; then echo "regression_diff=true" >>$GITHUB_OUTPUT; fi
         grep -e 'FAILED' -e 'failed (ignored)' -e 'not ok' installcheck.log || true
         cat regression.log
@@ -152,5 +155,5 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log ABI Breakage ${{ matrix.dir }} PG${{ matrix.pg }}
-        path: postgres.log
+        path: postmaster.log
 

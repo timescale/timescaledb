@@ -3,6 +3,8 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 \set ECHO ALL
 CREATE VIEW settings AS SELECT * FROM _timescaledb_catalog.compression_settings ORDER BY upper(relid::text) COLLATE "C";
+CREATE VIEW ht_settings AS SELECT * FROM timescaledb_information.hypertable_compression_settings ORDER BY upper(hypertable::text) COLLATE "C";
+CREATE VIEW chunk_settings AS SELECT * FROM timescaledb_information.chunk_compression_settings ORDER BY upper(hypertable::text) COLLATE "C", upper(chunk::text) COLLATE "C";
 CREATE TABLE metrics(time timestamptz not null, device text, value float);
 SELECT table_name FROM create_hypertable('metrics','time');
  table_name 
@@ -16,6 +18,17 @@ SELECT * FROM settings;
 ---------+-----------+---------+--------------+--------------------
  metrics | {device}  | {time}  | {t}          | {t}
 (1 row)
+
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    | device    | "time" DESC | 
+(1 row)
+
+SELECT * FROM chunk_settings;
+ hypertable | chunk | segmentby | orderby 
+------------+-------+-----------+---------
+(0 rows)
 
 -- create 2 chunks
 INSERT INTO metrics VALUES ('2000-01-01'), ('2001-01-01');
@@ -36,12 +49,18 @@ INFO:  compress_chunk_tuplesort_start
 (1 row)
 
 RESET timescaledb.debug_compression_path_info;
-SELECT * FROM _timescaledb_catalog.compression_settings;
+SELECT * FROM settings;
                      relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
 ------------------------------------------------+-----------+---------+--------------+--------------------
  metrics                                        | {device}  | {time}  | {t}          | {t}
  _timescaledb_internal.compress_hyper_2_3_chunk | {device}  | {time}  | {t}          | {t}
 (2 rows)
+
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_1_1_chunk | device    | "time" DESC
+(1 row)
 
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
              compress_chunk             
@@ -57,6 +76,13 @@ SELECT * FROM settings;
  _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
 (3 rows)
 
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_1_1_chunk | device    | "time" DESC
+ metrics    | _timescaledb_internal._hyper_1_2_chunk | device    | "time" DESC
+(2 rows)
+
 -- dropping chunk should remove that chunks compression settings
 DROP TABLE _timescaledb_internal._hyper_1_1_chunk;
 SELECT * FROM settings;
@@ -65,6 +91,12 @@ SELECT * FROM settings;
  metrics                                        | {device}  | {time}  | {t}          | {t}
  _timescaledb_internal.compress_hyper_2_4_chunk | {device}  | {time}  | {t}          | {t}
 (2 rows)
+
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_1_2_chunk | device    | "time" DESC
+(1 row)
 
 -- decompress_chunk should remove settings for that chunk
 SELECT decompress_chunk('_timescaledb_internal._hyper_1_2_chunk');
@@ -78,6 +110,11 @@ SELECT * FROM settings;
 ---------+-----------+---------+--------------+--------------------
  metrics | {device}  | {time}  | {t}          | {t}
 (1 row)
+
+SELECT * FROM chunk_settings;
+ hypertable | chunk | segmentby | orderby 
+------------+-------+-----------+---------
+(0 rows)
 
 -- compress_chunk should add settings back
 SELECT compress_chunk('_timescaledb_internal._hyper_1_2_chunk');
@@ -93,11 +130,27 @@ SELECT * FROM settings;
  _timescaledb_internal.compress_hyper_2_5_chunk | {device}  | {time}  | {t}          | {t}
 (2 rows)
 
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_1_2_chunk | device    | "time" DESC
+(1 row)
+
 -- dropping hypertable should remove all settings
 DROP TABLE metrics;
 SELECT * FROM settings;
  relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
 -------+-----------+---------+--------------+--------------------
+(0 rows)
+
+SELECT * FROM ht_settings;
+ hypertable | segmentby | orderby | compress_interval_length 
+------------+-----------+---------+--------------------------
+(0 rows)
+
+SELECT * FROM chunk_settings;
+ hypertable | chunk | segmentby | orderby 
+------------+-------+-----------+---------
 (0 rows)
 
 CREATE TABLE metrics(time timestamptz not null, d1 text, d2 text, value float);
@@ -115,6 +168,12 @@ SELECT * FROM settings;
  metrics |           | {time}  | {t}          | {t}
 (1 row)
 
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    |           | "time" DESC | 
+(1 row)
+
 -- create chunk
 INSERT INTO metrics VALUES ('2000-01-01');
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1');
@@ -123,6 +182,12 @@ SELECT * FROM settings;
   relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
 ---------+-----------+---------+--------------+--------------------
  metrics | {d1}      | {time}  | {t}          | {t}
+(1 row)
+
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    | d1        | "time" DESC | 
 (1 row)
 
 SELECT compress_chunk(show_chunks('metrics'));
@@ -139,6 +204,12 @@ SELECT * FROM settings;
  _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
 (2 rows)
 
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_3_6_chunk | d1        | "time" DESC
+(1 row)
+
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d2');
 SELECT * FROM settings;
@@ -148,6 +219,18 @@ SELECT * FROM settings;
  _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
 (2 rows)
 
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    | d2        | "time" DESC | 
+(1 row)
+
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_3_6_chunk | d1        | "time" DESC
+(1 row)
+
 -- changing settings should update settings for hypertable but not existing compressed chunks
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
 SELECT * FROM settings;
@@ -156,6 +239,18 @@ SELECT * FROM settings;
  metrics                                        |           | {time}  | {t}          | {t}
  _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
 (2 rows)
+
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    |           | "time" DESC | 
+(1 row)
+
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_3_6_chunk | d1        | "time" DESC
+(1 row)
 
 -- create another chunk
 INSERT INTO metrics VALUES ('2000-02-01');
@@ -175,23 +270,23 @@ SELECT * FROM settings;
  _timescaledb_internal.compress_hyper_4_9_chunk |           | {time}  | {t}          | {t}
 (3 rows)
 
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    |           | "time" DESC | 
+(1 row)
+
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_3_6_chunk | d1        | "time" DESC
+ metrics    | _timescaledb_internal._hyper_3_8_chunk |           | "time" DESC
+(2 rows)
+
 ALTER TABLE metrics SET (timescaledb.compress_segmentby='d2');
 SELECT format('%I.%I', schema_name, table_name) AS "CHUNK" FROM _timescaledb_catalog.chunk WHERE compressed_chunk_id IS NOT NULL ORDER BY id LIMIT 1 OFFSET 1\gset
 -- recompressing chunks should apply current hypertable settings
-SELECT decompress_chunk(:'CHUNK');
-            decompress_chunk            
-----------------------------------------
- _timescaledb_internal._hyper_3_8_chunk
-(1 row)
-
-SELECT * FROM settings;
-                     relid                      | segmentby | orderby | orderby_desc | orderby_nullsfirst 
-------------------------------------------------+-----------+---------+--------------+--------------------
- metrics                                        | {d2}      | {time}  | {t}          | {t}
- _timescaledb_internal.compress_hyper_4_7_chunk | {d1}      | {time}  | {t}          | {t}
-(2 rows)
-
-SELECT compress_chunk(:'CHUNK');
+SELECT compress_chunk(:'CHUNK', recompress:=true);
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_8_chunk
@@ -204,4 +299,70 @@ SELECT * FROM settings;
  _timescaledb_internal.compress_hyper_4_10_chunk | {d2}      | {time}  | {t}          | {t}
  _timescaledb_internal.compress_hyper_4_7_chunk  | {d1}      | {time}  | {t}          | {t}
 (3 rows)
+
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    | d2        | "time" DESC | 
+(1 row)
+
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_3_6_chunk | d1        | "time" DESC
+ metrics    | _timescaledb_internal._hyper_3_8_chunk | d2        | "time" DESC
+(2 rows)
+
+-- test different order by flags with compression settings view
+CREATE TABLE metrics2(time timestamptz not null, d1 text, d2 text, value float);
+SELECT create_hypertable('metrics2','time');
+   create_hypertable   
+-----------------------
+ (5,public,metrics2,t)
+(1 row)
+
+SELECT * FROM ht_settings;
+ hypertable | segmentby |   orderby   | compress_interval_length 
+------------+-----------+-------------+--------------------------
+ metrics    | d2        | "time" DESC | 
+ metrics2   |           |             | 
+(2 rows)
+
+ALTER TABLE metrics2 SET (timescaledb.compress_orderby='d1 NULLS FIRST, d2 NULLS LAST, time, value ASC');
+SELECT * FROM ht_settings;
+ hypertable | segmentby |            orderby             | compress_interval_length 
+------------+-----------+--------------------------------+--------------------------
+ metrics    | d2        | "time" DESC                    | 
+ metrics2   |           | d1 NULLS FIRST,d2,"time",value | 
+(2 rows)
+
+ALTER TABLE metrics2 SET (timescaledb.compress_orderby='d1 DESC NULLS LAST, d2 ASC NULLS FIRST, value DESC, time ASC NULLS FIRST');
+SELECT * FROM ht_settings;
+ hypertable | segmentby |                             orderby                             | compress_interval_length 
+------------+-----------+-----------------------------------------------------------------+--------------------------
+ metrics    | d2        | "time" DESC                                                     | 
+ metrics2   |           | d1 DESC NULLS LAST,d2 NULLS FIRST,value DESC,"time" NULLS FIRST | 
+(2 rows)
+
+-- test decompression uses the correct settings
+ALTER TABLE metrics SET (timescaledb.compress_segmentby='');
+SELECT compress_chunk(show_chunks('metrics'), recompress:=true);
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_3_6_chunk
+ _timescaledb_internal._hyper_3_8_chunk
+(2 rows)
+
+ALTER TABLE metrics SET (timescaledb.compress_segmentby='d1,d2');
+SELECT * FROM chunk_settings;
+ hypertable |                 chunk                  | segmentby |   orderby   
+------------+----------------------------------------+-----------+-------------
+ metrics    | _timescaledb_internal._hyper_3_6_chunk |           | "time" DESC
+ metrics    | _timescaledb_internal._hyper_3_8_chunk |           | "time" DESC
+(2 rows)
+
+SELECT * FROM metrics WHERE d1 = 'foo';
+ time | d1 | d2 | value 
+------+----+----+-------
+(0 rows)
 

@@ -28,7 +28,7 @@ jobs:
         # If needed, install them before opening the core dump.
         sudo apt-get update
         sudo apt-get install 7zip clang lld llvm flex bison libipc-run-perl \
-          libtest-most-perl tree
+          libtest-most-perl tree jq
 
     - name: Checkout TimescaleDB
       uses: actions/checkout@v4
@@ -134,6 +134,7 @@ jobs:
     env:
       PG_SRC_DIR: pgbuild
       PG_INSTALL_DIR: postgresql
+      JOB_NAME: Fuzz decompression ${{ matrix.case.algo }} ${{ matrix.case.pgtype }} ${{ matrix.case.bulk && 'bulk' || 'rowbyrow' }}
 
     steps:
     - name: Install Linux dependencies
@@ -204,7 +205,9 @@ jobs:
         export PGPORT=5432
         export PGDATABASE=postgres
         export PATH=$HOME/$PG_INSTALL_DIR/bin:$PATH
-        pg_ctl -l postgres.log start
+        pg_ctl -o "-clogging_collector=true" -o "-clog_destination=jsonlog,stderr" \
+            -o "-clog_directory=$(readlink -f .)" -o "-clog_filename=postmaster.log" \
+            -o "-clog_error_verbosity=verbose" start
 
         psql -c "create extension timescaledb;"
 
@@ -265,7 +268,7 @@ jobs:
         [ $errors -eq 0 ] || exit 1
 
         # Shouldn't have any WARNINGS in the log.
-        ! grep -F "] WARNING: " postgres.log
+        ! grep -F "] WARNING: " postmaster.log
 
         # Check that the server is still alive.
         psql -c "select 1"
@@ -285,7 +288,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL log for ${{ steps.config.outputs.name }}
-        path: postgres.log
+        path: postgres.*
 
     - name: Save fuzzer-generated crash cases
       if: always()
@@ -350,7 +353,6 @@ jobs:
           bt full
         " 2>&1 | tee stacktrace.log
         ./scripts/bundle_coredumps.sh
-        grep -C40 "was terminated by signal" postgres.log > postgres-failure.log ||:
         exit 1 # Fail the job if we have core dumps.
 
     - name: Upload core dumps
@@ -359,3 +361,24 @@ jobs:
       with:
         name: Coredumps for ${{ steps.config.outputs.name }}
         path: coredumps
+
+    - name: Upload test results to the database
+      if: always()
+      env:
+        CI_STATS_DB: ${{ secrets.CI_STATS_DB }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_REF_NAME: ${{ github.ref_name }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        JOB_STATUS: ${{ job.status }}
+      run: |
+        if [[ "${{ github.event_name }}" == "pull_request" ]] ;
+        then
+            GITHUB_PR_NUMBER="${{ github.event.number }}"
+        else
+            GITHUB_PR_NUMBER=0
+        fi
+        export GITHUB_PR_NUMBER
+        scripts/upload_ci_stats.sh

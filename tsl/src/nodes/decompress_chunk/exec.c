@@ -486,8 +486,21 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	/* Two columns are decompressed, the column that needs to be aggregated and the count column */
 	Assert(dcontext->num_total_columns == 2);
 
-	CompressionColumnDescription *column_description = &dcontext->template_columns[0];
-	Assert(dcontext->template_columns[1].type == COUNT_COLUMN);
+	CompressionColumnDescription *value_column_description = &dcontext->template_columns[0];
+	CompressionColumnDescription *count_column_description = &dcontext->template_columns[1];
+	if (count_column_description->type != COUNT_COLUMN)
+	{
+		/*
+		 * The count and value columns can go in different order based on their
+		 * order in compressed chunk, so check which one we are seeing.
+		 */
+		CompressionColumnDescription *tmp = value_column_description;
+		value_column_description = count_column_description;
+		count_column_description = tmp;
+	}
+	Assert(value_column_description->type == COMPRESSED_COLUMN ||
+		   value_column_description->type == SEGMENTBY_COLUMN);
+	Assert(count_column_description->type == COUNT_COLUMN);
 
 	/* Get a free batch slot */
 	const int new_batch_index = batch_array_get_unused_slot(&batch_queue->batch_array);
@@ -521,14 +534,12 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 	int64 result_sum = 0;
 
-	if (column_description->type == SEGMENTBY_COLUMN)
+	if (value_column_description->type == SEGMENTBY_COLUMN)
 	{
 		/*
 		 * To calculate the sum for a segment by value, we need to multiply the value of the segment
 		 * by column with the number of compressed tuples in this batch.
 		 */
-		CompressionColumnDescription *column_description_count = &dcontext->template_columns[1];
-
 		while (true)
 		{
 			TupleTableSlot *compressed_slot =
@@ -545,13 +556,13 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			bool isnull_value, isnull_elements;
 			Datum value = slot_getattr(compressed_slot,
-									   column_description->compressed_scan_attno,
+									   value_column_description->compressed_scan_attno,
 									   &isnull_value);
 
 			/* We have multiple compressed tuples for this segment by value. Get number of
 			 * compressed tuples */
 			Datum elements = slot_getattr(compressed_slot,
-										  column_description_count->compressed_scan_attno,
+										  count_column_description->compressed_scan_attno,
 										  &isnull_elements);
 
 			if (!isnull_value && !isnull_elements)
@@ -582,10 +593,10 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			MemoryContextSwitchTo(old_mctx);
 		}
 	}
-	else if (column_description->type == COMPRESSED_COLUMN)
+	else if (value_column_description->type == COMPRESSED_COLUMN)
 	{
 		Assert(dcontext->enable_bulk_decompression);
-		Assert(column_description->bulk_decompression_supported);
+		Assert(value_column_description->bulk_decompression_supported);
 		Assert(list_length(aggref->args) == 1);
 
 		while (true)
@@ -603,8 +614,9 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			/* Decompress data */
 			bool isnull;
-			Datum value =
-				slot_getattr(compressed_slot, column_description->compressed_scan_attno, &isnull);
+			Datum value = slot_getattr(compressed_slot,
+									   value_column_description->compressed_scan_attno,
+									   &isnull);
 
 			Ensure(isnull == false, "got unexpected NULL attribute value from compressed batch");
 
@@ -620,13 +632,13 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 			DecompressAllFunction decompress_all =
 				tsl_get_decompress_all_function(header->compression_algorithm,
-												column_description->typid);
+												value_column_description->typid);
 			Assert(decompress_all != NULL);
 
 			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
 
 			arrow = decompress_all(PointerGetDatum(header),
-								   column_description->typid,
+								   value_column_description->typid,
 								   batch_state->per_batch_context);
 
 			Assert(arrow != NULL);

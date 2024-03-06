@@ -19,17 +19,17 @@
 #include <hypertable_cache.h>
 #include <jsonb_utils.h>
 
-#include "bgw/job.h"
+#include "bgw_policy/job_api.h"
 #include "bgw_policy/job.h"
 #include "bgw_policy/reorder_api.h"
+#include "bgw/job_stat.h"
+#include "bgw/job.h"
+#include "bgw/timer.h"
 #include "errors.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "reorder.h"
 #include "utils.h"
-#include "guc.h"
-#include "bgw/job_stat.h"
-#include "bgw/timer.h"
-
 /*
  * Default scheduled interval for reorder jobs should be 1/2 of the default chunk length.
  * If no such length is specified for the hypertable, then
@@ -43,8 +43,7 @@
 /* Default max runtime for a reorder job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME                                                                        \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("0"), InvalidOid, -1))
-/* Right now, there is an infinite number of retries for reorder jobs */
-#define DEFAULT_MAX_RETRIES (-1)
+
 /* Default retry period for reorder_jobs is currently 5 minutes */
 #define DEFAULT_RETRY_PERIOD                                                                       \
 	DatumGetIntervalP(DirectFunctionCall3(interval_in, CStringGetDatum("5 min"), InvalidOid, -1))
@@ -272,7 +271,7 @@ policy_reorder_add(PG_FUNCTION_ARGS)
 	job_id = ts_bgw_job_insert_relation(&application_name,
 										&schedule_interval,
 										DEFAULT_MAX_RUNTIME,
-										DEFAULT_MAX_RETRIES,
+										JOB_RETRY_UNLIMITED,
 										DEFAULT_RETRY_PERIOD,
 										&proc_schema,
 										&proc_name,

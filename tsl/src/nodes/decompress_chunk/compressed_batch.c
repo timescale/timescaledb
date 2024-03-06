@@ -104,9 +104,10 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	column_values->output_attoffset = offs;
 	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[offs];
 	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[offs];
-	Datum *output_value = column_values->output_value;
-	bool *output_isnull = column_values->output_isnull;
 
+	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
+	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[attr];
+	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
 	const int value_bytes = get_typlen(column_description->typid);
 	Assert(value_bytes != 0);
 
@@ -123,9 +124,10 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 */
 		column_values->decompression_type = DT_Default;
 
-		*output_value = getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
-									   column_description->output_attno,
-									   output_isnull);
+		*column_values->output_value =
+			getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
+						   column_description->output_attno,
+						   column_values->output_isnull);
 		return;
 	}
 
@@ -200,7 +202,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 			VARHDRSZ + (arrow->dictionary ? get_max_text_datum_size(arrow->dictionary) :
 											get_max_text_datum_size(arrow));
 
-		*output_value =
+		*column_values->output_value =
 			PointerGetDatum(MemoryContextAlloc(batch_state->per_batch_context, maxbytes));
 
 		/*
@@ -559,29 +561,6 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	return get_vector_qual_summary(batch_state->vector_qual_result, n_rows);
 }
 
-void
-compressed_batch_discard_tuples(DecompressBatchState *batch_state)
-{
-	batch_state->next_batch_row = batch_state->total_batch_rows;
-	batch_state->vector_qual_result = NULL;
-
-	if (batch_state->per_batch_context != NULL)
-	{
-		ExecClearTuple(batch_state->compressed_slot);
-		ExecClearTuple(&batch_state->decompressed_scan_slot_data.base);
-		MemoryContextReset(batch_state->per_batch_context);
-	}
-	else
-	{
-		/*
-		 * Check that we have a valid zero-initialized batch here.
-		 */
-		Assert(IsA(&batch_state->decompressed_scan_slot_data, Invalid));
-		Assert(batch_state->decompressed_scan_slot_data.base.tts_ops == NULL);
-		Assert(batch_state->compressed_slot == NULL);
-	}
-}
-
 static void tts_getsomeattrs(TupleTableSlot *slot, int natts);
 
 static void
@@ -629,7 +608,42 @@ tts_copy_minimal_tuple(TupleTableSlot *slot)
 	return TTSOpsVirtual.copy_minimal_tuple(slot);
 }
 
-static pg_noinline void
+/*
+ * Scrolls the compressed batch to the end, discarding any tuples left in it.
+ * This makes the batch ready to accept the next compressed tuple, but without
+ * de-initializing its expensive reusable parts such as memory context and tuple
+ * slots. This is used when vectorized quals don't pass for the entire batch,
+ * and also in batch array to free the batch state for reuse.
+ */
+void
+compressed_batch_discard_tuples(DecompressBatchState *batch_state)
+{
+	batch_state->next_batch_row = batch_state->total_batch_rows;
+	batch_state->vector_qual_result = NULL;
+
+	if (batch_state->per_batch_context != NULL)
+	{
+		ExecClearTuple(batch_state->compressed_slot);
+		ExecClearTuple(&batch_state->decompressed_scan_slot_data.base);
+		MemoryContextReset(batch_state->per_batch_context);
+	}
+	else
+	{
+		/*
+		 * Check that we have a valid zero-initialized batch here.
+		 */
+		Assert(IsA(&batch_state->decompressed_scan_slot_data, Invalid));
+		Assert(batch_state->decompressed_scan_slot_data.base.tts_ops == NULL);
+		Assert(batch_state->compressed_slot == NULL);
+	}
+}
+
+/*
+ * Initializes the zero-initialized batch state. We do this on demand, because
+ * it involves the creation of memory context and tuple slots, which are
+ * relatively expensive.
+ */
+static void
 compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *batch_state,
 						   TupleTableSlot *compressed_slot)
 {
@@ -648,7 +662,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	batch_state->compressed_slot =
 		MakeSingleTupleTableSlot(dcontext->compressed_slot_tdesc, compressed_slot->tts_ops);
 
-	/* Get a reference the the output TupleTableSlot */
+	/* Get a reference to the output TupleTableSlot */
 	TupleTableSlot *decompressed_slot = dcontext->decompressed_slot;
 
 	if (dcontext->tts_ops.base_slot_size == 0)
@@ -1270,6 +1284,12 @@ compressed_batch_save_first_tuple(DecompressContext *dcontext, DecompressBatchSt
 	}
 }
 
+/*
+ * Frees all resources used by the compressed batch.
+ *
+ * If the batch is intended to be reused, use compressed_batch_discard_tuples()
+ * instead.
+ */
 void
 compressed_batch_destroy(DecompressBatchState *batch_state)
 {

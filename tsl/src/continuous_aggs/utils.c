@@ -101,7 +101,13 @@ continuous_agg_validate_query(PG_FUNCTION_ARGS)
 
 		tree = pg_parse_query(sql);
 
-		if (list_length(tree) > 1)
+		if (tree == NIL)
+		{
+			edata->elevel = ERROR;
+			edata->sqlerrcode = ERRCODE_INTERNAL_ERROR;
+			edata->message = "failed to parse query";
+		}
+		else if (list_length(tree) > 1)
 		{
 			edata->elevel = WARNING;
 			edata->sqlerrcode = ERRCODE_FEATURE_NOT_SUPPORTED;

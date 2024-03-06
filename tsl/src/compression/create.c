@@ -60,8 +60,7 @@ compression_column_segment_metadata_name(int16 column_index, const char *type)
 	int ret;
 
 	Assert(column_index > 0);
-	ret =
-		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PREFIX "%s_%d", type, column_index);
+	ret = snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
@@ -84,6 +83,24 @@ column_segment_max_name(int16 column_index)
 													COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME);
 }
 
+int
+compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
+								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
+{
+	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
+
+	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
+	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
+
+	if (orderby_pos != 0)
+	{
+		char *metadata_name = compression_column_segment_metadata_name(orderby_pos, metadata_type);
+		return get_attnum(compressed_reloid, metadata_name);
+	}
+
+	return InvalidAttrNumber;
+}
+
 /*
  * return the columndef list for compressed hypertable.
  * we do this by getting the source hypertable's attrs,
@@ -97,7 +114,8 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 {
 	Oid compresseddata_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	ArrayType *segmentby = settings->fd.segmentby;
-	List *column_defs = NIL;
+	List *compressed_column_defs = NIL;
+	List *segmentby_column_defs = NIL;
 
 	Relation rel = table_open(src_relid, AccessShareLock);
 	TupleDesc tupdesc = rel->rd_att;
@@ -120,6 +138,7 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 COMPRESSION_COLUMN_METADATA_PREFIX);
 
 		bool is_segmentby = ts_array_is_member(segmentby, NameStr(attr->attname));
+		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 
 		if (is_segmentby)
 		{
@@ -127,64 +146,80 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 			typmod = attr->atttypmod;
 			collid = attr->attcollation;
 		}
+
 		if (!OidIsValid(attroid))
 		{
 			attroid = compresseddata_oid; /* default type for column */
 		}
+
 		coldef = makeColumnDef(NameStr(attr->attname), attroid, typmod, collid);
-		column_defs = lappend(column_defs, coldef);
-	}
 
-	table_close(rel, AccessShareLock);
-
-	/* additional metadata columns. */
-
-	/* count of the number of uncompressed rows */
-	column_defs = lappend(column_defs,
-						  makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
-										INT4OID,
-										-1 /* typemod */,
-										0 /*collation*/));
-	/* sequence_num column */
-	column_defs = lappend(column_defs,
-						  makeColumnDef(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-										INT4OID,
-										-1 /* typemod */,
-										0 /*collation*/));
-
-	if (settings->fd.orderby)
-	{
-		Datum datum;
-		bool isnull;
-		int16 index = 1;
-		ArrayIterator it = array_create_iterator(settings->fd.orderby, 0, NULL);
-		while (array_iterate(it, &datum, &isnull))
+		/*
+		 * Put the metadata columns before the compressed columns, because they
+		 * are accessed before decompression.
+		 */
+		if (is_orderby)
 		{
-			AttrNumber col_attno = get_attnum(settings->fd.relid, TextDatumGetCString(datum));
-			Oid col_type = get_atttype(settings->fd.relid, col_attno);
-			TypeCacheEntry *type = lookup_type_cache(col_type, TYPECACHE_LT_OPR);
+			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
 			if (!OidIsValid(type->lt_opr))
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
-						 errmsg("invalid ordering column type %s", format_type_be(col_type)),
+						 errmsg("invalid ordering column type %s", format_type_be(attr->atttypid)),
 						 errdetail("Could not identify a less-than operator for the type.")));
 
 			/* segment_meta min and max columns */
-			column_defs = lappend(column_defs,
-								  makeColumnDef(column_segment_min_name(index),
-												col_type,
-												-1 /* typemod */,
-												0 /*collation*/));
-			column_defs = lappend(column_defs,
-								  makeColumnDef(column_segment_max_name(index),
-												col_type,
-												-1 /* typemod */,
-												0 /*collation*/));
-			index++;
+			compressed_column_defs = lappend(compressed_column_defs,
+											 makeColumnDef(column_segment_min_name(index),
+														   attr->atttypid,
+														   attr->atttypmod,
+														   attr->attcollation));
+			compressed_column_defs = lappend(compressed_column_defs,
+											 makeColumnDef(column_segment_max_name(index),
+														   attr->atttypid,
+														   attr->atttypmod,
+														   attr->attcollation));
+		}
+
+		if (is_segmentby)
+		{
+			segmentby_column_defs = lappend(segmentby_column_defs, coldef);
+		}
+		else
+		{
+			compressed_column_defs = lappend(compressed_column_defs, coldef);
 		}
 	}
-	return column_defs;
+
+	/*
+	 * Add the metadata columns. Count is always accessed, so put it first.
+	 * Sequence number should probably go after all orderby columns, but we
+	 * put it here for simplicity.
+	 */
+	List *all_column_defs = list_make2(makeColumnDef(COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+													 INT4OID,
+													 -1 /* typemod */,
+													 0 /*collation*/),
+									   makeColumnDef(COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
+													 INT4OID,
+													 -1 /* typemod */,
+													 0 /*collation*/));
+
+	/*
+	 * Then, put all segmentby columns. They are likely to be used in filters
+	 * before decompression.
+	 */
+	all_column_defs = list_concat(all_column_defs, segmentby_column_defs);
+
+	/*
+	 * Then, put all the compressed columns.
+	 */
+	all_column_defs = list_concat(all_column_defs, compressed_column_defs);
+
+	table_close(rel, AccessShareLock);
+
+	return all_column_defs;
 }
 
 /* use this api for the case when you add a single column to a table that already has

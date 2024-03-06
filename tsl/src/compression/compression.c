@@ -281,6 +281,10 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	 */
 	Relation out_rel = relation_open(out_table, ExclusiveLock);
 
+	/* Sanity check we are dealing with relations */
+	Ensure(in_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
+	Ensure(out_rel->rd_rel->relkind == RELKIND_RELATION, "compress_chunk called on non-relation");
+
 	TupleDesc in_desc = RelationGetDescr(in_rel);
 	TupleDesc out_desc = RelationGetDescr(out_rel);
 	/* Before calling row compressor relation should be segmented and sorted as configured
@@ -430,13 +434,26 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	}
 
 	RowCompressor row_compressor;
+	/* Reset sequence is used for resetting the sequence without
+	 * having to fetch the existing sequence for an individual
+	 * sequence group. If we are rolling up an uncompressed chunk
+	 * into an existing compressed chunk, we have to fetch
+	 * sequence numbers for each batch of the segment using
+	 * the respective index. In normal compression, this is
+	 * not necessary because we start segment numbers from zero.
+	 * We distinguish these cases by insert_options being zero for rollups.
+	 *
+	 * Sequence numbers are planned to be removed in the near future,
+	 * which will render this flag obsolete.
+	 */
+	bool reset_sequence = insert_options > 0;
 	row_compressor_init(settings,
 						&row_compressor,
-						in_desc,
+						in_rel,
 						out_rel,
 						out_desc->natts,
 						true /*need_bistate*/,
-						false /*reset_sequence*/,
+						reset_sequence,
 						insert_options);
 
 	if (matched_index_rel != NULL)
@@ -842,11 +859,12 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
 }
 
 static void
-build_column_map(CompressionSettings *settings, TupleDesc in_desc, Relation compressed_table,
-				 PerColumn **pcolumns, int16 **pmap)
+build_column_map(CompressionSettings *settings, Relation uncompressed_table,
+				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
 {
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
 	TupleDesc out_desc = RelationGetDescr(compressed_table);
+	TupleDesc in_desc = RelationGetDescr(uncompressed_table);
 
 	PerColumn *columns = palloc0(sizeof(PerColumn) * in_desc->natts);
 	int16 *map = palloc0(sizeof(int16) * in_desc->natts);
@@ -869,32 +887,41 @@ build_column_map(CompressionSettings *settings, TupleDesc in_desc, Relation comp
 
 		if (!is_segmentby)
 		{
-			int16 segment_min_attr_offset = -1;
-			int16 segment_max_attr_offset = -1;
-			SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
 			if (compressed_column_attr->atttypid != compressed_data_type_oid)
 				elog(ERROR,
 					 "expected column '%s' to be a compressed data type",
 					 NameStr(attr->attname));
 
-			if (is_orderby)
+			AttrNumber segment_min_attr_number =
+				compressed_column_metadata_attno(settings,
+												 uncompressed_table->rd_id,
+												 attr->attnum,
+												 compressed_table->rd_id,
+												 "min");
+			AttrNumber segment_max_attr_number =
+				compressed_column_metadata_attno(settings,
+												 uncompressed_table->rd_id,
+												 attr->attnum,
+												 compressed_table->rd_id,
+												 "max");
+			int16 segment_min_attr_offset = segment_min_attr_number - 1;
+			int16 segment_max_attr_offset = segment_max_attr_number - 1;
+
+			SegmentMetaMinMaxBuilder *segment_min_max_builder = NULL;
+			if (segment_min_attr_number != InvalidAttrNumber ||
+				segment_max_attr_number != InvalidAttrNumber)
 			{
-				int16 index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
-				char *segment_min_col_name = column_segment_min_name(index);
-				char *segment_max_col_name = column_segment_max_name(index);
-				AttrNumber segment_min_attr_number =
-					get_attnum(compressed_table->rd_id, segment_min_col_name);
-				AttrNumber segment_max_attr_number =
-					get_attnum(compressed_table->rd_id, segment_max_col_name);
-				if (segment_min_attr_number == InvalidAttrNumber)
-					elog(ERROR, "couldn't find metadata column \"%s\"", segment_min_col_name);
-				if (segment_max_attr_number == InvalidAttrNumber)
-					elog(ERROR, "couldn't find metadata column \"%s\"", segment_max_col_name);
-				segment_min_attr_offset = AttrNumberGetAttrOffset(segment_min_attr_number);
-				segment_max_attr_offset = AttrNumberGetAttrOffset(segment_max_attr_number);
+				Ensure(segment_min_attr_number != InvalidAttrNumber,
+					   "could not find the min metadata column");
+				Ensure(segment_max_attr_number != InvalidAttrNumber,
+					   "could not find the min metadata column");
 				segment_min_max_builder =
 					segment_meta_min_max_builder_create(attr->atttypid, attr->attcollation);
 			}
+
+			Ensure(!is_orderby || segment_min_max_builder != NULL,
+				   "orderby columns must have minmax metadata");
+
 			*column = (PerColumn){
 				.compressor = compressor_for_type(attr->atttypid),
 				.min_metadata_attr_offset = segment_min_attr_offset,
@@ -927,7 +954,7 @@ build_column_map(CompressionSettings *settings, TupleDesc in_desc, Relation comp
  ********************/
 void
 row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
-					TupleDesc uncompressed_tuple_desc, Relation compressed_table,
+					Relation uncompressed_table, Relation compressed_table,
 					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
 					int insert_options)
 {
@@ -958,7 +985,7 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 		.compressed_table = compressed_table,
 		.bistate = need_bistate ? GetBulkInsertState() : NULL,
 		.resultRelInfo = ts_catalog_open_indexes(compressed_table),
-		.n_input_columns = uncompressed_tuple_desc->natts,
+		.n_input_columns = RelationGetDescr(uncompressed_table)->natts,
 		.count_metadata_column_offset = AttrNumberGetAttrOffset(count_metadata_column_num),
 		.sequence_num_metadata_column_offset = AttrNumberGetAttrOffset(sequence_num_column_num),
 		.compressed_values = palloc(sizeof(Datum) * num_columns_in_compressed_table),
@@ -975,7 +1002,7 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 	memset(row_compressor->compressed_is_null, 1, sizeof(bool) * num_columns_in_compressed_table);
 
 	build_column_map(settings,
-					 uncompressed_tuple_desc,
+					 uncompressed_table,
 					 compressed_table,
 					 &row_compressor->per_column,
 					 &row_compressor->uncompressed_col_to_compressed_col);
@@ -2328,6 +2355,8 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 									&tmfd,
 									false);
 		Assert(result == TM_Ok);
+
+		Assert(cis->cds != NULL);
 		cis->cds->batches_decompressed += decompressor.batches_decompressed;
 		cis->cds->tuples_decompressed += decompressor.tuples_decompressed;
 	}

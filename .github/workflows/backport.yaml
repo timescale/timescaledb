@@ -17,6 +17,10 @@ on:
       # branches that are not main, so it's inconvenient.
       - backport/trigger
 
+# The workflow needs the permission to push branches
+permissions:
+  contents: write
+
 jobs:
   backport:
     name: Backport Bug Fixes

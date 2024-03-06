@@ -27,7 +27,7 @@
  * a few times if we are not getting the correct response. This should reduce
  * test flakiness.
  */
-#define INVALID_STATUS_RETRIES 5
+#define INVALID_RESPONSE_RETRIES 5
 
 TS_FUNCTION_INFO_V1(ts_test_status);
 TS_FUNCTION_INFO_V1(ts_test_status_ssl);
@@ -82,8 +82,7 @@ test_factory(ConnectionType type, int status, char *host, int port)
 		ts_connection_mock_set_recv_buf(conn, test_string, strlen(test_string));
 #endif
 
-	int retries = 0;
-	while (retries < INVALID_STATUS_RETRIES)
+	for (int retries = 0; retries < INVALID_RESPONSE_RETRIES; retries++)
 	{
 		req = build_request(status);
 
@@ -93,20 +92,22 @@ test_factory(ConnectionType type, int status, char *host, int port)
 
 		ts_http_request_destroy(req);
 
-		if (err != HTTP_ERROR_NONE)
-			elog(ERROR, "%s", ts_http_strerror(err));
-
 		/* We are mocking the connection, no need to retry */
 		if (type == CONNECTION_MOCK)
 			break;
+
+		/* Could be a transient HTTP error, lets try again */
+		if (err != HTTP_ERROR_NONE)
+			continue;
 
 		/* Got what we want, no need to retry */
 		if (ts_http_response_state_valid_status(rsp) ||
 			ts_http_response_state_status_code(rsp) == status)
 			break;
-
-		retries++;
 	}
+
+	if (err != HTTP_ERROR_NONE)
+		elog(ERROR, "%s", ts_http_strerror(err));
 
 	ts_connection_destroy(conn);
 

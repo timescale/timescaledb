@@ -58,7 +58,32 @@ typedef struct CompressedColumnValues
  */
 typedef struct DecompressBatchState
 {
-	VirtualTupleTableSlot decompressed_scan_slot_data; /* A slot for the decompressed data */
+	/*
+	 * The slot for the decompressed tuple.
+	 *
+	 * We embed it into the batch state as the first member (data inheritance),
+	 * so that it's easier to pass out to parent nodes, while following the usual
+	 * Postgres interface of passing the tuple table slots.
+	 * We use &batch_state->decompressed_scan_slot_data.base everywhere where we
+	 * need the TupleTableSlot*, and some parent nodes can cast this pointer to
+	 * DecompressBatchState* to use our custom interfaces.
+	 *
+	 * The slot itself follows the TTSVirtualOps tuple slot protocol, because Postgres
+	 * expression executor has special fast path for virtual tuples, and we don't
+	 * really need the custom tuple slot protocol for anything. One potential use
+	 * case for it would be late decompression by implementing custom slot_getattr().
+	 * It was actually implemented and didn't show any benefits in the preliminary
+	 * testing, compared to what we already achieve with lazy decompression after
+	 * vectorized filters. One reason is that the Postgres expression compiler
+	 * can be eager in requesting materialization. For example, it would call
+	 * slot_getattr up to the last attribute used by every filter in a qualifier,
+	 * before running any qualifiers. This might be possible to configure, but
+	 * the area needs more research.
+	 *
+	 * See the PR #6628 for context.
+	 */
+	VirtualTupleTableSlot decompressed_scan_slot_data;
+
 	/*
 	 * Compressed target slot. We have to keep a local copy when doing batch
 	 * sorted merge, because the segmentby column values might reference the
@@ -119,6 +144,9 @@ extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 
 extern void compressed_batch_discard_tuples(DecompressBatchState *batch_state);
 
+/*
+ * Returns the current decompressed tuple in the compressed batch.
+ */
 inline static TupleTableSlot *
 compressed_batch_current_tuple(DecompressBatchState *batch_state)
 {

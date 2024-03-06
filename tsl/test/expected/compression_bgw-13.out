@@ -307,16 +307,6 @@ SELECT COUNT(*) AS dropped_chunks_count
                    14
 (1 row)
 
--- We need to have some chunks that are marked as dropped, otherwise
--- we will not have a problem below.
-SELECT COUNT(*) AS dropped_chunks_count
-  FROM _timescaledb_catalog.chunk
- WHERE dropped = TRUE;
- dropped_chunks_count 
-----------------------
-                   14
-(1 row)
-
 SELECT count(*) FROM timescaledb_information.chunks
 WHERE hypertable_name = 'conditions' and is_compressed = true;
  count 
@@ -347,7 +337,7 @@ LOG:  statement: CALL run_job(1004);
 LOG:  acquiring locks for compressing "_timescaledb_internal._hyper_11_40_chunk"
 LOG:  locks acquired for compressing "_timescaledb_internal._hyper_11_40_chunk"
 LOG:  new compressed chunk "_timescaledb_internal.compress_hyper_13_61_chunk" created
-LOG:  using index "_hyper_11_40_chunk_conditions_time_idx" to scan rows for compression
+LOG:  using tuplesort to scan rows from "_hyper_11_40_chunk" for compression
 LOG:  finished compressing 144 rows from "_hyper_11_40_chunk"
 LOG:  job 1004 completed processing chunk _timescaledb_internal._hyper_11_40_chunk
 set client_min_messages TO NOTICE;
@@ -434,14 +424,12 @@ SELECT count(*) from test2;
     29
 (1 row)
 
--- call recompress_chunk inside a transaction. This should fails since
--- it contains transaction-terminating commands.
-\set ON_ERROR_STOP 0
-START TRANSACTION;
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
-ROLLBACK;
-\set ON_ERROR_STOP 1
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_14_62_chunk
+(1 row)
+
 -- Demonstrate that no locks are held on the hypertable, chunk, or the
 -- compressed chunk after recompress_chunk has executed.
 SELECT pid, locktype, relation, relation::regclass, mode, granted
@@ -510,12 +498,22 @@ WHERE hypertable_name = 'test2' ORDER BY chunk_name;
 (2 rows)
 
 \set ON_ERROR_STOP 0
--- call recompress_chunk when status is not unordered
-CALL recompress_chunk(:'CHUNK_NAME'::regclass, true);
-psql:include/recompress_basic.sql:115: NOTICE:  nothing to recompress in chunk "_hyper_14_62_chunk"
+-- call compress_chunk when status is not unordered
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
+psql:include/recompress_basic.sql:107: NOTICE:  chunk "_hyper_14_62_chunk" is already compressed
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_14_62_chunk
+(1 row)
+
 -- This will succeed and compress the chunk for the test below.
-CALL recompress_chunk(:'CHUNK_NAME'::regclass, false);
-psql:include/recompress_basic.sql:118: ERROR:  nothing to recompress in chunk "_hyper_14_62_chunk"
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
+psql:include/recompress_basic.sql:110: NOTICE:  chunk "_hyper_14_62_chunk" is already compressed
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_14_62_chunk
+(1 row)
+
 --now decompress it , then try and recompress
 SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
              decompress_chunk             
@@ -523,8 +521,12 @@ SELECT decompress_chunk(:'CHUNK_NAME'::regclass);
  _timescaledb_internal._hyper_14_62_chunk
 (1 row)
 
-CALL recompress_chunk(:'CHUNK_NAME'::regclass);
-psql:include/recompress_basic.sql:122: ERROR:  call compress_chunk instead of recompress_chunk
+SELECT compress_chunk(:'CHUNK_NAME'::regclass);
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_14_62_chunk
+(1 row)
+
 \set ON_ERROR_STOP 1
 -- test recompress policy
 CREATE TABLE metrics(time timestamptz NOT NULL);
@@ -629,7 +631,7 @@ SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'met
 
 ---- nothing to do yet
 CALL run_job(:JOB_RECOMPRESS);
-psql:include/recompress_basic.sql:194: NOTICE:  no chunks for hypertable "public.metrics" that satisfy recompress chunk policy
+psql:include/recompress_basic.sql:186: NOTICE:  no chunks for hypertable "public.metrics" that satisfy recompress chunk policy
 ---- status should be 1
 SELECT chunk_status FROM compressed_chunk_info_view WHERE hypertable_name = 'metrics';
  chunk_status 

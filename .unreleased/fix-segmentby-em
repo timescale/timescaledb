@@ -1,2 +1,0 @@
-Fixes: #6424, #6536 Inefficient join plans on compressed hypertables.
-Thanks: @coney21 and @GStechschulte for reporting the problem with inefficient join plans on compressed hypertables.
