@@ -32,6 +32,8 @@
 #include "nodes/chunk_append/transform.h"
 #include "guc.h"
 #include "utils.h"
+#include "osm_callbacks.h"
+#include "chunk.h"
 
 /*
  * Exclude child relations (chunks) at execution time based on constraints.
@@ -255,7 +257,37 @@ ca_append_begin(CustomScanState *node, EState *estate, int eflags)
 					restrictinfos = lappend(restrictinfos, ri);
 				}
 				restrictinfos = constify_restrictinfos(&root, restrictinfos);
+#if PG14_GE
+				chunk_startup_exclusion_hook_type osm_chunk_exclusion_hook =
+					ts_get_osm_chunk_startup_exclusion_hook();
 
+				if (osm_chunk_exclusion_hook)
+				{
+					Index rt_index = scanrelid;
+					RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
+					Oid relid = rte->relid;
+					Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+					Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+					int tiered_chunks_match = 0;
+					// Index varno = rt_index;
+					if (chunk && IS_OSM_CHUNK(chunk))
+					{
+						tiered_chunks_match = osm_chunk_exclusion_hook(NameStr(ht->fd.schema_name),
+																	NameStr(ht->fd.table_name),
+																	relid,
+																	(ForeignScan *) plan,
+																	restrictinfos,
+																	rt_index);
+						if (tiered_chunks_match == 0)
+						{
+							// the OSM chunk can be skipped entirely
+							continue;
+						}
+					}
+				}
+#endif
+				// this expects the chunk to already have check constraints, which are used in 
+				// can_exclude_chunk -> calling relation_excluded_by_constraints
 				if (can_exclude_chunk(&root, estate, scanrelid, restrictinfos))
 					continue;
 
