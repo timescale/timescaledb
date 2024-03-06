@@ -91,14 +91,24 @@ is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
  * of the decompress chunk node. If this is possible, the decompress chunk node will emit partial
  * aggregates directly, and there is no need for the PostgreSQL aggregation node on top.
  */
-bool
+Path *
 apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path, Path *path)
 {
 	if (!ts_guc_enable_vectorized_aggregation || !ts_guc_enable_bulk_decompression)
-		return false;
+		return NULL;
 
 	Assert(path != NULL);
 	Assert(aggregation_path->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+
+	if (IsA(path, ProjectionPath))
+	{
+		ProjectionPath *projection = castNode(ProjectionPath, path);
+		Path *subpath = projection->subpath;
+		if (equal(projection->path.pathtarget->exprs, subpath->pathtarget->exprs))
+		{
+			path = subpath;
+		}
+	}
 
 	if (is_vectorizable_agg_path(root, aggregation_path, path))
 	{
@@ -112,9 +122,10 @@ apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path, 
 
 		/* The decompress chunk node can perform the aggregation directly. No need for a dedicated
 		 * agg node on top. */
-		return true;
+		fprintf(stderr, "succeeded\n");
+		return path;
 	}
 
 	/* PostgreSQL should handle the aggregation. Regular agg node on top is required. */
-	return false;
+	return NULL;
 }

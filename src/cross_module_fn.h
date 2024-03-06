@@ -90,7 +90,7 @@ typedef struct CrossModuleFunctions
 	PGFunction move_chunk;
 
 	/* Vectorized queries */
-	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
+	Path * (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
 
 	/* Continuous Aggregates */
 	PGFunction partialize_agg;

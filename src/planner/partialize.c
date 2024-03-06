@@ -458,7 +458,8 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *pathtarget_befo
 		AggPath *agg_path =
 			create_sorted_partial_agg_path(root, projected, chunk_grouping_target, d_num_groups, extra_data);
 
-		if (ts_cm_functions->push_down_aggregation(root, agg_path, projected))
+		Path *pushed_down = ts_cm_functions->push_down_aggregation(root, agg_path, projected);
+		if (pushed_down)
 		{
 			*sorted_paths = lappend(*sorted_paths, projected);
 		}
@@ -473,7 +474,8 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *pathtarget_befo
 		AggPath *agg_path =
 			create_hashed_partial_agg_path(root, projected, chunk_grouping_target, d_num_groups, extra_data);
 
-		if (ts_cm_functions->push_down_aggregation(root, agg_path, projected))
+		Path *pushed_down = ts_cm_functions->push_down_aggregation(root, agg_path, projected);
+		if (pushed_down)
 		{
 			*hashed_paths = lappend(*hashed_paths, projected);
 		}
