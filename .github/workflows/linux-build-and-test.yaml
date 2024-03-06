@@ -69,7 +69,9 @@ jobs:
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
       run: |
-        brew install gawk
+        # Disable the automatic dependency upgrade executed by `brew install`
+        # https://docs.brew.sh/Manpage#install-options-formulacask-
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gawk
         # Install perl modules after last Homebew call, since Homebrew can change the perl version
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'IPC::Run')"
         sudo perl -MCPAN -e "CPAN::Shell->notest('install', 'Test::Most')"

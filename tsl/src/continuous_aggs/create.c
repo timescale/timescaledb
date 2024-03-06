@@ -958,9 +958,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		 * - ts_compute_inscribed_bucketed_refresh_window_variable()
 		 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
 		 */
-		refresh_window.start = ts_continuous_agg_bucket_width_variable(cagg) ?
-								   ts_time_get_nobegin(refresh_window.type) :
-								   ts_time_get_min(refresh_window.type);
+		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
 		continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_CREATION, true, true);
