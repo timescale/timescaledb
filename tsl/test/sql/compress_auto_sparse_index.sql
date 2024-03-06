@@ -23,6 +23,13 @@ select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
 explain select * from sparse where value = 1;
 
 
+-- Should survive renames.
+alter table sparse rename column value to wert;
+explain select * from sparse where wert = 1;
+alter table sparse rename column wert to value;
+explain select * from sparse where value = 1;
+
+
 -- Not for expression indexes.
 drop index ii;
 create index ii on sparse((value + 1));

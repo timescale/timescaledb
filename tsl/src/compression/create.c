@@ -93,7 +93,7 @@ column_segment_max_name(int16 column_index)
  * in this case we disambiguate them with their md5 hash.
  */
 char *
-compressed_column_metadata_name_v2(char *metadata_type, char *column_name)
+compressed_column_metadata_name_v2(const char *metadata_type, const char *column_name)
 {
 	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
 	Assert(strlen(metadata_type) <= 6);
@@ -984,17 +984,39 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 			 "cannot compress tables with reserved column prefix '%s'",
 			 COMPRESSION_COLUMN_METADATA_PREFIX);
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		ListCell *lc;
-		foreach (lc, chunks)
+		return;
+	}
+
+	RenameStmt *compressed_col_stmt = (RenameStmt *) copyObject(stmt);
+	RenameStmt *compressed_index_stmt = (RenameStmt *) copyObject(stmt);
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+	ListCell *lc;
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		compressed_col_stmt->relation =
+			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+		ExecRenameStmt(compressed_col_stmt);
+
+		compressed_index_stmt->relation = compressed_col_stmt->relation;
+		const char *sparse_index_types[] = { "min", "max" };
+		for (size_t i = 0; i < sizeof(sparse_index_types) / sizeof(sparse_index_types[0]); i++)
 		{
-			Chunk *chunk = lfirst(lc);
-			RenameStmt *compress_col_stmt = (RenameStmt *) copyObject(stmt);
-			compress_col_stmt->relation =
-				makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
-			ExecRenameStmt(compress_col_stmt);
+			char *old_index_name =
+				compressed_column_metadata_name_v2(sparse_index_types[i], stmt->subname);
+			if (get_attnum(chunk->table_id, old_index_name) == InvalidAttrNumber)
+			{
+				continue;
+			}
+
+			// CommandCounterIncrement();
+			char *new_index_name =
+				compressed_column_metadata_name_v2(sparse_index_types[i], stmt->newname);
+			compressed_index_stmt->subname = old_index_name;
+			compressed_index_stmt->newname = new_index_name;
+			ExecRenameStmt(compressed_index_stmt);
 		}
 	}
 }

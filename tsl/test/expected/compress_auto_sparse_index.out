@@ -61,6 +61,27 @@ explain select * from sparse where value = 1;
          Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
 (4 rows)
 
+-- Should survive renames.
+alter table sparse rename column value to wert;
+explain select * from sparse where wert = 1;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..19.75 rows=72000 width=12)
+   Vectorized Filter: (wert = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..19.75 rows=72 width=76)
+         Filter: ((_ts_meta_v2_min_wert <= '1'::double precision) AND (_ts_meta_v2_max_wert >= '1'::double precision))
+(4 rows)
+
+alter table sparse rename column wert to value;
+explain select * from sparse where value = 1;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..19.75 rows=72000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..19.75 rows=72 width=76)
+         Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
+(4 rows)
+
 -- Not for expression indexes.
 drop index ii;
 create index ii on sparse((value + 1));
