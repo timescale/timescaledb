@@ -274,8 +274,28 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
         "The compiler ${CMAKE_C_COMPILER_ID} does not support -fvisibility=hidden"
     )
   endif(NOT CC_SUPPORTS_VISIBILITY_HIDDEN)
-endif()
+  # security options go here - these are not supported by all compilers
+  # first and foremost, do we have LTO?
+  check_c_compiler_flag(-flto CC_SUPPORTS_LTO)
+  # if we are building on a GLIBC environment, FORTIFY is available
+  check_c_compiler_flag(-D_FORTIFY_SOURCE CC_SUPPORTS_FORTIFY)
 
+  if(CC_SUPPORTS_FORTIFY)
+      add_compile_options(-D_FORTIFY_SOURCE=2)
+      if(CC_SUPPORTS_LTO)
+          add_compile_options(-flto)
+      endif() 
+   else()
+     message(STATUS "Compiler ${CMAKE_C_COMPILER_ID}  does not support -D_FORTIFY_SOURCE=1")
+ endif()
+ # CFI is currently supported by clang
+ check_c_compiler_flag(-CFI CC_SUPPORTS_CFI)
+ if(CC_SUPPORTS_CFI AND CC_SUPPORTS_LTO)
+     add_compile_options(-flto -fsanitize=cfi)
+ else()
+     message(STATUS "Compiler ${CMAKE_C_COMPILER_ID} does not support CFI")
+ endif()
+endif()
 # On Windows, default to only include Release builds so MSBuild.exe 'just works'
 if(WIN32 AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_CONFIGURATION_TYPES
