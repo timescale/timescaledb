@@ -112,7 +112,11 @@ ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ALTER TABLE foo RESET (timescaledb.compress);
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
 ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
+
+--should succeed
+BEGIN;
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
+ROLLBACK;
 
 --note that the time column "a" should not be added to the end of the order by list again (should appear first)
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid = 'foo'::regclass;
