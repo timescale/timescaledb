@@ -95,6 +95,8 @@ bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
 #endif
 
+int ts_guc_debug_toast_tuple_target = 128;
+
 #ifdef TS_DEBUG
 static const struct config_enum_entry require_vector_qual_options[] = {
 	{ "allow", RVQ_Allow, false },
@@ -639,6 +641,19 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+
+	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_toast_tuple_target"),
+							/* short_desc= */ "set toast tuple target on compressed chunks",
+							/* long_desc= */ "this is for debugging purposes",
+							/* valueAddr= */ &ts_guc_debug_toast_tuple_target,
+							/* bootValue = */ 128,
+							/* minValue = */ 1,
+							/* maxValue = */ 65535,
+							/* context= */ PGC_USERSET,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_qual"),
 							 /* short_desc= */

@@ -355,6 +355,7 @@ detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster, MemoryContext
 		 * This is an externally stored datum --- fetch it back from there.
 		 */
 		attr = ts_toast_fetch_datum(attr, detoaster, dest_mctx);
+
 		/* If it's compressed, decompress it */
 		if (VARATT_IS_COMPRESSED(attr))
 		{
@@ -387,14 +388,15 @@ detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster, MemoryContext
 		 * This is a compressed value stored inline in the main tuple. It rarely
 		 * occurs in practice, because we set a low toast_tuple_target = 128
 		 * for the compressed chunks, but is still technically possible.
+		 *
+		 * Note that the attr comes from the compressed tuple slot here, so we
+		 * don't have to free it unlike the above case of decompression.
 		 */
-		struct varlena *tmp = attr;
-
 		MemoryContext old_context = MemoryContextSwitchTo(dest_mctx);
-		attr = ts_toast_decompress_datum(tmp);
+		attr = ts_toast_decompress_datum(attr);
 		MemoryContextSwitchTo(old_context);
 
-		pfree(tmp);
+		return attr;
 	}
 
 	/*

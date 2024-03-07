@@ -197,7 +197,7 @@ simple8brle_bitmap_prefixsums(Simple8bRleSerialized *compressed)
 	 * Check that the number of ones actually fits into the uint16 counters
 	 * we're using.
 	 */
-	CheckCompressedData(((typeof(*prefix_sums)) num_ones) == num_ones);
+	CheckCompressedData(((uint16) num_ones) == num_ones);
 
 	Simple8bRleBitmap result = {
 		.data = prefix_sums,
