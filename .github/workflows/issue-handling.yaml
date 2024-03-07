@@ -35,8 +35,8 @@ jobs:
     if: >-
       github.event_name == 'issues'
       && github.event.action != 'closed'
-      && ( contains(github.event.issues.issue.labels.*.name, 'segfault')
-           || contains(github.event.issues.issue.labels.*.name, 'security') )
+      && ( contains(github.event.issue.labels.*.name, 'segfault')
+           || contains(github.event.issue.labels.*.name, 'security') )
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
       SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_SECURITY }}
