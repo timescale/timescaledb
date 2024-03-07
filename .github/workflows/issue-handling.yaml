@@ -45,7 +45,7 @@ jobs:
 
       - name: Generate message
         run: |
-          gh api ${{ github.url }} --template='{"channel": $SLACK_CHANNEL, "text": "Issue <{{.url}}|#{{.number}} {{.title}}> needs attention"}' >message.json
+          gh api ${{ github.event.issue.url }} --template='{"channel": $SLACK_CHANNEL, "text": "Issue <{{.url}}|#{{.number}} {{.title}}> needs attention"}' >message.json
 
       - name: Send slack message
         uses: krider2010/slack-bot-action@1.0.1
