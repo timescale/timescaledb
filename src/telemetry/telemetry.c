@@ -330,7 +330,7 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 {
 	int res;
 	StringInfo command;
-	MemoryContext old_context = CurrentMemoryContext, spi_context;
+	MemoryContext orig_context = CurrentMemoryContext;
 
 	const char *command_string = "SELECT "
 								 "job_type, jsonb_object_agg(sqlerrcode, count) "
@@ -391,11 +391,11 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		if (sqlerrs_jsonb == NULL)
 			continue;
 		/* the jsonb object cannot be created in the SPI context or it will be lost */
-		spi_context = MemoryContextSwitchTo(old_context);
+		MemoryContext spi_context = MemoryContextSwitchTo(orig_context);
 		add_errors_by_sqlerrcode_internal(parse_state,
 										  TextDatumGetCString(record_jobtype),
 										  sqlerrs_jsonb);
-		old_context = MemoryContextSwitchTo(spi_context);
+		MemoryContextSwitchTo(spi_context);
 	}
 
 	res = SPI_finish();
@@ -431,7 +431,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 {
 	StringInfo command;
 	int res;
-	MemoryContext old_context = CurrentMemoryContext, spi_context;
+	MemoryContext orig_context = CurrentMemoryContext;
 	SPITupleTable *tuptable = NULL;
 
 	const char *command_string =
@@ -511,7 +511,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 			elog(ERROR, "null record field returned");
 		}
 
-		spi_context = MemoryContextSwitchTo(old_context);
+		MemoryContext spi_context = MemoryContextSwitchTo(orig_context);
 		TelemetryJobStats stats = { .total_runs = DatumGetInt64(total_runs),
 									.total_successes = DatumGetInt64(total_successes),
 									.total_failures = DatumGetInt64(total_failures),
@@ -522,7 +522,7 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 									.total_duration_failures =
 										DatumGetIntervalP(total_duration_failures) };
 		add_job_stats_internal(parse_state, TextDatumGetCString(jobtype_datum), &stats);
-		old_context = MemoryContextSwitchTo(spi_context);
+		MemoryContextSwitchTo(spi_context);
 	}
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
