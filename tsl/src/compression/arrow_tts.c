@@ -255,6 +255,7 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
 	Assert(!TTS_EMPTY(child_slot));
+	Assert(OidIsValid(slot->tts_tableOid));
 
 	if (tuple_index == InvalidTupleIndex)
 	{
