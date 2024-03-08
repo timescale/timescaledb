@@ -131,9 +131,10 @@ BEGIN
     ELSE
         _interval_value := _time_interval::TEXT;
         _interval_type  := 'interval';
-        _watermark      := COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
 
-        IF _bucket_column_type = 'timestamp with timezone' THEN
+        -- We expect an ISO date later in parsing (i.e., min value has to be '4714-11-24 00:53:28+00:53:28 BC')
+        SET LOCAL datestyle = 'ISO, MDY';
+        IF _bucket_column_type = 'timestamp with time zone' THEN
             _watermark := COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamptz)::TEXT;
         ELSE
             _watermark := COALESCE(_timescaledb_functions.to_timestamp_without_timezone(_timescaledb_functions.cagg_watermark(_cagg_data.mat_hypertable_id)), '-infinity'::timestamp)::TEXT;

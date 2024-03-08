@@ -150,7 +150,7 @@ jobs:
         copy build_win/test/pg_hba.conf ${{ env.PGDATA }}
         icacls . /grant runneradmin:F /T
         ~/PostgreSQL/${{ matrix.pg }}/bin/pg_ctl start -o "${{ matrix.pg_config }}" --log=postmaster.log
-        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=30
+        ~/PostgreSQL/${{ matrix.pg }}/bin/pg_isready -U postgres -d postgres --timeout=60
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'CREATE USER root SUPERUSER LOGIN;'
         echo "PG version:"
         ~/PostgreSQL/${{ matrix.pg }}/bin/psql -U postgres -d postgres -c 'SELECT version();'

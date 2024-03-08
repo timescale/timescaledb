@@ -111,3 +111,26 @@ extern void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *groupl
 extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
+
+static inline int64
+cagg_get_time_min(const ContinuousAgg *cagg)
+{
+	if (ts_continuous_agg_bucket_width_variable(cagg))
+		/*
+		 * To determine inscribed/circumscribed refresh window for variable-sized
+		 * buckets we should be able to calculate time_bucket(window.begin) and
+		 * time_bucket(window.end). This, however, is not possible in general case.
+		 * As an example, the minimum date is 4714-11-24 BC, which is before any
+		 * reasonable default `origin` value. Thus for variable-sized buckets
+		 * instead of minimum date we use -infinity since time_bucket(-infinity)
+		 * is well-defined as -infinity.
+		 *
+		 * For more details see:
+		 * - ts_compute_inscribed_bucketed_refresh_window_variable()
+		 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
+		 */
+		return ts_time_get_nobegin_or_min(cagg->partition_type);
+
+	/* For fixed-sized buckets return min (start of time) */
+	return ts_time_get_min(cagg->partition_type);
+}

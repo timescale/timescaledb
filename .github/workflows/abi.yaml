@@ -77,6 +77,9 @@ jobs:
             pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_latest) }}-alpine3.18
             tester: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine
+            # this test has issues with 16.0 version of pg_dump binary
+            # which affects backwards test only 
+            ignores: pg_dump_unprivileged
           - dir: forward
             pg: 16
             builder: ${{ fromJson(needs.config.outputs.pg16_abi_min) }}-alpine

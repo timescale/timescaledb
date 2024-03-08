@@ -1008,7 +1008,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 								  collations,
 								  nullsFirst);
 
-		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ 0);
+		ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
 
 		decompress_plan->custom_plans = list_make1(sort);
 	}
@@ -1017,12 +1017,15 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		/*
 		 * Add a sort if the compressed scan is not ordered appropriately.
 		 */
-		if (!pathkeys_contained_in(dcpath->compressed_pathkeys, compressed_path->pathkeys))
+		if (!pathkeys_contained_in(dcpath->required_compressed_pathkeys, compressed_path->pathkeys))
 		{
-			List *compressed_pks = dcpath->compressed_pathkeys;
+			List *compressed_pks = dcpath->required_compressed_pathkeys;
 			Sort *sort = ts_make_sort_from_pathkeys((Plan *) compressed_scan,
 													compressed_pks,
 													bms_make_singleton(compressed_scan->scanrelid));
+
+			ts_label_sort_with_costsize(root, sort, /* limit_tuples = */ -1.0);
+
 			decompress_plan->custom_plans = list_make1(sort);
 		}
 		else

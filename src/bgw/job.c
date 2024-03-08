@@ -1464,7 +1464,7 @@ ts_bgw_job_insert_relation(Name application_name, Interval *schedule_interval,
 			TimestampTzGetDatum(initial_start);
 	}
 
-	if (hypertable_id == 0)
+	if (hypertable_id == INVALID_HYPERTABLE_ID)
 		nulls[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = true;
 	else
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] = Int32GetDatum(hypertable_id);
