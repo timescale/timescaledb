@@ -25,11 +25,14 @@ $$;
 create table :hypertable(
        metric_id serial,
        created_at timestamptz not null unique,
-       location_id int,
-       device_id int,
+       location_id int,		--segmentby attribute with index
+       owner_id int,		--segmentby attribute without index
+       device_id int,		--non-segmentby attribute
        temp float,
        humidity float
 );
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
 select create_hypertable(:'hypertable', by_range('created_at'));
  create_hypertable 
 -------------------
@@ -48,15 +51,15 @@ select setseed(1);
 --
 -- The timestamps for the original rows will have timestamps every 10
 -- seconds. Any other timestamps are inserted as part of the test.
-insert into :hypertable (created_at, location_id, device_id, temp, humidity)
-select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+insert into :hypertable (created_at, location_id, owner_id, device_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
-	  timescaledb.compress_segmentby = 'location_id'
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
 );
--- Set some test chunks as global variables (first and last chunk here)
+-- Get some test chunks as global variables (first and last chunk here)
 select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
   from timescaledb_information.chunks
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
@@ -67,6 +70,9 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
  order by chunk2 desc
  limit 1 \gset
+-- We need to drop the index to trigger parallel plans. Otherwise they
+-- will use the index.
+drop index hypertable_device_id_idx;
 -- Show parallel plan and count on uncompressed (non-hyperstore)
 -- hypertable
 set max_parallel_workers_per_gather=2;
@@ -101,7 +107,7 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8647
+         1 | 52277
 (1 row)
 
 -- Save counts collected over entire hypertable
@@ -154,7 +160,7 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8647
+         1 | 52277
 (1 row)
 
 -- Enable parallel on SeqScan and check for same result
@@ -171,6 +177,9 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
                      ->  Parallel Seq Scan on _hyper_1_1_chunk
                            Filter: (device_id = 1)
                ->  Partial GroupAggregate
+                     ->  Parallel Seq Scan on _hyper_1_6_chunk
+                           Filter: (device_id = 1)
+               ->  Partial GroupAggregate
                      ->  Parallel Seq Scan on _hyper_1_2_chunk
                            Filter: (device_id = 1)
                ->  Partial GroupAggregate
@@ -182,15 +191,12 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
                ->  Partial GroupAggregate
                      ->  Parallel Seq Scan on _hyper_1_5_chunk
                            Filter: (device_id = 1)
-               ->  Partial GroupAggregate
-                     ->  Parallel Seq Scan on _hyper_1_6_chunk
-                           Filter: (device_id = 1)
 (22 rows)
 
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8647
+         1 | 52277
 (1 row)
 
 -- Enable ColumnarScan and check for same result
@@ -207,6 +213,9 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_1_1_chunk
                            Vectorized Filter: (device_id = 1)
                ->  Partial GroupAggregate
+                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_1_6_chunk
+                           Vectorized Filter: (device_id = 1)
+               ->  Partial GroupAggregate
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_1_2_chunk
                            Vectorized Filter: (device_id = 1)
                ->  Partial GroupAggregate
@@ -218,15 +227,12 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
                ->  Partial GroupAggregate
                      ->  Parallel Custom Scan (ColumnarScan) on _hyper_1_5_chunk
                            Vectorized Filter: (device_id = 1)
-               ->  Partial GroupAggregate
-                     ->  Parallel Custom Scan (ColumnarScan) on _hyper_1_6_chunk
-                           Vectorized Filter: (device_id = 1)
 (22 rows)
 
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8647
+         1 | 52277
 (1 row)
 
 -- Parallel plan with hyperstore on single chunk
@@ -242,7 +248,7 @@ select device_id, count(*) from :chunk1 where device_id=1 group by device_id;
 select device_id, count(*) from :chunk1 where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |   219
+         1 |  1249
 (1 row)
 
 -- Compare hyperstore per-location counts with original counts without
