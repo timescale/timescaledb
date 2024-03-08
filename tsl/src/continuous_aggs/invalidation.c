@@ -1015,7 +1015,8 @@ InvalidationStore *
 invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 							  const InternalTimeRange *refresh_window,
 							  const CaggsInfo *all_caggs_info, const long max_materializations,
-							  bool *do_merged_refresh, InternalTimeRange *ret_merged_refresh_window)
+							  bool *do_merged_refresh, InternalTimeRange *ret_merged_refresh_window,
+							  const CaggRefreshCallContext callctx)
 {
 	CaggInvalidationState state;
 	InvalidationStore *store = NULL;
@@ -1057,7 +1058,8 @@ invalidation_process_cagg_log(int32 mat_hypertable_id, int32 raw_hypertable_id,
 													   store,
 													   state.bucket_width,
 													   state.bucket_function,
-													   &merged_refresh_window);
+													   &merged_refresh_window,
+													   callctx);
 		*do_merged_refresh = true;
 		*ret_merged_refresh_window = merged_refresh_window;
 		invalidation_store_free(store);
