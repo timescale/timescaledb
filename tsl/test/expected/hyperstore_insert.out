@@ -1,0 +1,243 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/setup_hyperstore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+-- Alternative function to compress_chunk that uses the table access
+-- method to compress a chunk.
+create function twist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method hyperstore', chunk);
+    return chunk;
+end
+$$;
+create function untwist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method heap', chunk);
+    return chunk;
+end
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id int,
+       device_id int,
+       temp float,
+       humidity float
+);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id'
+);
+-- Set some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 desc
+ limit 1 \gset
+-- TODO(timescale/timescaledb-private#1068) Parallel sequence scan does not work
+set max_parallel_workers_per_gather to 0;
+-- Compress the chunks and check that the counts are the same
+select location_id, count(*) into orig from :hypertable GROUP BY location_id;
+select twist_chunk(show_chunks(:'hypertable'));
+              twist_chunk               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+select location_id, count(*) into comp from :hypertable GROUP BY location_id;
+select * from orig join comp using (location_id) where orig.count != comp.count;
+ location_id | count | count 
+-------------+-------+-------
+(0 rows)
+
+drop table orig, comp;
+-- Check that all chunks are compressed
+select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
+    chunk_name    | compression_status 
+------------------+--------------------
+ _hyper_1_1_chunk | Compressed
+ _hyper_1_2_chunk | Compressed
+ _hyper_1_3_chunk | Compressed
+ _hyper_1_4_chunk | Compressed
+ _hyper_1_5_chunk | Compressed
+ _hyper_1_6_chunk | Compressed
+(6 rows)
+
+--
+-- Test that a conflict happens when inserting a value that already
+-- exists in the compressed part of the chunk.
+--
+-- Check that we have at least one timestamp that we want to test.
+SELECT count(*) FROM :chunk1 WHERE created_at  = '2022-06-01'::timestamptz;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+\set ON_ERROR_STOP 1
+-- Insert values, which will end up in the uncompressed parts
+INSERT INTO :chunk1(created_at, location_id, device_id, temp, humidity)
+VALUES ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
+INSERT INTO :hypertable(created_at, location_id, device_id, temp, humidity)
+VALUES ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0);
+-- Should still generate an error
+\set ON_ERROR_STOP 0
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0);
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+\set ON_ERROR_STOP 1
+--
+-- Testing speculative inserts and upserts
+--
+-- Speculative insert with conflicting row should succeed and not
+-- insert anything
+select location_id, count(*) into orig from :hypertable GROUP BY location_id;
+-- Inserting into compressed part
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+-- Inserting into non-compressed part
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+-- Check the count after the operations above. We count each location
+-- here since it is easier to see what went wrong if something did.
+select location_id, count(*) into curr from :hypertable GROUP BY location_id;
+select * from :hypertable where created_at between '2022-06-01 00:00:01' and '2022-06-01 00:00:09';
+ metric_id |          created_at          | location_id | device_id | temp | humidity 
+-----------+------------------------------+-------------+-----------+------+----------
+    259204 | Wed Jun 01 00:00:02 2022 PDT |           1 |         1 |    1 |        1
+    259205 | Wed Jun 01 00:00:03 2022 PDT |           1 |         1 |    1 |        1
+(2 rows)
+
+select * from orig join curr using (location_id) where orig.count != curr.count;
+ location_id | count | count 
+-------------+-------+-------
+(0 rows)
+
+drop table curr;
+-- Speculative insert with non-conflicting rows should succeed.
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:06', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:07', 1, 1, 1.0, 1.0)
+on conflict (created_at) do nothing;
+select location_id, count(*) into curr from :hypertable GROUP BY location_id;
+select location_id, curr.count - orig.count as increase
+  from orig join curr using (location_id)
+ where orig.count != curr.count;
+ location_id | increase 
+-------------+----------
+           1 |        2
+(1 row)
+
+drop table orig, curr;
+-- Upserts with conflicting and non-conflicting rows should work
+-- correctly also when inserting directly into the chunks.
+--
+-- We have tested this above, but since different code paths are used
+-- for DO UPDATE, DO NOTHING, and plain inserts, we test this as well
+-- to be safe.
+-- Insert of a value that exists in the compressed part.
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:00', 11, 1, 1.0, 1.0)
+on conflict (created_at) do update set location_id = 12;
+-- TODO(timescale/timescaledb-private#1087): Inserts directly into chunks do not work.
+\set ON_ERROR_STOP 0
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01  00:00:10', 13, 1, 1.0, 1.0)
+on conflict (created_at) do update set location_id = 14;
+ERROR:  cannot update compressed tuple
+\set ON_ERROR_STOP 1
+-- Insert of a value that exists in the non-compressed part. (These
+-- were inserted above.)
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:02', 15, 1, 1.0, 1.0)
+on conflict (created_at) do update set location_id = 16;
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:03', 17, 1, 1.0, 1.0)
+on conflict (created_at) do update set location_id = 18;
+-- Inserting them again should still update.
+insert into :chunk1(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:02', 19, 1, 1.0, 1.0)
+on conflict (created_at) do update set location_id = 20;
+insert into :hypertable(created_at, location_id, device_id, temp, humidity)
+values ('2022-06-01 00:00:03', 21, 1, 1.0, 1.0)
+on conflict (created_at) do update set location_id = 22;
+select * from :hypertable where location_id between 11 and 22
+order by location_id;
+ metric_id |          created_at          | location_id | device_id |       temp       |     humidity     
+-----------+------------------------------+-------------+-----------+------------------+------------------
+         1 | Wed Jun 01 00:00:00 2022 PDT |          12 |        23 | 15.5003657696018 | 41.0800937306156
+    259204 | Wed Jun 01 00:00:02 2022 PDT |          20 |         1 |                1 |                1
+    259205 | Wed Jun 01 00:00:03 2022 PDT |          22 |         1 |                1 |                1
+(3 rows)
+
+drop table :hypertable;
