@@ -151,105 +151,6 @@ WHERE location = 1;
   1211
 (1 row)
 
--- Test that a conflict happens when inserting a value that already exists in the
--- compressed part of the chunk
-SELECT count(*) FROM :chunk WHERE time  = '2022-06-01'::timestamptz;
- count 
--------
-     1
-(1 row)
-
-\set ON_ERROR_STOP 0
-INSERT INTO readings VALUES ('2022-06-01', 1, 1, 1.0, 1.0);
-ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
--- Same result if inserted directly into the compressed chunk
-INSERT INTO :chunk VALUES ('2022-06-01', 1, 1, 1.0, 1.0);
-ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
-\set ON_ERROR_STOP 1
--- Test insert of a non-conflicting value into the compressed chunk,
--- first directly into chunk and then via hypertable. The value should
--- end up in the non-compressed part in contrast to the conflicting
--- value above.
-INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
-INSERT INTO readings VALUES ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0);
-SELECT * FROM readings WHERE time BETWEEN '2022-06-01'::timestamptz AND '2022-06-01 01:00'::timestamptz ORDER BY time ASC LIMIT 10;
-             time             | location | device |       temp       |     humidity     
-------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:00 2022 PDT |        4 |     23 | 15.5003657696018 | 41.0800937306156
- Wed Jun 01 00:00:02 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:05 2022 PDT |        6 |     16 | 2.46896653987823 | 82.6510652318869
- Wed Jun 01 00:00:10 2022 PDT |        6 |     22 | 10.9878665816682 | 79.6729535595605
- Wed Jun 01 00:00:15 2022 PDT |        8 |     20 | 8.64503534833077 |  22.702832723223
- Wed Jun 01 00:00:20 2022 PDT |        7 |     21 | 8.91004884877971 | 90.3003536264856
- Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
- Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
- Wed Jun 01 00:00:35 2022 PDT |       10 |     28 | 35.8231509472248 | 13.8241150359667
-(10 rows)
-
--- Inserting the same values again should lead to conflicts
-\set ON_ERROR_STOP 0
-INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0);
-ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
-INSERT INTO readings VALUES ('2022-06-01 00:00:03'::timestamptz, 1, 1, 1.0, 1.0);
-ERROR:  duplicate key value violates unique constraint "1_1_readings_time_key"
-\set ON_ERROR_STOP 1
-SELECT device, count(*) FROM readings WHERE device=1 GROUP BY device;
- device | count 
---------+-------
-      1 | 17386
-(1 row)
-
--- Speculative insert when conflicting row is in the non-compressed part
-INSERT INTO :chunk VALUES ('2022-06-01 00:00:02', 2, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 11;
--- Show the updated tuple
-SELECT * FROM readings WHERE time = '2022-06-01 00:00:02'::timestamptz;
-             time             | location | device | temp | humidity 
-------------------------------+----------+--------+------+----------
- Wed Jun 01 00:00:02 2022 PDT |       11 |      1 |    1 |        1
-(1 row)
-
-INSERT INTO readings VALUES ('2022-06-01 00:00:02', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 12;
-SELECT * FROM readings WHERE time = '2022-06-01 00:00:02'::timestamptz;
-             time             | location | device | temp | humidity 
-------------------------------+----------+--------+------+----------
- Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |    1 |        1
-(1 row)
-
--- Speculative insert when conflicting row is in the compressed part
-\set ON_ERROR_STOP 0
-INSERT INTO :chunk VALUES ('2022-06-01', 2, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 13;
-ERROR:  cannot update compressed tuple
-\set ON_ERROR_STOP 1
-SELECT * FROM readings WHERE time = '2022-06-01'::timestamptz;
-             time             | location | device |       temp       |     humidity     
-------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:00 2022 PDT |        4 |     23 | 15.5003657696018 | 41.0800937306156
-(1 row)
-
-INSERT INTO readings VALUES ('2022-06-01', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 14;
-SELECT * FROM readings WHERE time = '2022-06-01'::timestamptz;
-             time             | location | device |       temp       |     humidity     
-------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:00 2022 PDT |       14 |     23 | 15.5003657696018 | 41.0800937306156
-(1 row)
-
--- Speculative insert without a conflicting
-INSERT INTO :chunk VALUES ('2022-06-01 00:00:06', 2, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 15;
-SELECT * FROM readings WHERE time = '2022-06-01 00:00:06';
-             time             | location | device | temp | humidity 
-------------------------------+----------+--------+------+----------
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |    1 |        1
-(1 row)
-
-INSERT INTO readings VALUES ('2022-06-01 00:00:07', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO UPDATE SET location = 16;
-SELECT * FROM readings WHERE time = '2022-06-01 00:00:07';
-             time             | location | device | temp | humidity 
-------------------------------+----------+--------+------+----------
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |    1 |        1
-(1 row)
-
-INSERT INTO readings VALUES ('2022-06-01', 3, 1, 1.0, 1.0) ON CONFLICT (time) DO NOTHING;
 SET enable_indexscan = false;
 -- Columnar scan with qual on segmentby where filtering should be
 -- turned into scankeys
@@ -268,11 +169,11 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
  Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:02:50 2022 PDT |        6 |      2 | 3.41795491467339 | 79.4169433908854
+ Wed Jun 01 00:03:15 2022 PDT |        2 |      2 | 32.3846700262051 | 43.4716481956856
+ Wed Jun 01 00:03:35 2022 PDT |        9 |      3 | 37.0804688754844 | 29.4121735958255
+ Wed Jun 01 00:05:05 2022 PDT |        2 |      1 | 23.9311159063196 | 29.1861844182151
 (5 rows)
 
 -- Show with indexscan
@@ -292,11 +193,11 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
  Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:02:50 2022 PDT |        6 |      2 | 3.41795491467339 | 79.4169433908854
+ Wed Jun 01 00:03:15 2022 PDT |        2 |      2 | 32.3846700262051 | 43.4716481956856
+ Wed Jun 01 00:03:35 2022 PDT |        9 |      3 | 37.0804688754844 | 29.4121735958255
+ Wed Jun 01 00:05:05 2022 PDT |        2 |      1 | 23.9311159063196 | 29.1861844182151
 (5 rows)
 
 SET enable_indexscan = false;
@@ -305,30 +206,26 @@ SET enable_indexscan = false;
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
  Limit
-   ->  Sort
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
-         ->  Gather
-               Workers Planned: 1
-               ->  Parallel Append
-                     ->  Seq Scan on _hyper_1_1_chunk
+   ->  Gather Merge
+         Workers Planned: 1
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on compress_hyper_2_7_chunk
                            Filter: (device < 4)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                           Filter: (device < 4)
-                           ->  Parallel Seq Scan on compress_hyper_2_7_chunk
-                                 Filter: (device < 4)
-(12 rows)
+(8 rows)
 
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
  Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:02:50 2022 PDT |        6 |      2 | 3.41795491467339 | 79.4169433908854
+ Wed Jun 01 00:03:15 2022 PDT |        2 |      2 | 32.3846700262051 | 43.4716481956856
+ Wed Jun 01 00:03:35 2022 PDT |        9 |      3 | 37.0804688754844 | 29.4121735958255
+ Wed Jun 01 00:05:05 2022 PDT |        2 |      1 | 23.9311159063196 | 29.1861844182151
 (5 rows)
 
 SET timescaledb.enable_transparent_decompression TO false;
@@ -347,11 +244,11 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
  Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
  Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:01:05 2022 PDT |        3 |      7 | 1.36548898576188 | 13.8143608776025
+ Wed Jun 01 00:01:20 2022 PDT |        2 |     16 | 10.1597583380004 | 32.6534412097854
 (5 rows)
 
 -- With index scan
@@ -370,11 +267,11 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
  Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
  Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:01:05 2022 PDT |        3 |      7 | 1.36548898576188 | 13.8143608776025
+ Wed Jun 01 00:01:20 2022 PDT |        2 |     16 | 10.1597583380004 | 32.6534412097854
 (5 rows)
 
 SET enable_indexscan = false;
@@ -383,11 +280,11 @@ SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
  Wed Jun 01 00:00:25 2022 PDT |        3 |      5 | 23.5021762463069 |  76.360064629636
  Wed Jun 01 00:00:30 2022 PDT |        3 |     19 |  8.2758179500301 | 10.2100470173341
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:01:05 2022 PDT |        3 |      7 | 1.36548898576188 | 13.8143608776025
+ Wed Jun 01 00:01:20 2022 PDT |        2 |     16 | 10.1597583380004 | 32.6534412097854
 (5 rows)
 
 SET timescaledb.enable_transparent_decompression TO false;
@@ -404,11 +301,11 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:15:00 2022 PDT |        1 |     23 | 31.3889641515487 | 85.2225946586275
- Wed Jun 01 00:53:10 2022 PDT |        1 |     23 | 23.7504133501012 | 66.7493748468098
- Wed Jun 01 01:01:10 2022 PDT |        1 |     23 | 7.45510140333042 | 43.6563419416481
- Wed Jun 01 01:30:25 2022 PDT |        1 |     23 | 30.0992169522525 | 60.8634665478617
+ Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:12:45 2022 PDT |        1 |      1 | 13.1569511365916 | 86.7500491115748
+ Wed Jun 01 01:19:50 2022 PDT |        1 |      1 | 29.5443807293122 | 2.56533840018596
+ Wed Jun 01 01:44:35 2022 PDT |        1 |      1 | 1.09145497137706 | 81.9018703001777
+ Wed Jun 01 02:22:45 2022 PDT |        1 |      1 | 32.3284351265662 |  46.457827923454
 (5 rows)
 
 -- Show with transparent decompression
@@ -453,10 +350,10 @@ SELECT count(*) FROM :chunk WHERE humidity > 110;
  Aggregate (actual rows=1 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
          Vectorized Filter: (humidity > '110'::double precision)
-         Rows Removed by Filter: 12244
+         Rows Removed by Filter: 12240
  Decompression Cache Hits: 0
- Decompression Cache Misses: 28
- Decompress Count: 28
+ Decompression Cache Misses: 30
+ Decompress Count: 30
 (7 rows)
 
 SELECT count(*) FROM :chunk WHERE humidity > 110;
@@ -475,7 +372,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY device ASC LIMIT 5;
    ->  Sort (actual rows=5 loops=1)
          Sort Key: device
          Sort Method: top-N heapsort 
-         ->  Seq Scan on _hyper_1_1_chunk (actual rows=1253 loops=1)
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=1249 loops=1)
                Filter: (device < 4)
                Rows Removed by Filter: 10991
 (7 rows)
@@ -501,17 +398,17 @@ WHERE format('%I.%I', schemaname, tablename)::regclass = 'chunk_data'::regclass;
 SELECT * FROM chunk_data_relstats;
   relname   | reltuples | relpages 
 ------------+-----------+----------
- chunk_data |     12244 |       91
+ chunk_data |     12240 |       90
 (1 row)
 
 SELECT * FROM chunk_data_attrstats;
  attname  | n_distinct |                                 most_common_vals                                 
 ----------+------------+----------------------------------------------------------------------------------
  time     |         -1 | 
- location |         12 | 3,9,10,2,1,6,8,7,5,4
- device   |         30 | 26,5,18,1,21,23,3,16,24,30,10,19,9,14,28,13,27,7,2,6,20,22,25,17,4,8,12,15,29,11
- temp     |  -0.999755 | 1
- humidity |  -0.999755 | 1
+ location |         10 | 3,9,10,2,1,6,8,7,5,4
+ device   |         30 | 26,5,18,21,23,1,3,16,24,30,10,19,9,14,28,13,27,7,2,6,20,22,25,17,4,8,12,15,29,11
+ temp     |         -1 | 
+ humidity |         -1 | 
 (5 rows)
 
 -- Stats on compressed chunk before ANALYZE. Note that this chunk is
@@ -540,7 +437,7 @@ FROM pg_class
 WHERE oid = :'chunk'::regclass;
      relname      | reltuples | relpages 
 ------------------+-----------+----------
- _hyper_1_1_chunk |     12244 |        5
+ _hyper_1_1_chunk |     12240 |        1
 (1 row)
 
 -- There should be no difference in attrstats, so EXCEPT query should
@@ -669,11 +566,11 @@ ON (c1.compressed_chunk_id = c2.id);
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:00:02 2022 PDT |       12 |      1 |                1 |                1
- Wed Jun 01 00:00:03 2022 PDT |        1 |      1 |                1 |                1
- Wed Jun 01 00:00:06 2022 PDT |        2 |      1 |                1 |                1
- Wed Jun 01 00:00:07 2022 PDT |        3 |      1 |                1 |                1
  Wed Jun 01 00:00:55 2022 PDT |        1 |      1 | 18.1355983740562 | 93.2399098726618
+ Wed Jun 01 00:02:50 2022 PDT |        6 |      2 | 3.41795491467339 | 79.4169433908854
+ Wed Jun 01 00:03:15 2022 PDT |        2 |      2 | 32.3846700262051 | 43.4716481956856
+ Wed Jun 01 00:03:35 2022 PDT |        9 |      3 | 37.0804688754844 | 29.4121735958255
+ Wed Jun 01 00:05:05 2022 PDT |        2 |      1 | 23.9311159063196 | 29.1861844182151
 (5 rows)
 
 -- Show access method used on chunk
@@ -692,8 +589,7 @@ SELECT device, orig.count AS orig_count, decomp.count AS decomp_count, (decomp.c
 FROM orig JOIN decomp USING (device) WHERE orig.count != decomp.count;
  device | orig_count | decomp_count | diff 
 --------+------------+--------------+------
-      1 |      17384 |        17388 |    4
-(1 row)
+(0 rows)
 
 -- Convert back to hyperstore to check that metadata was cleaned up
 -- from last time this table used hyperstore
@@ -725,7 +621,7 @@ WHERE time BETWEEN '2022-06-01 00:00:01' AND '2022-06-01 00:00:10'::timestamptz;
 SELECT count(*) FROM sample_readings;
  count 
 -------
-     6
+     2
 (1 row)
 
 -- Now add the column
@@ -737,7 +633,7 @@ SELECT count(*) FROM readings r
 JOIN sample_readings s USING (time, location, device, temp, humidity);
  count 
 -------
-     6
+     2
 (1 row)
 
 -- insert some new (non-compressed) data into the chunk in order to
@@ -767,7 +663,7 @@ SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
 SELECT sum(_ts_meta_count) FROM :cchunk;
   sum  
 -------
- 12244
+ 12240
 (1 row)
 
 CALL recompress_chunk(:'chunk');
@@ -832,13 +728,13 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
 SELECT sum(_ts_meta_count) FROM :cchunk;
   sum  
 -------
- 24398
+ 24394
 (1 row)
 
 -- A count on the chunk should return the same count
 SELECT count(*) FROM :chunk;
  count 
 -------
- 24398
+ 24394
 (1 row)
 
