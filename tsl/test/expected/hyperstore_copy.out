@@ -25,11 +25,14 @@ $$;
 create table :hypertable(
        metric_id serial,
        created_at timestamptz not null unique,
-       location_id int,
-       device_id int,
+       location_id int,		--segmentby attribute with index
+       owner_id int,		--segmentby attribute without index
+       device_id int,		--non-segmentby attribute
        temp float,
        humidity float
 );
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
 select create_hypertable(:'hypertable', by_range('created_at'));
  create_hypertable 
 -------------------
@@ -48,15 +51,15 @@ select setseed(1);
 --
 -- The timestamps for the original rows will have timestamps every 10
 -- seconds. Any other timestamps are inserted as part of the test.
-insert into :hypertable (created_at, location_id, device_id, temp, humidity)
-select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+insert into :hypertable (created_at, location_id, owner_id, device_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
-	  timescaledb.compress_segmentby = 'location_id'
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
 );
--- Set some test chunks as global variables (first and last chunk here)
+-- Get some test chunks as global variables (first and last chunk here)
 select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
   from timescaledb_information.chunks
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass

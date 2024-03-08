@@ -25,11 +25,14 @@ $$;
 create table :hypertable(
        metric_id serial,
        created_at timestamptz not null unique,
-       location_id int,
-       device_id int,
+       location_id int,		--segmentby attribute with index
+       owner_id int,		--segmentby attribute without index
+       device_id int,		--non-segmentby attribute
        temp float,
        humidity float
 );
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
 select create_hypertable(:'hypertable', by_range('created_at'));
  create_hypertable 
 -------------------
@@ -48,15 +51,15 @@ select setseed(1);
 --
 -- The timestamps for the original rows will have timestamps every 10
 -- seconds. Any other timestamps are inserted as part of the test.
-insert into :hypertable (created_at, location_id, device_id, temp, humidity)
-select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+insert into :hypertable (created_at, location_id, owner_id, device_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
-	  timescaledb.compress_segmentby = 'location_id'
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
 );
--- Set some test chunks as global variables (first and last chunk here)
+-- Get some test chunks as global variables (first and last chunk here)
 select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
   from timescaledb_information.chunks
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
@@ -168,10 +171,10 @@ on conflict (created_at) do nothing;
 -- here since it is easier to see what went wrong if something did.
 select location_id, count(*) into curr from :hypertable GROUP BY location_id;
 select * from :hypertable where created_at between '2022-06-01 00:00:01' and '2022-06-01 00:00:09';
- metric_id |          created_at          | location_id | device_id | temp | humidity 
------------+------------------------------+-------------+-----------+------+----------
-    259204 | Wed Jun 01 00:00:02 2022 PDT |           1 |         1 |    1 |        1
-    259205 | Wed Jun 01 00:00:03 2022 PDT |           1 |         1 |    1 |        1
+ metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
+-----------+------------------------------+-------------+----------+-----------+------+----------
+    259204 | Wed Jun 01 00:00:02 2022 PDT |           1 |          |         1 |    1 |        1
+    259205 | Wed Jun 01 00:00:03 2022 PDT |           1 |          |         1 |    1 |        1
 (2 rows)
 
 select * from orig join curr using (location_id) where orig.count != curr.count;
@@ -231,11 +234,11 @@ values ('2022-06-01 00:00:03', 21, 1, 1.0, 1.0)
 on conflict (created_at) do update set location_id = 22;
 select * from :hypertable where location_id between 11 and 22
 order by location_id;
- metric_id |          created_at          | location_id | device_id |       temp       |     humidity     
------------+------------------------------+-------------+-----------+------------------+------------------
-         1 | Wed Jun 01 00:00:00 2022 PDT |          12 |        23 | 15.5003657696018 | 41.0800937306156
-    259204 | Wed Jun 01 00:00:02 2022 PDT |          20 |         1 |                1 |                1
-    259205 | Wed Jun 01 00:00:03 2022 PDT |          22 |         1 |                1 |                1
+ metric_id |          created_at          | location_id | owner_id | device_id |       temp       |     humidity     
+-----------+------------------------------+-------------+----------+-----------+------------------+------------------
+         1 | Wed Jun 01 00:00:00 2022 PDT |          12 |       23 |         2 | 16.4320374922463 | 55.2454376356891
+    259204 | Wed Jun 01 00:00:02 2022 PDT |          20 |          |         1 |                1 |                1
+    259205 | Wed Jun 01 00:00:03 2022 PDT |          22 |          |         1 |                1 |                1
 (3 rows)
 
 drop table :hypertable;
