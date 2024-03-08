@@ -1,0 +1,206 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/setup_hyperstore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+-- Alternative function to compress_chunk that uses the table access
+-- method to compress a chunk.
+create function twist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method hyperstore', chunk);
+    return chunk;
+end
+$$;
+create function untwist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method heap', chunk);
+    return chunk;
+end
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id int,		--segmentby attribute with index
+       owner_id int,		--segmentby attribute without index
+       device_id int,		--non-segmentby attribute
+       temp float,
+       humidity float
+);
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, owner_id, device_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+-- Get some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 desc
+ limit 1 \gset
+-- TODO(#1068) Parallel sequence scan does not work
+set max_parallel_workers_per_gather to 0;
+select twist_chunk(show_chunks(:'hypertable'));
+              twist_chunk               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+-- Check that all chunks are compressed
+select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
+    chunk_name    | compression_status 
+------------------+--------------------
+ _hyper_1_1_chunk | Compressed
+ _hyper_1_2_chunk | Compressed
+ _hyper_1_3_chunk | Compressed
+ _hyper_1_4_chunk | Compressed
+ _hyper_1_5_chunk | Compressed
+ _hyper_1_6_chunk | Compressed
+(6 rows)
+
+select relname, amname
+  from pg_class join pg_am on (relam = pg_am.oid)
+ where pg_class.oid in (select show_chunks(:'hypertable'))
+order by relname;
+     relname      |   amname   
+------------------+------------
+ _hyper_1_1_chunk | hyperstore
+ _hyper_1_2_chunk | hyperstore
+ _hyper_1_3_chunk | hyperstore
+ _hyper_1_4_chunk | hyperstore
+ _hyper_1_5_chunk | hyperstore
+ _hyper_1_6_chunk | hyperstore
+(6 rows)
+
+-- Pick a random row to update
+\x on
+select * from :hypertable order by created_at offset 577 limit 1;
+-[ RECORD 1 ]-----------------------------
+metric_id   | 578
+created_at  | Wed Jun 01 01:36:10 2022 PDT
+location_id | 5
+owner_id    | 19
+device_id   | 4
+temp        | 14.8028647461121
+humidity    | 32.8888982411381
+
+select created_at, location_id, owner_id, device_id
+from :hypertable order by created_at offset 577 limit 1 \gset
+\x off
+-- Test updating the same row using segment-by column, other lookup column
+explain (costs off)
+update :hypertable set temp = 100.0 where created_at = :'created_at';
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Update on readings
+         Update on _hyper_1_1_chunk readings_1
+         ->  Result
+               ->  Index Scan using "1_1_readings_created_at_key" on _hyper_1_1_chunk readings_1
+                     Index Cond: (created_at = 'Wed Jun 01 01:36:10 2022 PDT'::timestamp with time zone)
+(6 rows)
+
+\x on
+select * from :hypertable where created_at = :'created_at';
+-[ RECORD 1 ]-----------------------------
+metric_id   | 578
+created_at  | Wed Jun 01 01:36:10 2022 PDT
+location_id | 5
+owner_id    | 19
+device_id   | 4
+temp        | 14.8028647461121
+humidity    | 32.8888982411381
+
+update :hypertable set temp = 100.0 where created_at = :'created_at';
+select * from :hypertable where created_at = :'created_at';
+-[ RECORD 1 ]-----------------------------
+metric_id   | 578
+created_at  | Wed Jun 01 01:36:10 2022 PDT
+location_id | 5
+owner_id    | 19
+device_id   | 4
+temp        | 100
+humidity    | 32.8888982411381
+
+\x off
+-- Disable checks on max tuples decompressed per transaction
+set timescaledb.max_tuples_decompressed_per_dml_transaction to 0;
+-- Using the segmentby attribute that has an index
+explain (costs off)
+update :hypertable set humidity = 110.0 where location_id = :location_id;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Update on readings
+         Update on _hyper_1_1_chunk readings_1
+         Update on _hyper_1_2_chunk readings_2
+         Update on _hyper_1_3_chunk readings_3
+         Update on _hyper_1_4_chunk readings_4
+         Update on _hyper_1_5_chunk readings_5
+         Update on _hyper_1_6_chunk readings_6
+         ->  Result
+               ->  Append
+                     ->  Index Scan using _hyper_1_1_chunk_hypertable_location_id_idx on _hyper_1_1_chunk readings_1
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_2_chunk_hypertable_location_id_idx on _hyper_1_2_chunk readings_2
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_3_chunk_hypertable_location_id_idx on _hyper_1_3_chunk readings_3
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_4_chunk_hypertable_location_id_idx on _hyper_1_4_chunk readings_4
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_5_chunk_hypertable_location_id_idx on _hyper_1_5_chunk readings_5
+                           Index Cond: (location_id = 5)
+                     ->  Index Scan using _hyper_1_6_chunk_hypertable_location_id_idx on _hyper_1_6_chunk readings_6
+                           Index Cond: (location_id = 5)
+(22 rows)
+
+select count(*) from :hypertable where humidity = 110.0;
+ count 
+-------
+     0
+(1 row)
+
+update :hypertable set humidity = 110.0 where location_id = :location_id;
+select count(*) from :hypertable where humidity = 110.0;
+ count 
+-------
+ 25888
+(1 row)
+
