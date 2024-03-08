@@ -38,9 +38,6 @@ MatchText(const char *t, int tlen, const char *p, int plen)
 	if (plen == 1 && *p == '%')
 		return LIKE_TRUE;
 
-	/* Since this function recurses, it could be driven to stack overflow */
-	check_stack_depth();
-
 	/*
 	 * In this loop, we advance by char when matching wildcards (and thus on
 	 * recursive entry to this function we are properly char-synced). On other
@@ -129,6 +126,9 @@ MatchText(const char *t, int tlen, const char *p, int plen)
 			{
 				if (GETCHAR(*t) == firstpat)
 				{
+					/* Since this function recurses, it could be driven to stack overflow */
+					check_stack_depth();
+
 					int matched = MatchText(t, tlen, p, plen);
 
 					if (matched != LIKE_FALSE)
