@@ -626,7 +626,10 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 												all_dead);
 
 		if (result)
+		{
+			slot->tts_tableOid = RelationGetRelid(scan->rel);
 			ExecStoreArrowTuple(slot, InvalidTupleIndex);
+		}
 
 		return result;
 	}
@@ -660,6 +663,7 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 	{
 		/* Still in the same compressed tuple, so just update tuple index and
 		 * return the same Arrow slot */
+		Assert(slot->tts_tableOid == RelationGetRelid(scan->rel));
 		ExecStoreArrowTuple(slot, tuple_index);
 		return true;
 	}
@@ -673,6 +677,7 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 
 	if (result)
 	{
+		slot->tts_tableOid = RelationGetRelid(scan->rel);
 		ExecStoreArrowTuple(slot, tuple_index);
 		/* Save the current compressed TID */
 		ItemPointerCopy(&decoded_tid, &cscan->tid);
@@ -720,7 +725,10 @@ compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot sna
 	}
 
 	if (result)
+	{
+		slot->tts_tableOid = RelationGetRelid(relation);
 		ExecStoreArrowTuple(slot, tuple_index);
+	}
 
 	return result;
 }
@@ -1124,7 +1132,10 @@ compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
 											  tmfd);
 
 		if (result == TM_Ok)
+		{
+			slot->tts_tableOid = RelationGetRelid(relation);
 			ExecStoreArrowTuple(slot, tuple_index);
+		}
 
 		table_close(crel, NoLock);
 	}
@@ -1143,7 +1154,10 @@ compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
 									tmfd);
 
 		if (result == TM_Ok)
+		{
+			slot->tts_tableOid = RelationGetRelid(relation);
 			ExecStoreArrowTuple(slot, InvalidTupleIndex);
+		}
 	}
 
 	return result;
@@ -1354,7 +1368,10 @@ compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXm
 	}
 
 	if (result)
+	{
+		slot->tts_tableOid = RelationGetRelid(scan->rs_rd);
 		ExecStoreArrowTuple(slot, tuple_index);
+	}
 	else
 		ExecClearTuple(slot);
 
