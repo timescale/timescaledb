@@ -1457,7 +1457,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 														ALLOCSET_DEFAULT_SIZES),
 		.estate = CreateExecutorState(),
 
-		.decompressed_slots = palloc0(sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION),
+		.decompressed_slots = palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
 	};
 
 	create_per_compressed_column(&decompressor);
