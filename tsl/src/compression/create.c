@@ -49,6 +49,22 @@
 #include "utils.h"
 #include "guc.h"
 
+static const char *sparse_index_types[] = { "min", "max" };
+
+static bool
+is_sparse_index_type(const char *type)
+{
+	for (size_t i = 0; i < sizeof(sparse_index_types) / sizeof(sparse_index_types[0]); i++)
+	{
+		if (strcmp(sparse_index_types[i], type) == 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void validate_hypertable_for_compression(Hypertable *ht);
 static List *build_columndefs(CompressionSettings *settings, Oid src_relid);
 static ColumnDef *build_columndef_singlecolumn(const char *colname, Oid typid);
@@ -58,7 +74,7 @@ static void compression_settings_update(Hypertable *ht, CompressionSettings *set
 static char *
 compression_column_segment_metadata_name(const char *type, int16 column_index)
 {
-	Assert(strcmp(type, "min") == 0 || strcmp(type, "max") == 0);
+	Assert(is_sparse_index_type(type));
 
 	char *buf = palloc(sizeof(char) * NAMEDATALEN);
 
@@ -95,7 +111,7 @@ column_segment_max_name(int16 column_index)
 char *
 compressed_column_metadata_name_v2(const char *metadata_type, const char *column_name)
 {
-	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
+	Assert(is_sparse_index_type(metadata_type));
 	Assert(strlen(metadata_type) <= 6);
 
 	const int len = strlen(column_name);
@@ -127,7 +143,7 @@ int
 compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
 								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
 {
-	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
+	Assert(is_sparse_index_type(metadata_type));
 
 	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
 	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
@@ -1001,7 +1017,6 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 		ExecRenameStmt(compressed_col_stmt);
 
 		compressed_index_stmt->relation = compressed_col_stmt->relation;
-		const char *sparse_index_types[] = { "min", "max" };
 		for (size_t i = 0; i < sizeof(sparse_index_types) / sizeof(sparse_index_types[0]); i++)
 		{
 			char *old_index_name =
@@ -1011,7 +1026,6 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 				continue;
 			}
 
-			// CommandCounterIncrement();
 			char *new_index_name =
 				compressed_column_metadata_name_v2(sparse_index_types[i], stmt->newname);
 			compressed_index_stmt->subname = old_index_name;
