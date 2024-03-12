@@ -116,6 +116,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
        hyperstore_scans.sql merge_compress.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+  list(APPEND TEST_FILES hyperstore_parallel.sql)
+endif()
+
 set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
