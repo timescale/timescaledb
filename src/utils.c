@@ -1727,3 +1727,23 @@ ts_makeaclitem(PG_FUNCTION_ARGS)
 
 	PG_RETURN_ACLITEM_P(result);
 }
+
+/*
+ * heap_form_tuple using NullableDatum array instead of two arrays for
+ * values and nulls
+ */
+HeapTuple
+ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums)
+{
+	int numElements = tupleDescriptor->natts;
+	Datum *values = palloc0(sizeof(Datum) * numElements);
+	bool *nulls = palloc0(sizeof(bool) * numElements);
+
+	for (int i = 0; i < numElements; i++)
+	{
+		values[i] = datums[i].value;
+		nulls[i] = datums[i].isnull;
+	}
+
+	return heap_form_tuple(tupleDescriptor, values, nulls);
+}

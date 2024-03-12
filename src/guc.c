@@ -68,7 +68,6 @@ TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
-bool ts_guc_enable_async_append = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
@@ -444,18 +443,6 @@ _guc_init(void)
 							 "Enable reading of tiered data by including a foreign table "
 							 "representing the data in the object storage into the query plan",
 							 &ts_guc_enable_osm_reads,
-							 true,
-							 PGC_USERSET,
-							 0,
-							 NULL,
-							 NULL,
-							 NULL);
-
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_async_append"),
-							 "Enable async query execution on data nodes",
-							 "Enable optimization that runs remote queries asynchronously"
-							 "across data nodes",
-							 &ts_guc_enable_async_append,
 							 true,
 							 PGC_USERSET,
 							 0,

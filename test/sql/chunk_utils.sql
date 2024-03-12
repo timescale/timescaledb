@@ -308,8 +308,6 @@ INSERT INTO PUBLIC.drop_chunk_test_tstz VALUES(now()+INTERVAL '5 minutes', 1.0, 
 
 SELECT * FROM test.show_subtables('drop_chunk_test_ts');
 SELECT * FROM test.show_subtables('drop_chunk_test_tstz');
--- "created_before/after" can be used with time partitioning in show chunks
-SELECT show_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
 
 BEGIN;
     SELECT show_chunks('drop_chunk_test_ts');
@@ -649,5 +647,11 @@ FROM timescaledb_information.chunks
 WHERE hypertable_name = 'hyper1' and hypertable_schema = 'test1'
 ORDER BY chunk_name ;
 
--- "created_before/after" can be used with time partitioning in drop chunks
+-- "created_before/after" can be used with time partitioning in drop/show chunks
+SELECT show_chunks('drop_chunk_test_tstz', created_before => now() - INTERVAL '1 hour');
 SELECT drop_chunks('drop_chunk_test_tstz', created_before => now() + INTERVAL '1 hour');
+SELECT show_chunks('drop_chunk_test_ts');
+-- "created_before/after" accept timestamptz even though partitioning col is just
+-- timestamp
+SELECT show_chunks('drop_chunk_test_ts', created_after => now() - INTERVAL '1 hour', created_before => now());
+SELECT drop_chunks('drop_chunk_test_ts', created_after => INTERVAL '1 hour', created_before => now());
