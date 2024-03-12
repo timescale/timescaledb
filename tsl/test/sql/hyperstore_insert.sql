@@ -4,9 +4,6 @@
 
 \ir include/setup_hyperstore.sql
 
--- TODO(timescale/timescaledb-private#1068) Parallel sequence scan does not work
-set max_parallel_workers_per_gather to 0;
-
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
 select twist_chunk(show_chunks(:'hypertable'));
