@@ -144,13 +144,28 @@ SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_s
 (1 row)
 
 -- Compression policy
-SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds') AS compress_chunks_job_id \gset
+SELECT add_compression_policy('test', compress_created_before => INTERVAL '1 hour') AS compress_chunks_job_id \gset
 SELECT pg_sleep(3);
  pg_sleep 
 ----------
  
 (1 row)
 
+CALL run_job(:compress_chunks_job_id);
+-- Chunk compression status
+SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;
+ compression_status 
+--------------------
+ Uncompressed
+(1 row)
+
+SELECT remove_compression_policy('test');
+ remove_compression_policy 
+---------------------------
+ t
+(1 row)
+
+SELECT add_compression_policy('test', compress_created_before => INTERVAL '2 seconds') AS compress_chunks_job_id \gset
 CALL run_job(:compress_chunks_job_id);
 -- Chunk compression status
 SELECT DISTINCT compression_status FROM _timescaledb_internal.compressed_chunk_stats;

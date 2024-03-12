@@ -33,10 +33,10 @@ jobs:
     name: Notify security channel
     runs-on: ubuntu-latest
     if: >-
-      github.event_name == 'issues'
-      && github.event.action != 'closed'
-      && ( contains(github.event.issues.issue.labels.*.name, 'segfault')
-           || contains(github.event.issues.issue.labels.*.name, 'security') )
+      github.event_name == 'issues' &&
+      github.event.action != 'closed' &&
+      ( contains(github.event.issue.labels.*.name, 'segfault') ||
+        contains(github.event.issue.labels.*.name, 'security') )
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
       SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_SECURITY }}
@@ -45,7 +45,7 @@ jobs:
 
       - name: Generate message
         run: |
-          gh api ${{ github.url }} --template='{"channel": $SLACK_CHANNEL, "text": "Issue <{{.url}}|#{{.number}} {{.title}}> needs attention"}' >message.json
+          gh api ${{ github.event.issue.url }} --template="{\"channel\": \"$SLACK_CHANNEL\", \"text\": \"Issue <{{.url}}|#{{.number}} {{.title}}> needs attention\"}" | tee message.json
 
       - name: Send slack message
         uses: krider2010/slack-bot-action@1.0.1
@@ -162,8 +162,9 @@ jobs:
          team: 'database-eng'
          GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
       - name: Remove waiting-for-author label
-        if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false'
-          && steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author' }}
+        if: >-
+          steps.checkUserMember.outputs.isTeamMember == 'false' &&
+          steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author'
         uses: andymckay/labeler@3a4296e9dcdf9576b0456050db78cfd34853f260
         with:
           remove-labels: 'waiting-for-author, no-activity'

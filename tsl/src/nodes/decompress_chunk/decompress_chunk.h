@@ -108,7 +108,7 @@ typedef struct DecompressChunkPath
 	 */
 	List *aggregated_column_type;
 
-	List *compressed_pathkeys;
+	List *required_compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;
 	bool batch_sorted_merge;

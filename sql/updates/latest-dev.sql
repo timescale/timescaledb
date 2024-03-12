@@ -161,4 +161,19 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.get_chunk_colstats;
 DROP FUNCTION IF EXISTS _timescaledb_internal.get_chunk_relstats;
 DROP FUNCTION IF EXISTS _timescaledb_internal.get_chunk_colstats;
 
-
+-- In older TSDB versions, we disabled autovacuum for compressed chunks
+-- to keep the statistics. However, this restriction was removed in
+-- #5118 but no migration was performed to remove the custom
+-- autovacuum setting for existing chunks.
+DO $$
+DECLARE
+  chunk regclass;
+BEGIN
+  FOR chunk IN
+  SELECT pg_catalog.format('%I.%I', schema_name, table_name)::regclass
+    FROM _timescaledb_catalog.chunk WHERE dropped = false
+  LOOP
+    EXECUTE pg_catalog.format('ALTER TABLE %s RESET (autovacuum_enabled);', chunk::text);
+  END LOOP;
+END
+$$;
