@@ -120,6 +120,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_scans.sql)
 endif()
 
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+  list(APPEND TEST_FILES hyperstore_parallel.sql)
+endif()
+
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "17"))
   list(APPEND TEST_FILES privilege_maintain.sql)
 endif()
