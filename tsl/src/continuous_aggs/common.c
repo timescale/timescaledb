@@ -201,8 +201,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg(
-							 "time bucket function must reference a hypertable dimension column")));
+						 errmsg("time bucket function must reference the primary hypertable "
+								"dimension column")));
 
 			if (list_length(fe->args) >= 3)
 			{

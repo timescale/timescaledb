@@ -70,14 +70,14 @@ AS
 Select max(temperature)
 from conditions
  group by time_bucket('1week', timemeasure) , location WITH NO DATA;
-ERROR:  time bucket function must reference a hypertable dimension column
+ERROR:  time bucket function must reference the primary hypertable dimension column
 --time_bucket on expression
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 Select max(temperature)
 from conditions
  group by time_bucket('1week', timec+ '10 minutes'::interval) , location WITH NO DATA;
-ERROR:  time bucket function must reference a hypertable dimension column
+ERROR:  time bucket function must reference the primary hypertable dimension column
 --multiple time_bucket functions
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
@@ -369,14 +369,14 @@ as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
-ERROR:  time bucket function must reference a hypertable dimension column
+ERROR:  time bucket function must reference the primary hypertable dimension column
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 as
 select time_bucket(100, timec), min(location), sum(temperature),sum(humidity)
 from conditions
 group by time_bucket(100, timec) WITH NO DATA;
-ERROR:  time bucket function must reference a hypertable dimension column
+ERROR:  time bucket function must reference the primary hypertable dimension column
 ALTER TABLE conditions ALTER timec type int;
 create materialized view mat_with_test( timec, minl, sumt , sumh)
 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
