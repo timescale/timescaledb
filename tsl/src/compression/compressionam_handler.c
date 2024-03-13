@@ -1323,6 +1323,8 @@ typedef struct IndexCallbackState
 	ArrowArray **arrow_columns;
 	int16 *attrs_map;
 	AttrNumber count_cattno;
+	Bitmapset *segmentby_cols;
+	Bitmapset *orderby_cols;
 } IndexCallbackState;
 
 /*
@@ -1337,11 +1339,7 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 	//							callback_state->index_info->ii_ExclusionOps != NULL);
 	int32 num_rows = -1;
 	TupleDesc idesc = RelationGetDescr(index);
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(icstate->rel);
-	Bitmapset *segmentby_cols = NULL;
-	Bitmapset *orderby_cols = NULL;
-
-	build_segment_and_orderby_bms(caminfo, &segmentby_cols, &orderby_cols);
+	const Bitmapset *segmentby_cols = icstate->segmentby_cols;
 
 	for (int i = 0; i < icstate->index_info->ii_NumIndexAttrs; i++)
 	{
@@ -1434,9 +1432,6 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 		tid_to_compressed_tid(&index_tid, tid, rownum + 1);
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
 	}
-
-	bms_free(segmentby_cols);
-	bms_free(orderby_cols);
 }
 
 /*
@@ -1475,6 +1470,8 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 		.arrow_columns = palloc(sizeof(ArrowArray *) * indexInfo->ii_NumIndexAttrs),
 	};
 	IndexInfo iinfo = *indexInfo;
+
+	build_segment_and_orderby_bms(caminfo, &icstate.segmentby_cols, &icstate.orderby_cols);
 
 	/* Translate index attribute numbers for the compressed relation */
 	for (int i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
@@ -1515,6 +1512,8 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	MemoryContextDelete(icstate.decompression_mcxt);
 	pfree(icstate.attrs_map);
 	pfree(icstate.arrow_columns);
+	bms_free(icstate.segmentby_cols);
+	bms_free(icstate.orderby_cols);
 
 	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	const TableAmRoutine *oldam = relation->rd_tableam;
