@@ -55,14 +55,15 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 	const uint64 *restrict blocks = compressed->slots + num_selector_slots;
 	for (uint32 block_index = 0; block_index < num_blocks; block_index++)
 	{
-		const int selector_value = selector_values[block_index];
+		const uint8 selector_value = selector_values[block_index];
 		const uint64 block_data = blocks[block_index];
 
 		/* We don't see RLE blocks so often in the real data, <1% of blocks. */
 		if (unlikely(simple8brle_selector_is_rle(selector_value)))
 		{
 			const uint16 n_block_values = simple8brle_rledata_repeatcount(block_data);
-			CheckCompressedData(decompressed_index + n_block_values <= n_buffer_elements);
+			CheckCompressedData(n_block_values <= n_buffer_elements);
+			CheckCompressedData(decompressed_index <= n_buffer_elements - n_block_values);
 
 			const uint64 repeated_value_raw = simple8brle_rledata_value(block_data);
 			const ELEMENT_TYPE repeated_value_converted = repeated_value_raw;
@@ -97,7 +98,8 @@ FUNCTION_NAME(simple8brle_decompress_all_buf,
 		 * might be incorrect.                                                                     \
 		 */                                                                                        \
 		const uint16 n_block_values = SIMPLE8B_NUM_ELEMENTS[X];                                    \
-		CheckCompressedData(decompressed_index + n_block_values <= n_buffer_elements);             \
+		CheckCompressedData(n_block_values <= n_buffer_elements);                                  \
+		CheckCompressedData(decompressed_index <= n_buffer_elements - n_block_values);             \
                                                                                                    \
 		const uint64 bitmask = simple8brle_selector_get_bitmask(X);                                \
                                                                                                    \
