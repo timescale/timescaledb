@@ -277,10 +277,21 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
   # security options go here - these are not supported by all compilers
   # first and foremost, do we have LTO?
   check_c_compiler_flag(-flto CC_SUPPORTS_LTO)
+  if(NOT CC_SUPPORTS_LTO)
+    message("The compiler ${CMAKE_C_COMPILER_ID} does not support LTO - CFI disabled and FORTIFY might increase binary size significantly")
+  endif()
   # if we are building on a GLIBC environment, FORTIFY is available
-  check_c_compiler_flag(-D_FORTIFY_SOURCE CC_SUPPORTS_FORTIFY)
-
-  if(CC_SUPPORTS_FORTIFY)
+  include(CheckCSourceCompiles)
+  set(CMAKE_REQUIRED_FLAGS -Werror)
+  set(CMAKE_REQUIRED_DEFINITIONS -D_FORTIFY_SOURCE)
+  # If this build succeeds, _FORTIFY_SOURCE is not available
+  check_c_source_compiles("
+  #include <string.h>
+    int main() {
+      char buffer[8];
+      strcpy(buffer, \"hello world\");
+     }" FORTIFY_NOT_AVAILABLE)
+  if(NOT FORTIFY_NOT_AVAILABLE)
       add_compile_options(-D_FORTIFY_SOURCE=2)
       if(CC_SUPPORTS_LTO)
           add_compile_options(-flto)
@@ -289,9 +300,10 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|AppleClang|Clang")
      message(STATUS "Compiler ${CMAKE_C_COMPILER_ID}  does not support -D_FORTIFY_SOURCE=1")
  endif()
  # CFI is currently supported by clang
- check_c_compiler_flag(-CFI CC_SUPPORTS_CFI)
- if(CC_SUPPORTS_CFI AND CC_SUPPORTS_LTO)
-     add_compile_options(-flto -fsanitize=cfi)
+ check_c_compiler_flag(-fsanitize=cfi CC_SUPPORTS_CFI)
+ # for CFI to work, we need LTO and Hidden Visibility
+ if(CC_SUPPORTS_CFI AND CC_SUPPORTS_LTO AND CC_SUPPORTS_VISIBILITY_HIDDEN)
+     add_compile_options(-fvisibility=hidden -flto -fsanitize=cfi)
  else()
      message(STATUS "Compiler ${CMAKE_C_COMPILER_ID} does not support CFI")
  endif()
