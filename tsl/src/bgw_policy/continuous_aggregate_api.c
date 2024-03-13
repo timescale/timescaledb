@@ -119,11 +119,8 @@ policy_refresh_cagg_get_refresh_start(const ContinuousAgg *cagg, const Dimension
 	/* interpret NULL as min value for that type */
 	if (*start_isnull)
 	{
-		Oid type = ts_dimension_get_partition_type(dim);
-
-		return cagg->bucket_function->bucket_fixed_interval == false ?
-				   ts_time_get_nobegin_or_min(type) :
-				   ts_time_get_min(type);
+		Assert(cagg->partition_type == ts_dimension_get_partition_type(dim));
+		return cagg_get_time_min(cagg);
 	}
 
 	return res;
