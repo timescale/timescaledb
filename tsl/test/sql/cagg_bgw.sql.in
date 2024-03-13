@@ -286,6 +286,26 @@ and cagg.materialization_hypertable_name = ps.hypertable_name;
 
 \x off
 
+-- test merged refresh (change data in two chunks)
+UPDATE test_continuous_agg_table SET data = 11;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+ALTER SYSTEM SET timescaledb.materializations_per_refresh_window = 0;
+SELECT pg_reload_conf();
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+--advance time by 1day so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '1day')::bigint * 1000000, true);
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50, 50);
+
+SELECT * FROM sorted_bgw_log;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+ALTER SYSTEM RESET timescaledb.materializations_per_refresh_window;
+SELECT pg_reload_conf();
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
 DROP MATERIALIZED VIEW test_continuous_agg_view;
 
 --create a view with a function that it has no permission to execute

@@ -48,6 +48,6 @@ extern void invalidation_process_hypertable_log(int32 mat_hypertable_id, int32 r
 extern InvalidationStore *invalidation_process_cagg_log(
 	int32 mat_hypertable_id, int32 raw_hypertable_id, const InternalTimeRange *refresh_window,
 	const CaggsInfo *all_caggs_info, const long max_materializations, bool *do_merged_refresh,
-	InternalTimeRange *ret_merged_refresh_window);
+	InternalTimeRange *ret_merged_refresh_window, const CaggRefreshCallContext callctx);
 
 extern void invalidation_store_free(InvalidationStore *store);

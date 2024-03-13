@@ -11,6 +11,7 @@
 #include <catalog/index.h>
 #include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
+#include <catalog/pg_am_d.h>
 #include <catalog/pg_constraint_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_type.h>
@@ -19,6 +20,7 @@
 #include <commands/defrem.h>
 #include <commands/tablecmds.h>
 #include <commands/tablespace.h>
+#include <common/md5.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <parser/parse_type.h>
@@ -47,6 +49,22 @@
 #include "utils.h"
 #include "guc.h"
 
+static const char *sparse_index_types[] = { "min", "max" };
+
+static bool
+is_sparse_index_type(const char *type)
+{
+	for (size_t i = 0; i < sizeof(sparse_index_types) / sizeof(sparse_index_types[0]); i++)
+	{
+		if (strcmp(sparse_index_types[i], type) == 0)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void validate_hypertable_for_compression(Hypertable *ht);
 static List *build_columndefs(CompressionSettings *settings, Oid src_relid);
 static ColumnDef *build_columndef_singlecolumn(const char *colname, Oid typid);
@@ -54,13 +72,15 @@ static void compression_settings_update(Hypertable *ht, CompressionSettings *set
 										WithClauseResult *with_clause_options);
 
 static char *
-compression_column_segment_metadata_name(int16 column_index, const char *type)
+compression_column_segment_metadata_name(const char *type, int16 column_index)
 {
+	Assert(is_sparse_index_type(type));
+
 	char *buf = palloc(sizeof(char) * NAMEDATALEN);
-	int ret;
 
 	Assert(column_index > 0);
-	ret = snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
+	int ret =
+		snprintf(buf, NAMEDATALEN, COMPRESSION_COLUMN_METADATA_PATTERN_V1, type, column_index);
 	if (ret < 0 || ret > NAMEDATALEN)
 	{
 		ereport(ERROR,
@@ -72,33 +92,70 @@ compression_column_segment_metadata_name(int16 column_index, const char *type)
 char *
 column_segment_min_name(int16 column_index)
 {
-	return compression_column_segment_metadata_name(column_index,
-													COMPRESSION_COLUMN_METADATA_MIN_COLUMN_NAME);
+	return compression_column_segment_metadata_name("min", column_index);
 }
 
 char *
 column_segment_max_name(int16 column_index)
 {
-	return compression_column_segment_metadata_name(column_index,
-													COMPRESSION_COLUMN_METADATA_MAX_COLUMN_NAME);
+	return compression_column_segment_metadata_name("max", column_index);
+}
+
+/*
+ * Get metadata name for a given column name and metadata type, format version 2.
+ * We can't reference the attribute numbers, because they can change after
+ * drop/restore if we had any dropped columns.
+ * We might have to truncate the column names to fit into the NAMEDATALEN here,
+ * in this case we disambiguate them with their md5 hash.
+ */
+char *
+compressed_column_metadata_name_v2(const char *metadata_type, const char *column_name)
+{
+	Assert(is_sparse_index_type(metadata_type));
+	Assert(strlen(metadata_type) <= 6);
+
+	const int len = strlen(column_name);
+	Assert(len < NAMEDATALEN);
+
+	/*
+	 * We have to fit the name into NAMEDATALEN - 1 which is 63 bytes:
+	 * 12 (_ts_meta_v2_) + 6 (metadata_type) + 1 (_) + x (column_name) + 1 (_) + 4 (hash) = 63;
+	 * x = 63 - 24 = 39.
+	 */
+	char *result;
+	if (len > 39)
+	{
+		const char *errstr = NULL;
+		char hash[33];
+		Ensure(pg_md5_hash_compat(column_name, len, hash, &errstr), "md5 computation failure");
+
+		result = psprintf("_ts_meta_v2_%.6s_%.4s_%.39s", metadata_type, hash, column_name);
+	}
+	else
+	{
+		result = psprintf("_ts_meta_v2_%.6s_%.39s", metadata_type, column_name);
+	}
+	Assert(strlen(result) < NAMEDATALEN);
+	return result;
 }
 
 int
 compressed_column_metadata_attno(CompressionSettings *settings, Oid chunk_reloid,
 								 AttrNumber chunk_attno, Oid compressed_reloid, char *metadata_type)
 {
-	Assert(strcmp(metadata_type, "min") == 0 || strcmp(metadata_type, "max") == 0);
+	Assert(is_sparse_index_type(metadata_type));
 
 	char *attname = get_attname(chunk_reloid, chunk_attno, /* missing_ok = */ false);
 	int16 orderby_pos = ts_array_position(settings->fd.orderby, attname);
 
 	if (orderby_pos != 0)
 	{
-		char *metadata_name = compression_column_segment_metadata_name(orderby_pos, metadata_type);
+		char *metadata_name = compression_column_segment_metadata_name(metadata_type, orderby_pos);
 		return get_attnum(compressed_reloid, metadata_name);
 	}
 
-	return InvalidAttrNumber;
+	char *metadata_name = compressed_column_metadata_name_v2(metadata_type, attname);
+	return get_attnum(compressed_reloid, metadata_name);
 }
 
 /*
@@ -118,16 +175,54 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 	List *segmentby_column_defs = NIL;
 
 	Relation rel = table_open(src_relid, AccessShareLock);
+
+	Bitmapset *btree_columns = NULL;
+	if (ts_guc_auto_sparse_indexes)
+	{
+		/*
+		 * Check which columns have btree indexes. We will create sparse minmax
+		 * indexes for them in compressed chunk.
+		 */
+		ListCell *lc;
+		List *index_oids = RelationGetIndexList(rel);
+		foreach (lc, index_oids)
+		{
+			Oid index_oid = lfirst_oid(lc);
+			Relation index_rel = index_open(index_oid, AccessShareLock);
+			IndexInfo *index_info = BuildIndexInfo(index_rel);
+			index_close(index_rel, NoLock);
+
+			/*
+			 * We want to create the sparse minmax index, if it can satisfy the same
+			 * kinds of queries as the uncompressed index. The simplest case is btree
+			 * which can satisfy equality and comparison tests, same as sparse minmax.
+			 *
+			 * We can be smarter here, e.g. for 'BRIN', sparse minmax can be similar
+			 * to 'BRIN' with range opclass, but not for bloom filter opclass. For GIN,
+			 * sparse minmax is useless because it doesn't help satisfy text search
+			 * queries, and so on. Currently we check only the simplest btree case.
+			 */
+			if (index_info->ii_Am != BTREE_AM_OID)
+			{
+				continue;
+			}
+
+			for (int i = 0; i < index_info->ii_NumIndexKeyAttrs; i++)
+			{
+				AttrNumber attno = index_info->ii_IndexAttrNumbers[i];
+				if (attno != InvalidAttrNumber)
+				{
+					btree_columns = bms_add_member(btree_columns, attno);
+				}
+			}
+		}
+	}
+
 	TupleDesc tupdesc = rel->rd_att;
 
-	for (int attno = 0; attno < tupdesc->natts; attno++)
+	for (int attoffset = 0; attoffset < tupdesc->natts; attoffset++)
 	{
-		Oid attroid = InvalidOid;
-		int32 typmod = -1;
-		Oid collid = 0;
-
-		Form_pg_attribute attr = TupleDescAttr(tupdesc, attno);
-		ColumnDef *coldef;
+		Form_pg_attribute attr = TupleDescAttr(tupdesc, attoffset);
 		if (attr->attisdropped)
 			continue;
 		if (strncmp(NameStr(attr->attname),
@@ -138,31 +233,32 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 				 COMPRESSION_COLUMN_METADATA_PREFIX);
 
 		bool is_segmentby = ts_array_is_member(segmentby, NameStr(attr->attname));
-		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
-
 		if (is_segmentby)
 		{
-			attroid = attr->atttypid; /*segment by columns have original type */
-			typmod = attr->atttypmod;
-			collid = attr->attcollation;
+			segmentby_column_defs = lappend(segmentby_column_defs,
+											makeColumnDef(NameStr(attr->attname),
+														  attr->atttypid,
+														  attr->atttypmod,
+														  attr->attcollation));
+			continue;
 		}
-
-		if (!OidIsValid(attroid))
-		{
-			attroid = compresseddata_oid; /* default type for column */
-		}
-
-		coldef = makeColumnDef(NameStr(attr->attname), attroid, typmod, collid);
 
 		/*
-		 * Put the metadata columns before the compressed columns, because they
-		 * are accessed before decompression.
+		 * This is either an orderby or a normal compressed column. We want to
+		 * have metadata for some of them.  Put the metadata columns before the
+		 * respective compressed column, because they are accessed before
+		 * decompression.
 		 */
+		bool is_orderby = ts_array_is_member(settings->fd.orderby, NameStr(attr->attname));
 		if (is_orderby)
 		{
 			int index = ts_array_position(settings->fd.orderby, NameStr(attr->attname));
 			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
+			/*
+			 * We must be able to create the metadata for the orderby columns,
+			 * because it is required for sorting.
+			 */
 			if (!OidIsValid(type->lt_opr))
 				ereport(ERROR,
 						(errcode(ERRCODE_UNDEFINED_FUNCTION),
@@ -181,15 +277,46 @@ build_columndefs(CompressionSettings *settings, Oid src_relid)
 														   attr->atttypmod,
 														   attr->attcollation));
 		}
+		else if (bms_is_member(attr->attnum, btree_columns))
+		{
+			TypeCacheEntry *type = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR);
 
-		if (is_segmentby)
-		{
-			segmentby_column_defs = lappend(segmentby_column_defs, coldef);
+			if (OidIsValid(type->lt_opr))
+			{
+				/*
+				 * Here we create minmax metadata for the columns for which
+				 * we have btree indexes. Not sure it is technically possible
+				 * to have a btree index for a column and at the same time
+				 * not have a "less" operator for it. Still, we can have
+				 * various unusual user-defined types, and the minmax metadata
+				 * for the rest of the columns are not required for correctness,
+				 * so play it safe and just don't create the metadata if we don't
+				 * have an operator.
+				 */
+				compressed_column_defs =
+					lappend(compressed_column_defs,
+							makeColumnDef(compressed_column_metadata_name_v2("min",
+																			 NameStr(
+																				 attr->attname)),
+										  attr->atttypid,
+										  attr->atttypmod,
+										  attr->attcollation));
+				compressed_column_defs =
+					lappend(compressed_column_defs,
+							makeColumnDef(compressed_column_metadata_name_v2("max",
+																			 NameStr(
+																				 attr->attname)),
+										  attr->atttypid,
+										  attr->atttypmod,
+										  attr->attcollation));
+			}
 		}
-		else
-		{
-			compressed_column_defs = lappend(compressed_column_defs, coldef);
-		}
+
+		compressed_column_defs = lappend(compressed_column_defs,
+										 makeColumnDef(NameStr(attr->attname),
+													   compresseddata_oid,
+													   /* typmod = */ -1,
+													   /* collOid = */ InvalidOid));
 	}
 
 	/*
@@ -873,17 +1000,37 @@ tsl_process_compress_table_rename_column(Hypertable *ht, const RenameStmt *stmt)
 			 "cannot compress tables with reserved column prefix '%s'",
 			 COMPRESSION_COLUMN_METADATA_PREFIX);
 
-	if (TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
 	{
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		ListCell *lc;
-		foreach (lc, chunks)
+		return;
+	}
+
+	RenameStmt *compressed_col_stmt = (RenameStmt *) copyObject(stmt);
+	RenameStmt *compressed_index_stmt = (RenameStmt *) copyObject(stmt);
+	List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
+	ListCell *lc;
+	foreach (lc, chunks)
+	{
+		Chunk *chunk = lfirst(lc);
+		compressed_col_stmt->relation =
+			makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
+		ExecRenameStmt(compressed_col_stmt);
+
+		compressed_index_stmt->relation = compressed_col_stmt->relation;
+		for (size_t i = 0; i < sizeof(sparse_index_types) / sizeof(sparse_index_types[0]); i++)
 		{
-			Chunk *chunk = lfirst(lc);
-			RenameStmt *compress_col_stmt = (RenameStmt *) copyObject(stmt);
-			compress_col_stmt->relation =
-				makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), -1);
-			ExecRenameStmt(compress_col_stmt);
+			char *old_index_name =
+				compressed_column_metadata_name_v2(sparse_index_types[i], stmt->subname);
+			if (get_attnum(chunk->table_id, old_index_name) == InvalidAttrNumber)
+			{
+				continue;
+			}
+
+			char *new_index_name =
+				compressed_column_metadata_name_v2(sparse_index_types[i], stmt->newname);
+			compressed_index_stmt->subname = old_index_name;
+			compressed_index_stmt->newname = new_index_name;
+			ExecRenameStmt(compressed_index_stmt);
 		}
 	}
 }

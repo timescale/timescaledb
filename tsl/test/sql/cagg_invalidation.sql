@@ -698,6 +698,7 @@ INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
 
 \set VERBOSITY default
+\set ON_ERROR_STOP 0
 -- Test acceptable values for materializations per refresh
 SET timescaledb.materializations_per_refresh_window=' 5 ';
 INSERT INTO conditions VALUES (140, 1, 1.0);
@@ -720,6 +721,7 @@ INSERT INTO conditions VALUES (140, 1, 1.0);
 CALL refresh_continuous_aggregate('cond_10', 0, 200);
 \set VERBOSITY terse
 RESET timescaledb.materializations_per_refresh_window;
+\set ON_ERROR_STOP 1
 
 -- Test refresh with undefined invalidation threshold and variable sized buckets
 CREATE TABLE timestamp_ht (

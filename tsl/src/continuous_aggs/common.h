@@ -84,6 +84,13 @@ typedef struct CAggTimebucketInfo
 	TimestampTz origin;
 } CAggTimebucketInfo;
 
+typedef enum CaggRefreshCallContext
+{
+	CAGG_REFRESH_CREATION,
+	CAGG_REFRESH_WINDOW,
+	CAGG_REFRESH_POLICY,
+} CaggRefreshCallContext;
+
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
 	{                                                                                              \
