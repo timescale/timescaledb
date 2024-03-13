@@ -112,7 +112,13 @@ lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok)
 	caminfo->compressed_relation_id = form.compressed_chunk_id;
 
 	if (caminfo->compressed_relation_id > 0)
+	{
 		caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
+		caminfo->count_cattno =
+			get_attnum(caminfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+		Assert(OidIsValid(caminfo->count_cattno));
+	}
+
 	else
 		caminfo->compressed_relid = InvalidOid;
 
@@ -235,8 +241,6 @@ typedef struct CompressionScanDescData
 	int64 returned_noncompressed_count;
 	int64 returned_compressed_count;
 	int32 compressed_row_count;
-	AttrNumber count_colattno;
-	int16 *attrs_map;
 	bool compressed_read_done;
 } CompressionScanDescData;
 
@@ -375,12 +379,9 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 		flags &= ~SO_TEMP_SNAPSHOT;
 	}
 
-	const TupleDesc tupdesc = RelationGetDescr(relation);
-	const TupleDesc c_tupdesc = RelationGetDescr(scan->compressed_rel);
 	ParallelTableScanDesc cptscan =
 		parallel_scan ? (ParallelTableScanDesc) &cpscan->cpscandesc : NULL;
 
-	scan->attrs_map = build_attribute_offset_map(tupdesc, c_tupdesc, &scan->count_colattno);
 	scan->cscan_desc = heapam->scan_begin(scan->compressed_rel,
 										  snapshot,
 										  scan->rs_base.rs_nkeys,
@@ -426,7 +427,6 @@ compressionam_endscan(TableScanDesc sscan)
 	if (scan->rs_base.rs_key)
 		pfree(scan->rs_base.rs_key);
 
-	pfree(scan->attrs_map);
 	pfree(scan);
 }
 
@@ -1375,8 +1375,6 @@ typedef struct IndexCallbackState
 	bool *isnull;
 	MemoryContext decompression_mcxt;
 	ArrowArray **arrow_columns;
-	int16 *attrs_map;
-	AttrNumber count_cattno;
 	Bitmapset *segmentby_cols;
 	Bitmapset *orderby_cols;
 } IndexCallbackState;
@@ -1504,7 +1502,6 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 {
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
 	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
-	AttrNumber count_cattno = InvalidAttrNumber;
 	IndexCallbackState icstate = {
 		.callback = callback,
 		.orig_state = callback_state,
@@ -1518,9 +1515,6 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 													/* minContextSize = */ 0,
 													/* initBlockSize = */ 64 * 1024,
 													/* maxBlockSize = */ 64 * 1024),
-		.attrs_map = build_attribute_offset_map(RelationGetDescr(relation),
-												RelationGetDescr(crel),
-												&count_cattno),
 		.arrow_columns = (ArrowArray **) palloc(sizeof(ArrowArray *) * indexInfo->ii_NumIndexAttrs),
 	};
 	IndexInfo iinfo = *indexInfo;
@@ -1531,8 +1525,7 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	for (int i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
 	{
 		const AttrNumber attno = indexInfo->ii_IndexAttrNumbers[i];
-		const int16 cattoff = icstate.attrs_map[AttrNumberGetAttrOffset(attno)];
-		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
+		const AttrNumber cattno = caminfo->columns[AttrNumberGetAttrOffset(attno)].cattnum;
 
 		iinfo.ii_IndexAttrNumbers[i] = cattno;
 		icstate.arrow_columns[i] = NULL;
@@ -1541,7 +1534,7 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	/* Include the count column in the callback. It is needed to know the
 	 * uncompressed tuple count in case of building an index on the segmentby
 	 * column. */
-	iinfo.ii_IndexAttrNumbers[iinfo.ii_NumIndexAttrs++] = count_cattno;
+	iinfo.ii_IndexAttrNumbers[iinfo.ii_NumIndexAttrs++] = caminfo->count_cattno;
 
 	/* Check uniqueness on compressed */
 	iinfo.ii_Unique = false;
@@ -1564,7 +1557,6 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	table_close(crel, NoLock);
 	FreeExecutorState(icstate.estate);
 	MemoryContextDelete(icstate.decompression_mcxt);
-	pfree(icstate.attrs_map);
 	pfree((void *) icstate.arrow_columns);
 	bms_free(icstate.segmentby_cols);
 	bms_free(icstate.orderby_cols);
