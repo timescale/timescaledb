@@ -121,6 +121,7 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
+    cagg_invalidation
     move
     reorder
     telemetry_stats-${PG_VERSION_MAJOR})
