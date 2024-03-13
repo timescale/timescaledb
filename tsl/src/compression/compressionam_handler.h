@@ -56,6 +56,8 @@ typedef struct CompressionAmInfo
 	int num_segmentby;
 	int num_orderby;
 	int num_keys;
+	AttrNumber count_cattno; /* Attribute number of count column in
+							  * compressed rel */
 	/* Per-column information follows. */
 	ColumnCompressionSettings columns[FLEXIBLE_ARRAY_MEMBER];
 } CompressionAmInfo;
