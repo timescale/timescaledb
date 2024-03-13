@@ -51,6 +51,7 @@
 
 static const char *sparse_index_types[] = { "min", "max" };
 
+#ifdef USE_ASSERT_CHECKING
 static bool
 is_sparse_index_type(const char *type)
 {
@@ -64,6 +65,7 @@ is_sparse_index_type(const char *type)
 
 	return false;
 }
+#endif
 
 static void validate_hypertable_for_compression(Hypertable *ht);
 static List *build_columndefs(CompressionSettings *settings, Oid src_relid);
