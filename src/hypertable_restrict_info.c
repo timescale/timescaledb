@@ -692,14 +692,6 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 			chunk_ids = ts_chunk_id_find_in_subspace(ht, dimension_vectors);
 		}
 
-		/*
-		 * Always include the OSM chunk if we have one and OSM reads are
-		 * enabled. It has some virtual dimension slices (at the moment,
-		 * (+inf, +inf) slice for time, but it used to be different and might
-		 * change again.) So sometimes it will match and sometimes it won't,
-		 * so we have to check if it's already there not to add a duplicate.
-		 * Similarly if OSM reads are disabled then we exclude the OSM chunk.
-		 */
 		int32 osm_chunk_id = ts_chunk_get_osm_chunk_id(ht->fd.id);
 
 		if (osm_chunk_id != INVALID_CHUNK_ID)
@@ -710,7 +702,29 @@ ts_hypertable_restrict_info_get_chunks(HypertableRestrictInfo *hri, Hypertable *
 			}
 			else
 			{
-				chunk_ids = list_append_unique_int(chunk_ids, osm_chunk_id);
+				/*
+				 * At this point the OSM chunk was either:
+				 * 1. added to the list because it has a valid range that agrees with the
+				 * restrictions;
+				 * 2. not added because it has a valid range and it was excluded;
+				 * 3. not added because it has an invalid range and it was excluded.
+				 * If the chunk's range is invalid, only then should we consider adding it,
+				 * otherwise the exclusion logic should have correctly included or excluded it from
+				 * the list. Also, if the range is invalid but the NONCONTIGUOUS flag is not set,
+				 * indicating that the chunk is empty, we don't need to do a scan so we do not add
+				 * it either.
+				 */
+				const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+				DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
+																		time_dim->fd.id,
+																		LockTupleKeyShare,
+																		RowShareLock);
+				bool range_invalid =
+					ts_osm_chunk_range_is_invalid(slice->fd.range_start, slice->fd.range_end);
+
+				if (range_invalid &&
+					ts_flags_are_set_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS))
+					chunk_ids = list_append_unique_int(chunk_ids, osm_chunk_id);
 			}
 		}
 	}

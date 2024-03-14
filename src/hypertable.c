@@ -2513,8 +2513,9 @@ ts_hypertable_update_chunk_sizing(Hypertable *ht)
 	return true;
 }
 
-static DimensionSlice *
-ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
+DimensionSlice *
+ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTupleMode tuplockmode,
+								LOCKMODE tablelockmode)
 {
 	ChunkConstraints *constraints =
 		ts_chunk_constraint_scan_by_chunk_id(osm_chunk_id, 1, CurrentMemoryContext);
@@ -2525,7 +2526,7 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
 		if (is_dimension_constraint(cc))
 		{
 			ScanTupLock tuplock = {
-				.lockmode = LockTupleExclusive,
+				.lockmode = tuplockmode,
 				.waitpolicy = LockWaitBlock,
 			};
 			if (!IsolationUsesXactSnapshot())
@@ -2537,7 +2538,7 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
 				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
 													   &tuplock,
 													   CurrentMemoryContext,
-													   RowShareLock);
+													   tablelockmode);
 			if (dimslice->fd.dimension_id == time_dim_id)
 				return dimslice;
 		}
@@ -2626,7 +2627,11 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	bool overlap = false, range_invalid = false;
 
-	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id, time_dim->fd.id);
+	/* Lock tuple FOR UPDATE */
+	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
+															time_dim->fd.id,
+															LockTupleExclusive,
+															RowShareLock);
 
 	if (!slice)
 		ereport(ERROR, errmsg("could not find time dimension slice for chunk %d", osm_chunk_id));

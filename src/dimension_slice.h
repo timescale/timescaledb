@@ -114,3 +114,6 @@ extern int ts_dimension_slice_update_by_id(int32 dimension_slice_id,
 
 #define dimension_slice_collision_scan(dimension_id, range_start, range_end)                       \
 	ts_dimension_slice_collision_scan_limit(dimension_id, range_start, range_end, 0)
+
+DimensionSlice *ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id,
+												LockTupleMode tuplockmode, LOCKMODE tablelockmode);
