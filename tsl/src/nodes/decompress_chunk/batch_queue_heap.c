@@ -420,16 +420,12 @@ build_batch_sorted_merge_info(const List *sortinfo, int *nkeys)
 }
 
 BatchQueue *
-batch_queue_heap_create(int num_compressed_cols, Size batch_memory_context_bytes,
-						const List *sortinfo, const TupleDesc result_tupdesc,
-						const BatchQueueFunctions *funcs)
+batch_queue_heap_create(int num_compressed_cols, const List *sortinfo,
+						const TupleDesc result_tupdesc, const BatchQueueFunctions *funcs)
 {
 	BatchQueueHeap *queue = palloc0(sizeof(BatchQueueHeap));
 
-	batch_array_init(&queue->queue.batch_array,
-					 INITIAL_BATCH_CAPACITY,
-					 num_compressed_cols,
-					 batch_memory_context_bytes);
+	batch_array_init(&queue->queue.batch_array, INITIAL_BATCH_CAPACITY, num_compressed_cols);
 
 	queue->sortkeys = build_batch_sorted_merge_info(sortinfo, &queue->nkeys);
 

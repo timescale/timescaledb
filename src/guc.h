@@ -68,6 +68,8 @@ extern char *ts_current_timestamp_mock;
 #define ts_shutdown_bgw false
 #endif
 
+extern TSDLLEXPORT int ts_guc_debug_toast_tuple_target;
+
 typedef enum DebugRequireVectorQual
 {
 	RVQ_Allow = 0,

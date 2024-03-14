@@ -90,7 +90,6 @@ typedef struct DecompressBatchState
 	TupleTableSlot *compressed_slot;
 	uint16 total_batch_rows;
 	uint16 next_batch_row;
-	Size block_size_bytes; /* Block size to use for memory context */
 	MemoryContext per_batch_context;
 
 	/*
@@ -114,27 +113,28 @@ extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
 
-#define create_bulk_decompression_mctx(parent_mctx)                                                \
-	AllocSetContextCreate(parent_mctx,                                                             \
-						  "DecompressBatchState bulk decompression",                               \
-						  /* minContextSize = */ 0,                                                \
-						  /* initBlockSize = */ 64 * 1024,                                         \
-						  /* maxBlockSize = */ 64 * 1024);
 /*
- * Initialize the batch memory context
+ * Initialize the batch memory context and bulk decompression context.
  *
- * We use custom size for the batch memory context page, calculated to
- * fit the typical result of bulk decompression (if we use it).
- * This allows us to save on expensive malloc/free calls, because the
- * Postgres memory contexts reallocate all pages except the first one
- * after each reset.
+ * We use Generation context here because the AllocSet has a hardcoded threshold
+ * of 8kB per allocation, after which it allocates directly through malloc. We
+ * want to make the blocks as big as possible, but below the malloc's mmap
+ * threshold. For small queries, these contexts are basically single-shot and
+ * the page faults after an mmap slow them down significantly. The threshold
+ * should be 128 kiB according to the docs, but I'm seeing 64 kiB in testing.
+ *
+ * If bulk decompression is not used, use the default size for batch context.
+ * This reduces memory usage and improves performance with batch sorted merge.
  */
-#define create_per_batch_mctx(block_size_bytes)                                                    \
-	AllocSetContextCreate(CurrentMemoryContext,                                                    \
-						  "DecompressBatchState per-batch",                                        \
-						  0,                                                                       \
-						  block_size_bytes,                                                        \
-						  block_size_bytes);
+#define create_bulk_decompression_mctx(parent_mctx)                                                \
+	GenerationContextCreateCompat(parent_mctx,                                                     \
+								  "DecompressBatchState bulk decompression",                       \
+								  64 * 1024);
+
+#define create_per_batch_mctx(dcontext)                                                            \
+	GenerationContextCreateCompat(CurrentMemoryContext,                                            \
+								  "DecompressBatchState per-batch",                                \
+								  dcontext->enable_bulk_decompression ? 64 * 1024 : 8 * 1024);
 
 extern void compressed_batch_destroy(DecompressBatchState *batch_state);
 

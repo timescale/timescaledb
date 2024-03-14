@@ -37,8 +37,6 @@
 #include "nodes/decompress_chunk/qual_pushdown.h"
 #include "utils.h"
 
-#define DECOMPRESS_CHUNK_BATCH_SIZE 1000
-
 static CustomPathMethods decompress_chunk_path_methods = {
 	.CustomName = "DecompressChunk",
 	.PlanCustomPath = decompress_chunk_plan_create,
@@ -330,7 +328,7 @@ cost_decompress_chunk(PlannerInfo *root, Path *path, Path *compressed_path)
 
 	/* total_cost is cost for fetching all tuples */
 	path->total_cost = compressed_path->total_cost + path->rows * cpu_tuple_cost;
-	path->rows = compressed_path->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	path->rows = compressed_path->rows * TARGET_COMPRESSED_BATCH_SIZE;
 }
 
 /* Smoothstep function S1 (the h01 cubic Hermite spline). */
@@ -421,7 +419,7 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 	 * compressed chunk is never projected so we can't use it for that.
 	 */
 	const double work_mem_bytes = work_mem * (double) 1024.0;
-	const double needed_memory_bytes = open_batches_clamped * DECOMPRESS_CHUNK_BATCH_SIZE *
+	const double needed_memory_bytes = open_batches_clamped * TARGET_COMPRESSED_BATCH_SIZE *
 									   dcpath->custom_path.path.pathtarget->width;
 
 	/*
@@ -733,7 +731,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				   compressed_rel,
 				   ts_chunk_is_partial(chunk));
 	set_baserel_size_estimates(root, compressed_rel);
-	double new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
+	double new_row_estimate = compressed_rel->rows * TARGET_COMPRESSED_BATCH_SIZE;
 
 	if (!compression_info->single_chunk)
 	{

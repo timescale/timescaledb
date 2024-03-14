@@ -17,7 +17,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 													MemoryContext dest_mctx)
 {
 	const bool has_nulls = gorilla_data->nulls != NULL;
-	const uint16 n_total =
+	const uint32 n_total =
 		has_nulls ? gorilla_data->nulls->num_elements : gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
 
@@ -25,7 +25,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
 	 * can work in 64-byte blocks.
 	 */
-	const uint16 n_total_padded =
+	const uint32 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 
@@ -36,7 +36,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	const int buffer_bytes = n_total_padded * sizeof(ELEMENT_TYPE) + 8;
 	ELEMENT_TYPE *restrict decompressed_values = MemoryContextAlloc(dest_mctx, buffer_bytes);
 
-	const uint16 n_notnull = gorilla_data->tag0s->num_elements;
+	const uint32 n_notnull = gorilla_data->tag0s->num_elements;
 	CheckCompressedData(n_total >= n_notnull);
 
 	/* Unpack the basic compressed data parts. */
@@ -47,15 +47,13 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	BitArrayIterator leading_zeros_iterator;
 	bit_array_iterator_init(&leading_zeros_iterator, &leading_zeros_bitarray);
 
-	uint8 all_leading_zeros[MAX_NUM_LEADING_ZEROS_PADDED_N64];
-	const uint16 leading_zeros_padded =
-		unpack_leading_zeros_array(&gorilla_data->leading_zeros, all_leading_zeros);
+	uint32 num_leading_zeros_padded;
+	uint8 *restrict all_leading_zeros =
+		unpack_leading_zeros_array(&gorilla_data->leading_zeros, &num_leading_zeros_padded);
 
-	uint8 bit_widths[GLOBAL_MAX_ROWS_PER_COMPRESSION + 63];
-	const uint16 num_bit_widths =
-		simple8brle_decompress_all_buf_uint8(gorilla_data->num_bits_used_per_xor,
-											 bit_widths,
-											 sizeof(bit_widths) / sizeof(bit_widths[0]));
+	uint32 num_bit_widths;
+	uint8 *restrict bit_widths =
+		simple8brle_decompress_all_uint8(gorilla_data->num_bits_used_per_xor, &num_bit_widths);
 
 	BitArray xors_bitarray = gorilla_data->xors;
 	BitArrayIterator xors_iterator;
@@ -70,7 +68,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 	 * number of 1s in the tag1s array.
 	 */
 	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) == num_bit_widths);
-	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) <= leading_zeros_padded);
+	CheckCompressedData(simple8brle_bitmap_num_ones(&tag1s) <= num_leading_zeros_padded);
 
 	/*
 	 * 1b) Sanity check: the first tag1 must be 1, so that we initialize the bit
@@ -183,7 +181,7 @@ FUNCTION_NAME(gorilla_decompress_all, ELEMENT_TYPE)(CompressedGorillaData *goril
 			validity_bitmap[n_total / 64] &= tail_mask;
 
 #ifdef USE_ASSERT_CHECKING
-			for (int i = 0; i < 64; i++)
+			for (uint32 i = 0; i < 64; i++)
 			{
 				Assert(arrow_row_is_valid(validity_bitmap, (n_total / 64) * 64 + i) ==
 					   (i < n_total % 64));

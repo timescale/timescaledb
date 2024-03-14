@@ -858,6 +858,14 @@ RelationGetSmgr(Relation rel)
 #endif
 #endif
 
+#if PG15_GE
+#define GenerationContextCreateCompat(parent, name, blockSize)                                     \
+	GenerationContextCreate(parent, name, 0, blockSize, blockSize)
+#else
+#define GenerationContextCreateCompat(parent, name, blockSize)                                     \
+	GenerationContextCreate(parent, name, blockSize)
+#endif
+
 /*
  * PG16 adds a new parameter to DefineIndex, total_parts, that takes
  * in the total number of direct and indirect partitions of the relation.

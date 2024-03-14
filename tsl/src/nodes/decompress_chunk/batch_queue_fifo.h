@@ -66,5 +66,5 @@ static const struct BatchQueueFunctions BatchQueueFunctionsFifo = {
 	.top_tuple = batch_queue_fifo_top_tuple,
 };
 
-extern BatchQueue *batch_queue_fifo_create(int num_compressed_cols, Size batch_memory_context_bytes,
+extern BatchQueue *batch_queue_fifo_create(int num_compressed_cols,
 										   const BatchQueueFunctions *funcs);
