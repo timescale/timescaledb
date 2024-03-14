@@ -41,6 +41,7 @@ typedef enum CatalogTable
 	TABLESPACE,
 	BGW_JOB,
 	BGW_JOB_STAT,
+	BGW_JOB_STAT_HISTORY,
 	METADATA,
 	BGW_POLICY_CHUNK_STATS,
 	CONTINUOUS_AGG,
@@ -50,7 +51,6 @@ typedef enum CatalogTable
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
 	CONTINUOUS_AGGS_BUCKET_FUNCTION,
-	JOB_ERRORS,
 	CONTINUOUS_AGGS_WATERMARK,
 	TELEMETRY_EVENT,
 	/* Don't forget updating catalog.c when adding new tables! */
@@ -678,6 +678,51 @@ enum Anum_bgw_job_stat_pkey_idx
 
 #define Natts_bjw_job_stat_pkey_idx (_Anum_bgw_job_stat_pkey_idx_max - 1)
 
+#define BGW_JOB_STAT_HISTORY_TABLE_NAME "bgw_job_stat_history"
+
+enum Anum_bgw_job_stat_history
+{
+	Anum_bgw_job_stat_history_id = 1,
+	Anum_bgw_job_stat_history_job_id,
+	Anum_bgw_job_stat_history_pid,
+	Anum_bgw_job_stat_history_execution_start,
+	Anum_bgw_job_stat_history_execution_finish,
+	Anum_bgw_job_stat_history_succeeded,
+	Anum_bgw_job_stat_history_config,
+	Anum_bgw_job_stat_history_error_data,
+	_Anum_bgw_job_stat_history_max,
+};
+
+#define Natts_bgw_job_stat_history (_Anum_bgw_job_stat_history_max - 1)
+
+typedef struct FormData_bgw_job_stat_history
+{
+	int64 id;
+	int32 job_id;
+	int32 pid;
+	TimestampTz execution_start;
+	TimestampTz execution_finish;
+	bool succeeded;
+	Jsonb *config;
+	Jsonb *error_data;
+} FormData_bgw_job_stat_history;
+
+typedef FormData_bgw_job_stat_history *Form_bgw_job_stat_history;
+
+enum
+{
+	BGW_JOB_STAT_HISTORY_PKEY_IDX = 0,
+	_MAX_BGW_JOB_STAT_HISTORY_INDEX,
+};
+
+enum Anum_bgw_job_stat_history_pkey_idx
+{
+	Anum_bgw_job_stat_history_pkey_idx_id = 1,
+	_Anum_bgw_job_stat_history_pkey_idx_max,
+};
+
+#define Natts_bjw_job_stat_history_pkey_idx (_Anum_bgw_job_stat_history_pkey_idx_max - 1)
+
 /******************************
  *
  * metadata table definitions
@@ -1186,31 +1231,6 @@ typedef struct CatalogSecurityContext
 	int saved_security_context;
 } CatalogSecurityContext;
 
-#define JOB_ERRORS_TABLE_NAME "job_errors"
-
-enum Anum_job_error
-{
-	Anum_job_error_job_id = 1,
-	Anum_job_error_pid,
-	Anum_job_error_start_time,
-	Anum_job_error_finish_time,
-	Anum_job_error_error_data,
-	_Anum_job_error_max,
-};
-
-#define Natts_job_error (_Anum_job_error_max - 1)
-
-typedef struct FormData_job_error
-{
-	int32 job_id;
-	int32 pid;
-	TimestampTz start_time;
-	TimestampTz finish_time;
-	Jsonb *error_data;
-} FormData_job_error;
-
-typedef FormData_job_error *Form_job_error;
-
 #define HYPERTABLE_STATUS_DEFAULT 0
 /* flag set when hypertable has an attached OSM chunk */
 #define HYPERTABLE_STATUS_OSM 1
@@ -1266,6 +1286,8 @@ extern TSDLLEXPORT void ts_catalog_insert_only(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_insert(Relation rel, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values,
 												 bool *nulls);
+extern TSDLLEXPORT void ts_catalog_insert_datums(Relation rel, TupleDesc tupdesc,
+												 NullableDatum *datums);
 extern TSDLLEXPORT void ts_catalog_update_tid_only(Relation rel, ItemPointer tid, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_update_tid(Relation rel, ItemPointer tid, HeapTuple tuple);
 extern TSDLLEXPORT void ts_catalog_update(Relation rel, HeapTuple tuple);

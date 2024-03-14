@@ -221,8 +221,8 @@ SELECT * FROM _timescaledb_catalog.hypertable;
         Schema         |          Name          | Type  |   Owner    
 -----------------------+------------------------+-------+------------
  _timescaledb_internal | bgw_job_stat           | table | super_user
+ _timescaledb_internal | bgw_job_stat_history   | table | super_user
  _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
- _timescaledb_internal | job_errors             | table | super_user
 (3 rows)
 
 -- Test that renaming ordinary table works
