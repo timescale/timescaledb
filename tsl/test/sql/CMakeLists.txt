@@ -107,8 +107,14 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES bgw_scheduler_control.sql)
   endif()
-  list(APPEND TEST_FILES hyperstore.sql hyperstore_insert.sql
-       hyperstore_scans.sql merge_compress.sql)
+  list(
+    APPEND
+    TEST_FILES
+    hyperstore.sql
+    hyperstore_copy.sql
+    hyperstore_insert.sql
+    hyperstore_scans.sql
+    merge_compress.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
