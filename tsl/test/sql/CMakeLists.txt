@@ -50,8 +50,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_db_scheduler.sql
-    job_errors_permissions.sql
-    troubleshooting_job_errors.sql
+    bgw_job_stat_history.sql
+    bgw_job_stat_history_errors.sql
+    bgw_job_stat_history_errors_permissions.sql
     bgw_db_scheduler_fixed.sql
     bgw_reorder_drop_chunks.sql
     scheduler_fixed.sql
@@ -111,8 +112,9 @@ set(SOLO_TESTS
     # log level.
     bgw_scheduler_control
     bgw_db_scheduler
-    job_errors_permissions
-    troubleshooting_job_errors
+    bgw_job_stat_history_errors_permissions
+    bgw_job_stat_history_errors
+    bgw_job_stat_history
     bgw_db_scheduler_fixed
     bgw_reorder_drop_chunks
     scheduler_fixed

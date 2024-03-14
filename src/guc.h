@@ -39,6 +39,7 @@ extern TSDLLEXPORT bool ts_guc_enable_vectorized_aggregation;
 extern bool ts_guc_restoring;
 extern int ts_guc_max_open_chunks_per_insert;
 extern int ts_guc_max_cached_chunks_per_hypertable;
+extern TSDLLEXPORT bool ts_guc_enable_job_execution_logging;
 
 #ifdef USE_TELEMETRY
 typedef enum TelemetryLevel

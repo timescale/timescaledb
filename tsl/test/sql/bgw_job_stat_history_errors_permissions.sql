@@ -45,7 +45,7 @@ END
 $$;
 
 -- to make sure custom_log is first updated by custom_proc_1
-select add_job('custom_proc2', '2 min', initial_start => now() + interval '5 seconds') as custom_proc2_id \gset
+select add_job('custom_proc2', '2 min', initial_start => now() + interval '1 seconds') as custom_proc2_id \gset
 
 SET ROLE :ROLE_SUPERUSER;
 SELECT _timescaledb_functions.start_background_workers();
@@ -59,9 +59,9 @@ SELECT pg_sleep(6);
 -- job crashed.
 \set start '2000-01-01 00:00:00+00'
 \set finish '2000-01-01 00:00:10+00'
-INSERT INTO _timescaledb_internal.job_errors(job_id, pid, start_time, finish_time, error_data) VALUES
-       (11111, 12345, :'start'::timestamptz, :'finish'::timestamptz, '{"message": "not an error"}'),
-       (22222, 45678, :'start'::timestamptz, :'finish'::timestamptz, '{}');
+INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, error_data) VALUES
+       (11111, 12345, false, :'start'::timestamptz, :'finish'::timestamptz, '{"message": "not an error"}'),
+       (22222, 45678, false, :'start'::timestamptz, :'finish'::timestamptz, '{}');
 
 -- We check the log as different users and should only see what we
 -- have permissions to see. We only bother about jobs at 1000 or
@@ -78,8 +78,9 @@ SET ROLE :ROLE_SUPERUSER;
 SELECT job_id, proc_schema, proc_name, sqlerrcode, err_message
 FROM timescaledb_information.job_errors WHERE job_id >= 1000;
 
-SELECT _timescaledb_functions.stop_background_workers();
-
 SELECT delete_job(:custom_proc2_id);
 SELECT delete_job(:custom_proc1_id);
 SELECT delete_job(:job_fail_id);
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
