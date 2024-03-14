@@ -53,7 +53,7 @@ set(SOURCE_FILES
     policy_internal.sql
     cagg_utils.sql
     cagg_migrate.sql
-    job_error_log_retention.sql
+    job_stat_history_log_retention.sql
     osm_api.sql
     compression_defaults.sql)
 

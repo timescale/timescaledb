@@ -378,22 +378,22 @@ END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_job_error_retention(job_id integer,config jsonb) RETURNS integer LANGUAGE PLPGSQL AS $$
+CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_job_stat_history_retention(job_id integer,config jsonb) RETURNS integer LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.policy_job_error_retention(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
+    RAISE WARNING 'function _timescaledb_internal.policy_job_stat_history_retention(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
-  RETURN _timescaledb_functions.policy_job_error_retention($1,$2);
+  RETURN _timescaledb_functions.policy_job_stat_history_retention($1,$2);
 END$$
 SET search_path TO pg_catalog,pg_temp;
 
 
-CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_job_error_retention_check(config jsonb) RETURNS void LANGUAGE PLPGSQL AS $$
+CREATE OR REPLACE FUNCTION _timescaledb_internal.policy_job_stat_history_retention_check(config jsonb) RETURNS void LANGUAGE PLPGSQL AS $$
 BEGIN
   IF current_setting('timescaledb.enable_deprecation_warnings', true)::bool THEN
-    RAISE WARNING 'function _timescaledb_internal.policy_job_error_retention_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
+    RAISE WARNING 'function _timescaledb_internal.policy_job_stat_history_retention_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.';
   END IF;
-  PERFORM _timescaledb_functions.policy_job_error_retention_check($1);
+  PERFORM _timescaledb_functions.policy_job_stat_history_retention_check($1);
 END$$
 SET search_path TO pg_catalog,pg_temp;
 

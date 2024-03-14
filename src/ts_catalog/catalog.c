@@ -61,6 +61,10 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = INTERNAL_SCHEMA_NAME,
 		.table_name = BGW_JOB_STAT_TABLE_NAME,
 	},
+	[BGW_JOB_STAT_HISTORY] = {
+		.schema_name = INTERNAL_SCHEMA_NAME,
+		.table_name = BGW_JOB_STAT_HISTORY_TABLE_NAME,
+	},
 	[METADATA] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = METADATA_TABLE_NAME,
@@ -96,10 +100,6 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 	[CONTINUOUS_AGGS_BUCKET_FUNCTION] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_BUCKET_FUNCTION_TABLE_NAME,
-	},
-	[JOB_ERRORS] = {
-		.schema_name = INTERNAL_SCHEMA_NAME,
-		.table_name = JOB_ERRORS_TABLE_NAME,
 	},
 	[CONTINUOUS_AGGS_WATERMARK] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
@@ -182,6 +182,12 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 			[BGW_JOB_STAT_PKEY_IDX] = "bgw_job_stat_pkey",
 		},
 	},
+	[BGW_JOB_STAT_HISTORY] = {
+		.length = _MAX_BGW_JOB_STAT_HISTORY_INDEX,
+		.names = (char *[]) {
+			[BGW_JOB_STAT_HISTORY_PKEY_IDX] = "bgw_job_stat_history_pkey",
+		},
+	},
 	[METADATA] = {
 		.length = _MAX_METADATA_INDEX,
 		.names = (char *[]) {
@@ -257,6 +263,7 @@ static const char *catalog_table_serial_id_names[_MAX_CATALOG_TABLES] = {
 	[TABLESPACE] = CATALOG_SCHEMA_NAME ".tablespace_id_seq",
 	[BGW_JOB] = CONFIG_SCHEMA_NAME ".bgw_job_id_seq",
 	[BGW_JOB_STAT] = NULL,
+	[BGW_JOB_STAT_HISTORY] = INTERNAL_SCHEMA_NAME ".bgw_job_stat_history_id_seq",
 	[CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG] = NULL,
 	[CONTINUOUS_AGGS_INVALIDATION_THRESHOLD] = NULL,
 	[CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG] = NULL,
@@ -627,6 +634,15 @@ TSDLLEXPORT void
 ts_catalog_insert_values(Relation rel, TupleDesc tupdesc, Datum *values, bool *nulls)
 {
 	HeapTuple tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	ts_catalog_insert(rel, tuple);
+	heap_freetuple(tuple);
+}
+
+TSDLLEXPORT void
+ts_catalog_insert_datums(Relation rel, TupleDesc tupdesc, NullableDatum *datums)
+{
+	HeapTuple tuple = ts_heap_form_tuple(tupdesc, datums);
 
 	ts_catalog_insert(rel, tuple);
 	heap_freetuple(tuple);

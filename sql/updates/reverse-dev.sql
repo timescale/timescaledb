@@ -206,4 +206,91 @@ CREATE FUNCTION _timescaledb_functions.get_chunk_colstats(relid REGCLASS)
 RETURNS TABLE(chunk_id INTEGER, hypertable_id INTEGER, att_num INTEGER, nullfrac REAL, width INTEGER, distinctval REAL, slotkind INTEGER[], slotopstrings CSTRING[], slotcollations OID[], slot1numbers FLOAT4[], slot2numbers FLOAT4[], slot3numbers FLOAT4[], slot4numbers FLOAT4[], slot5numbers FLOAT4[], slotvaluetypetrings CSTRING[], slot1values CSTRING[], slot2values CSTRING[], slot3values CSTRING[], slot4values CSTRING[], slot5values CSTRING[])
 AS $$BEGIN END$$ LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp;
 
+--
+-- START bgw_job_stat_history
+--
+DROP VIEW IF EXISTS timescaledb_information.job_errors;
 
+ALTER EXTENSION timescaledb
+  DROP VIEW timescaledb_information.job_history;
+
+DROP VIEW IF EXISTS timescaledb_information.job_history;
+
+CREATE TABLE _timescaledb_internal.job_errors (
+  job_id integer not null,
+  pid integer,
+  start_time timestamptz,
+  finish_time timestamptz,
+  error_data jsonb
+);
+
+INSERT INTO _timescaledb_internal.job_errors (job_id, pid, start_time, finish_time, error_data)
+SELECT
+  job_id,
+  pid,
+  execution_start,
+  execution_finish,
+  error_data
+FROM
+  _timescaledb_internal.bgw_job_stat_history
+WHERE
+  succeeded IS FALSE
+ORDER BY
+  job_id, execution_start;
+
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_internal.bgw_job_stat_history;
+
+DROP TABLE IF EXISTS _timescaledb_internal.bgw_job_stat_history;
+
+REVOKE ALL ON _timescaledb_internal.job_errors FROM PUBLIC;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.policy_job_stat_history_retention(job_id integer,config jsonb);
+DROP FUNCTION IF EXISTS _timescaledb_internal.policy_job_stat_history_retention_check(config jsonb);
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_stat_history_retention(job_id integer,config jsonb);
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_stat_history_retention_check(config jsonb);
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_job_error_retention(job_id integer, config JSONB) RETURNS integer
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    drop_after INTERVAL;
+    numrows INTEGER;
+BEGIN
+    SELECT  config->>'drop_after' INTO STRICT drop_after;
+    WITH deleted AS
+        (DELETE
+        FROM _timescaledb_internal.job_errors
+        WHERE finish_time < (now() - drop_after) RETURNING *)
+        SELECT count(*)
+        FROM deleted INTO numrows;
+    RETURN numrows;
+END;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+CREATE OR REPLACE FUNCTION _timescaledb_functions.policy_job_error_retention_check(config JSONB) RETURNS VOID
+LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+  drop_after interval;
+BEGIN
+    IF config IS NULL THEN
+        RAISE EXCEPTION 'config cannot be NULL, and must contain drop_after';
+    END IF;
+    SELECT config->>'drop_after' INTO STRICT drop_after;
+    IF drop_after IS NULL THEN
+        RAISE EXCEPTION 'drop_after interval not provided';
+    END IF ;
+END;
+$BODY$ SET search_path TO pg_catalog, pg_temp;
+
+UPDATE
+  _timescaledb_config.bgw_job
+SET
+  application_name = 'Error Log Retention Policy [2]',
+  proc_schema = '_timescaledb_functions',
+  proc_name = 'policy_job_error_retention',
+  check_schema = '_timescaledb_functions',
+  check_name = 'policy_job_error_retention_check'
+WHERE
+  id = 2;

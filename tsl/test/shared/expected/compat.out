@@ -134,11 +134,11 @@ WARNING:  function _timescaledb_internal.partialize_agg(anyelement) is deprecate
 SELECT _timescaledb_internal.policy_compression_check(NULL);
 WARNING:  function _timescaledb_internal.policy_compression_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  config must not be NULL
-SELECT _timescaledb_internal.policy_job_error_retention(0,NULL);
-WARNING:  function _timescaledb_internal.policy_job_error_retention(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
-ERROR:  permission denied for table job_errors
-SELECT _timescaledb_internal.policy_job_error_retention_check(NULL);
-WARNING:  function _timescaledb_internal.policy_job_error_retention_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
+SELECT _timescaledb_internal.policy_job_stat_history_retention(0,NULL);
+WARNING:  function _timescaledb_internal.policy_job_stat_history_retention(integer,jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
+ERROR:  permission denied for table bgw_job_stat_history
+SELECT _timescaledb_internal.policy_job_stat_history_retention_check(NULL);
+WARNING:  function _timescaledb_internal.policy_job_stat_history_retention_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
 ERROR:  config cannot be NULL, and must contain drop_after
 SELECT _timescaledb_internal.policy_refresh_continuous_aggregate_check(NULL);
 WARNING:  function _timescaledb_internal.policy_refresh_continuous_aggregate_check(jsonb) is deprecated and has been moved to _timescaledb_functions schema. this compatibility function will be removed in a future version.
