@@ -116,6 +116,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     cagg_query_using_merge.sql
     cagg_refresh_using_merge.sql
     hyperstore.sql
+    hyperstore_copy.sql
     hyperstore_insert.sql
     hyperstore_scans.sql)
 endif()
