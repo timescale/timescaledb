@@ -1,0 +1,132 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/setup_hyperstore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+-- Alternative function to compress_chunk that uses the table access
+-- method to compress a chunk.
+create function twist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method hyperstore', chunk);
+    return chunk;
+end
+$$;
+create function untwist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method heap', chunk);
+    return chunk;
+end
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id int,
+       device_id int,
+       temp float,
+       humidity float
+);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id'
+);
+-- Set some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 desc
+ limit 1 \gset
+-- Compress the chunks and check that the counts are the same
+select location_id, count(*) into orig from :hypertable GROUP BY location_id;
+select twist_chunk(show_chunks(:'hypertable'));
+              twist_chunk               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+select location_id, count(*) into comp from :hypertable GROUP BY location_id;
+select * from orig join comp using (location_id) where orig.count != comp.count;
+ location_id | count | count 
+-------------+-------+-------
+(0 rows)
+
+drop table orig, comp;
+-- Check that all chunks are compressed
+select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
+    chunk_name    | compression_status 
+------------------+--------------------
+ _hyper_1_1_chunk | Compressed
+ _hyper_1_2_chunk | Compressed
+ _hyper_1_3_chunk | Compressed
+ _hyper_1_4_chunk | Compressed
+ _hyper_1_5_chunk | Compressed
+ _hyper_1_6_chunk | Compressed
+(6 rows)
+
+-- Check that a simple copy will work. This will insert into uncompressed region.
+copy :hypertable(created_at, location_id, device_id, temp, humidity) from stdin;
+select created_at, location_id, device_id, temp, humidity
+from :hypertable where created_at between '2022-06-01 00:00:01' and '2022-06-01 00:00:09';
+          created_at          | location_id | device_id | temp | humidity 
+------------------------------+-------------+-----------+------+----------
+ Wed Jun 01 00:00:02 2022 PDT |           1 |         1 |    1 |        1
+ Wed Jun 01 00:00:03 2022 PDT |           1 |         1 |    1 |        1
+ Wed Jun 01 00:00:04 2022 PDT |           1 |         1 |    1 |        1
+ Wed Jun 01 00:00:05 2022 PDT |           1 |         1 |    1 |        1
+(4 rows)
+
+select created_at, location_id, device_id, temp, humidity into orig
+from :hypertable where created_at between '2022-06-01 00:00:01' and '2022-06-01 00:00:09';
+-- Insert a batch of rows conflicting with compressed rows
+\set ON_ERROR_STOP 0
+copy :hypertable(created_at, location_id, device_id, temp, humidity) from stdin;
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+\set ON_ERROR_STOP 1
+-- Insert a batch of rows conflicting with non-compressed rows
+\set ON_ERROR_STOP 0
+copy :hypertable(created_at, location_id, device_id, temp, humidity) from stdin;
+ERROR:  duplicate key value violates unique constraint "1_1_readings_created_at_key"
+\set ON_ERROR_STOP 1
+select created_at, location_id, device_id, temp, humidity into curr
+from :hypertable where created_at between '2022-06-01 00:00:01' and '2022-06-01 00:00:09';
+select * from orig join curr using (created_at) where row(orig) != row(curr);
+ created_at | location_id | device_id | temp | humidity | location_id | device_id | temp | humidity 
+------------+-------------+-----------+------+----------+-------------+-----------+------+----------
+(0 rows)
+
