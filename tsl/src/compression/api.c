@@ -820,7 +820,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			return uncompressed_chunk_id;
 		}
 
-		if (get_compressed_chunk_index_for_recompression(chunk))
+		if (ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
 		{
 			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		}
@@ -1124,7 +1124,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-	if (!ts_chunk_needs_recompression(chunk))
+	if (!ts_chunk_is_partial(chunk))
 	{
 		int elevel = if_not_compressed ? NOTICE : ERROR;
 		elog(elevel,
@@ -1152,8 +1152,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 * 4: frozen
 	 * 8: compressed_partial
 	 */
-	if (!ts_chunk_is_compressed(uncompressed_chunk) &&
-		ts_chunk_needs_recompression(uncompressed_chunk))
+	if (!ts_chunk_is_compressed(uncompressed_chunk) && ts_chunk_is_partial(uncompressed_chunk))
 		elog(ERROR,
 			 "unexpected chunk status %d in chunk %s.%s",
 			 uncompressed_chunk->fd.status,
