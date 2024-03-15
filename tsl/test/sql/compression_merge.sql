@@ -46,6 +46,22 @@ CROSS JOIN generate_series(1, 5, 1) i;
 -- Compression is set to merge those 24 chunks into 3 chunks, two 10 hour chunks and a single 4 hour chunk.
 ALTER TABLE test2 set (timescaledb.compress, timescaledb.compress_segmentby='i', timescaledb.compress_orderby='loc,"Time"', timescaledb.compress_chunk_time_interval='10 hours');
 
+-- Verify we are fully recompressing unordered chunks
+BEGIN;
+  SELECT count(compress_chunk(chunk,  true)) FROM show_chunks('test2') chunk;
+  SELECT format('%I.%I',ch.schema_name,ch.table_name) AS "CHUNK"
+    FROM _timescaledb_catalog.chunk ch
+    JOIN _timescaledb_catalog.hypertable ht ON ht.id=ch.hypertable_id
+    JOIN _timescaledb_catalog.hypertable ht2 ON ht.id=ht2.compressed_hypertable_id AND ht2.table_name='test2' LIMIT 1 \gset
+
+  -- Not using time as first column in orderby makes the merged chunks unordered
+  -- We want to sure we are fully recompressing them which will make only
+  -- a single batch per segment group
+  SELECT count(*)
+  FROM :CHUNK
+  WHERE i = 1;
+ROLLBACK;
+
 SELECT
   $$
   SELECT * FROM test2 ORDER BY i, "Time"
