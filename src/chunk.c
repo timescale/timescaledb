@@ -129,7 +129,7 @@ static void chunk_scan_ctx_destroy(ChunkScanCtx *ctx);
 static void chunk_collision_scan(ChunkScanCtx *scanctx, const Hypercube *cube);
 static int chunk_scan_ctx_foreach_chunk_stub(ChunkScanCtx *ctx, on_chunk_stub_func on_chunk,
 											 uint16 limit);
-static Datum chunks_return_srf(FunctionCallInfo fcinfo);
+static Datum show_chunks_return_srf(FunctionCallInfo fcinfo);
 static int chunk_cmp(const void *ch1, const void *ch2);
 static int chunk_point_find_chunk_id(const Hypertable *ht, const Point *p);
 static void init_scan_by_qualified_table_name(ScanIterator *iterator, const char *schema_name,
@@ -2034,7 +2034,7 @@ Datum
 ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 {
 	/*
-	 * chunks_return_srf is called even when it is not the first call but only
+	 * show_chunks_return_srf is called even when it is not the first call but only
 	 * after doing some computation first
 	 */
 	if (SRF_IS_FIRSTCALL())
@@ -2173,7 +2173,7 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		ts_cache_release(hcache);
 	}
 
-	return chunks_return_srf(fcinfo);
+	return show_chunks_return_srf(fcinfo);
 }
 
 static Chunk *
@@ -3720,12 +3720,13 @@ chunk_cmp(const void *ch1, const void *ch2)
  * to work.
  */
 static Datum
-chunks_return_srf(FunctionCallInfo fcinfo)
+show_chunks_return_srf(FunctionCallInfo fcinfo)
 {
 	FuncCallContext *funcctx;
 	uint64 call_cntr;
 	TupleDesc tupdesc;
 	Chunk *result_set;
+	Chunk *curr_chunk;
 
 	/* stuff done only on the first call of the function */
 	if (SRF_IS_FIRSTCALL())
@@ -3744,6 +3745,24 @@ chunks_return_srf(FunctionCallInfo fcinfo)
 
 	call_cntr = funcctx->call_cntr;
 	result_set = (Chunk *) funcctx->user_fctx;
+
+	/*
+	 * skip if it's an OSM chunk. Ideally this check could be done deep down in
+	 * functions like "chunk_scan_context_add_chunk", "chunk_tuple_dropped_filter"
+	 * etc. but they are used by other APIs like drop_chunks, chunk_scan_find, etc
+	 * which need access to the OSM chunk. Trying to unify scan functions across
+	 * all such usages seems to be too much of an overhaul as compared to this.
+	 *
+	 * Check the index appropriately first.
+	 */
+	if (call_cntr < funcctx->max_calls)
+	{
+		curr_chunk = &result_set[call_cntr];
+		if (IS_OSM_CHUNK(curr_chunk))
+		{
+			call_cntr = ++funcctx->call_cntr;
+		}
+	}
 
 	/* do when there is more left to send */
 	if (call_cntr < funcctx->max_calls)
