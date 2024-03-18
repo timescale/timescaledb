@@ -635,8 +635,7 @@ process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 	LockRelationOid(hyper_relid, ExclusiveLock);
 	const CaggsInfo all_caggs_info =
 		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	invalidations = invalidation_process_cagg_log(cagg->data.mat_hypertable_id,
-												  cagg->data.raw_hypertable_id,
+	invalidations = invalidation_process_cagg_log(cagg,
 												  refresh_window,
 												  &all_caggs_info,
 												  ts_guc_cagg_max_individual_materializations,
@@ -787,10 +786,7 @@ continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 	/* Process invalidations in the hypertable invalidation log */
 	const CaggsInfo all_caggs_info =
 		ts_continuous_agg_get_all_caggs_info(cagg->data.raw_hypertable_id);
-	invalidation_process_hypertable_log(cagg->data.mat_hypertable_id,
-										cagg->data.raw_hypertable_id,
-										refresh_window.type,
-										&all_caggs_info);
+	invalidation_process_hypertable_log(cagg, refresh_window.type, &all_caggs_info);
 
 	/* Commit and Start a new transaction */
 	SPI_commit_and_chain();
