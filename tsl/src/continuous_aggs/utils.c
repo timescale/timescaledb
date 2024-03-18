@@ -23,7 +23,7 @@ static Datum
 create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query,
 								 const ErrorData *edata)
 {
-	NullableDatum datums[Natts_cagg_validate_query] = { 0 };
+	NullableDatum datums[Natts_cagg_validate_query] = { { 0 } };
 	HeapTuple tuple;
 
 	tupdesc = BlessTupleDesc(tupdesc);

@@ -946,6 +946,13 @@ ORDER BY id;
  16 | child_hyper_constr
 (2 rows)
 
+-- show_chunks will not show the OSM chunk which is visible via the above query
+SELECT show_chunks('hyper_constr');
+               show_chunks               
+-----------------------------------------
+ _timescaledb_internal._hyper_7_15_chunk
+(1 row)
+
 ROLLBACK;
 CALL run_job(:deljob_id);
 NOTICE:  hypertable_drop_chunks_hook 
