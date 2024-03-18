@@ -1645,6 +1645,8 @@ AS SELECT time_bucket('30 days',time), avg(val1),  count(val2)
 NOTICE:  refreshing continuous aggregate "test_morecols_cagg"
 ALTER MATERIALIZED VIEW test_morecols_cagg SET (timescaledb.compress='true');
 NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_44" is set to ""
 SELECT compress_chunk(ch) FROM show_chunks('test_morecols_cagg') ch;
               compress_chunk              
 ------------------------------------------

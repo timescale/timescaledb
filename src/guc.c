@@ -5,9 +5,13 @@
  */
 #include <postgres.h>
 #include <utils/guc.h>
+#include <utils/varlena.h>
+#include <utils/regproc.h>
+#include <parser/parse_func.h>
 #include <miscadmin.h>
 
 #include "guc.h"
+#include "extension.h"
 #include "license_guc.h"
 #include "config.h"
 #include "hypertable_cache.h"
@@ -62,6 +66,7 @@ bool ts_guc_enable_qual_propagation = true;
 bool ts_guc_enable_cagg_reorder_groupby = true;
 bool ts_guc_enable_now_constify = true;
 TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
+TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
@@ -72,8 +77,11 @@ bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
+TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
+static char *ts_guc_default_segmentby_fn = NULL;
+static char *ts_guc_default_orderby_fn = NULL;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
@@ -93,6 +101,8 @@ bool ts_guc_debug_require_batch_sorted_merge = false;
 bool ts_shutdown_bgw = false;
 char *ts_current_timestamp_mock = NULL;
 #endif
+
+int ts_guc_debug_toast_tuple_target = 128;
 
 #ifdef TS_DEBUG
 static const struct config_enum_entry require_vector_qual_options[] = {
@@ -212,6 +222,90 @@ static void
 assign_max_open_chunks_per_insert_hook(int newval, void *extra)
 {
 	validate_chunk_cache_sizes(ts_guc_max_cached_chunks_per_hypertable, newval);
+}
+
+static Oid
+get_segmentby_func(char *input_name)
+{
+	List *namelist = NIL;
+
+	if (strlen(input_name) == 0)
+	{
+		return InvalidOid;
+	}
+
+#if PG16_LT
+	namelist = stringToQualifiedNameList(input_name);
+#else
+	namelist = stringToQualifiedNameList(input_name, NULL);
+#endif
+	Oid argtyp[] = { REGCLASSOID };
+	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+}
+
+static bool
+check_segmentby_func(char **newval, void **extra, GucSource source)
+{
+	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
+	if (ts_extension_is_loaded())
+	{
+		Oid segment_func_oid = get_segmentby_func(*newval);
+
+		if (strlen(*newval) > 0 && !OidIsValid(segment_func_oid))
+		{
+			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
+			return false;
+		}
+	}
+	return true;
+}
+
+Oid
+ts_guc_default_segmentby_fn_oid()
+{
+	return get_segmentby_func(ts_guc_default_segmentby_fn);
+}
+
+static Oid
+get_orderby_func(char *input_name)
+{
+	List *namelist = NIL;
+
+	if (strlen(input_name) == 0)
+	{
+		return InvalidOid;
+	}
+
+#if PG16_LT
+	namelist = stringToQualifiedNameList(input_name);
+#else
+	namelist = stringToQualifiedNameList(input_name, NULL);
+#endif
+	Oid argtyp[] = { REGCLASSOID, TEXTARRAYOID };
+	return LookupFuncName(namelist, lengthof(argtyp), argtyp, true);
+}
+
+static bool
+check_orderby_func(char **newval, void **extra, GucSource source)
+{
+	/* if the extension doesn't exist you can't check for the function, have to take it on faith */
+	if (ts_extension_is_loaded())
+	{
+		Oid func_oid = get_orderby_func(*newval);
+
+		if (strlen(*newval) > 0 && !OidIsValid(func_oid))
+		{
+			GUC_check_errdetail("Function \"%s\" does not exist.", *newval);
+			return false;
+		}
+	}
+	return true;
+}
+
+Oid
+ts_guc_default_orderby_fn_oid()
+{
+	return get_orderby_func(ts_guc_default_orderby_fn);
 }
 
 void
@@ -436,6 +530,26 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	/*
+	 * Define the limit on number of invalidation-based refreshes we allow per
+	 * refresh call. If this limit is exceeded, fall back to a single refresh that
+	 * covers the range decided by the min and max invalidated time.
+	 */
+	DefineCustomIntVariable(MAKE_EXTOPTION("materializations_per_refresh_window"),
+							"Max number of materializations per cagg refresh window",
+							"The maximal number of individual refreshes per cagg refresh. If more "
+							"refreshes need to be performed, they are merged into a larger "
+							"single refresh.",
+							&ts_guc_cagg_max_individual_materializations,
+							10,
+							0,
+							INT_MAX,
+							PGC_USERSET,
+							0,
+							NULL,
+							NULL,
+							NULL);
+
 	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_tiered_reads"),
 							 "Enable tiered data reads",
 							 "Enable reading of tiered data by including a foreign table "
@@ -494,6 +608,19 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
+	DefineCustomBoolVariable(MAKE_EXTOPTION("auto_sparse_indexes"),
+							 "Create sparse indexes on compressed chunks",
+							 "The hypertable columns that are used as index keys will have "
+							 "suitable sparse indexes when compressed. Must be set at the moment "
+							 "of chunk compression, e.g. when the `compress_chunk()` is called.",
+							 &ts_guc_auto_sparse_indexes,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 	DefineCustomIntVariable(MAKE_EXTOPTION("max_open_chunks_per_insert"),
 							"Maximum open chunks per insert",
 							"Maximum number of open chunk tables per insert",
@@ -532,6 +659,32 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 #endif
+
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_segmentby_default_function"),
+							   /* short_desc= */ "Function that sets default segment_by",
+							   /* long_desc= */
+							   "Function to use for calculating default segment_by setting for "
+							   "compression",
+							   /* valueAddr= */ &ts_guc_default_segmentby_fn,
+							   /* Value= */ "_timescaledb_functions.get_segmentby_defaults",
+							   /* context= */ PGC_USERSET,
+							   /* flags= */ 0,
+							   /* check_hook= */ check_segmentby_func,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
+
+	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("compression_orderby_default_function"),
+							   /* short_desc= */ "Function that sets default order_by",
+							   /* long_desc= */
+							   "Function to use for calculating default order_by setting for "
+							   "compression",
+							   /* valueAddr= */ &ts_guc_default_orderby_fn,
+							   /* Value= */ "_timescaledb_functions.get_orderby_defaults",
+							   /* context= */ PGC_USERSET,
+							   /* flags= */ 0,
+							   /* check_hook= */ check_orderby_func,
+							   /* assign_hook= */ NULL,
+							   /* show_hook= */ NULL);
 
 	DefineCustomStringVariable(/* name= */ MAKE_EXTOPTION("license"),
 							   /* short_desc= */ "TimescaleDB license type",
@@ -626,6 +779,19 @@ _guc_init(void)
 							   /* check_hook= */ NULL,
 							   /* assign_hook= */ NULL,
 							   /* show_hook= */ NULL);
+
+	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_toast_tuple_target"),
+							/* short_desc= */ "set toast tuple target on compressed chunks",
+							/* long_desc= */ "this is for debugging purposes",
+							/* valueAddr= */ &ts_guc_debug_toast_tuple_target,
+							/* bootValue = */ 128,
+							/* minValue = */ 1,
+							/* maxValue = */ 65535,
+							/* context= */ PGC_USERSET,
+							/* flags= */ 0,
+							/* check_hook= */ NULL,
+							/* assign_hook= */ NULL,
+							/* show_hook= */ NULL);
 
 	DefineCustomEnumVariable(/* name= */ MAKE_EXTOPTION("debug_require_vector_qual"),
 							 /* short_desc= */

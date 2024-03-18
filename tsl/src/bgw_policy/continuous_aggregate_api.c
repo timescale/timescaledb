@@ -119,10 +119,8 @@ policy_refresh_cagg_get_refresh_start(const ContinuousAgg *cagg, const Dimension
 	/* interpret NULL as min value for that type */
 	if (*start_isnull)
 	{
-		Oid type = ts_dimension_get_partition_type(dim);
-
-		return ts_continuous_agg_bucket_width_variable(cagg) ? ts_time_get_nobegin_or_min(type) :
-															   ts_time_get_min(type);
+		Assert(cagg->partition_type == ts_dimension_get_partition_type(dim));
+		return cagg_get_time_min(cagg);
 	}
 
 	return res;
@@ -437,7 +435,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 	else
 		end_offset = interval_to_int64(config->offset_end.value, config->offset_end.type);
 
-	if (ts_continuous_agg_bucket_width_variable(cagg))
+	if (cagg->bucket_function->bucket_fixed_interval == false)
 	{
 		/*
 		 * There are several cases of variable-sized buckets:
@@ -456,19 +454,21 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 
 		/* bucket_function should always be specified for variable-sized buckets */
 		Assert(cagg->bucket_function != NULL);
-		/* ... and bucket_function->bucket_width too */
-		Assert(cagg->bucket_function->bucket_width != NULL);
+		/* ... and bucket_function->bucket_time_width too */
+		Assert(cagg->bucket_function->bucket_time_width != NULL);
 
 		/* Make a temporary copy of bucket_width */
-		Interval interval = *cagg->bucket_function->bucket_width;
+		Interval interval = *cagg->bucket_function->bucket_time_width;
 		interval.day += 31 * interval.month;
 		interval.month = 0;
 		bucket_width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
 	}
 	else
 	{
-		bucket_width = ts_continuous_agg_bucket_width(cagg);
+		bucket_width = ts_continuous_agg_fixed_bucket_width(cagg->bucket_function);
 	}
+
+	Assert(bucket_width > 0);
 
 	if (ts_time_saturating_add(end_offset, bucket_width * 2, INT8OID) > start_offset)
 		ereport(ERROR,

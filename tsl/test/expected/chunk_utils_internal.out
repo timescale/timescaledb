@@ -250,6 +250,7 @@ SELECT create_hypertable('public.table_to_compress', 'time', chunk_time_interval
 (1 row)
 
 ALTER TABLE public.table_to_compress SET (timescaledb.compress, timescaledb.compress_segmentby = 'acq_id');
+NOTICE:  default order by for hypertable "table_to_compress" is set to ""time" DESC"
 INSERT INTO public.table_to_compress VALUES ('2020-01-01', 1234567, 777888);
 INSERT INTO public.table_to_compress VALUES ('2020-02-01', 567567, 890890);
 INSERT INTO public.table_to_compress VALUES ('2020-02-10', 1234, 5678);
@@ -780,6 +781,9 @@ EXPLAIN (COSTS OFF) SELECT * from ht_try WHERE timec < '2023-01-01 01:00';
 -- in the chunks' targetlists on DELETE/UPDATE works (including partially
 -- compressed chunks)
 ALTER table ht_try SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "ht_try" is set to ""
+NOTICE:  default order by for hypertable "ht_try" is set to "timec DESC"
 INSERT INTO ht_try VALUES ('2021-06-05 01:00', 10, 222);
 SELECT compress_chunk(show_chunks('ht_try', newer_than => '2021-01-01'::timestamptz));
              compress_chunk              
@@ -1381,6 +1385,9 @@ SELECT create_hypertable('test2', 'time');
 
 INSERT INTO test2 VALUES ('2020-01-01'::timestamptz, 1);
 ALTER TABLE test2 SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test2" is set to ""
+NOTICE:  default order by for hypertable "test2" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('test2'));
               compress_chunk              
 ------------------------------------------

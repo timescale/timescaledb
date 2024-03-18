@@ -351,6 +351,7 @@ ALTER TABLE conditions SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'city'
 );
+NOTICE:  default order by for hypertable "conditions" is set to "day DESC"
 SELECT compress_chunk(ch) FROM show_chunks('conditions') AS ch;
              compress_chunk              
 -----------------------------------------
@@ -664,6 +665,7 @@ ALTER TABLE conditions_timestamp SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'city'
 );
+NOTICE:  default order by for hypertable "conditions_timestamp" is set to "tstamp DESC"
 SELECT compress_chunk(ch) FROM show_chunks('conditions_timestamp') AS ch;
               compress_chunk               
 -------------------------------------------
@@ -890,6 +892,7 @@ ALTER TABLE conditions_timestamptz SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'city'
 );
+NOTICE:  default order by for hypertable "conditions_timestamptz" is set to "tstamp DESC"
 SELECT compress_chunk(ch) FROM show_chunks('conditions_timestamptz') AS ch;
               compress_chunk               
 -------------------------------------------

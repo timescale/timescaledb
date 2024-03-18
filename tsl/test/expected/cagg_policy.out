@@ -384,6 +384,8 @@ CREATE MATERIALIZED VIEW max_mat_view_date
 -- Test 1 step policy for timestamp type buckets
 ALTER materialized view max_mat_view_date set (timescaledb.compress = true);
 NOTICE:  defaulting compress_orderby to time_bucket
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_6" is set to ""
 -- Only works for cagg
 SELECT timescaledb_experimental.add_policies('continuous_agg_max_mat_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
@@ -868,6 +870,8 @@ GROUP BY 1 WITH NO DATA;
 -- Test 1 step policy for smallint type buckets
 ALTER materialized view mat_smallint set (timescaledb.compress = true);
 NOTICE:  defaulting compress_orderby to a
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 -- All policies are added in one step
 SELECT timescaledb_experimental.add_policies('mat_smallint', refresh_start_offset => 10::smallint, refresh_end_offset => 1::smallint, compress_after => 11::smallint, drop_after => 20::smallint);
  add_policies 
@@ -1071,6 +1075,8 @@ GROUP BY 1 WITH NO DATA;
 -- Test 1 step policy for bigint type buckets
 ALTER materialized view mat_bigint set (timescaledb.compress = true);
 NOTICE:  defaulting compress_orderby to a
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 -- All policies are added in one step
 SELECT timescaledb_experimental.add_policies('mat_bigint', refresh_start_offset => 10::bigint, refresh_end_offset => 1::bigint, compress_after => 11::bigint, drop_after => 20::bigint);
  add_policies 
@@ -1142,8 +1148,12 @@ SELECT * FROM mat_bigint WHERE a>100 ORDER BY 1;
 
 ALTER MATERIALIZED VIEW mat_bigint SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to a
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_14" is set to ""
 ALTER MATERIALIZED VIEW mat_smallint SET (timescaledb.compress);
 NOTICE:  defaulting compress_orderby to a
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 \set ON_ERROR_STOP 0
 SELECT add_compression_policy('mat_smallint', 0::smallint);
 ERROR:  compress_after value for compression policy should be greater than the start of the refresh window of continuous aggregate policy for mat_smallint
@@ -1192,6 +1202,9 @@ SELECT time,
 FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-02 23:55:00+0', '20m') gtime (time),
     generate_series(1, 2, 1) gdevice (device_id);
 ALTER TABLE metrics SET ( timescaledb.compress );
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "metrics" is set to ""
+NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT compress_chunk(ch) FROM show_chunks('metrics') ch;
               compress_chunk              
 ------------------------------------------

@@ -80,10 +80,7 @@ select show_chunks as chunk_to_compress_2 from show_chunks('mytab_twoseg') limit
 
 select compress_chunk(:'chunk_to_compress_2');
 
--- should have 2 compressed rows
--- select numrows_pre_compression, numrows_post_compression from _timescaledb_catalog.compression_chunk_size ccs
--- join compressed_chunk_info_view v on ccs.chunk_id = v.chunk_id where v.compressed_chunk_schema || '.' || v.compressed_chunk_name
---  = :'chunk_to_compress_2';
+-- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
 insert into mytab_twoseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
@@ -103,7 +100,7 @@ select ctid, * from :compressed_chunk_name_2;
 -- verify that initial data is returned as expected
 select * from :chunk_to_compress_2 ORDER BY a, c, time DESC;
 
--- should still have 2 compressed rows
+-- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
 ----------------- more than one batch per segment ----------------------
@@ -129,12 +126,13 @@ select show_chunks('mytab2') as chunk_to_compress_2 \gset
 
 select ctid, * from :compressed_chunk_name_2;
 -- after compression
+-- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
 select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_2');
 
 select ctid, * from :compressed_chunk_name_2;
--- after recompression
+-- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'chunk_to_compress_2';
 
 -- failing test from compression_ddl
@@ -149,6 +147,7 @@ INSERT INTO test_defaults SELECT '2001-01-01', 1;
 
 SELECT compress_chunk(show_chunks) AS "compressed_chunk" FROM show_chunks('test_defaults') ORDER BY show_chunks::text LIMIT 1 \gset
 
+-- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'compressed_chunk';
 
 SELECT * FROM test_defaults ORDER BY 1;
@@ -162,8 +161,7 @@ SELECT * FROM test_defaults ORDER BY 1,2;
 
 SELECT compress_chunk(:'compressed_chunk');
 SELECT * FROM test_defaults ORDER BY 1,2;
--- here we will have an additional compressed row after recompression because the new
--- data corresponds to a new segment
+-- stats are no longer updated during segmentwise recompression
 select * from compression_rowcnt_view where chunk_name = :'compressed_chunk';
 
 -- test prepared statements

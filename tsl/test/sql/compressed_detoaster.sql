@@ -13,12 +13,7 @@ alter table longstr set (timescaledb.compress);
 -- but very hard to hit with the usual toast_tuple_target = 128 on compressed
 -- chunks. So here we increase the toast_tuple_target to simplify
 -- testing.
-select format('%I.%I', schema_name, table_name) compressed_table
-from _timescaledb_catalog.hypertable
-where id = (select compressed_hypertable_id from _timescaledb_catalog.hypertable
-    where table_name = 'longstr')
-\gset
-alter table :compressed_table set (toast_tuple_target = 512);
+set timescaledb.debug_toast_tuple_target = 512;
 
 
 -- Now, test compression and decompression with various string lengths.

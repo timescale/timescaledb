@@ -51,7 +51,6 @@ typedef struct DecompressContext
 	int num_total_columns;
 	int num_compressed_columns;
 	List *vectorized_quals_constified;
-	Size batch_memory_context_bytes;
 	bool reverse;
 	bool batch_sorted_merge; /* Merge append optimization enabled */
 	bool enable_bulk_decompression;

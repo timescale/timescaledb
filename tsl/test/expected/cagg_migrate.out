@@ -158,7 +158,8 @@ UNION ALL
   GROUP BY (public.time_bucket(168, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -341,6 +342,8 @@ psql:include/cagg_migrate_common.sql:104: ERROR:  plan already exists for contin
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
 psql:include/cagg_migrate_common.sql:108: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:108: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:108: NOTICE:  default segment by for hypertable "_materialized_hypertable_3" is set to ""
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
 SELECT add_continuous_aggregate_policy('conditions_summary_daily', '30 days'::interval, '1 day'::interval, '1 hour'::interval);
@@ -384,6 +387,8 @@ TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCA
 psql:include/cagg_migrate_common.sql:128: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:129: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:129: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:129: NOTICE:  default segment by for hypertable "_materialized_hypertable_7" is set to ""
 psql:include/cagg_migrate_common.sql:129: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('1008' AS integer), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -529,6 +534,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:181: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:181: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:181: NOTICE:  default segment by for hypertable "_materialized_hypertable_9" is set to ""
 psql:include/cagg_migrate_common.sql:181: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -633,6 +640,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:203: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('1008' AS integer), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 10 other objects
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1002 not found, skipping
@@ -1018,7 +1027,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -1193,6 +1203,8 @@ psql:include/cagg_migrate_common.sql:104: ERROR:  plan already exists for contin
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
 psql:include/cagg_migrate_common.sql:108: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:108: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:108: NOTICE:  default segment by for hypertable "_materialized_hypertable_7" is set to ""
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -1236,6 +1248,8 @@ TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCA
 psql:include/cagg_migrate_common.sql:128: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:129: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:129: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:129: NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 psql:include/cagg_migrate_common.sql:129: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('2023-01-01 00:00:00' AS timestamp without time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -1369,6 +1383,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:181: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:181: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:181: NOTICE:  default segment by for hypertable "_materialized_hypertable_13" is set to ""
 psql:include/cagg_migrate_common.sql:181: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2023-01-01 00:00:00' AS timestamp without time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -1473,6 +1489,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:203: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_15" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2023-01-01 00:00:00' AS timestamp without time zone), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 6 other objects
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1014 not found, skipping
@@ -1855,7 +1873,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -2024,6 +2043,8 @@ psql:include/cagg_migrate_common.sql:104: ERROR:  plan already exists for contin
 -- policies for test
 ALTER MATERIALIZED VIEW conditions_summary_daily SET (timescaledb.compress=true);
 psql:include/cagg_migrate_common.sql:108: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:108: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:108: NOTICE:  default segment by for hypertable "_materialized_hypertable_11" is set to ""
 \if :IS_TIME_DIMENSION
 SELECT add_retention_policy('conditions_summary_daily', '30 days'::interval);
  add_retention_policy 
@@ -2067,6 +2088,8 @@ TRUNCATE _timescaledb_catalog.continuous_agg_migrate_plan RESTART IDENTITY CASCA
 psql:include/cagg_migrate_common.sql:128: NOTICE:  truncate cascades to table "continuous_agg_migrate_plan_step"
 CALL cagg_migrate('conditions_summary_daily');
 psql:include/cagg_migrate_common.sql:129: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:129: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:129: NOTICE:  default segment by for hypertable "_materialized_hypertable_21" is set to ""
 psql:include/cagg_migrate_common.sql:129: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily_new', CAST('2022-12-31 16:00:00-08' AS timestamp with time zone), NULL);"
 SELECT
     ca.raw_hypertable_id AS "NEW_RAW_HYPERTABLE_ID",
@@ -2200,6 +2223,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE);
 psql:include/cagg_migrate_common.sql:181: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:181: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:181: NOTICE:  default segment by for hypertable "_materialized_hypertable_23" is set to ""
 psql:include/cagg_migrate_common.sql:181: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2022-12-31 16:00:00-08' AS timestamp with time zone), NULL);"
 -- cagg with the new format because it was overriden
 \d+ conditions_summary_daily
@@ -2304,6 +2329,8 @@ SELECT * FROM cagg_jobs WHERE schema = 'public' AND name = 'conditions_summary_d
 
 CALL cagg_migrate('conditions_summary_daily', override => TRUE, drop_old => TRUE);
 psql:include/cagg_migrate_common.sql:203: NOTICE:  defaulting compress_orderby to bucket
+psql:include/cagg_migrate_common.sql:203: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/cagg_migrate_common.sql:203: NOTICE:  default segment by for hypertable "_materialized_hypertable_25" is set to ""
 psql:include/cagg_migrate_common.sql:203: WARNING:  refresh the continuous aggregate after the migration executing this statement: "CALL public.refresh_continuous_aggregate('public.conditions_summary_daily', CAST('2022-12-31 16:00:00-08' AS timestamp with time zone), NULL);"
 psql:include/cagg_migrate_common.sql:203: NOTICE:  drop cascades to 6 other objects
 psql:include/cagg_migrate_common.sql:203: NOTICE:  job 1026 not found, skipping
@@ -2682,7 +2709,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;
@@ -2881,7 +2909,8 @@ UNION ALL
   GROUP BY (public.time_bucket('7 days'::interval, conditions."time"));
 COPY _timescaledb_catalog.hypertable (id, schema_name, table_name, associated_schema_name, associated_table_prefix, num_dimensions, chunk_sizing_func_schema, chunk_sizing_func_name, chunk_target_size, compression_state, compressed_hypertable_id, status) FROM stdin;
 COPY _timescaledb_catalog.dimension (id, hypertable_id, column_name, column_type, aligned, num_slices, partitioning_func_schema, partitioning_func, interval_length, compress_interval_length, integer_now_func_schema, integer_now_func) FROM stdin;
-COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, bucket_width, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_agg (mat_hypertable_id, raw_hypertable_id, parent_mat_hypertable_id, user_view_schema, user_view_name, partial_view_schema, partial_view_name, direct_view_schema, direct_view_name, materialized_only, finalized) FROM stdin;
+COPY _timescaledb_catalog.continuous_aggs_bucket_function (mat_hypertable_id, bucket_func, bucket_width, bucket_fixed_width) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_invalidation_threshold (hypertable_id, watermark) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_materialization_invalidation_log (materialization_id, lowest_modified_value, greatest_modified_value) FROM stdin;
 COPY _timescaledb_catalog.continuous_aggs_watermark (mat_hypertable_id, watermark) FROM stdin;

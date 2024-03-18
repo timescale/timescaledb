@@ -11,6 +11,7 @@ NOTICE:  adding not-null constraint to column "ts"
 (1 row)
 
 alter table batches set (timescaledb.compress, timescaledb.compress_segmentby = 'id');
+NOTICE:  default order by for hypertable "batches" is set to "ts DESC"
 insert into batches values ('2022-02-02 00:00:01', 1), ('2022-02-02 00:00:11', 1),
     ('2022-02-02 00:00:02', 2), ('2022-02-02 00:00:12', 2),
     ('2022-02-02 00:00:03', 3), ('2022-02-02 00:00:13', 3);

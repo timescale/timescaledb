@@ -424,22 +424,23 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		nulls_serialized = bytes_deserialize_simple8b_and_advance(&si);
 	}
 
-	const uint16 n_notnull = indices_serialized->num_elements;
-	const uint16 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
+	const uint32 n_notnull = indices_serialized->num_elements;
+	const uint32 n_total = header->has_nulls ? nulls_serialized->num_elements : n_notnull;
 	CheckCompressedData(n_total >= n_notnull);
-	const uint16 n_padded =
+	const uint32 n_padded =
 		n_total + 63; /* This is the padding requirement of simple8brle_decompress_all. */
 	int16 *restrict indices = MemoryContextAlloc(dest_mctx, sizeof(int16) * n_padded);
 
-	const uint16 n_decompressed =
+	const uint32 n_decompressed =
 		simple8brle_decompress_all_buf_int16(indices_serialized, indices, n_padded);
 	CheckCompressedData(n_decompressed == n_notnull);
 
 	/* Check that the dictionary indices that we've just read are not out of bounds. */
 	CheckCompressedData(header->num_distinct <= GLOBAL_MAX_ROWS_PER_COMPRESSION);
+	/* We use signed indexes as recommended by the Arrow spec. */
 	CheckCompressedData(header->num_distinct <= INT16_MAX);
 	bool have_incorrect_index = false;
-	for (int i = 0; i < n_notnull; i++)
+	for (uint32 i = 0; i < n_notnull; i++)
 	{
 		have_incorrect_index |= indices[i] >= (int16) header->num_distinct;
 	}

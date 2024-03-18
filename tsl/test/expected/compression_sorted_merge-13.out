@@ -1531,6 +1531,7 @@ ALTER TABLE test SET (
     timescaledb.compress,
     timescaledb.compress_segmentby = 'otherId,valueFk,otherFk'
 );
+NOTICE:  default order by for hypertable "test" is set to "dttm DESC"
 INSERT INTO public.test (id, dttm, otherid, valuefk, otherfk, measure)
 VALUES  (109288, '2023-05-25 23:12:13.000000', 130, 14499, 13, 0.13216569884001217),
         (109286, '2023-05-25 23:12:13.000000', 130, 14500, 13, 0.3740651978942786),

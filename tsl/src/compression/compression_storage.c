@@ -35,6 +35,7 @@
 #include "compression.h"
 #include "create.h"
 #include "utils.h"
+#include "guc.h"
 
 #define PRINT_COMPRESSION_TABLE_NAME(buf, prefix, hypertable_id)                                   \
 	do                                                                                             \
@@ -159,7 +160,7 @@ set_toast_tuple_target_on_chunk(Oid compressed_table_id)
 	DefElem def_elem = {
 		.type = T_DefElem,
 		.defname = "toast_tuple_target",
-		.arg = (Node *) makeInteger(128),
+		.arg = (Node *) makeInteger(ts_guc_debug_toast_tuple_target),
 		.defaction = DEFELEM_SET,
 		.location = -1,
 	};

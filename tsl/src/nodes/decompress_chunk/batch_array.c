@@ -11,15 +11,13 @@
  * Create states to hold information for up to n batches.
  */
 void
-batch_array_init(BatchArray *array, int nbatches, int ncolumns_per_batch,
-				 Size memory_context_block_size_bytes)
+batch_array_init(BatchArray *array, int nbatches, int ncolumns_per_batch)
 {
 	Assert(nbatches >= 0);
 
 	array->n_batch_states = nbatches;
 	array->n_columns_per_batch = ncolumns_per_batch;
 	array->unused_batch_states = bms_add_range(NULL, 0, nbatches - 1);
-	array->batch_memory_context_bytes = memory_context_block_size_bytes;
 	array->n_batch_state_bytes =
 		sizeof(DecompressBatchState) + sizeof(CompressedColumnValues) * ncolumns_per_batch;
 	array->batch_states = palloc0(array->n_batch_state_bytes * nbatches);

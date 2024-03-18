@@ -94,8 +94,9 @@ SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::inte
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 
 -- min distance from end should be 1
-SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width
-FROM _timescaledb_catalog.continuous_agg;
+SELECT mat_hypertable_id, user_view_schema, user_view_name FROM _timescaledb_catalog.continuous_agg;
+SELECT mat_hypertable_id, bucket_width FROM _timescaledb_catalog.continuous_aggs_bucket_function;
+
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
 
@@ -285,6 +286,26 @@ where cagg.view_name::text like '%test_continuous_agg_view'
 and cagg.materialization_hypertable_name = ps.hypertable_name;
 
 \x off
+
+-- test merged refresh (change data in two chunks)
+UPDATE test_continuous_agg_table SET data = 11;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+ALTER SYSTEM SET timescaledb.materializations_per_refresh_window = 0;
+SELECT pg_reload_conf();
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+--advance time by 1day so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '1day')::bigint * 1000000, true);
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50, 50);
+
+SELECT * FROM sorted_bgw_log;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+ALTER SYSTEM RESET timescaledb.materializations_per_refresh_window;
+SELECT pg_reload_conf();
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 DROP MATERIALIZED VIEW test_continuous_agg_view;
 

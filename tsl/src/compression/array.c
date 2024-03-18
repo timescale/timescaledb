@@ -493,17 +493,9 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 
 	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(si);
 
-	/*
-	 * We need a quite significant padding of 63 elements, not bytes, after the
-	 * last element, because we work in Simple8B blocks which can contain up to
-	 * 64 elements.
-	 */
-	uint32 sizes[GLOBAL_MAX_ROWS_PER_COMPRESSION + 63];
-	const uint16 n_notnull =
-		simple8brle_decompress_all_buf_uint32(sizes_serialized,
-											  sizes,
-											  sizeof(sizes) / sizeof(sizes[0]));
-	const int n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
+	uint32 n_notnull;
+	uint32 *restrict sizes = simple8brle_decompress_all_uint32(sizes_serialized, &n_notnull);
+	const uint32 n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
 	CheckCompressedData(n_total >= n_notnull);
 
 	uint32 *offsets =
@@ -513,7 +505,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		(uint8 *) MemoryContextAlloc(dest_mctx, pad_to_multiple(64, si->len - si->cursor));
 
 	uint32 offset = 0;
-	for (int i = 0; i < n_notnull; i++)
+	for (uint32 i = 0; i < n_notnull; i++)
 	{
 		void *unaligned = consumeCompressedData(si, sizes[i]);
 

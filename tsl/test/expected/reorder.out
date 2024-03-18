@@ -1359,6 +1359,9 @@ SELECT table_name FROM create_hypertable('comp_ht_test','time');
 (1 row)
 
 ALTER TABLE comp_ht_test SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "comp_ht_test" is set to ""
+NOTICE:  default order by for hypertable "comp_ht_test" is set to ""time" DESC"
 SELECT
   format('%I.%I', ht.schema_name, ht.table_name) AS "INTERNALTABLE"
 FROM

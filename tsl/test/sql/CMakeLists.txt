@@ -13,6 +13,7 @@ set(TEST_FILES
     cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
+    compress_auto_sparse_index.sql
     compress_default.sql
     compress_float8_corrupt.sql
     compressed_detoaster.sql
@@ -120,6 +121,7 @@ set(SOLO_TESTS
     cagg_bgw
     cagg_ddl-${PG_VERSION_MAJOR}
     cagg_dump
+    cagg_invalidation
     move
     reorder
     telemetry_stats-${PG_VERSION_MAJOR})

@@ -700,6 +700,7 @@ CREATE UNIQUE INDEX timestamp_id_idx ON test_limit(timestamp, id);
 
 ALTER TABLE test_limit SET (
     timescaledb.compress,
+    timescaledb.compress_segmentby = '',
     timescaledb.compress_orderby = 'timestamp'
 );
 SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;

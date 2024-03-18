@@ -94,6 +94,8 @@ SELECT * FROM _timescaledb_config.bgw_job where id=:retention_job_id;
 
 --turn on compression and compress all chunks
 ALTER TABLE test_retention_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_retention_table" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('test_retention_table') ch;
  count 
 -------
@@ -186,6 +188,8 @@ INSERT INTO test_reorder_chunks_table VALUES (5, 5);
 INSERT INTO test_reorder_chunks_table VALUES (6, 6);
 -- Enable compression
 ALTER TABLE test_reorder_chunks_table set (timescaledb.compress, timescaledb.compress_orderby = 'time DESC');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_reorder_chunks_table" is set to ""
 -- Compress 2 chunks:
 SELECT compress_chunk(show_chunks('test_reorder_chunks_table', newer_than => 2, older_than => 4));
              compress_chunk              

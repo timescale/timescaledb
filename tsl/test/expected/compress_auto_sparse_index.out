@@ -1,0 +1,160 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+create table sparse(ts int, value float);
+select create_hypertable('sparse', 'ts');
+NOTICE:  adding not-null constraint to column "ts"
+  create_hypertable  
+---------------------
+ (1,public,sparse,t)
+(1 row)
+
+insert into sparse select x, x from generate_series(1, 10000) x;
+alter table sparse set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "sparse" is set to ""
+NOTICE:  default order by for hypertable "sparse" is set to "ts DESC"
+-- When the chunks are compressed, minmax metadata are created for columns that
+-- have btree indexes.
+create index ii on sparse(value);
+select count(compress_chunk(x)) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where value = 1;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..19.75 rows=72000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_2_chunk  (cost=0.00..19.75 rows=72 width=76)
+         Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
+(4 rows)
+
+-- Should be disabled with the GUC
+set timescaledb.auto_sparse_indexes to off;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where value = 1;
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.50 rows=750000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_3_chunk  (cost=0.00..17.50 rows=750 width=76)
+(3 rows)
+
+reset timescaledb.auto_sparse_indexes;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where value = 1;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..19.75 rows=72000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..19.75 rows=72 width=76)
+         Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
+(4 rows)
+
+-- Should survive renames.
+alter table sparse rename column value to wert;
+explain select * from sparse where wert = 1;
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..19.75 rows=72000 width=12)
+   Vectorized Filter: (wert = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..19.75 rows=72 width=76)
+         Filter: ((_ts_meta_v2_min_wert <= '1'::double precision) AND (_ts_meta_v2_max_wert >= '1'::double precision))
+(4 rows)
+
+alter table sparse rename column wert to value;
+explain select * from sparse where value = 1;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.27..19.75 rows=72000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_4_chunk  (cost=0.00..19.75 rows=72 width=76)
+         Filter: ((_ts_meta_v2_min_value <= '1'::double precision) AND (_ts_meta_v2_max_value >= '1'::double precision))
+(4 rows)
+
+-- Not for expression indexes.
+drop index ii;
+create index ii on sparse((value + 1));
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where value = 1;
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.50 rows=750000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_5_chunk  (cost=0.00..17.50 rows=750 width=76)
+(3 rows)
+
+-- Not for other index types.
+drop index ii;
+create index ii on sparse using hash(value);
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where value = 1;
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.50 rows=750000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_6_chunk  (cost=0.00..17.50 rows=750 width=76)
+(3 rows)
+
+-- When the chunk is recompressed without index, no sparse index is created.
+drop index ii;
+select count(compress_chunk(decompress_chunk(x))) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where value = 1;
+                                         QUERY PLAN                                         
+--------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=0.02..17.50 rows=750000 width=12)
+   Vectorized Filter: (value = '1'::double precision)
+   ->  Seq Scan on compress_hyper_2_7_chunk  (cost=0.00..17.50 rows=750 width=76)
+(3 rows)
+
+-- Long column names.
+select count(decompress_chunk(x)) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+\set ECHO none
+select count(compress_chunk(x)) from show_chunks('sparse') x;
+ count 
+-------
+     1
+(1 row)
+
+explain select * from sparse where Abcdef012345678_Bbcdef012345678_Cbcdef012345678_Dbcdef0 = 1;
+                                                                          QUERY PLAN                                                                           
+---------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_1_1_chunk  (cost=3.48..10.45 rows=3000 width=264)
+   Vectorized Filter: (abcdef012345678_bbcdef012345678_cbcdef012345678_dbcdef0 = 1)
+   ->  Seq Scan on compress_hyper_2_8_chunk  (cost=0.00..10.45 rows=3 width=2092)
+         Filter: ((_ts_meta_v2_min_9218_abcdef012345678_bbcdef012345678_cbcdef0 <= 1) AND (_ts_meta_v2_max_9218_abcdef012345678_bbcdef012345678_cbcdef0 >= 1))
+(4 rows)
+

@@ -71,6 +71,9 @@ WARNING:  column type "timestamp without time zone" used for "time" does not fol
 (1 row)
 
 ALTER TABLE records SET (timescaledb.compress = true);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "records" is set to ""
+NOTICE:  default order by for hypertable "records" is set to ""time" DESC"
 ALTER TABLE records ADD COLUMN col1 boolean DEFAULT false NOT NULL;
 -- NULL constraints are useless and it is safe allow adding this
 -- column with NULL constraint to a compressed hypertable (Issue #5151)
@@ -649,6 +652,8 @@ INSERT INTO test1 SELECT '2018-03-02 1:05'::TIMESTAMPTZ, 2;
 NOTICE:   raise notice test1_print_trigger called 
 NOTICE:   raise notice test1_print_trigger called 
 ALTER TABLE test1 set (timescaledb.compress, timescaledb.compress_orderby = '"Time" DESC');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test1" is set to ""
 SELECT count(compress_chunk(ch)) FROM show_chunks('test1') ch;
  count 
 -------
@@ -675,6 +680,9 @@ INSERT INTO i2844 SELECT generate_series('2000-01-01'::timestamptz, '2000-01-02'
 CREATE MATERIALIZED VIEW test_agg WITH (timescaledb.continuous) AS SELECT time_bucket('1 hour', created_at) AS bucket, AVG(c1) AS avg_c1 FROM i2844 GROUP BY bucket;
 NOTICE:  refreshing continuous aggregate "test_agg"
 ALTER TABLE i2844 SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "i2844" is set to ""
+NOTICE:  default order by for hypertable "i2844" is set to "created_at DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings WHERE relid='i2844'::regclass;
  relid | segmentby |   orderby    | orderby_desc | orderby_nullsfirst 
 -------+-----------+--------------+--------------+--------------------
@@ -982,6 +990,7 @@ SELECT create_hypertable('test_defaults','time');
 (1 row)
 
 ALTER TABLE test_defaults SET (timescaledb.compress,timescaledb.compress_segmentby='device_id');
+psql:include/compression_alter.sql:119: NOTICE:  default order by for hypertable "test_defaults" is set to ""time" DESC"
 -- create 2 chunks
 INSERT INTO test_defaults SELECT '2000-01-01', 1;
 INSERT INTO test_defaults SELECT '2001-01-01', 1;
@@ -1238,6 +1247,9 @@ SELECT create_hypertable('issue4140', 'time');
 (1 row)
 
 ALTER TABLE issue4140 SET(timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "issue4140" is set to ""
+NOTICE:  default order by for hypertable "issue4140" is set to ""time" DESC"
 SELECT format('%I.%I', schema_name, table_name)::regclass AS ctable
 FROM _timescaledb_catalog.hypertable
 WHERE id = (SELECT compressed_hypertable_id FROM _timescaledb_catalog.hypertable WHERE table_name = 'issue4140') \gset
@@ -1304,6 +1316,7 @@ SELECT create_hypertable(
 (1 row)
 
 alter table "tEst2" set (timescaledb.compress=true, timescaledb.compress_segmentby='"Id"');
+NOTICE:  default order by for hypertable "tEst2" is set to ""Time" DESC"
 CREATE MATERIALIZED VIEW "tEst2_mv"
 WITH (timescaledb.continuous) AS
 SELECT "Id" as "Idd",
@@ -1856,6 +1869,9 @@ VALUES -- chunk1
   ('2022-01-01 00:04'::timestamptz, 1, 2);
 -- enable compression, compress all chunks
 ALTER TABLE test_partials SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_partials" is set to ""
+NOTICE:  default order by for hypertable "test_partials" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('test_partials'));
               compress_chunk               
 -------------------------------------------
@@ -2134,6 +2150,9 @@ INSERT INTO space_part values
 ('2021-01-01 00:03', 2, 1, 1);
 -- compress them
 ALTER TABLE space_part SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "space_part" is set to ""
+NOTICE:  default order by for hypertable "space_part" is set to ""time" DESC"
 SELECT compress_chunk(show_chunks('space_part'));
               compress_chunk               
 -------------------------------------------
@@ -2330,8 +2349,9 @@ WARNING:  column type "character varying" used for "col1" does not follow best p
 create unique index myidx_unique ON
 mytab (lower(col1::text), col2, departure_ts, arrival_ts);
 alter table mytab set (timescaledb.compress);
-WARNING:  column "col2" should be used for segmenting or ordering
-WARNING:  column "arrival_ts" should be used for segmenting or ordering
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: Please make sure col2 is not a unique column and appropriate for a segment by
+NOTICE:  default segment by for hypertable "mytab" is set to "col2"
+NOTICE:  default order by for hypertable "mytab" is set to "departure_ts DESC, arrival_ts"
 -- github issue 6186
 -- verify inserting into index works as expected during decompression
 insert into mytab (col1, col2, value, arrival_ts, departure_ts)
@@ -2416,6 +2436,7 @@ INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 ('2022-01-01 01:00', 'dev2', 12);
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_ex SET (timescaledb.compress, timescaledb.compress_segmentby='device_id');
+NOTICE:  default order by for hypertable "hyper_ex" is set to ""time" DESC"
 ERROR:  constraint hyper_ex_time_device_id_excl is not supported for compression
 \set ON_ERROR_STOP 1
 -- check deferred uniqueness
@@ -2433,6 +2454,9 @@ NOTICE:  adding not-null constraint to column "time"
 
 INSERT INTO hyper_unique_deferred(time, device_id,sensor_1) VALUES (1257987700000000000, 'dev2', 11);
 alter table hyper_unique_deferred set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "hyper_unique_deferred" is set to ""
+NOTICE:  default order by for hypertable "hyper_unique_deferred" is set to ""time" DESC"
 select compress_chunk(show_chunks('hyper_unique_deferred')); -- also worked fine before 2.11.0
               compress_chunk               
 -------------------------------------------

@@ -348,14 +348,23 @@ get_direct_view_oid(int32 mat_hypertable_id)
 	NameData view_schema_name;
 	NameData view_name_name;
 
-	char *view_schema =
-		DatumGetCString(slot_getattr(slot, Anum_continuous_agg_direct_view_schema, &is_null));
+	/* We need to get the attribute names dynamically since this function can be called during an
+	 * upgrade and the fixed attribution numbers (i.e., Anum_continuous_agg_direct_view_schema) can
+	 * be different. */
+	AttrNumber direct_view_schema_attr = get_attnum(cagg_rel->rd_id, "direct_view_schema");
+	Ensure(direct_view_schema_attr != InvalidAttrNumber,
+		   "unable to get attribute number for direct_view_schema");
+
+	AttrNumber direct_view_name_attr = get_attnum(cagg_rel->rd_id, "direct_view_name");
+	Ensure(direct_view_name_attr != InvalidAttrNumber,
+		   "unable to get attribute number for direct_view_name");
+
+	char *view_schema = DatumGetCString(slot_getattr(slot, direct_view_schema_attr, &is_null));
 	Ensure(!is_null, "unable to get view schema for oid %d", mat_hypertable_id);
 	Assert(view_schema != NULL);
 	namestrcpy(&view_schema_name, view_schema);
 
-	char *view_name =
-		DatumGetCString(slot_getattr(slot, Anum_continuous_agg_direct_view_name, &is_null));
+	char *view_name = DatumGetCString(slot_getattr(slot, direct_view_name_attr, &is_null));
 	Ensure(!is_null, "unable to get view name for oid %d", mat_hypertable_id);
 	Assert(view_name != NULL);
 	namestrcpy(&view_name_name, view_name);
