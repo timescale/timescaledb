@@ -92,7 +92,6 @@ typedef struct CrossModuleFunctions
 
 	void (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *trigdata);
-	void (*process_vacuum_cmd)(const VacuumStmt *vacstmt);
 
 	/* Vectorized queries */
 	void (*tsl_postprocess_plan)(PlannedStmt *stmt);
