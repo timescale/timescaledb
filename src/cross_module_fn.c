@@ -279,7 +279,6 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.set_rel_pathlist = NULL,
 	.ddl_command_start = NULL,
 	.ddl_command_end = NULL,
-	.process_vacuum_cmd = NULL,
 	.process_altertable_cmd = NULL,
 	.process_rename_cmd = NULL,
 	.process_explain_def = NULL,

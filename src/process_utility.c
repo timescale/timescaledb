@@ -843,12 +843,6 @@ process_vacuum(ProcessUtilityArgs *args)
 	{
 		PreventCommandDuringRecovery(is_vacuumcmd ? "VACUUM" : "ANALYZE");
 
-		/* Let TSL-side know a vacuum is about to be executed. Used by custom
-		 * TAM to set up state and needs to happen prior to the actual
-		 * vacuum. */
-		if (ts_cm_functions->process_vacuum_cmd)
-			ts_cm_functions->process_vacuum_cmd(stmt);
-
 		/* ACL permission checks inside vacuum_rel and analyze_rel called by this ExecVacuum */
 		ExecVacuum(args->parse_state, stmt, is_toplevel);
 	}

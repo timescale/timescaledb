@@ -60,17 +60,8 @@ static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transcation */
 
-/* Relids of TAM relations to be analyzed */
-static List *analyze_relids = NIL;
-
 #define COMPRESSION_AM_INFO_SIZE(natts)                                                            \
 	(sizeof(CompressionAmInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
-
-void
-compressionam_set_analyze_relid(Oid relid)
-{
-	analyze_relids = list_append_unique_oid(analyze_relids, relid);
-}
 
 static int32
 get_compressed_chunk_id(int32 chunk_id)
@@ -88,6 +79,15 @@ get_chunk_id_from_relid(Oid relid)
 	const char *relname = get_rel_name(relid);
 	ts_chunk_get_id(schema, relname, &chunk_id, false);
 	return chunk_id;
+}
+
+static const TableAmRoutine *
+switch_to_heapam(Relation rel)
+{
+	const TableAmRoutine *tableam = rel->rd_tableam;
+	Assert(tableam == compressionam_routine());
+	rel->rd_tableam = GetHeapamTableAmRoutine();
+	return tableam;
 }
 
 static CompressionAmInfo *
@@ -326,7 +326,6 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 						ParallelTableScanDesc parallel_scan, uint32 flags)
 {
 	CompressionScanDesc scan;
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
 	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) parallel_scan;
 
@@ -370,7 +369,11 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 
 	ParallelTableScanDesc ptscan =
 		parallel_scan ? (ParallelTableScanDesc) &cpscan->pscandesc : NULL;
-	scan->uscan_desc = heapam->scan_begin(relation, snapshot, nkeys, keys, ptscan, flags);
+
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	scan->uscan_desc =
+		relation->rd_tableam->scan_begin(relation, snapshot, nkeys, keys, ptscan, flags);
+	relation->rd_tableam = oldtam;
 
 	if (parallel_scan)
 	{
@@ -384,13 +387,13 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 
 	ParallelTableScanDesc cptscan =
 		parallel_scan ? (ParallelTableScanDesc) &cpscan->cpscandesc : NULL;
-
-	scan->cscan_desc = heapam->scan_begin(scan->compressed_rel,
-										  snapshot,
-										  scan->rs_base.rs_nkeys,
-										  scan->rs_base.rs_key,
-										  cptscan,
-										  flags);
+	Relation crel = scan->compressed_rel;
+	scan->cscan_desc = crel->rd_tableam->scan_begin(scan->compressed_rel,
+													snapshot,
+													scan->rs_base.rs_nkeys,
+													scan->rs_base.rs_key,
+													cptscan,
+													flags);
 
 	return &scan->rs_base;
 }
@@ -400,25 +403,33 @@ compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool all
 					 bool allow_sync, bool allow_pagemode)
 {
 	CompressionScanDesc scan = (CompressionScanDesc) sscan;
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->reset = true;
 	scan->compressed_read_done = false;
+
 	table_rescan(scan->cscan_desc, key);
-	heapam->scan_rescan(scan->uscan_desc, key, set_params, allow_strat, allow_sync, allow_pagemode);
+
+	Relation relation = scan->uscan_desc->rs_rd;
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	relation->rd_tableam
+		->scan_rescan(scan->uscan_desc, key, set_params, allow_strat, allow_sync, allow_pagemode);
+	relation->rd_tableam = oldtam;
 }
 
 static void
 compressionam_endscan(TableScanDesc sscan)
 {
 	CompressionScanDesc scan = (CompressionScanDesc) sscan;
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	RelationDecrementReferenceCount(sscan->rs_rd);
 	table_endscan(scan->cscan_desc);
 	table_close(scan->compressed_rel, AccessShareLock);
-	heapam->scan_end(scan->uscan_desc);
+
+	Relation relation = sscan->rs_rd;
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	relation->rd_tableam->scan_end(scan->uscan_desc);
+	relation->rd_tableam = oldtam;
 
 	elog(DEBUG2,
 		 "scanned " INT64_FORMAT " tuples (" INT64_FORMAT " compressed, " INT64_FORMAT
@@ -444,10 +455,13 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 	{
 		/* All the compressed data has been returned, so now return tuples
 		 * from the non-compressed data */
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 		child_slot = arrow_slot_get_noncompressed_slot(slot);
 
-		bool result = heapam->scan_getnextslot(scan->uscan_desc, direction, child_slot);
+		Relation relation = sscan->rs_rd;
+		const TableAmRoutine *oldtam = switch_to_heapam(relation);
+		bool result =
+			relation->rd_tableam->scan_getnextslot(scan->uscan_desc, direction, child_slot);
+		relation->rd_tableam = oldtam;
 
 		if (result)
 		{
@@ -503,7 +517,9 @@ compressionam_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_initialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
+	rel->rd_tableam = oldtam;
 
 	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 	table_block_parallelscan_initialize(crel, (ParallelTableScanDesc) &cpscan->cpscandesc);
@@ -522,7 +538,9 @@ compressionam_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc psca
 	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_reinitialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
+	rel->rd_tableam = oldtam;
 
 	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 	table_block_parallelscan_reinitialize(crel, (ParallelTableScanDesc) &cpscan->cpscandesc);
@@ -539,9 +557,10 @@ static void
 compressionam_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, CommandId cid,
 						   int options, BulkInsertStateData *bistate)
 {
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	/* Inserts only supported in non-compressed relation, so simply forward to the heap AM */
-	heapam->multi_insert(relation, slots, ntuples, cid, options, bistate);
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	relation->rd_tableam->multi_insert(relation, slots, ntuples, cid, options, bistate);
+	relation->rd_tableam = oldtam;
 
 	TS_WITH_MEMORY_CONTEXT(CurTransactionContext, {
 		partially_compressed_relids =
@@ -566,7 +585,6 @@ typedef struct IndexFetchComprData
 static IndexFetchTableData *
 compressionam_index_fetch_begin(Relation rel)
 {
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 
@@ -574,7 +592,10 @@ compressionam_index_fetch_begin(Relation rel)
 	cscan->h_base.rel = rel;
 	cscan->compr_rel = crel;
 	cscan->compr_hscan = crel->rd_tableam->index_fetch_begin(crel);
-	cscan->uncompr_hscan = heapam->index_fetch_begin(rel);
+
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	cscan->uncompr_hscan = rel->rd_tableam->index_fetch_begin(rel);
+	rel->rd_tableam = oldtam;
 	ItemPointerSetInvalid(&cscan->tid);
 
 	return &cscan->h_base;
@@ -584,22 +605,27 @@ static void
 compressionam_index_fetch_reset(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
+	Relation rel = scan->rel;
 
 	ItemPointerSetInvalid(&cscan->tid);
 	cscan->compr_rel->rd_tableam->index_fetch_reset(cscan->compr_hscan);
-	heapam->index_fetch_reset(cscan->uncompr_hscan);
+
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->index_fetch_reset(cscan->uncompr_hscan);
+	rel->rd_tableam = oldtam;
 }
 
 static void
 compressionam_index_fetch_end(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	Relation crel = cscan->compr_rel;
+	Relation rel = scan->rel;
 
 	crel->rd_tableam->index_fetch_end(cscan->compr_hscan);
-	heapam->index_fetch_end(cscan->uncompr_hscan);
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->index_fetch_end(cscan->uncompr_hscan);
+	rel->rd_tableam = oldtam;
 	table_close(crel, AccessShareLock);
 	pfree(cscan);
 }
@@ -614,19 +640,23 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	TupleTableSlot *child_slot;
+	Relation rel = scan->rel;
 	Relation crel = cscan->compr_rel;
+
 	ItemPointerData decoded_tid;
 
 	if (!is_compressed_tid(tid))
 	{
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 		child_slot = arrow_slot_get_noncompressed_slot(slot);
-		bool result = heapam->index_fetch_tuple(cscan->uncompr_hscan,
-												tid,
-												snapshot,
-												child_slot,
-												call_again,
-												all_dead);
+
+		const TableAmRoutine *oldtam = switch_to_heapam(rel);
+		bool result = rel->rd_tableam->index_fetch_tuple(cscan->uncompr_hscan,
+														 tid,
+														 snapshot,
+														 child_slot,
+														 call_again,
+														 all_dead);
+		rel->rd_tableam = oldtam;
 
 		if (result)
 		{
@@ -713,9 +743,10 @@ compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot sna
 		 * We need to have a new slot for the call since the heap AM expects a
 		 * BufferHeap TTS and we cannot pass down our Arrow TTS.
 		 */
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
-		result = heapam->tuple_fetch_row_version(relation, tid, snapshot, child_slot);
+		const TableAmRoutine *oldtam = switch_to_heapam(relation);
+		result = relation->rd_tableam->tuple_fetch_row_version(relation, tid, snapshot, child_slot);
+		relation->rd_tableam = oldtam;
 	}
 	else
 	{
@@ -744,8 +775,11 @@ compressionam_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 
 	if (!is_compressed_tid(tid))
 	{
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-		return heapam->tuple_tid_valid(cscan->uscan_desc, tid);
+		Relation rel = scan->rs_rd;
+		const TableAmRoutine *oldtam = switch_to_heapam(rel);
+		bool valid = rel->rd_tableam->tuple_tid_valid(cscan->uscan_desc, tid);
+		rel->rd_tableam = oldtam;
+		return valid;
 	}
 
 	(void) compressed_tid_to_tid(&ctid, tid);
@@ -913,7 +947,6 @@ compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 	 */
 	TransactionId xid_noncompr = InvalidTransactionId;
 	TransactionId xid_compr = InvalidTransactionId;
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 
 	/* Reset the deltids array before recreating it with the result */
 	delstate->ndeltids = 0;
@@ -921,7 +954,9 @@ compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 	if (noncompr_delstate.ndeltids > 0 &&
 		(total_knowndeletable_non_compressed > 0 || delstate->bottomup))
 	{
-		xid_noncompr = heapam->index_delete_tuples(rel, &noncompr_delstate);
+		const TableAmRoutine *oldtam = switch_to_heapam(rel);
+		xid_noncompr = rel->rd_tableam->index_delete_tuples(rel, &noncompr_delstate);
+		rel->rd_tableam = oldtam;
 		memcpy(delstate->deltids,
 			   noncompr_delstate.deltids,
 			   noncompr_delstate.ndeltids * sizeof(TM_IndexDelete));
@@ -933,7 +968,7 @@ compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 		/* Assume RowExclusivelock since this involves deleting tuples */
 		Relation compr_rel = table_open(caminfo->compressed_relid, RowExclusiveLock);
 
-		xid_compr = heapam->index_delete_tuples(compr_rel, &compr_delstate);
+		xid_compr = compr_rel->rd_tableam->index_delete_tuples(compr_rel, &compr_delstate);
 
 		for (int i = 0; i < compr_delstate.ndeltids; i++)
 		{
@@ -1027,8 +1062,10 @@ compressionam_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId ci
 		 * into the new heap. */
 	}
 
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-	heapam->tuple_insert(relation, slot, cid, options, bistate);
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	relation->rd_tableam->tuple_insert(relation, slot, cid, options, bistate);
+	relation->rd_tableam = oldtam;
+
 	TS_WITH_MEMORY_CONTEXT(CurTransactionContext, {
 		partially_compressed_relids =
 			list_append_unique_oid(partially_compressed_relids, RelationGetRelid(relation));
@@ -1039,16 +1076,19 @@ static void
 compressionam_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, CommandId cid,
 									   int options, BulkInsertStateData *bistate, uint32 specToken)
 {
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-	heapam->tuple_insert_speculative(relation, slot, cid, options, bistate, specToken);
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	relation->rd_tableam
+		->tuple_insert_speculative(relation, slot, cid, options, bistate, specToken);
+	relation->rd_tableam = oldtam;
 }
 
 static void
 compressionam_tuple_complete_speculative(Relation relation, TupleTableSlot *slot, uint32 specToken,
 										 bool succeeded)
 {
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-	heapam->tuple_complete_speculative(relation, slot, specToken, succeeded);
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	relation->rd_tableam->tuple_complete_speculative(relation, slot, specToken, succeeded);
+	relation->rd_tableam = oldtam;
 }
 
 static TM_Result
@@ -1058,9 +1098,12 @@ compressionam_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Sn
 	if (!is_compressed_tid(tid))
 	{
 		/* Just pass this on to regular heap AM */
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-		return heapam
-			->tuple_delete(relation, tid, cid, snapshot, crosscheck, wait, tmfd, changingPart);
+		const TableAmRoutine *oldtam = switch_to_heapam(relation);
+		TM_Result result =
+			relation->rd_tableam
+				->tuple_delete(relation, tid, cid, snapshot, crosscheck, wait, tmfd, changingPart);
+		relation->rd_tableam = oldtam;
+		return result;
 	}
 
 	/* This shouldn't happen because hypertable_modify should have
@@ -1084,17 +1127,19 @@ compressionam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *
 	if (!is_compressed_tid(otid))
 	{
 		/* Just pass this on to regular heap AM */
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-		return heapam->tuple_update(relation,
-									otid,
-									slot,
-									cid,
-									snapshot,
-									crosscheck,
-									wait,
-									tmfd,
-									lockmode,
-									update_indexes);
+		const TableAmRoutine *oldtam = switch_to_heapam(relation);
+		TM_Result result = relation->rd_tableam->tuple_update(relation,
+															  otid,
+															  slot,
+															  cid,
+															  snapshot,
+															  crosscheck,
+															  wait,
+															  tmfd,
+															  lockmode,
+															  update_indexes);
+		relation->rd_tableam = oldtam;
+		return result;
 	}
 
 	/* This shouldn't happen because hypertable_modify should have
@@ -1144,17 +1189,18 @@ compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
 	}
 	else
 	{
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
-		result = heapam->tuple_lock(relation,
-									tid,
-									snapshot,
-									child_slot,
-									cid,
-									mode,
-									wait_policy,
-									flags,
-									tmfd);
+		const TableAmRoutine *oldtam = switch_to_heapam(relation);
+		result = relation->rd_tableam->tuple_lock(relation,
+												  tid,
+												  snapshot,
+												  child_slot,
+												  cid,
+												  mode,
+												  wait_policy,
+												  flags,
+												  tmfd);
+		relation->rd_tableam = oldtam;
 
 		if (result == TM_Ok)
 		{
@@ -1189,9 +1235,13 @@ compressionam_relation_set_new_filelocator(Relation rel, const RelFileLocator *n
 										   char persistence, TransactionId *freezeXid,
 										   MultiXactId *minmulti)
 {
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-
-	heapam->relation_set_new_filelocator(rel, newrlocator, persistence, freezeXid, minmulti);
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->relation_set_new_filelocator(rel,
+												  newrlocator,
+												  persistence,
+												  freezeXid,
+												  minmulti);
+	rel->rd_tableam = oldtam;
 }
 
 static void
@@ -1233,9 +1283,7 @@ compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrateg
 
 	pgstat_progress_start_command(PROGRESS_COMMAND_VACUUM, RelationGetRelid(rel));
 
-	/* Vacuum the uncompressed relation */
-	// const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-	// heapam->relation_vacuum(rel, params, bstrategy);
+	/* TODO: Vacuum the uncompressed relation */
 
 	/* The compressed relation can be vacuumed too, but might not need it
 	 * unless we do a lot of insert/deletes of compressed rows */
@@ -1252,9 +1300,7 @@ compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrateg
  * the TAM giving the impression that the total number of blocks is the sum of
  * compressed and non-compressed blocks. This is done by returning the sum of
  * the total number of blocks across both relations in the relation_size() TAM
- * callback. However, returning the total block sum does not work for other
- * cases where relation_size() is used, so this is guarded by a flag (see
- * relation_size() for details).
+ * callback.
  *
  * The non-compressed relation is sampled first, and, only once the blockno
  * increases beyond the number of blocks in the non-compressed relation, the
@@ -1266,32 +1312,25 @@ compressionam_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
 	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
-	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-	/*
-	 * Compute the actual number of blocks in non-compressed relation. The
-	 * field rs_nblocks is set by postgresql based on the AM's
-	 * relation_size() callback. Since we "faked" the number of blocks for the
-	 * non-compressed relation to be the sum of the blocks of both relations,
-	 * we need to compute the actual number of blocks here.
-	 */
-	BlockNumber unblocks = (uhscan->rs_nblocks - chscan->rs_nblocks);
 
-	/* Ensure the relation doesn't remain in analyze_relids after the
-	 * ANALYZE */
-	analyze_relids = list_delete_oid(analyze_relids, RelationGetRelid(scan->rs_rd));
-
-	if (blockno >= unblocks)
+	/* If blockno is past the blocks in the non-compressed relation, we should
+	 * analyze the compressed relation */
+	if (blockno >= uhscan->rs_nblocks)
 	{
 		/* Get the compressed rel blockno by subtracting the number of
 		 * non-compressed blocks */
-		blockno -= unblocks;
+		blockno -= uhscan->rs_nblocks;
 		return cscan->compressed_rel->rd_tableam->scan_analyze_next_block(cscan->cscan_desc,
 																		  blockno,
 																		  bstrategy);
 	}
 
-	return heapam->scan_analyze_next_block(cscan->uscan_desc, blockno, bstrategy);
+	Relation rel = scan->rs_rd;
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	bool result = rel->rd_tableam->scan_analyze_next_block(cscan->uscan_desc, blockno, bstrategy);
+	rel->rd_tableam = oldtam;
+
+	return result;
 }
 
 /*
@@ -1360,13 +1399,14 @@ compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXm
 	else
 	{
 		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
-		const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-
-		result = heapam->scan_analyze_next_tuple(cscan->uscan_desc,
-												 OldestXmin,
-												 liverows,
-												 deadrows,
-												 child_slot);
+		Relation rel = scan->rs_rd;
+		const TableAmRoutine *oldtam = switch_to_heapam(rel);
+		result = rel->rd_tableam->scan_analyze_next_tuple(cscan->uscan_desc,
+														  OldestXmin,
+														  liverows,
+														  deadrows,
+														  child_slot);
+		rel->rd_tableam = oldtam;
 		tuple_index = InvalidTupleIndex;
 	}
 
@@ -1502,6 +1542,7 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 		ItemPointerData index_tid;
 		tid_to_compressed_tid(&index_tid, tid, rownum + 1);
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
+		icstate->ntuples++;
 	}
 }
 
@@ -1560,7 +1601,11 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	iinfo.ii_ExclusionOps = NULL;
 	iinfo.ii_Predicate = NULL;
 
-	/* TODO: special case for segmentby column */
+	/* Call heap's index_build_range_scan() on the compressed relation. The
+	 * custom callback we give it will "unwrap" the compressed segments into
+	 * individual tuples. Therefore, we cannot use the tuple count returned by
+	 * the function since it only represent the number of compressed
+	 * tuples. Instead, tuples are counted in the callback state. */
 	crel->rd_tableam->index_build_range_scan(crel,
 											 indexRelation,
 											 &iinfo,
@@ -1580,21 +1625,20 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	bms_free(icstate.segmentby_cols);
 	bms_free(icstate.orderby_cols);
 
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
-	const TableAmRoutine *oldam = relation->rd_tableam;
-	relation->rd_tableam = heapam;
-	icstate.ntuples += heapam->index_build_range_scan(relation,
-													  indexRelation,
-													  indexInfo,
-													  allow_sync,
-													  anyvisible,
-													  progress,
-													  start_blockno,
-													  numblocks,
-													  callback,
-													  callback_state,
-													  scan);
-	relation->rd_tableam = oldam;
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	icstate.ntuples += relation->rd_tableam->index_build_range_scan(relation,
+																	indexRelation,
+																	indexInfo,
+																	allow_sync,
+																	anyvisible,
+																	progress,
+																	start_blockno,
+																	numblocks,
+																	callback,
+																	callback_state,
+																	scan);
+	relation->rd_tableam = oldtam;
+
 	return icstate.ntuples;
 }
 
@@ -1650,24 +1694,6 @@ compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 {
 	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
 	uint64 ubytes = table_block_relation_size(rel, forkNumber);
-	ListCell *lc;
-	bool analyzing = false;
-
-	foreach (lc, analyze_relids)
-	{
-		Oid relid = lfirst_oid(lc);
-
-		if (relid == RelationGetRelid(rel))
-		{
-			analyzing = true;
-			// analyze_relids = list_delete_cell(analyze_relids, lc);
-			break;
-		}
-	}
-
-	if (!analyzing)
-		return ubytes;
-
 	/* For ANALYZE, need to return sum for both relations. */
 	Relation crel = try_relation_open(caminfo->compressed_relid, AccessShareLock);
 
@@ -1676,6 +1702,7 @@ compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 
 	uint64 cbytes = table_block_relation_size(crel, forkNumber);
 	relation_close(crel, NoLock);
+
 	return ubytes + cbytes;
 }
 
@@ -1684,7 +1711,6 @@ compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumb
 									 double *tuples, double *allvisfrac)
 {
 	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
-	const TableAmRoutine *heapam = GetHeapamTableAmRoutine();
 	double ctuples;
 	double callvisfrac;
 	BlockNumber cpages;
@@ -1695,7 +1721,9 @@ compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumb
 	if (!OidIsValid(caminfo->compressed_relid))
 		return;
 
-	heapam->relation_estimate_size(rel, attr_widths, pages, tuples, allvisfrac);
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->relation_estimate_size(rel, attr_widths, pages, tuples, allvisfrac);
+	rel->rd_tableam = oldtam;
 
 	/* Cannot pass on attr_widths since they are cached widths for the
 	 * non-compressed relation which also doesn't have the same number of
