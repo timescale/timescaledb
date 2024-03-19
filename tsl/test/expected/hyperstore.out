@@ -418,7 +418,7 @@ FROM pg_class
 WHERE oid = :'chunk'::regclass;
      relname      | reltuples | relpages 
 ------------------+-----------+----------
- _hyper_1_1_chunk |        -1 |        0
+ _hyper_1_1_chunk |     12240 |        1
 (1 row)
 
 SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
@@ -459,7 +459,7 @@ FROM pg_class
 WHERE oid = :'chunk2'::regclass;
      relname      | reltuples | relpages 
 ------------------+-----------+----------
- _hyper_1_6_chunk |        -1 |        0
+ _hyper_1_6_chunk |     22321 |        1
 (1 row)
 
 SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
