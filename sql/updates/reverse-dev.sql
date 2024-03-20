@@ -3,4 +3,4 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.cagg_get_bucket_function_info(INT
 -- Hyperstore AM
 DROP ACCESS METHOD IF EXISTS hyperstore;
 DROP FUNCTION IF EXISTS ts_compressionam_handler;
-
+DROP FUNCTION IF EXISTS _timescaledb_debug.is_compressed_tid;

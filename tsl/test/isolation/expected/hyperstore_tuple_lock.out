@@ -1,0 +1,45 @@
+Parsed test spec with 2 sessions
+
+starting permutation: s1_start_transaction s1_select_for_update s2_update s1_select s1_commit s2_select s1_select
+step s1_start_transaction: 
+    start transaction;
+
+step s1_select_for_update: 
+    select _timescaledb_debug.is_compressed_tid(ctid), * from metrics where metric_id = 1234 for update;
+
+is_compressed_tid|metric_id|created_at                  |device_id|           twist
+-----------------+---------+----------------------------+---------+----------------
+t                |     1234|Wed Jun 01 20:33:00 2022 PDT|       23|36.0377444695822
+(1 row)
+
+step s2_update: 
+    update metrics set twist = 200.0 where metric_id = 1234;
+ <waiting ...>
+step s1_select: 
+    select * from metrics where metric_id = 1234;
+
+metric_id|created_at                  |device_id|           twist
+---------+----------------------------+---------+----------------
+     1234|Wed Jun 01 20:33:00 2022 PDT|       23|36.0377444695822
+(1 row)
+
+step s1_commit: 
+    commit;
+
+step s2_update: <... completed>
+step s2_select: 
+    select * from metrics where metric_id = 1234;
+
+metric_id|created_at                  |device_id|twist
+---------+----------------------------+---------+-----
+     1234|Wed Jun 01 20:33:00 2022 PDT|       23|  200
+(1 row)
+
+step s1_select: 
+    select * from metrics where metric_id = 1234;
+
+metric_id|created_at                  |device_id|twist
+---------+----------------------------+---------+-----
+     1234|Wed Jun 01 20:33:00 2022 PDT|       23|  200
+(1 row)
+
