@@ -22,6 +22,7 @@
 #include "compression/algorithms/gorilla.h"
 #include "compression/api.h"
 #include "compression/arrow_cache_explain.h"
+#include "compression/arrow_tts.h"
 #include "compression/attr_capture.h"
 #include "compression/compression.h"
 #include "compression/compressionam_handler.h"
@@ -172,6 +173,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.decompress_target_segments = decompress_target_segments,
 	.compressionam_handler = compressionam_handler,
+	.is_compressed_tid = tsl_is_compressed_tid,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
 	.show_chunk = chunk_show,
