@@ -22,6 +22,7 @@
 	}
 
 /* bgw policy functions */
+CROSSMODULE_WRAPPER(is_compressed_tid);
 CROSSMODULE_WRAPPER(policy_compression_add);
 CROSSMODULE_WRAPPER(policy_compression_remove);
 CROSSMODULE_WRAPPER(policy_recompression_proc);
@@ -365,6 +366,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
 	.compressionam_handler = error_no_default_fn_pg_community,
+	.is_compressed_tid = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
