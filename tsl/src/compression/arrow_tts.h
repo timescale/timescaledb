@@ -318,4 +318,6 @@ extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);
 extern const ArrowArray *arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno);
 extern void arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs);
 
+extern Datum tsl_is_compressed_tid(PG_FUNCTION_ARGS);
+
 #endif /* PG_ARROW_TUPTABLE_H */

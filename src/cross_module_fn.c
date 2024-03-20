@@ -97,6 +97,9 @@ CROSSMODULE_WRAPPER(chunk_create_empty_table);
 CROSSMODULE_WRAPPER(recompress_chunk_segmentwise);
 CROSSMODULE_WRAPPER(get_compressed_chunk_index_for_recompression);
 
+/* hyperstore */
+CROSSMODULE_WRAPPER(is_compressed_tid);
+
 /*
  * casting a function pointer to a pointer of another type is undefined
  * behavior, so we need one of these for every function type we have
@@ -365,6 +368,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
 	.compressionam_handler = error_no_default_fn_pg_community,
+	.is_compressed_tid = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,
 	.create_chunk = error_no_default_fn_pg_community,
