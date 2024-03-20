@@ -18,6 +18,12 @@
 #include "custom_type_cache.h"
 #include "utils/palloc.h"
 
+Datum
+tsl_is_compressed_tid(PG_FUNCTION_ARGS)
+{
+	PG_RETURN_BOOL(is_compressed_tid((ItemPointer) PG_GETARG_POINTER(0)));
+}
+
 /*
  * Get a map of attribute offsets that maps non-compressed offsets to
  * compressed offsets.

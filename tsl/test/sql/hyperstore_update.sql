@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
 \ir include/setup_hyperstore.sql
 
 -- TODO(#1068) Parallel sequence scan does not work
@@ -42,3 +44,27 @@ update :hypertable set humidity = 110.0 where location_id = :location_id;
 select count(*) from :hypertable where humidity = 110.0;
 update :hypertable set humidity = 110.0 where location_id = :location_id;
 select count(*) from :hypertable where humidity = 110.0;
+
+-- Make sure there is a mix of compressed and non-compressed rows for
+-- the select for update test below. Run an update on a metric_id to
+-- decompress the corresponding segment.
+update :hypertable set humidity = 120.0 where metric_id = 1001;
+
+-- Testing to select for update, and then perform an update of those
+-- rows. The selection is to make sure that we have a mix of
+-- compressed and uncompressed tuples.
+start transaction;
+select _timescaledb_debug.is_compressed_tid(ctid),
+       metric_id, created_at
+  into to_update
+  from :hypertable
+ where metric_id between 1000 and 1005
+order by metric_id for update;
+
+select * from to_update order by metric_id;
+
+update :hypertable set humidity = 200.0, temp = 500.0
+where (created_at, metric_id) in (select created_at, metric_id from to_update);
+
+select * from :hypertable where humidity = 200.0 order by metric_id;
+commit;

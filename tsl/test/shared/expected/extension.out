@@ -20,6 +20,7 @@ FROM pg_proc p
 WHERE proname <> 'get_telemetry_report'
 ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text COLLATE "C";
  _timescaledb_debug.extension_state()
+ _timescaledb_debug.is_compressed_tid(tid)
  _timescaledb_functions.alter_job_set_hypertable_id(integer,regclass)
  _timescaledb_functions.attach_osm_table_chunk(regclass,regclass)
  _timescaledb_functions.bookend_deserializefunc(bytea,internal)
