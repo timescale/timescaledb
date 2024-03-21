@@ -1,0 +1,263 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO queries
+create function twist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method hyperstore', chunk);
+    return chunk;
+end
+$$;
+create function untwist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method heap', chunk);
+    return chunk;
+end
+$$;
+create table readings(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id int,		--segmentby attribute with index
+       owner_id int,		--segmentby attribute without index
+       device_id int,		--non-segmentby attribute
+       temp float,
+       humidity float
+);
+create index hypertable_location_id_idx on readings (location_id);
+create index hypertable_device_id_idx on readings (device_id);
+select create_hypertable('readings', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into readings (created_at, location_id, owner_id, device_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+alter table readings set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ order by chunk1 asc
+ limit 1 
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 
+set timescaledb.enable_columnarscan to false;
+set enable_memoize to false;
+create table the_hyperstore (
+       updated_at timestamptz not null unique,
+       device_id int,
+       height float
+);
+create index on the_hyperstore (device_id);
+select from create_hypertable('the_hyperstore', 'updated_at');
+--
+(1 row)
+
+insert into the_hyperstore
+select t, ceil(random()*5), random()*40
+from generate_series('2022-06-01'::timestamptz, '2022-06-10', '1 hour') t;
+select * into expected_inner from _timescaledb_internal._hyper_1_1_chunk join the_hyperstore using (device_id);
+select created_at, updated_at, o.device_id, i.humidity, o.height
+  into expected_left
+  from _timescaledb_internal._hyper_1_1_chunk i left join the_hyperstore o
+    on i.created_at = o.updated_at and i.device_id = o.device_id;
+alter table the_hyperstore set (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = '',
+      timescaledb.compress_orderby = 'updated_at desc'
+);
+select twist_chunk(show_chunks('the_hyperstore'));
+              twist_chunk               
+----------------------------------------
+ _timescaledb_internal._hyper_3_7_chunk
+ _timescaledb_internal._hyper_3_8_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+(3 rows)
+
+vacuum analyze the_hyperstore;
+set enable_mergejoin to true;
+set enable_hashjoin to false;
+set enable_nestloop to false;
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select * from _timescaledb_internal._hyper_1_1_chunk join the_hyperstore using (device_id);
+                                                           QUERY PLAN                                                           
+--------------------------------------------------------------------------------------------------------------------------------
+ Merge Join (actual rows=265355 loops=1)
+   Merge Cond: (_hyper_1_1_chunk.device_id = _hyper_3_7_chunk.device_id)
+   ->  Index Scan using _hyper_1_1_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=6120 loops=1)
+   ->  Materialize (actual rows=264141 loops=1)
+         ->  Merge Append (actual rows=217 loops=1)
+               Sort Key: _hyper_3_7_chunk.device_id
+               ->  Index Scan using _hyper_3_7_chunk_the_hyperstore_device_id_idx on _hyper_3_7_chunk (actual rows=17 loops=1)
+               ->  Index Scan using _hyper_3_8_chunk_the_hyperstore_device_id_idx on _hyper_3_8_chunk (actual rows=168 loops=1)
+               ->  Index Scan using _hyper_3_9_chunk_the_hyperstore_device_id_idx on _hyper_3_9_chunk (actual rows=32 loops=1)
+ Arrays read from cache: 642
+ Arrays decompressed: 9
+(11 rows)
+
+select * into merge_join from _timescaledb_internal._hyper_1_1_chunk join the_hyperstore using (device_id);
+select * from merge_join r full join expected_inner e on row(r) = row(e)
+where r.device_id is null or e.device_id is null;
+(0 rows)
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select created_at, updated_at, o.device_id, i.humidity, o.height
+  from _timescaledb_internal._hyper_1_1_chunk i left join the_hyperstore o
+    on i.created_at = o.updated_at and i.device_id = o.device_id;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Merge Left Join (actual rows=6120 loops=1)
+   Merge Cond: (i.created_at = o_1.updated_at)
+   Join Filter: (i.device_id = o_1.device_id)
+   Rows Removed by Join Filter: 13
+   ->  Index Scan using "1_1_readings_created_at_key" on _hyper_1_1_chunk i (actual rows=6120 loops=1)
+   ->  Materialize (actual rows=18 loops=1)
+         ->  Merge Append (actual rows=18 loops=1)
+               Sort Key: o_1.updated_at
+               ->  Index Scan using "7_7_the_hyperstore_updated_at_key" on _hyper_3_7_chunk o_1 (actual rows=17 loops=1)
+               ->  Index Scan using "8_8_the_hyperstore_updated_at_key" on _hyper_3_8_chunk o_2 (actual rows=1 loops=1)
+               ->  Index Scan using "9_9_the_hyperstore_updated_at_key" on _hyper_3_9_chunk o_3 (actual rows=1 loops=1)
+ Arrays read from cache: 66
+ Arrays decompressed: 7
+(13 rows)
+
+select created_at, updated_at, o.device_id, i.humidity, o.height
+  into merge_outer_join
+  from _timescaledb_internal._hyper_1_1_chunk i left join the_hyperstore o
+    on i.created_at = o.updated_at and i.device_id = o.device_id;
+select * from merge_outer_join r full join expected_left e on row(r) = row(e)
+where r.device_id is distinct from e.device_id;
+(0 rows)
+
+drop table merge_join;
+drop table merge_outer_join;
+set enable_mergejoin to false;
+set enable_hashjoin to false;
+set enable_nestloop to true;
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select * from _timescaledb_internal._hyper_1_1_chunk join the_hyperstore using (device_id);
+                                                         QUERY PLAN                                                         
+----------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=265355 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=6120 loops=1)
+   ->  Append (actual rows=43 loops=6120)
+         ->  Index Scan using _hyper_3_7_chunk_the_hyperstore_device_id_idx on _hyper_3_7_chunk (actual rows=3 loops=6120)
+               Index Cond: (device_id = _hyper_1_1_chunk.device_id)
+         ->  Index Scan using _hyper_3_8_chunk_the_hyperstore_device_id_idx on _hyper_3_8_chunk (actual rows=34 loops=6120)
+               Index Cond: (device_id = _hyper_1_1_chunk.device_id)
+         ->  Index Scan using _hyper_3_9_chunk_the_hyperstore_device_id_idx on _hyper_3_9_chunk (actual rows=6 loops=6120)
+               Index Cond: (device_id = _hyper_1_1_chunk.device_id)
+ Arrays read from cache: 796056
+ Arrays decompressed: 9
+(11 rows)
+
+select * into nestloop_join from _timescaledb_internal._hyper_1_1_chunk join the_hyperstore using (device_id);
+select * from nestloop_join r full join expected_inner e on row(r) = row(e)
+where r.device_id is null or e.device_id is null;
+(0 rows)
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select created_at, updated_at, o.device_id, i.humidity, o.height
+  from _timescaledb_internal._hyper_1_1_chunk i left join the_hyperstore o
+    on i.created_at = o.updated_at and i.device_id = o.device_id;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ Nested Loop Left Join (actual rows=6120 loops=1)
+   ->  Seq Scan on _hyper_1_1_chunk i (actual rows=6120 loops=1)
+   ->  Append (actual rows=0 loops=6120)
+         ->  Index Scan using "7_7_the_hyperstore_updated_at_key" on _hyper_3_7_chunk o_1 (actual rows=0 loops=6120)
+               Index Cond: (updated_at = i.created_at)
+               Filter: (i.device_id = device_id)
+               Rows Removed by Filter: 0
+         ->  Index Scan using "8_8_the_hyperstore_updated_at_key" on _hyper_3_8_chunk o_2 (actual rows=0 loops=6116)
+               Index Cond: (updated_at = i.created_at)
+               Filter: (i.device_id = device_id)
+         ->  Index Scan using "9_9_the_hyperstore_updated_at_key" on _hyper_3_9_chunk o_3 (actual rows=0 loops=6116)
+               Index Cond: (updated_at = i.created_at)
+               Filter: (i.device_id = device_id)
+ Arrays read from cache: 43
+ Arrays decompressed: 3
+(15 rows)
+
+select created_at, updated_at, o.device_id, i.humidity, o.height
+  into nestloop_outer_join
+  from _timescaledb_internal._hyper_1_1_chunk i left join the_hyperstore o
+    on i.created_at = o.updated_at and i.device_id = o.device_id;
+select * from nestloop_outer_join r full join expected_left e on row(r) = row(e)
+where r.device_id is distinct from e.device_id;
+(0 rows)
+
+drop table nestloop_join;
+drop table nestloop_outer_join;
+set enable_mergejoin to false;
+set enable_hashjoin to true;
+set enable_nestloop to false;
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select * from _timescaledb_internal._hyper_1_1_chunk join the_hyperstore using (device_id);
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Hash Join (actual rows=265355 loops=1)
+   Hash Cond: (_hyper_3_7_chunk.device_id = _hyper_1_1_chunk.device_id)
+   ->  Append (actual rows=217 loops=1)
+         ->  Seq Scan on _hyper_3_7_chunk (actual rows=17 loops=1)
+         ->  Seq Scan on _hyper_3_8_chunk (actual rows=168 loops=1)
+         ->  Seq Scan on _hyper_3_9_chunk (actual rows=32 loops=1)
+   ->  Hash (actual rows=6120 loops=1)
+         Buckets: 8192  Batches: 1 
+         ->  Seq Scan on _hyper_1_1_chunk (actual rows=6120 loops=1)
+ Arrays read from cache: 642
+ Arrays decompressed: 9
+(11 rows)
+
+select * into hash_join from _timescaledb_internal._hyper_1_1_chunk join the_hyperstore using (device_id);
+select * from hash_join r full join expected_inner e on row(r) = row(e)
+where r.device_id is null or e.device_id is null;
+(0 rows)
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select created_at, updated_at, o.device_id, i.humidity, o.height
+  from _timescaledb_internal._hyper_1_1_chunk i left join the_hyperstore o
+    on i.created_at = o.updated_at and i.device_id = o.device_id;
+                                    QUERY PLAN                                    
+----------------------------------------------------------------------------------
+ Hash Right Join (actual rows=6120 loops=1)
+   Hash Cond: ((o_1.updated_at = i.created_at) AND (o_1.device_id = i.device_id))
+   ->  Append (actual rows=217 loops=1)
+         ->  Seq Scan on _hyper_3_7_chunk o_1 (actual rows=17 loops=1)
+         ->  Seq Scan on _hyper_3_8_chunk o_2 (actual rows=168 loops=1)
+         ->  Seq Scan on _hyper_3_9_chunk o_3 (actual rows=32 loops=1)
+   ->  Hash (actual rows=6120 loops=1)
+         Buckets: 8192  Batches: 1 
+         ->  Seq Scan on _hyper_1_1_chunk i (actual rows=6120 loops=1)
+ Arrays read from cache: 656
+ Arrays decompressed: 7
+(11 rows)
+
+select created_at, updated_at, o.device_id, i.humidity, o.height
+  into hash_outer_join
+  from _timescaledb_internal._hyper_1_1_chunk i left join the_hyperstore o
+    on i.created_at = o.updated_at and i.device_id = o.device_id;
+select * from hash_outer_join r full join expected_left e on row(r) = row(e)
+where r.device_id is distinct from e.device_id;
+(0 rows)
+
+drop table hash_join;
+drop table hash_outer_join;
+drop table expected_inner, expected_left;
