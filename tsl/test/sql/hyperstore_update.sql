@@ -68,3 +68,79 @@ where (created_at, metric_id) in (select created_at, metric_id from to_update);
 
 select * from :hypertable where humidity = 200.0 order by metric_id;
 commit;
+
+-----------------------------
+-- Test update from cursor --
+-----------------------------
+
+-- Test cursor update via hypertable. Data is non-compressed
+\x on
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable order by created_at offset 898 limit 1;
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable order by created_at offset 898 limit 1 \gset
+\x off
+
+begin;
+declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+
+-- Update via the cursor. The update should work since it happens on
+-- non-compressed data
+update :hypertable set humidity = 200.0 where current of curs1;
+commit;
+select humidity from :hypertable
+where created_at = :'created_at' and humidity = 200.0;
+
+-- Test cursor update via hypertable on compressed data
+--
+-- First, make sure the data is compressed. Do it only on the chunk we
+-- will select the cursor from to make it faster
+select ch as chunk
+from show_chunks(:'hypertable') ch limit 1 \gset
+vacuum full :chunk;
+
+\x on
+select ctid, * from :hypertable order by created_at offset 898 limit 1;
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable order by created_at offset 898 limit 1 \gset
+\x off
+
+begin;
+declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+update :hypertable set humidity = 400.0 where current of curs1;
+commit;
+-- The update silently succeeds but doesn't update anything since DML
+-- decompression deleted the row at the cursor and moved it to the
+-- non-compressed rel. Currently, this is not the "correct" behavior.
+select humidity from :hypertable where created_at = :'created_at' and humidity = 400.0;
+
+\x on
+select ctid, * from :hypertable order by created_at offset 898 limit 1;
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable order by created_at offset 898 limit 1 \gset
+\x off
+
+-- Test doing the update directly on the chunk. The data should now be
+-- decompressed again due to DML decompression in the previous query.
+begin;
+declare curs1 cursor for select humidity from :chunk where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+update :chunk set humidity = 400.0 where current of curs1;
+commit;
+-- The update should succeed because the data is not compressed
+select humidity from :chunk where created_at = :'created_at' and humidity = 400.0;
+
+-- Recompress everything again and try cursor update via chunk on
+-- compressed data
+vacuum full :chunk;
+\set ON_ERROR_STOP 0
+begin;
+declare curs1 cursor for select humidity from :chunk where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+-- The update should now "correctly" fail with an error when it
+-- happens on compressed data.
+update :chunk set humidity = 500.0 where current of curs1;
+commit;
+\set ON_ERROR_STOP 1
