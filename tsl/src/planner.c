@@ -94,6 +94,8 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 			 * Caching is done by our hypertable expansion, which doesn't run in
 			 * these cases.
 			 */
+			Assert(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
+				   rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
 			fdw_private->cached_chunk_struct =
 				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
 		}
