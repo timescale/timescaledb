@@ -7,14 +7,17 @@
 #include <access/attnum.h>
 #include <access/heapam.h>
 #include <access/hio.h>
+#include <access/rewriteheap.h>
 #include <access/skey.h>
 #include <access/tableam.h>
+
 #include <access/transam.h>
 #include <access/xact.h>
 #include <catalog/heap.h>
 #include <catalog/index.h>
 #include <catalog/pg_attribute.h>
 #include <catalog/storage.h>
+#include <commands/progress.h>
 #include <commands/vacuum.h>
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
@@ -30,6 +33,7 @@
 #include <storage/buf.h>
 #include <storage/bufmgr.h>
 #include <storage/itemptr.h>
+#include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <storage/off.h>
 #include <utils/builtins.h>
@@ -37,6 +41,8 @@
 #include <utils/hsearch.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
+#include <utils/syscache.h>
+#include <utils/tuplesort.h>
 #include <utils/typcache.h>
 
 #include "arrow_tts.h"
@@ -54,6 +60,8 @@
 
 static const TableAmRoutine hyperstore_methods;
 static void convert_to_hyperstore_finish(Oid relid);
+static Tuplesortstate *create_tuplesort_for_compress(const HyperstoreInfo *caminfo,
+													 const TupleDesc tupdesc);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transcation */
@@ -1005,7 +1013,6 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 		 * first. Otherwise just add to the non-compressed deltids array */
 		if (is_compressed_tid(&deltid->tid))
 		{
-			TM_IndexDelete *deltid_compr = &compr_delstate.deltids[compr_delstate.ndeltids];
 			ItemPointerData decoded_tid;
 			bool found;
 			TidEntry *tidentry;
@@ -1020,6 +1027,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 			if (!found)
 			{
 				/* Add to compressed IndexDelete array */
+				TM_IndexDelete *deltid_compr = &compr_delstate.deltids[compr_delstate.ndeltids];
 				deltid_compr->id = deltid->id;
 				ItemPointerCopy(&decoded_tid, &deltid_compr->tid);
 
@@ -1386,36 +1394,352 @@ hyperstore_relation_copy_data(Relation rel, const RelFileLocator *newrlocator)
 }
 
 static void
-hyperstore_relation_copy_for_cluster(Relation OldCompression, Relation NewCompression,
+on_compression_progress(RowCompressor *rowcompress, uint64 ntuples)
+{
+	pgstat_progress_update_param(PROGRESS_CLUSTER_HEAP_TUPLES_WRITTEN, ntuples);
+}
+
+/*
+ * Rewrite a relation and compress at the same time.
+ *
+ * Note that all tuples are frozen when compressed to make sure they are
+ * visible to concurrent transactions after the rewrite. This isn't MVCC
+ * compliant and does not work for isolation levels of repeatable read or
+ * higher. Ideally, we should check visibility of each original tuple that we
+ * roll up into a compressed tuple and transfer visibility information (XID)
+ * based on that, just like done in heap when it is using a rewrite state.
+ */
+static Oid
+compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *xid_cutoff,
+					   MultiXactId *multi_cutoff)
+{
+	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	TupleDesc tupdesc = RelationGetDescr(rel);
+	Oid old_compressed_relid = caminfo->compressed_relid;
+	CompressionSettings *settings = ts_compression_settings_get(old_compressed_relid);
+	Relation old_compressed_rel = table_open(old_compressed_relid, AccessExclusiveLock);
+#if PG15_GE
+	Oid accessMethod = old_compressed_rel->rd_rel->relam;
+#endif
+	Oid tableSpace = old_compressed_rel->rd_rel->reltablespace;
+	char relpersistence = old_compressed_rel->rd_rel->relpersistence;
+	Oid new_compressed_relid = make_new_heap(old_compressed_relid,
+											 tableSpace,
+#if PG15_GE
+											 accessMethod,
+#endif
+											 relpersistence,
+											 AccessExclusiveLock);
+	Relation new_compressed_rel = table_open(new_compressed_relid, AccessExclusiveLock);
+	RowCompressor row_compressor;
+	double reltuples;
+	int32 relpages;
+
+	/* Initialize the compressor. */
+	row_compressor_init(settings,
+						&row_compressor,
+						rel,
+						new_compressed_rel,
+						RelationGetDescr(old_compressed_rel)->natts,
+						true /*need_bistate*/,
+						HEAP_INSERT_FROZEN);
+
+	row_compressor.on_flush = on_compression_progress;
+	row_compressor_append_sorted_rows(&row_compressor, tuplesort, tupdesc, old_compressed_rel);
+	reltuples = row_compressor.num_compressed_rows;
+	relpages = RelationGetNumberOfBlocks(new_compressed_rel);
+	row_compressor_close(&row_compressor);
+
+	table_close(new_compressed_rel, NoLock);
+	table_close(old_compressed_rel, NoLock);
+
+	/* Update stats for the compressed relation */
+	Relation relRelation = table_open(RelationRelationId, RowExclusiveLock);
+	HeapTuple reltup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(new_compressed_relid));
+	if (!HeapTupleIsValid(reltup))
+		elog(ERROR, "cache lookup failed for relation %u", new_compressed_relid);
+	Form_pg_class relform = (Form_pg_class) GETSTRUCT(reltup);
+
+	relform->relpages = relpages;
+	relform->reltuples = reltuples;
+
+	CatalogTupleUpdate(relRelation, &reltup->t_self, reltup);
+
+	/* Clean up. */
+	heap_freetuple(reltup);
+	table_close(relRelation, RowExclusiveLock);
+
+	/* Make the update visible */
+	CommandCounterIncrement();
+
+	/* Finish the heap swap for the compressed relation. Note that it is not
+	 * possible to swap toast content since new tuples were generated via
+	 * compression. */
+	finish_heap_swap(old_compressed_relid,
+					 new_compressed_relid,
+					 false /* is_system_catalog */,
+					 false /* swap_toast_by_content */,
+					 false,
+					 true,
+					 *xid_cutoff,
+					 *multi_cutoff,
+					 relpersistence);
+
+	return new_compressed_relid;
+}
+
+/*
+ * Rewrite/compress the relation for CLUSTER or VACUUM FULL.
+ *
+ * The copy_for_cluster() callback is called during a CLUSTER or VACUUM FULL,
+ * and performs a heap swap/rewrite. The code is based on the heap's
+ * copy_for_cluster(), with changes to handle two heaps and compressed tuples.
+ *
+ * For Hyperstore, two heap swaps are performed: one on the non-compressed
+ * (user-visible) relation, which is managed by PostgreSQL and passed on to
+ * this callback, and one on the compressed relation that is implemented
+ * within the callback.
+ *
+ * The Hyperstore implementation of copy_for_cluster() is similar to the one
+ * for Heap. However, instead of "rewriting" tuples into the new heap (while
+ * at the same time handling freezing and visibility), Hyperstore will
+ * compress all the data and write it to a new compressed relation. Since the
+ * compression is based on the legacy compression implementation, visibility
+ * of recently deleted tuples and freezing of tuples is not correctly handled,
+ * at least not for higher isolation levels than read committed. Changes to
+ * handle higher isolation levels should be considered in a future update of
+ * this code.
+ *
+ * Some things missing includes the handling of recently dead tuples that need
+ * to be transferred to the new heap since they might still be visible to some
+ * ongoing transactions. PostgreSQL's heap implementation handles this via the
+ * heap rewrite module. It should also be possible to write frozen compressed
+ * tuples if all rows it compresses are also frozen.
+ */
+static void
+hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompression,
 									 Relation OldIndex, bool use_sort, TransactionId OldestXmin,
 									 TransactionId *xid_cutoff, MultiXactId *multi_cutoff,
 									 double *num_tuples, double *tups_vacuumed,
 									 double *tups_recently_dead)
 {
-	FEATURE_NOT_SUPPORTED;
+	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(OldHyperstore);
+	TupleDesc tupdesc = RelationGetDescr(OldHyperstore);
+	CompressionScanDesc cscan;
+	HeapScanDesc chscan;
+	HeapScanDesc uhscan;
+	Tuplesortstate *tuplesort;
+	TableScanDesc tscan;
+	TupleTableSlot *slot;
+	ArrowTupleTableSlot *aslot;
+	BufferHeapTupleTableSlot *hslot;
+	BlockNumber prev_cblock = InvalidBlockNumber;
+	BlockNumber startblock;
+	BlockNumber nblocks;
+
+	if (ts_is_hypertable(RelationGetRelid(OldHyperstore)))
+		return;
+
+	/* Error out if this is a CLUSTER. It would be possible to CLUSTER only
+	 * the non-compressed relation, but utility of this is questionable as
+	 * most of the data should be compressed (and ordered) anyway. */
+	if (OldIndex != NULL)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot cluster a hyperstore table"),
+				 errdetail("A hyperstore table is already ordered by compression.")));
+
+	tuplesort = create_tuplesort_for_compress(caminfo, tupdesc);
+
+	/* In scan-and-sort mode and also VACUUM FULL, set phase */
+	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_SEQ_SCAN_HEAP);
+
+	/* This will scan via the Hyperstore callbacks, getting tuples from both
+	 * compressed and non-compressed relations */
+	tscan = table_beginscan(OldHyperstore, SnapshotAny, 0, (ScanKey) NULL);
+	cscan = (CompressionScanDesc) tscan;
+	chscan = (HeapScanDesc) cscan->cscan_desc;
+	uhscan = (HeapScanDesc) cscan->uscan_desc;
+	slot = table_slot_create(OldHyperstore, NULL);
+	startblock = chscan->rs_startblock + uhscan->rs_startblock;
+	nblocks = chscan->rs_nblocks + uhscan->rs_nblocks;
+
+	/* Set total heap blocks */
+	pgstat_progress_update_param(PROGRESS_CLUSTER_TOTAL_HEAP_BLKS, nblocks);
+
+	aslot = (ArrowTupleTableSlot *) slot;
+
+	for (;;)
+	{
+		HeapTuple tuple;
+		Buffer buf;
+		bool isdead;
+		BlockNumber cblock;
+
+		CHECK_FOR_INTERRUPTS();
+
+		if (!table_scan_getnextslot(tscan, ForwardScanDirection, slot))
+		{
+			/*
+			 * If the last pages of the scan were empty, we would go to
+			 * the next phase while heap_blks_scanned != heap_blks_total.
+			 * Instead, to ensure that heap_blks_scanned is equivalent to
+			 * total_heap_blks after the table scan phase, this parameter
+			 * is manually updated to the correct value when the table
+			 * scan finishes.
+			 */
+			pgstat_progress_update_param(PROGRESS_CLUSTER_HEAP_BLKS_SCANNED, nblocks);
+			break;
+		}
+		/*
+		 * In scan-and-sort mode and also VACUUM FULL, set heap blocks
+		 * scanned
+		 *
+		 * Note that heapScan may start at an offset and wrap around, i.e.
+		 * rs_startblock may be >0, and rs_cblock may end with a number
+		 * below rs_startblock. To prevent showing this wraparound to the
+		 * user, we offset rs_cblock by rs_startblock (modulo rs_nblocks).
+		 */
+		cblock = chscan->rs_cblock + uhscan->rs_cblock;
+
+		if (prev_cblock != cblock)
+		{
+			pgstat_progress_update_param(PROGRESS_CLUSTER_HEAP_BLKS_SCANNED,
+										 (cblock + nblocks - startblock) % nblocks + 1);
+			prev_cblock = cblock;
+		}
+		/* Get the actual tuple from the child slot (either compressed or
+		 * non-compressed). The tuple has all the visibility information. */
+		tuple = ExecFetchSlotHeapTuple(aslot->child_slot, false, NULL);
+		hslot = (BufferHeapTupleTableSlot *) aslot->child_slot;
+
+		buf = hslot->buffer;
+
+		LockBuffer(buf, BUFFER_LOCK_SHARE);
+
+		switch (HeapTupleSatisfiesVacuum(tuple, OldestXmin, buf))
+		{
+			case HEAPTUPLE_DEAD:
+				/* Definitely dead */
+				isdead = true;
+				break;
+			case HEAPTUPLE_RECENTLY_DEAD:
+				/* Note: This case is treated as "dead" in Hyperstore,
+				 * although some of these tuples might still be visible to
+				 * some transactions. For strict correctness, recently dead
+				 * tuples should be transferred to the new heap if they are
+				 * still visible to some transactions (e.g. under repeatable
+				 * read). However, this is tricky since multiple rows with
+				 * potentially different visibility is rolled up into one
+				 * compressed row with singular visibility. */
+				isdead = true;
+				break;
+			case HEAPTUPLE_LIVE:
+				/* Live or recently dead, must copy it */
+				isdead = false;
+				break;
+			case HEAPTUPLE_INSERT_IN_PROGRESS:
+
+				/*
+				 * Since we hold exclusive lock on the relation, normally the
+				 * only way to see this is if it was inserted earlier in our
+				 * own transaction.  However, it can happen in system
+				 * catalogs, since we tend to release write lock before commit
+				 * there. Still, system catalogs don't use Hyperstore.
+				 */
+				if (!TransactionIdIsCurrentTransactionId(HeapTupleHeaderGetXmin(tuple->t_data)))
+					elog(WARNING,
+						 "concurrent insert in progress within table \"%s\"",
+						 RelationGetRelationName(OldHyperstore));
+				/* treat as live */
+				isdead = false;
+				break;
+			case HEAPTUPLE_DELETE_IN_PROGRESS:
+
+				/*
+				 * Similar situation to INSERT_IN_PROGRESS case.
+				 */
+				if (!TransactionIdIsCurrentTransactionId(
+						HeapTupleHeaderGetUpdateXid(tuple->t_data)))
+					elog(WARNING,
+						 "concurrent delete in progress within table \"%s\"",
+						 RelationGetRelationName(OldHyperstore));
+				/* Note: This case is treated as "dead" in Hyperstore,
+				 * although this is "recently dead" in heap */
+				isdead = true;
+				break;
+			default:
+				elog(ERROR, "unexpected HeapTupleSatisfiesVacuum result");
+				isdead = false; /* keep compiler quiet */
+				break;
+		}
+
+		LockBuffer(buf, BUFFER_LOCK_UNLOCK);
+
+		if (isdead)
+		{
+			*tups_vacuumed += 1;
+
+			/* Skip whole segment if a dead compressed tuple */
+			if (arrow_slot_is_compressed(slot))
+				arrow_slot_mark_consumed(slot);
+			continue;
+		}
+
+		while (!arrow_slot_is_last(slot))
+		{
+			*num_tuples += 1;
+			tuplesort_puttupleslot(tuplesort, slot);
+			ExecStoreNextArrowTuple(slot);
+		}
+
+		*num_tuples += 1;
+		tuplesort_puttupleslot(tuplesort, slot);
+
+		/* Report increase in number of tuples scanned */
+		pgstat_progress_update_param(PROGRESS_CLUSTER_HEAP_TUPLES_SCANNED, *num_tuples);
+	}
+
+	table_endscan(tscan);
+	ExecDropSingleTupleTableSlot(slot);
+
+	/* Report that we are now sorting tuples */
+	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_SORT_TUPLES);
+
+	/* Sort and recreate compressed relation */
+	tuplesort_performsort(tuplesort);
+
+	/* Report that we are now writing new heap */
+	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_WRITE_NEW_HEAP);
+
+	compress_and_swap_heap(OldHyperstore, tuplesort, xid_cutoff, multi_cutoff);
+	tuplesort_end(tuplesort);
 }
 
 static void
 hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
+	if (ts_is_hypertable(RelationGetRelid(rel)))
+		return;
+
 	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
 
-	FEATURE_NOT_SUPPORTED;
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->relation_vacuum(rel, params, bstrategy);
+	rel->rd_tableam = oldtam;
 
+	/* Vacuum the compressed relation */
 	Relation crel = vacuum_open_relation(caminfo->compressed_relid,
 										 NULL,
 										 params->options,
 										 params->log_min_duration >= 0,
 										 lmode);
 
-	pgstat_progress_start_command(PROGRESS_COMMAND_VACUUM, RelationGetRelid(rel));
+	if (!crel)
+		return;
 
-	/* TODO: Vacuum the uncompressed relation */
-
-	/* The compressed relation can be vacuumed too, but might not need it
-	 * unless we do a lot of insert/deletes of compressed rows */
 	crel->rd_tableam->relation_vacuum(crel, params, bstrategy);
 	table_close(crel, NoLock);
 }
@@ -1869,8 +2193,14 @@ hyperstore_relation_toast_am(Relation rel)
 static uint64
 hyperstore_relation_size(Relation rel, ForkNumber forkNumber)
 {
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 	uint64 ubytes = table_block_relation_size(rel, forkNumber);
+	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
+
+	if (hyper_id == 0)
+		return ubytes;
+
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+
 	/* For ANALYZE, need to return sum for both relations. */
 	Relation crel = try_relation_open(caminfo->compressed_relid, AccessShareLock);
 
@@ -1975,42 +2305,9 @@ hyperstore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate
 	return false;
 }
 
-/*
- * Convert a table to compression AM.
- *
- * Need to setup the conversion state used to compress the data.
- */
-static void
-convert_to_hyperstore(Oid relid)
+static Tuplesortstate *
+create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tupdesc)
 {
-	MemoryContext oldcxt = MemoryContextSwitchTo(CurTransactionContext);
-	ConversionState *state = palloc0(sizeof(ConversionState));
-	Relation relation = table_open(relid, AccessShareLock);
-	TupleDesc tupdesc = RelationGetDescr(relation);
-	bool compress_chunk_created;
-	HyperstoreInfo *caminfo =
-		lazy_build_hyperstore_info_cache(relation, true, false, &compress_chunk_created);
-
-	state->relid = relid;
-
-	if (!compress_chunk_created)
-	{
-		/* A compressed relation already exists, so converting from legacy
-		 * compression. It is only necessary to write the non-compressed data
-		 * to the new heap. */
-		table_close(relation, AccessShareLock);
-		return;
-	}
-
-	/*
-	 * We compress the existing non-compressed data in the table when moving
-	 * to a table access method.
-	 *
-	 * TODO: Consider if we should compress data when creating a
-	 * hyperstore. It might make more sense to just "adopt" the table in the
-	 * state they are and deal with compression as part of the normal
-	 * procedure.
-	 */
 	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * caminfo->num_keys);
 	Oid *sort_operators = palloc0(sizeof(*sort_operators) * caminfo->num_keys);
 	Oid *sort_collations = palloc0(sizeof(*sort_collations) * caminfo->num_keys);
@@ -2056,16 +2353,54 @@ convert_to_hyperstore(Oid relid)
 		}
 	}
 
-	state->tuplesortstate = tuplesort_begin_heap(tupdesc,
-												 caminfo->num_keys,
-												 sort_keys,
-												 sort_operators,
-												 sort_collations,
-												 nulls_first,
-												 maintenance_work_mem,
-												 NULL,
-												 false /*=randomAccess*/);
+	return tuplesort_begin_heap(tupdesc,
+								caminfo->num_keys,
+								sort_keys,
+								sort_operators,
+								sort_collations,
+								nulls_first,
+								maintenance_work_mem,
+								NULL,
+								false /*=randomAccess*/);
+}
 
+/*
+ * Convert a table to compression AM.
+ *
+ * Need to setup the conversion state used to compress the data.
+ */
+static void
+convert_to_hyperstore(Oid relid)
+{
+	MemoryContext oldcxt = MemoryContextSwitchTo(CurTransactionContext);
+	ConversionState *state = palloc0(sizeof(ConversionState));
+	Relation relation = table_open(relid, AccessShareLock);
+	TupleDesc tupdesc = RelationGetDescr(relation);
+	bool compress_chunk_created;
+	HyperstoreInfo *caminfo =
+		lazy_build_hyperstore_info_cache(relation, true, false, &compress_chunk_created);
+
+	state->relid = relid;
+
+	if (!compress_chunk_created)
+	{
+		/* A compressed relation already exists, so converting from legacy
+		 * compression. It is only necessary to write the non-compressed data
+		 * to the new heap. */
+		table_close(relation, AccessShareLock);
+		return;
+	}
+
+	/*
+	 * We compress the existing non-compressed data in the table when moving
+	 * to a table access method.
+	 *
+	 * TODO: Consider if we should compress data when creating a
+	 * hyperstore. It might make more sense to just "adopt" the table in the
+	 * state they are and deal with compression as part of the normal
+	 * procedure.
+	 */
+	state->tuplesortstate = create_tuplesort_for_compress(caminfo, tupdesc);
 	table_close(relation, AccessShareLock);
 	conversionstate = state;
 	MemoryContextSwitchTo(oldcxt);

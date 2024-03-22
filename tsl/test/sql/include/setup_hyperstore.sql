@@ -54,6 +54,7 @@ alter table :hypertable set (
 	  timescaledb.compress_segmentby = 'location_id, owner_id'
 );
 
+
 -- Get some test chunks as global variables (first and last chunk here)
 select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
   from timescaledb_information.chunks
