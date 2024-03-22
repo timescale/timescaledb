@@ -121,7 +121,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_index.sql
     hyperstore_insert.sql
     hyperstore_scans.sql
-    hyperstore_update.sql)
+    hyperstore_update.sql
+    hyperstore_vacuum_full.sql)
 endif()
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
