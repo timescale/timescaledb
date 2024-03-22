@@ -786,7 +786,24 @@ compressionam_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 static bool
 compressionam_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
 {
-	return false;
+	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	bool result;
+
+	if (is_compressed_tid(&slot->tts_tid))
+	{
+		Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, NULL);
+		result = crel->rd_tableam->tuple_satisfies_snapshot(crel, child_slot, snapshot);
+		table_close(crel, AccessShareLock);
+	}
+	else
+	{
+		TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
+		const TableAmRoutine *oldtam = switch_to_heapam(rel);
+		result = rel->rd_tableam->tuple_satisfies_snapshot(rel, child_slot, snapshot);
+		rel->rd_tableam = oldtam;
+	}
+	return result;
 }
 
 /*

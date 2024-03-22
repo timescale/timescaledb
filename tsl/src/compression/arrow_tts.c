@@ -540,17 +540,26 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 }
 
 /*
+ * Fetch a system attribute of the slot's current tuple.
  */
 static Datum
 tts_arrow_getsysattr(TupleTableSlot *slot, int attnum, bool *isnull)
 {
+	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+
 	Assert(!TTS_EMPTY(slot));
 
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("cannot retrieve a system column in this context")));
+	/* System attributes are always negative. No need to use the attribute map
+	 * for compressed tuples since system attributes are neither compressed
+	 * nor mapped to different attribute numbers. */
+	Assert(attnum < 0);
 
-	return 0; /* silence compiler warnings */
+	if (NULL == aslot->child_slot)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("cannot retrieve a system column in this context")));
+
+	return aslot->child_slot->tts_ops->getsysattr(aslot->child_slot, attnum, isnull);
 }
 
 /*
