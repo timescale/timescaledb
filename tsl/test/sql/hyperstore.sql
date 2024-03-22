@@ -185,7 +185,7 @@ FROM pg_stats
 WHERE format('%I.%I', schemaname, tablename)::regclass = 'chunk_data'::regclass;
 
 SELECT * FROM chunk_data_relstats;
-SELECT * FROM chunk_data_attrstats;
+SELECT * FROM chunk_data_attrstats ORDER BY attname;
 
 -- Stats on compressed chunk before ANALYZE. Note that this chunk is
 -- partially compressed
@@ -212,7 +212,7 @@ SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_comm
 FROM pg_stats
 WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
 EXCEPT
-SELECT * FROM chunk_data_attrstats;
+SELECT * FROM chunk_data_attrstats ORDER BY attname;
 
 -- ANALYZE also via hypertable root and show that it will
 -- recurse to another chunk

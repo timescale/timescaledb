@@ -256,7 +256,7 @@ arrow_slot_is_last(const TupleTableSlot *slot)
 
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
-	return aslot->tuple_index == aslot->total_row_count;
+	return aslot->tuple_index == InvalidTupleIndex || aslot->tuple_index == aslot->total_row_count;
 }
 
 /*
