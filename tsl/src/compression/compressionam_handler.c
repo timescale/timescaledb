@@ -969,6 +969,9 @@ compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 	TransactionId xid_noncompr = InvalidTransactionId;
 	TransactionId xid_compr = InvalidTransactionId;
 
+	/* Reset the deltids array before recreating it with the result */
+	delstate->ndeltids = 0;
+
 	if (noncompr_delstate.ndeltids > 0)
 	{
 		const TableAmRoutine *oldtam = switch_to_heapam(rel);
