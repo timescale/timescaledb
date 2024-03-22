@@ -280,3 +280,134 @@ select * from :hypertable where humidity = 200.0 order by metric_id;
 (11 rows)
 
 commit;
+-----------------------------
+-- Test update from cursor --
+-----------------------------
+-- Test cursor update via hypertable. Data is non-compressed
+\x on
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable order by created_at offset 898 limit 1;
+-[ RECORD 1 ]-----+-----------------------------
+is_compressed_tid | f
+metric_id         | 899
+created_at        | Wed Jun 01 02:29:40 2022 PDT
+location_id       | 4
+owner_id          | 1
+device_id         | 5
+temp              | 32.7528003907232
+humidity          | 98.6390091565201
+
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable order by created_at offset 898 limit 1 \gset
+\x off
+begin;
+declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+     humidity     
+------------------
+ 98.6390091565201
+(1 row)
+
+-- Update via the cursor. The update should work since it happens on
+-- non-compressed data
+update :hypertable set humidity = 200.0 where current of curs1;
+commit;
+select humidity from :hypertable
+where created_at = :'created_at' and humidity = 200.0;
+ humidity 
+----------
+      200
+(1 row)
+
+-- Test cursor update via hypertable on compressed data
+--
+-- First, make sure the data is compressed. Do it only on the chunk we
+-- will select the cursor from to make it faster
+select ch as chunk
+from show_chunks(:'hypertable') ch limit 1 \gset
+vacuum full :chunk;
+\x on
+select ctid, * from :hypertable order by created_at offset 898 limit 1;
+-[ RECORD 1 ]-----------------------------
+ctid        | (2147483704,102)
+metric_id   | 899
+created_at  | Wed Jun 01 02:29:40 2022 PDT
+location_id | 4
+owner_id    | 1
+device_id   | 5
+temp        | 32.7528003907232
+humidity    | 200
+
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable order by created_at offset 898 limit 1 \gset
+\x off
+begin;
+declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+ humidity 
+----------
+      200
+(1 row)
+
+update :hypertable set humidity = 400.0 where current of curs1;
+commit;
+-- The update silently succeeds but doesn't update anything since DML
+-- decompression deleted the row at the cursor and moved it to the
+-- non-compressed rel. Currently, this is not the "correct" behavior.
+select humidity from :hypertable where created_at = :'created_at' and humidity = 400.0;
+ humidity 
+----------
+(0 rows)
+
+\x on
+select ctid, * from :hypertable order by created_at offset 898 limit 1;
+-[ RECORD 1 ]-----------------------------
+ctid        | (17,41)
+metric_id   | 899
+created_at  | Wed Jun 01 02:29:40 2022 PDT
+location_id | 4
+owner_id    | 1
+device_id   | 5
+temp        | 32.7528003907232
+humidity    | 200
+
+select created_at, location_id, owner_id, device_id, humidity
+from :hypertable order by created_at offset 898 limit 1 \gset
+\x off
+-- Test doing the update directly on the chunk. The data should now be
+-- decompressed again due to DML decompression in the previous query.
+begin;
+declare curs1 cursor for select humidity from :chunk where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+ humidity 
+----------
+      200
+(1 row)
+
+update :chunk set humidity = 400.0 where current of curs1;
+commit;
+-- The update should succeed because the data is not compressed
+select humidity from :chunk where created_at = :'created_at' and humidity = 400.0;
+ humidity 
+----------
+      400
+(1 row)
+
+-- Recompress everything again and try cursor update via chunk on
+-- compressed data
+vacuum full :chunk;
+\set ON_ERROR_STOP 0
+begin;
+declare curs1 cursor for select humidity from :chunk where created_at = :'created_at' for update;
+fetch forward 1 from curs1;
+ humidity 
+----------
+      400
+(1 row)
+
+-- The update should now "correctly" fail with an error when it
+-- happens on compressed data.
+update :chunk set humidity = 500.0 where current of curs1;
+ERROR:  cannot update compressed tuple
+commit;
+\set ON_ERROR_STOP 1
