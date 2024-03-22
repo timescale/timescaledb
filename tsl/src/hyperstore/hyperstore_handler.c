@@ -626,7 +626,23 @@ hyperstore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 static void
 hyperstore_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
 {
-	FEATURE_NOT_SUPPORTED;
+	CompressionScanDesc scan = (CompressionScanDesc) sscan;
+
+	if (is_compressed_tid(tid))
+	{
+		ItemPointerData decoded_tid;
+		uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+		const Relation rel = scan->cscan_desc->rs_rd;
+		rel->rd_tableam->tuple_get_latest_tid(scan->cscan_desc, &decoded_tid);
+		tid_to_compressed_tid(tid, &decoded_tid, tuple_index);
+	}
+	else
+	{
+		const Relation rel = scan->uscan_desc->rs_rd;
+		const TableAmRoutine *oldtam = switch_to_heapam(rel);
+		rel->rd_tableam->tuple_get_latest_tid(scan->uscan_desc, tid);
+		rel->rd_tableam = oldtam;
+	}
 }
 
 static void
@@ -894,9 +910,7 @@ hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsh
 							 TupleTableSlot *slot)
 {
 	bool result;
-	ItemPointerData decoded_tid;
-	const uint16 tuple_index =
-		is_compressed_tid(tid) ? compressed_tid_to_tid(&decoded_tid, tid) : InvalidTupleIndex;
+	uint16 tuple_index = InvalidTupleIndex;
 
 	if (!is_compressed_tid(tid))
 	{
@@ -914,10 +928,13 @@ hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsh
 	}
 	else
 	{
+		ItemPointerData decoded_tid;
 		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
 		Relation child_rel = table_open(caminfo->compressed_relid, AccessShareLock);
 		TupleTableSlot *child_slot =
 			arrow_slot_get_compressed_slot(slot, RelationGetDescr(child_rel));
+
+		tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
 		result = table_tuple_fetch_row_version(child_rel, &decoded_tid, snapshot, child_slot);
 		table_close(child_rel, NoLock);
 	}
