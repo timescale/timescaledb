@@ -52,6 +52,8 @@ insert into :hypertable(created_at, location_id, device_id, temp, humidity)
 values ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0);
 \set ON_ERROR_STOP 1
 
+set session characteristics as transaction isolation level repeatable read;
+
 --
 -- Testing speculative inserts and upserts
 --
