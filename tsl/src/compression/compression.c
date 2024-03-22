@@ -1262,6 +1262,11 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
 	}
+
+	if (NULL != row_compressor->on_flush)
+		row_compressor->on_flush(row_compressor,
+								 row_compressor->rows_compressed_into_current_value);
+
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
 	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;

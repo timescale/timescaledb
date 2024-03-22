@@ -122,6 +122,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_insert.sql
     hyperstore_scans.sql
     hyperstore_update.sql
+    hyperstore_vacuum_full.sql
     merge_compress.sql)
 endif()
 

@@ -265,6 +265,10 @@ typedef struct RowCompressor
 	bool first_iteration;
 	/* the heap insert options */
 	int insert_options;
+
+	/* Callback called on every flush. The ntuples argument is the number of
+	 * tuples flushed. Typically used for progress reporting. */
+	void (*on_flush)(struct RowCompressor *rowcompress, uint64 ntuples);
 } RowCompressor;
 
 /*
