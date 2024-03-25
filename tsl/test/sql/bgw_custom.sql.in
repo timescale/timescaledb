@@ -129,30 +129,6 @@ SELECT * FROM timescaledb_information.job_stats WHERE job_id > 1000;
 SELECT delete_job(:job_id_1);
 
 -- tests for #3545
-CREATE FUNCTION wait_for_job_to_run(job_param_id INTEGER, expected_runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
-$BODY$
-DECLARE
-    r RECORD;
-BEGIN
-    FOR i in 1..spins
-    LOOP
-    SELECT total_successes, total_failures FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO r;
-    IF (r.total_failures > 0) THEN
-        RAISE INFO 'wait_for_job_to_run: job execution failed';
-        RETURN false;
-    ELSEIF (r.total_successes = expected_runs) THEN
-        RETURN true;
-    ELSEIF (r.total_successes > expected_runs) THEN
-        RAISE 'num_runs > expected';
-    ELSE
-        PERFORM pg_sleep(0.1);
-    END IF;
-    END LOOP;
-    RAISE INFO 'wait_for_job_to_run: timeout after % tries', spins;
-    RETURN false;
-END
-$BODY$;
-
 TRUNCATE custom_log;
 
 -- Nested procedure call
@@ -209,8 +185,8 @@ SELECT add_job('custom_proc3', '1h', config := '{"type":"procedure"}'::jsonb, in
 SELECT _timescaledb_functions.start_background_workers();
 
 -- Wait for jobs
-SELECT wait_for_job_to_run(:job_id_1, 1);
-SELECT wait_for_job_to_run(:job_id_2, 1);
+SELECT test.wait_for_job_to_run(:job_id_1, 1);
+SELECT test.wait_for_job_to_run(:job_id_2, 1);
 
 -- Check results
 SELECT * FROM custom_log ORDER BY job_id, extra;
@@ -222,7 +198,7 @@ TRUNCATE custom_log;
 
 -- Forced Exception
 SELECT add_job('custom_proc4', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_3 \gset
-SELECT wait_for_job_to_run(:job_id_3, 1);
+SELECT test.wait_for_job_to_run(:job_id_3, 1);
 
 -- Check results
 SELECT * FROM custom_log ORDER BY job_id, extra;
@@ -254,7 +230,7 @@ SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
 
 -- Compression policy
 SELECT add_compression_policy('conditions', interval '1 day') AS job_id_4 \gset
-SELECT wait_for_job_to_run(:job_id_4, 1);
+SELECT test.wait_for_job_to_run(:job_id_4, 1);
 
 -- Chunk compress stats
 SELECT * FROM _timescaledb_internal.compressed_chunk_stats ORDER BY chunk_name;
@@ -270,7 +246,7 @@ order by id;
 
 --running job second time, wait for it to complete
 select t.schedule_interval FROM alter_job(:job_id_4, next_start=> now() ) t;
-SELECT wait_for_job_to_run(:job_id_4, 2);
+SELECT test.wait_for_job_to_run(:job_id_4, 2);
 
 SELECT id, table_name, status from _timescaledb_catalog.chunk
 where hypertable_id = (select id from _timescaledb_catalog.hypertable
@@ -297,7 +273,7 @@ WITH NO DATA;
 
 -- Refresh Continous Aggregate by Job
 SELECT add_job('custom_proc5', '1h', config := '{"type":"procedure"}'::jsonb, initial_start := now()) AS job_id_5 \gset
-SELECT wait_for_job_to_run(:job_id_5, 1);
+SELECT test.wait_for_job_to_run(:job_id_5, 1);
 SELECT count(*) FROM conditions_summary_daily;
 
 -- TESTs for alter_job_set_hypertable_id API
@@ -517,7 +493,7 @@ $$;
 
 select add_job('add_scheduled_jobs_with_check', schedule_interval => '1 hour') as last_job_id \gset
 -- wait for enough time
-SELECT wait_for_job_to_run(:last_job_id, 1);
+SELECT test.wait_for_job_to_run(:last_job_id, 1);
 select total_runs, total_successes, last_run_status from timescaledb_information.job_stats where job_id = :last_job_id;
 
 -- test coverage for alter_job
