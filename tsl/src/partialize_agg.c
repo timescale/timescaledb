@@ -110,6 +110,7 @@ apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path, 
 		/* Change the output of the path and let the decompress chunk node emit partial aggregates
 		 * directly */
 		decompress_path->perform_vectorized_aggregation = true;
+
 		decompress_path->custom_path.path.pathtarget = aggregation_path->path.pathtarget;
 
 		/* The decompress chunk node can perform the aggregation directly. No need for a dedicated
@@ -188,6 +189,7 @@ insert_vector_agg_node(Plan *plan)
 
 	fprintf(stderr, "found!!!\n");
 	// my_print(plan);
+	// mybt();
 
 	return vector_agg_plan_create(agg, custom);
 }

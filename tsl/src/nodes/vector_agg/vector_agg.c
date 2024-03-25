@@ -43,16 +43,12 @@ vector_agg_rescan(CustomScanState *node)
 static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
-	return ExecProcNode(linitial(node->custom_ps));
-	//	DecompressChunkState *ds = (DecompressChunkState *) linitial(node->custom_ps);
-	//	DecompressContext *dcontext = &ds->decompress_context;
-	//	TupleTableSlot *inner_slot = ExecProcNode(linitial(node->custom_ps));
-	//	if (inner_slot == NULL)
-	//	{
-	//		return NULL;
-	//	}
-	//
-	//	DecompressBatchState *batch_state = (DecompressBatchState *) inner_slot;
+	// return ExecProcNode(linitial(node->custom_ps));
+	DecompressChunkState *ds = (DecompressChunkState *) linitial(node->custom_ps);
+	return decompress_chunk_exec_vector_agg_impl(node,
+												 castNode(CustomScan, node->ss.ps.plan)
+													 ->custom_scan_tlist,
+												 ds);
 }
 
 static void
@@ -104,20 +100,21 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	CustomScan *custom = (CustomScan *) makeNode(CustomScan);
 	custom->custom_plans = list_make1(decompress_chunk);
 	custom->methods = &scan_methods;
-	// custom->scan.plan.targetlist = CustomBuildTargetList(agg->plan.targetlist, INDEX_VAR);
-	custom->scan.plan.targetlist = agg->plan.targetlist;
+	custom->scan.plan.targetlist = CustomBuildTargetList(agg->plan.targetlist, INDEX_VAR);
+	// custom->scan.plan.targetlist = agg->plan.targetlist;
 	//	fprintf(stderr, "source agg tagetlist:\n");
 	//	my_print(agg->plan.targetlist);
 	//	fprintf(stderr, "build targetlist:\n");
 	//	my_print(custom->scan.plan.targetlist);
-	// custom->custom_scan_tlist = CustomBuildTargetList(decompress_chunk->scan.plan.targetlist,
-	// INDEX_VAR);
-	custom->custom_scan_tlist = decompress_chunk->scan.plan.targetlist;
+	//  custom->custom_scan_tlist = CustomBuildTargetList(decompress_chunk->scan.plan.targetlist,
+	//  INDEX_VAR);
+	//  custom->custom_scan_tlist = decompress_chunk->scan.plan.targetlist;
+	custom->custom_scan_tlist = agg->plan.targetlist;
 
 	// custom->scan.plan.lefttree = agg->plan.lefttree;
 
-	fprintf(stderr, "created:\n");
-	my_print(custom);
+//	fprintf(stderr, "created:\n");
+//	my_print(custom);
 
 	(void) CustomBuildTargetList;
 
@@ -130,4 +127,10 @@ vector_agg_state_create(CustomScan *cscan)
 	CustomScanState *state = makeNode(CustomScanState);
 	state->methods = &exec_methods;
 	return (Node *) state;
+}
+
+void
+_vector_agg_init(void)
+{
+	TryRegisterCustomScanMethods(&scan_methods);
 }

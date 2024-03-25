@@ -39,6 +39,7 @@
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/gapfill/gapfill_functions.h"
+#include "nodes/vector_agg/vector_agg.h"
 #include "partialize_agg.h"
 #include "partialize_finalize.h"
 #include "planner.h"
@@ -195,6 +196,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
 	_skip_scan_init();
+	_vector_agg_init();
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);

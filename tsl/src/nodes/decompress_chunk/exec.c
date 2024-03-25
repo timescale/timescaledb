@@ -452,8 +452,7 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
 	Assert(dcontext->bulk_decompression_context != NULL);
 
 	/* Get a reference the the output TupleTableSlot */
-	TupleTableSlot *aggregated_slot =
-		decompress_state->csstate.ss.ss_ScanTupleSlot; // FIXME should be ss.ps.ps_ResultTupleSlot
+	TupleTableSlot *aggregated_slot = vector_agg_state->ss.ps.ps_ResultTupleSlot;
 	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 
 	/* Set all attributes of the result tuple to NULL. So, we return NULL if no data is processed
@@ -627,7 +626,7 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
  * Executing the aggregation directly in this node makes it possible to use the columnar data
  * directly before it is converted into row-based tuples.
  */
-static TupleTableSlot *
+TupleTableSlot *
 decompress_chunk_exec_vector_agg_impl(
 	CustomScanState *vector_agg_state,
 	/*
