@@ -170,8 +170,14 @@ DECLARE
   chunk regclass;
 BEGIN
   FOR chunk IN
-  SELECT pg_catalog.format('%I.%I', schema_name, table_name)::regclass
-    FROM _timescaledb_catalog.chunk WHERE dropped = false
+    SELECT pg_catalog.format('%I.%I', schema_name, table_name)::regclass
+      FROM _timescaledb_catalog.chunk c
+      JOIN pg_catalog.pg_class AS pc ON (pc.oid=format('%I.%I', schema_name, table_name)::regclass)
+      CROSS JOIN unnest(reloptions) AS u(option)
+      WHERE
+        dropped = false
+        AND osm_chunk = false
+        AND option LIKE 'autovacuum_enabled%'
   LOOP
     EXECUTE pg_catalog.format('ALTER TABLE %s RESET (autovacuum_enabled);', chunk::text);
   END LOOP;
