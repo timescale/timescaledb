@@ -133,7 +133,8 @@ jobs:
     - name: Configure TimescaleDB
       run: cmake -B build_win -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
         -DPG_PATH="$HOME/PostgreSQL/${{ matrix.pg }}" `
-        -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON
+        -DOPENSSL_ROOT_DIR="$HOME/PostgreSQL/${{ matrix.pg }}" -DASSERTIONS=ON `
+        -DTEST_PG_LOG_DIRECTORY="log"
     - name: Build TimescaleDB
       run: cmake --build build_win --config ${{ matrix.build_type }}
     - name: Install TimescaleDB
@@ -237,7 +238,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PostgreSQL ${{ matrix.pg }} log ${{ matrix.os }} ${{ matrix.build_type }} Build
-        path: postmaster.log
+        path: ${{ env.PGDATA }}\log\postmaster.log
 
     - name: Upload test results to the database
       if: always()

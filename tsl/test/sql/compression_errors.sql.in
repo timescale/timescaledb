@@ -511,7 +511,14 @@ ALTER TABLE osm_table SET (timescaledb.compress);
 
 INSERT INTO osm_table VALUES ('2022-11-11 11:11:11', 'foo', 1.0);
 
+SELECT format('%I.%I',chunk_schema,chunk_name) AS "CHUNK_NAME"
+FROM timescaledb_information.chunks
+WHERE hypertable_name = 'osm_table'
+ORDER BY chunk_name LIMIT 1 \gset
+
 UPDATE _timescaledb_catalog.chunk ch SET osm_chunk = true FROM _timescaledb_catalog.hypertable ht WHERE ch.hypertable_id = ht.id AND ht.table_name='osm_table';
 
-SELECT compress_chunk(show_chunks('osm_table'));
+-- show_chunks should not show any OSM chunks
+SELECT show_chunks('osm_table');
+SELECT compress_chunk(:'CHUNK_NAME');
 

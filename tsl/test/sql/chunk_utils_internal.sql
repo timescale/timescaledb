@@ -515,6 +515,8 @@ SELECT drop_chunks('hyper_constr', 10::int);
 SELECT id, table_name FROM _timescaledb_catalog.chunk
 where hypertable_id = (Select id from _timescaledb_catalog.hypertable where table_name = 'hyper_constr')
 ORDER BY id;
+-- show_chunks will not show the OSM chunk which is visible via the above query
+SELECT show_chunks('hyper_constr');
 ROLLBACK;
 CALL run_job(:deljob_id);
 CALL run_job(:deljob_id);
