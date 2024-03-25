@@ -33,6 +33,7 @@
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/chunk_append/transform.h"
+#include "nodes/vector_agg/vector_agg.h"
 #include "vector_predicates.h"
 #include "ts_catalog/array_utils.h"
 
@@ -722,18 +723,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	/* output target list */
 	decompress_plan->scan.plan.targetlist = decompressed_tlist;
-	/* input target list */
-	decompress_plan->custom_scan_tlist = NIL;
-
-	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
-	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
-	 *
-	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
-	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
-	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
-	 */
-	if (dcpath->perform_vectorized_aggregation)
-		decompress_plan->custom_scan_tlist = decompressed_tlist;
 
 	if (IsA(compressed_path, IndexPath))
 	{
@@ -1083,6 +1072,27 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 												 dcpath->bulk_decompression_column,
 												 dcpath->aggregated_column_type,
 												 sort_options);
+
+	/* input target list */
+	decompress_plan->custom_scan_tlist = NIL;
+
+	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
+	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
+	 *
+	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
+	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
+	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
+	 */
+	if (dcpath->perform_vectorized_aggregation)
+	{
+		decompress_plan->custom_scan_tlist = decompressed_tlist;
+		decompress_plan->scan.plan.targetlist = decompressed_tlist;
+	}
+
+	//	if (dcpath->perform_vectorized_aggregation)
+	//	{
+	//		return vector_agg_plan_create(&decompress_plan->scan.plan);
+	//	}
 
 	return &decompress_plan->scan.plan;
 }

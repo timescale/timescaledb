@@ -131,6 +131,11 @@ push_down_aggregation(PlannerInfo *root, AggPath *aggregation_path, Path *subpat
 	return false;
 }
 
+static void
+tsl_postprocess_plan_stub(PlannedStmt *stmt)
+{
+}
+
 static bool
 process_compress_table_default(AlterTableCmd *cmd, Hypertable *ht,
 							   WithClauseResult *with_clause_options)
@@ -323,6 +328,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policies_show = error_no_default_fn_pg_community,
 
 	.push_down_aggregation = push_down_aggregation,
+	.tsl_postprocess_plan = tsl_postprocess_plan_stub,
 
 	.partialize_agg = error_no_default_fn_pg_community,
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,

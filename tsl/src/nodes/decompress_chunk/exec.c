@@ -77,6 +77,7 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->decompress_context.reverse = lthird_int(settings);
 	chunk_state->decompress_context.batch_sorted_merge = lfourth_int(settings);
 	chunk_state->decompress_context.enable_bulk_decompression = lfifth_int(settings);
+	// chunk_state->perform_vectorized_aggregation = false; //lsixth_int(settings);
 	chunk_state->perform_vectorized_aggregation = lsixth_int(settings);
 
 	Assert(IsA(cscan->custom_exprs, List));
@@ -172,6 +173,8 @@ decompress_chunk_exec_heap(CustomScanState *node)
 	Assert(chunk_state->decompress_context.batch_sorted_merge);
 	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
+
+static TupleTableSlot *decompress_chunk_exec_vector_agg(CustomScanState *node);
 
 /*
  * Complete initialization of the supplied CustomScanState.
@@ -349,7 +352,13 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	 * Choose which batch queue we are going to use: heap for batch sorted
 	 * merge, and one-element FIFO for normal decompression.
 	 */
-	if (dcontext->batch_sorted_merge)
+	if (chunk_state->perform_vectorized_aggregation)
+	{
+		chunk_state->batch_queue =
+			batch_queue_fifo_create(num_compressed, &BatchQueueFunctionsFifo);
+		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_vector_agg;
+	}
+	else if (dcontext->batch_sorted_merge)
 	{
 		chunk_state->batch_queue =
 			batch_queue_heap_create(num_compressed,
@@ -393,12 +402,12 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
  * Perform a vectorized aggregation on int4 values
  */
 static TupleTableSlot *
-perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
+perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
+							DecompressChunkState *decompress_state)
 {
-	DecompressContext *dcontext = &chunk_state->decompress_context;
-	BatchQueue *batch_queue = chunk_state->batch_queue;
+	DecompressContext *dcontext = &decompress_state->decompress_context;
+	BatchQueue *batch_queue = decompress_state->batch_queue;
 
-	Assert(chunk_state != NULL);
 	Assert(aggref != NULL);
 
 	/* Partial result is a int8 */
@@ -443,14 +452,15 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	Assert(dcontext->bulk_decompression_context != NULL);
 
 	/* Get a reference the the output TupleTableSlot */
-	TupleTableSlot *decompressed_scan_slot = chunk_state->csstate.ss.ss_ScanTupleSlot;
-	Assert(decompressed_scan_slot->tts_tupleDescriptor->natts == 1);
+	TupleTableSlot *aggregated_slot =
+		decompress_state->csstate.ss.ss_ScanTupleSlot; // FIXME should be ss.ps.ps_ResultTupleSlot
+	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 
 	/* Set all attributes of the result tuple to NULL. So, we return NULL if no data is processed
 	 * by our implementation. In addition, the call marks the slot as being used (i.e., no
 	 * ExecStoreVirtualTuple call is required). */
-	ExecStoreAllNullTuple(decompressed_scan_slot);
-	Assert(!TupIsNull(decompressed_scan_slot));
+	ExecStoreAllNullTuple(aggregated_slot);
+	Assert(!TupIsNull(aggregated_slot));
 
 	int64 result_sum = 0;
 
@@ -463,7 +473,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 		while (true)
 		{
 			TupleTableSlot *compressed_slot =
-				ExecProcNode(linitial(chunk_state->csstate.custom_ps));
+				ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 
 			if (TupIsNull(compressed_slot))
 			{
@@ -494,7 +504,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 				Assert(amount > 0);
 
 				/* We have at least one value */
-				decompressed_scan_slot->tts_isnull[0] = false;
+				aggregated_slot->tts_isnull[0] = false;
 
 				/* Multiply the number of tuples with the actual value */
 				if (unlikely(pg_mul_s64_overflow(intvalue, amount, &batch_sum)))
@@ -522,7 +532,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 		while (true)
 		{
 			TupleTableSlot *compressed_slot =
-				ExecProcNode(linitial(chunk_state->csstate.custom_ps));
+				ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 			if (TupIsNull(compressed_slot))
 			{
 				/* All compressed batches are processed. */
@@ -541,7 +551,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			Ensure(isnull == false, "got unexpected NULL attribute value from compressed batch");
 
 			/* We have at least one value */
-			decompressed_scan_slot->tts_isnull[0] = false;
+			aggregated_slot->tts_isnull[0] = false;
 
 			CompressedDataHeader *header =
 				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
@@ -605,9 +615,9 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 
 	/* Use Int64GetDatum to store the result since a 64-bit value is not pass-by-value on 32-bit
 	 * systems */
-	decompressed_scan_slot->tts_values[0] = Int64GetDatum(result_sum);
+	aggregated_slot->tts_values[0] = Int64GetDatum(result_sum);
 
-	return decompressed_scan_slot;
+	return aggregated_slot;
 }
 
 /*
@@ -618,27 +628,42 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
  * directly before it is converted into row-based tuples.
  */
 static TupleTableSlot *
-perform_vectorized_aggregation(DecompressChunkState *chunk_state)
+decompress_chunk_exec_vector_agg_impl(
+	CustomScanState *vector_agg_state,
+	/*
+	 * For some reason, the output targetlist of DecompressChunk with vectorized
+	 * aggregation is INDEX_VAR into its scan targetlist, which in turn contains the
+	 * Aggref we need. So here we have to specify the aggregated targetlist
+	 * separately, because we can't get it in a uniform way from both Agg and DC
+	 * nodes.
+	 */
+	List *aggregated_tlist, DecompressChunkState *decompress_state)
 {
-	BatchQueue *bq = chunk_state->batch_queue;
+	BatchQueue *bq = decompress_state->batch_queue;
 
-	Assert(list_length(chunk_state->custom_scan_tlist) == 1);
+	Assert(list_length(aggregated_tlist) == 1); // FIXME
 
 	/* Checked by planner */
 	Assert(ts_guc_enable_vectorized_aggregation);
 	Assert(ts_guc_enable_bulk_decompression);
 
-	/* When using vectorized aggregates, only one result tuple is produced. So, if we have
+	/*
+	 * When using vectorized aggregates, only one result tuple is produced. So, if we have
 	 * already initialized a batch state, the aggregation was already performed.
 	 */
 	if (batch_array_has_active_batches(&bq->batch_array))
 	{
-		ExecClearTuple(chunk_state->csstate.ss.ss_ScanTupleSlot);
-		return chunk_state->csstate.ss.ss_ScanTupleSlot;
+		ExecClearTuple(vector_agg_state->ss.ss_ScanTupleSlot);
+		return vector_agg_state->ss.ss_ScanTupleSlot;
 	}
 
 	/* Determine which kind of vectorized aggregation we should perform */
-	TargetEntry *tlentry = (TargetEntry *) linitial(chunk_state->custom_scan_tlist);
+	// fprintf(stderr, "output tlist:\n");
+	// my_print(decompress_state->csstate.ss.ps.plan->targetlist);
+	// fprintf(stderr, "custom scan tlist:\n");
+	// my_print(decompress_state->custom_scan_tlist);
+
+	TargetEntry *tlentry = (TargetEntry *) linitial(aggregated_tlist);
 	Assert(IsA(tlentry->expr, Aggref));
 	Aggref *aggref = castNode(Aggref, tlentry->expr);
 
@@ -648,7 +673,7 @@ perform_vectorized_aggregation(DecompressChunkState *chunk_state)
 	switch (aggref->aggfnoid)
 	{
 		case F_SUM_INT4:
-			return perform_vectorized_sum_int4(chunk_state, aggref);
+			return perform_vectorized_sum_int4(vector_agg_state, aggref, decompress_state);
 		default:
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -656,6 +681,20 @@ perform_vectorized_aggregation(DecompressChunkState *chunk_state)
 							aggref->aggfnoid)));
 			pg_unreachable();
 	}
+}
+
+static TupleTableSlot *
+decompress_chunk_exec_vector_agg(CustomScanState *node)
+{
+	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
+	Assert(!chunk_state->decompress_context.batch_sorted_merge);
+	Assert(chunk_state->perform_vectorized_aggregation);
+
+	CustomScanState *vector_agg_state = node;
+
+	return decompress_chunk_exec_vector_agg_impl(vector_agg_state,
+												 chunk_state->custom_scan_tlist,
+												 chunk_state);
 }
 
 /*
@@ -672,10 +711,7 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 
 	Assert(bq->funcs == bqfuncs);
 
-	if (chunk_state->perform_vectorized_aggregation)
-	{
-		return perform_vectorized_aggregation(chunk_state);
-	}
+	Assert(!chunk_state->perform_vectorized_aggregation);
 
 	bqfuncs->pop(bq, dcontext);
 

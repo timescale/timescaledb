@@ -119,6 +119,7 @@ CrossModuleFunctions tsl_cm_functions = {
 
 	/* Vectorized queries */
 	.push_down_aggregation = apply_vectorized_agg_optimization,
+	.tsl_postprocess_plan = tsl_postprocess_plan,
 
 	/* Continuous Aggregates */
 	.partialize_agg = tsl_partialize_agg,

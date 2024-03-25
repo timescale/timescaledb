@@ -28,6 +28,8 @@
 #include "utils.h"
 #include "debug_assert.h"
 
+#include "nodes/vector_agg/vector_agg.h"
+
 /*
  * Are we able to optimize the path by applying vectorized aggregation?
  */
@@ -117,4 +119,87 @@ apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path, 
 
 	/* PostgreSQL should handle the aggregation. Regular agg node on top is required. */
 	return false;
+}
+
+static Plan *
+insert_vector_agg_node(Plan *plan)
+{
+	if (plan->lefttree)
+	{
+		plan->lefttree = insert_vector_agg_node(plan->lefttree);
+	}
+
+	if (plan->righttree)
+	{
+		plan->righttree = insert_vector_agg_node(plan->righttree);
+	}
+
+	if (IsA(plan, Append))
+	{
+		List *plans = castNode(Append, plan)->appendplans;
+		ListCell *lc;
+		foreach (lc, plans)
+		{
+			lfirst(lc) = insert_vector_agg_node(lfirst(lc));
+		}
+	}
+
+	if (plan->type != T_Agg)
+	{
+		return plan;
+	}
+
+	fprintf(stderr, "found agg!\n");
+
+	Agg *agg = castNode(Agg, plan);
+
+	if (agg->aggsplit != AGGSPLIT_INITIAL_SERIAL)
+	{
+		fprintf(stderr, "wrong split %d\n", agg->aggsplit);
+		return plan;
+	}
+
+	if (agg->plan.lefttree == NULL)
+	{
+		fprintf(stderr, "no leftnode?\n");
+		return plan;
+	}
+
+	if (!IsA(agg->plan.lefttree, CustomScan))
+	{
+		fprintf(stderr, "not custom\n");
+		// my_print(agg->plan.lefttree);
+		return plan;
+	}
+
+	CustomScan *custom = castNode(CustomScan, agg->plan.lefttree);
+	if (strcmp(custom->methods->CustomName, "DecompressChunk") != 0)
+	{
+		fprintf(stderr, "not decompress chunk\n");
+		return plan;
+	}
+
+	bool perform_vectorized_aggregation = list_nth_int(linitial(custom->custom_private), 5);
+	if (!perform_vectorized_aggregation)
+	{
+		fprintf(stderr, "no vectorized aggregation\n");
+		return plan;
+	}
+
+	fprintf(stderr, "found!!!\n");
+	// my_print(plan);
+
+	return vector_agg_plan_create(agg, custom);
+}
+
+void
+tsl_postprocess_plan(PlannedStmt *stmt)
+{
+	// mybt();
+	// my_print(stmt);
+
+	if (true)
+	{
+		stmt->planTree = insert_vector_agg_node(stmt->planTree);
+	}
 }
