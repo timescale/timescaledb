@@ -63,6 +63,17 @@ SELECT ctid, * FROM :compressed_chunk_name_1;
 -- after recompressing chunk
 select numrows_pre_compression, numrows_post_compression from _timescaledb_catalog.compression_chunk_size;
 
+
+insert into mytab_oneseg values ('2023-01-01 19:56:20.048355+02'::timestamptz, 2, NULL, 2);
+select chunk_id
+from compressed_chunk_info_view where hypertable_name = 'mytab_oneseg' \gset
+-- check we are handling unexpected chunk status (partially compressed but not compressed)
+update _timescaledb_catalog.chunk set status = 8 where id = :chunk_id;
+\set ON_ERROR_STOP 0
+select _timescaledb_functions.recompress_chunk_segmentwise(:'chunk_to_compress_1');
+\set ON_ERROR_STOP 1
+
+
 ---------------- test1: one affected segment, one unaffected --------------
 -- unaffected segment will still be recompressed in a future PR we want to avoid doing this
 create table mytab_twoseg (time timestamptz not null, a int, b int, c int);
