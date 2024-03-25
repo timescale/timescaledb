@@ -1575,24 +1575,6 @@ chunk_tuple_dropped_filter(const TupleInfo *ti, void *arg)
 	return stubctx->is_dropped ? SCAN_EXCLUDE : SCAN_INCLUDE;
 }
 
-/* This is a modified version of chunk_tuple_dropped_filter that does
- * not use ChunkStubScanCtx as the arg, it just ignores the passed in
- * argument.
- * We need a variant as the ScannerCtx assumes that the the filter function
- * and tuple_found function share the argument.
- */
-static ScanFilterResult
-chunk_check_ignorearg_dropped_filter(const TupleInfo *ti, void *arg)
-{
-	bool isnull;
-	Datum dropped = slot_getattr(ti->slot, Anum_chunk_dropped, &isnull);
-
-	Assert(!isnull);
-	bool is_dropped = DatumGetBool(dropped);
-
-	return is_dropped ? SCAN_EXCLUDE : SCAN_INCLUDE;
-}
-
 static ScanTupleResult
 chunk_tuple_found(TupleInfo *ti, void *arg)
 {
@@ -3294,104 +3276,47 @@ ts_chunk_create_fks(const Hypertable *ht, const Chunk *const chunk)
 	}
 }
 
-static ScanTupleResult
-chunk_tuple_update_schema_and_table(TupleInfo *ti, void *data)
-{
-	FormData_chunk form;
-	FormData_chunk *update = data;
-	CatalogSecurityContext sec_ctx;
-	HeapTuple new_tuple;
-
-	ts_chunk_formdata_fill(&form, ti);
-
-	namestrcpy(&form.schema_name, NameStr(update->schema_name));
-	namestrcpy(&form.table_name, NameStr(update->table_name));
-
-	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(new_tuple);
-	return SCAN_DONE;
-}
-
-static ScanTupleResult
-chunk_tuple_update_status(TupleInfo *ti, void *data)
-{
-	FormData_chunk form;
-	FormData_chunk *update = data;
-	CatalogSecurityContext sec_ctx;
-	HeapTuple new_tuple;
-
-	ts_chunk_formdata_fill(&form, ti);
-	form.status = update->status;
-	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(new_tuple);
-	return SCAN_DONE;
-}
-
-static bool
-chunk_update_form(FormData_chunk *form)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, form->id);
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   chunk_tuple_update_schema_and_table,
-							   form,
-							   0,
-							   ForwardScanDirection,
-							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
-}
-
-/* update the status flag for chunk. Should not be called directly
- * Use chunk_update_status instead
- * Acquires RowExclusiveLock
- */
-static bool
-chunk_update_status_internal(FormData_chunk *form)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0], Anum_chunk_idx_id, BTEqualStrategyNumber, F_INT4EQ, form->id);
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   chunk_tuple_update_status,
-							   form,
-							   0,
-							   ForwardScanDirection,
-							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
-}
-
-/* status update is done in 2 steps.
- * Do the equivalent of SELECT for UPDATE, followed by UPDATE
- * 1. RowShare lock to read the status.
- * 2. if status != proposed new status
- *      update status using RowExclusiveLock
- * All callers who want to update chunk status should call this function so that locks
+/*
+ * Chunk catalog updates are done in three steps.
+ * This is achieved by following this sequence:
+ *   1: call lock_chunk_tuple: this finds most recent version of tuple,
+ *   locks it, fills TID and data
+ *   2: make changes to the data
+ *   3: call chunk_update_catalog_tuple with the TID and updated data
+ *
+ * This is equivalent to SELECT for UPDATE, followed by UPDATE
+ *
+ * All callers who want to update chunk tuples should respect this so that locks
  * are acquired correctly.
+ *
+ */
+static void
+chunk_update_catalog_tuple(ItemPointer tid, FormData_chunk *update)
+{
+	HeapTuple new_tuple;
+	CatalogSecurityContext sec_ctx;
+	Catalog *catalog = ts_catalog_get();
+	Oid table = catalog_get_table_id(catalog, CHUNK);
+	Relation chunk_rel = relation_open(table, RowExclusiveLock);
+
+	new_tuple = chunk_formdata_make_tuple(update, chunk_rel->rd_att);
+
+	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
+	ts_catalog_update_tid(chunk_rel, tid, new_tuple);
+	ts_catalog_restore_user(&sec_ctx);
+	heap_freetuple(new_tuple);
+	relation_close(chunk_rel, NoLock);
+}
+/*
+ * This function locks the  timescaledb_catalog.chunk tuple (corresponding to chunk_id ) in
+ * LockTupleExclusiveMode. It blocks till the lock is acquired. The tid and data (corresponding to
+ * the locked tuple) are returned via tid and form arguments. Anyone updating/deleting a chunk entry
+ * from the catalog table is expected to first call this function. Refer to
+ * chunk_update_catalog_tuple() for more details.
  */
 static bool
-chunk_update_status(FormData_chunk *form)
+lock_chunk_tuple(int32 chunk_id, ItemPointer tid, FormData_chunk *form)
 {
-	int32 chunk_id = form->id;
-	int32 new_status = form->status;
-	bool success = true, dropped = false;
-	/* lock the chunk tuple for update. Block till we get exclusivetuplelock */
 	ScanTupLock scantuplock = {
 		.waitpolicy = LockWaitBlock,
 		.lockmode = LockTupleExclusive,
@@ -3399,6 +3324,8 @@ chunk_update_status(FormData_chunk *form)
 	ScanIterator iterator = ts_scan_iterator_create(CHUNK, RowShareLock, CurrentMemoryContext);
 	iterator.ctx.index = catalog_get_index(ts_catalog_get(), CHUNK, CHUNK_ID_INDEX);
 	iterator.ctx.tuplock = &scantuplock;
+	/* Keeping the lock since we presumably want to update the tuple */
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
 
 	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
 	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
@@ -3413,44 +3340,78 @@ chunk_update_status(FormData_chunk *form)
 								   BTEqualStrategyNumber,
 								   F_INT4EQ,
 								   Int32GetDatum(chunk_id));
+	bool success = false;
+	bool dropped, dropped_isnull;
 
 	ts_scanner_foreach(&iterator)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		bool dropped_isnull, status_isnull;
-		int status;
+
+		if (ti->lockresult != TM_Ok)
+		{
+			if (IsolationUsesXactSnapshot())
+			{
+				/* For Repeatable Read and Serializable isolation level report error
+				 * if we cannot lock the tuple
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("unable to lock chunk catalog tuple, lock result is %d for chunk "
+								"ID (%d)",
+								ti->lockresult,
+								chunk_id)));
+			}
+		}
 
 		dropped = DatumGetBool(slot_getattr(ti->slot, Anum_chunk_dropped, &dropped_isnull));
 		Assert(!dropped_isnull);
-		status = DatumGetInt32(slot_getattr(ti->slot, Anum_chunk_status, &status_isnull));
-		Assert(!status_isnull);
-		if (!dropped && status != new_status)
+		if (!dropped)
 		{
-			success = chunk_update_status_internal(form); // get RowExclusiveLock and update here
+			ts_chunk_formdata_fill(form, ti);
+			ItemPointer result_tid = ts_scanner_get_tuple_tid(ti);
+			tid->ip_blkid = result_tid->ip_blkid;
+			tid->ip_posid = result_tid->ip_posid;
+			success = true;
+			break;
 		}
 	}
 	ts_scan_iterator_close(&iterator);
-	if (dropped)
-		ereport(ERROR,
-				(errcode(ERRCODE_INTERNAL_ERROR),
-				 errmsg("attempt to update status(%d) on dropped chunk %d", new_status, chunk_id)));
+
 	return success;
 }
 
 bool
 ts_chunk_set_name(Chunk *chunk, const char *newname)
 {
-	namestrcpy(&chunk->fd.table_name, newname);
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
 
-	return chunk_update_form(&chunk->fd);
+	namestrcpy(&form.table_name, newname);
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 bool
 ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 {
-	namestrcpy(&chunk->fd.schema_name, newschema);
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
 
-	return chunk_update_form(&chunk->fd);
+	namestrcpy(&form.schema_name, newschema);
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 bool
@@ -3522,9 +3483,22 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 						   status,
 						   chunk->fd.status)));
 	}
-	uint32 mstatus = ts_clear_flags_32(chunk->fd.status, status);
-	chunk->fd.status = mstatus;
-	return chunk_update_status(&chunk->fd);
+
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	/* applying the flags after locking the metadata tuple */
+	int32 old_status = form.status;
+	form.status = ts_clear_flags_32(form.status, status);
+	chunk->fd.status = form.status;
+
+	/* Row-level locks are released at transaction end or during savepoint rollback */
+	if (old_status != form.status)
+		chunk_update_catalog_tuple(&tid, &form);
+
+	return true;
 }
 
 static bool
@@ -3541,112 +3515,129 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 						   status,
 						   chunk->fd.status)));
 	}
-	uint32 mstatus = ts_set_flags_32(chunk->fd.status, status);
-	chunk->fd.status = mstatus;
-	return chunk_update_status(&chunk->fd);
-}
-
-/*
- * Setting (INVALID_CHUNK_ID, true) is valid for an Access Node. It means
- * the data nodes contain the actual compressed chunks, and the meta-chunk is
- * marked as compressed in the Access Node.
- * Setting (is_compressed => false) means that the chunk is uncompressed.
- */
-static ScanTupleResult
-chunk_change_compressed_status_in_tuple(TupleInfo *ti, int32 compressed_chunk_id,
-										bool is_compressed)
-{
 	FormData_chunk form;
-	HeapTuple new_tuple;
-	CatalogSecurityContext sec_ctx;
+	ItemPointerData tid;
+	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
 
-	ts_chunk_formdata_fill(&form, ti);
-	if (is_compressed)
+	/* Somebody could update the status before we are able to lock it so check again */
+	if (ts_flags_are_set_32(form.status, CHUNK_STATUS_FROZEN))
 	{
-		form.compressed_chunk_id = compressed_chunk_id;
-		form.status = ts_set_flags_32(form.status, CHUNK_STATUS_COMPRESSED);
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   status,
+						   form.status)));
 	}
-	else
-	{
-		form.compressed_chunk_id = INVALID_CHUNK_ID;
-		form.status =
-			ts_clear_flags_32(form.status,
-							  CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
-								  CHUNK_STATUS_COMPRESSED_PARTIAL);
-	}
-	new_tuple = chunk_formdata_make_tuple(&form, ts_scanner_get_tupledesc(ti));
 
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
-	ts_catalog_restore_user(&sec_ctx);
-	heap_freetuple(new_tuple);
+	/* applying the flags after locking the metadata tuple */
+	int32 old_status = form.status;
+	form.status = ts_set_flags_32(form.status, status);
+	chunk->fd.status = form.status;
 
-	return SCAN_DONE;
-}
+	/* Row-level locks are released at transaction end or during savepoint rollback */
+	if (old_status != form.status)
+		chunk_update_catalog_tuple(&tid, &form);
 
-static ScanTupleResult
-chunk_clear_compressed_status_in_tuple(TupleInfo *ti, void *data)
-{
-	return chunk_change_compressed_status_in_tuple(ti, INVALID_CHUNK_ID, false);
-}
-
-static ScanTupleResult
-chunk_set_compressed_id_in_tuple(TupleInfo *ti, void *data)
-{
-	int32 compressed_chunk_id = *((int32 *) data);
-
-	return chunk_change_compressed_status_in_tuple(ti, compressed_chunk_id, true);
+	return true;
 }
 
 /*Assume permissions are already checked */
 bool
 ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 {
-	bool success = false;
-	ScanKeyData scankey[1];
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
-	success = chunk_scan_internal(CHUNK_ID_INDEX,
-								  scankey,
-								  1,
-								  chunk_check_ignorearg_dropped_filter,
-								  chunk_set_compressed_id_in_tuple,
-								  &compressed_chunk_id,
-								  0,
-								  ForwardScanDirection,
-								  RowExclusiveLock,
-								  CurrentMemoryContext) > 0;
-	if (success)
+	uint32 flags = CHUNK_STATUS_COMPRESSED;
+	uint32 mstatus = ts_set_flags_32(chunk->fd.status, flags);
+	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
 	{
-		chunk->fd.status = ts_set_flags_32(chunk->fd.status, CHUNK_STATUS_COMPRESSED);
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   chunk->fd.status)));
 	}
-	return success;
+
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	/* Somebody could update the status before we are able to lock it so check again */
+	if (ts_flags_are_set_32(form.status, CHUNK_STATUS_FROZEN))
+	{
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   form.status)));
+	}
+
+	/* re-applying the flags after locking the metadata tuple */
+	form.status = ts_set_flags_32(form.status, flags);
+	form.compressed_chunk_id = compressed_chunk_id;
+
+	chunk->fd.compressed_chunk_id = form.compressed_chunk_id;
+	chunk->fd.status = form.status;
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 /*Assume permissions are already checked */
 bool
 ts_chunk_clear_compressed_chunk(Chunk *chunk)
 {
-	int32 compressed_chunk_id = INVALID_CHUNK_ID;
-	ScanKeyData scankey[1];
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(chunk->fd.id));
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   chunk_check_ignorearg_dropped_filter,
-							   chunk_clear_compressed_status_in_tuple,
-							   &compressed_chunk_id,
-							   0,
-							   ForwardScanDirection,
-							   RowExclusiveLock,
-							   CurrentMemoryContext) > 0;
+	uint32 flags = CHUNK_STATUS_COMPRESSED | CHUNK_STATUS_COMPRESSED_UNORDERED |
+				   CHUNK_STATUS_COMPRESSED_PARTIAL;
+	uint32 mstatus = ts_clear_flags_32(chunk->fd.status, flags);
+	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
+	{
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   chunk->fd.status)));
+	}
+
+	FormData_chunk form;
+	ItemPointerData tid;
+	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	Assert(found);
+
+	/* Somebody could update the status before we are able to lock it so check again */
+	if (ts_flags_are_set_32(form.status, CHUNK_STATUS_FROZEN))
+	{
+		/* chunk in frozen state cannot be modified */
+		ereport(ERROR,
+				(errcode(ERRCODE_INTERNAL_ERROR),
+				 errmsg("cannot modify frozen chunk status"),
+				 errdetail("chunk id = %d attempt to set status %d , current status %d ",
+						   chunk->fd.id,
+						   mstatus,
+						   form.status)));
+	}
+
+	/* re-applying the flags after locking the metadata tuple */
+	form.status = ts_clear_flags_32(form.status, flags);
+	form.compressed_chunk_id = INVALID_CHUNK_ID;
+
+	chunk->fd.compressed_chunk_id = form.compressed_chunk_id;
+	chunk->fd.status = form.status;
+
+	chunk_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 /* Used as a tuple found function */
