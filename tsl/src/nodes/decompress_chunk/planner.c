@@ -123,7 +123,7 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 	 * Go over the scan targetlist and determine to which output column each
 	 * scan column goes, saving other additional info as we do that.
 	 */
-	path->have_bulk_decompression_columns = false;
+	bool bulk_decompression_possible_for_some_columns = false;
 	path->decompression_map = NIL;
 	foreach (lc, scan_tlist)
 	{
@@ -222,9 +222,9 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 			!is_segment && destination_attno_in_uncompressed_chunk > 0 &&
 			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
 				NULL;
-		path->have_bulk_decompression_columns |= bulk_decompression_possible;
 		path->bulk_decompression_column =
 			lappend_int(path->bulk_decompression_column, bulk_decompression_possible);
+		bulk_decompression_possible_for_some_columns |= bulk_decompression_possible;
 
 		/*
 		 * Save information about decompressed columns in uncompressed chunk
@@ -249,6 +249,16 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 			else
 				path->aggregated_column_type = lappend_int(path->aggregated_column_type, -1);
 		}
+	}
+
+	if (!bulk_decompression_possible_for_some_columns)
+	{
+		/*
+		 * This is mostly a cosmetic thing for EXPLAIN -- don't say that we're
+		 * using bulk decompression, if it is enabled but we have no columns
+		 * that support it.
+		 */
+		path->enable_bulk_decompression = false;
 	}
 
 	/*
@@ -1024,18 +1034,15 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	Assert(list_length(custom_plans) == 1);
 
-	const bool enable_bulk_decompression = !dcpath->batch_sorted_merge &&
-										   ts_guc_enable_bulk_decompression &&
-										   dcpath->have_bulk_decompression_columns;
-
 	/*
 	 * For some predicates, we have more efficient implementation that work on
 	 * the entire compressed batch in one go. They go to this list, and the rest
 	 * goes into the usual scan.plan.qual.
 	 */
 	List *vectorized_quals = NIL;
-	if (enable_bulk_decompression)
+	if (dcpath->enable_bulk_decompression)
 	{
+		Assert(!dcpath->batch_sorted_merge);
 		List *nonvectorized_quals = NIL;
 		find_vectorized_quals(dcpath,
 							  decompress_plan->scan.plan.qual,
@@ -1067,7 +1074,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 							  dcpath->info->chunk_rte->relid,
 							  dcpath->reverse,
 							  dcpath->batch_sorted_merge,
-							  enable_bulk_decompression,
+							  dcpath->enable_bulk_decompression,
 							  dcpath->perform_vectorized_aggregation);
 
 	/*

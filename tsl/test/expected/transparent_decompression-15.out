@@ -774,7 +774,7 @@ LIMIT 10;
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=5 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=5 loops=1)
-         Vectorized Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+         Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
          Rows Removed by Filter: 1795
          ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on compress_hyper_5_15_chunk (actual rows=5 loops=1)
                Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
@@ -4064,7 +4064,7 @@ LIMIT 10;
    ->  Merge Append (actual rows=5 loops=1)
          Sort Key: _hyper_2_4_chunk.device_id
          ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=1 loops=1)
-               Vectorized Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 359
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_6_17_chunk.device_id
@@ -4072,7 +4072,7 @@ LIMIT 10;
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
                            Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
          ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=3 loops=1)
-               Vectorized Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 1077
                ->  Sort (actual rows=3 loops=1)
                      Sort Key: compress_hyper_6_18_chunk.device_id
@@ -4080,7 +4080,7 @@ LIMIT 10;
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=3 loops=1)
                            Filter: ((_ts_meta_min_3 <= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) AND (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone))
          ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=1 loops=1)
-               Vectorized Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+               Filter: ("time" = 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                Rows Removed by Filter: 359
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: compress_hyper_6_19_chunk.device_id

@@ -22,6 +22,7 @@
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/gapfill/gapfill.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "planner.h"
 
 #include <math.h>
@@ -43,6 +44,140 @@ is_osm_present()
 }
 #endif
 
+/*
+ * Try to disable bulk decompression on DecompressChunkPath, skipping the above
+ * Projection path and also handling Lists.
+ */
+static void
+try_disable_bulk_decompression(PlannerInfo *root, Node *node)
+{
+	if (IsA(node, List))
+	{
+		ListCell *lc;
+		foreach (lc, (List *) node)
+		{
+			try_disable_bulk_decompression(root, (Node *) lfirst(lc));
+		}
+		return;
+	}
+
+	if (IsA(node, ProjectionPath))
+	{
+		try_disable_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
+		return;
+	}
+
+	if (IsA(node, AppendPath))
+	{
+		try_disable_bulk_decompression(root, (Node *) castNode(AppendPath, node)->subpaths);
+		return;
+	}
+
+	if (IsA(node, MergeAppendPath))
+	{
+		MergeAppendPath *mergeappend = castNode(MergeAppendPath, node);
+		ListCell *lc;
+		foreach (lc, mergeappend->subpaths)
+		{
+			Path *child = (Path *) lfirst(lc);
+			if (pathkeys_contained_in(mergeappend->path.pathkeys, child->pathkeys))
+			{
+				try_disable_bulk_decompression(root, (Node *) child);
+			}
+		}
+		return;
+	}
+
+	if (!IsA(node, CustomPath))
+	{
+		return;
+	}
+
+	CustomPath *custom_child = castNode(CustomPath, node);
+	if (strcmp(custom_child->methods->CustomName, "ChunkAppend") == 0)
+	{
+		try_disable_bulk_decompression(root, (Node *) custom_child->custom_paths);
+		return;
+	}
+
+	if (strcmp(custom_child->methods->CustomName, "DecompressChunk") != 0)
+	{
+		return;
+	}
+
+	DecompressChunkPath *dcpath = (DecompressChunkPath *) custom_child;
+	dcpath->enable_bulk_decompression = false;
+}
+
+/*
+ * When we have a small limit above chunk decompression, it is more efficient to
+ * use the row-by-row decompression iterators than the bulk decompression. Since
+ * bulk decompression is about 10x faster than row-by-row, this advantage goes
+ * away on limits > 100. This hook disables bulk decompression under small limits.
+ */
+static void
+check_limit_bulk_decompression(PlannerInfo *root, Node *node)
+{
+	ListCell *lc;
+	switch (node->type)
+	{
+		case T_List:
+			foreach (lc, (List *) node)
+			{
+				check_limit_bulk_decompression(root, lfirst(lc));
+			}
+			break;
+		case T_LimitPath:
+		{
+			double limit = -1;
+			LimitPath *path = castNode(LimitPath, node);
+
+			if (path->limitCount != NULL)
+			{
+				Const *count = castNode(Const, path->limitCount);
+				Assert(count->consttype == INT8OID);
+				Assert(DatumGetInt64(count->constvalue) >= 0);
+				limit = DatumGetInt64(count->constvalue);
+			}
+
+			if (path->limitOffset != NULL)
+			{
+				Const *offset = castNode(Const, path->limitOffset);
+				Assert(offset->consttype == INT8OID);
+				Assert(DatumGetInt64(offset->constvalue) >= 0);
+				limit += DatumGetInt64(offset->constvalue);
+			}
+
+			if (limit > 0 && limit < 100)
+			{
+				try_disable_bulk_decompression(root, (Node *) path->subpath);
+			}
+
+			break;
+		}
+#if PG14_GE
+		case T_MemoizePath:
+			check_limit_bulk_decompression(root, (Node *) castNode(MemoizePath, node)->subpath);
+			break;
+#endif
+		case T_ProjectionPath:
+			check_limit_bulk_decompression(root, (Node *) castNode(ProjectionPath, node)->subpath);
+			break;
+		case T_SubqueryScanPath:
+			check_limit_bulk_decompression(root,
+										   (Node *) castNode(SubqueryScanPath, node)->subpath);
+			break;
+		case T_NestPath:
+		case T_MergePath:
+		case T_HashPath:
+			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->outerjoinpath);
+			check_limit_bulk_decompression(root, (Node *) ((JoinPath *) node)->innerjoinpath);
+			break;
+		default:
+			break;
+	}
+}
+
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
 							RelOptInfo *output_rel, TsRelType input_reltype, Hypertable *ht,
@@ -60,6 +195,9 @@ tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptIn
 			break;
 		case UPPERREL_DISTINCT:
 			tsl_skip_scan_paths_add(root, input_rel, output_rel);
+			break;
+		case UPPERREL_FINAL:
+			check_limit_bulk_decompression(root, (Node *) output_rel->pathlist);
 			break;
 		default:
 			break;
