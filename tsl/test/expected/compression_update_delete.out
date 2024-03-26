@@ -2730,3 +2730,176 @@ UPDATE test_limit SET id = 0;
 DELETE FROM test_limit WHERE id > 0;
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
+-- check partial compression with DML
+CREATE TABLE test_partials (time timestamptz NOT NULL, a int, b int);
+SELECT create_hypertable('test_partials', 'time');
+      create_hypertable      
+-----------------------------
+ (35,public,test_partials,t)
+(1 row)
+
+INSERT INTO test_partials
+VALUES -- chunk1
+  ('2020-01-01 00:00'::timestamptz, 1, 2),
+  ('2020-01-01 00:01'::timestamptz, 2, 2),
+  ('2020-01-01 00:04'::timestamptz, 1, 2),
+  -- chunk2
+  ('2021-01-01 00:00'::timestamptz, 1, 2),
+  ('2021-01-01 00:04'::timestamptz, 1, 2),
+  -- chunk3
+  ('2022-01-01 00:00'::timestamptz, 1, 2),
+  ('2022-01-01 00:04'::timestamptz, 1, 2);
+-- enable compression, compress all chunks
+ALTER TABLE test_partials SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test_partials" is set to ""
+NOTICE:  default order by for hypertable "test_partials" is set to ""time" DESC"
+SELECT compress_chunk(show_chunks('test_partials'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_35_68_chunk
+ _timescaledb_internal._hyper_35_69_chunk
+ _timescaledb_internal._hyper_35_70_chunk
+(3 rows)
+
+-- fully compressed
+EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_partials
+   Order: test_partials."time"
+   ->  Custom Scan (DecompressChunk) on _hyper_35_68_chunk
+         ->  Sort
+               Sort Key: compress_hyper_36_71_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_71_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
+         ->  Sort
+               Sort Key: compress_hyper_36_72_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_72_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
+         ->  Sort
+               Sort Key: compress_hyper_36_73_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_73_chunk
+(14 rows)
+
+-- verify correct results
+SELECT * FROM test_partials ORDER BY time;
+             time             | a | b 
+------------------------------+---+---
+ Wed Jan 01 00:00:00 2020 PST | 1 | 2
+ Wed Jan 01 00:01:00 2020 PST | 2 | 2
+ Wed Jan 01 00:04:00 2020 PST | 1 | 2
+ Fri Jan 01 00:00:00 2021 PST | 1 | 2
+ Fri Jan 01 00:04:00 2021 PST | 1 | 2
+ Sat Jan 01 00:00:00 2022 PST | 1 | 2
+ Sat Jan 01 00:04:00 2022 PST | 1 | 2
+(7 rows)
+
+-- check that DML causes transparent decompression and that
+-- data gets shifted to the uncompressed parts
+EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify)
+   ->  Delete on test_partials
+         Delete on _hyper_35_68_chunk test_partials_1
+         Delete on _hyper_35_69_chunk test_partials_2
+         Delete on _hyper_35_70_chunk test_partials_3
+         ->  Custom Scan (ChunkAppend) on test_partials
+               ->  Seq Scan on _hyper_35_68_chunk test_partials_1
+                     Filter: (SubPlan 1)
+                     SubPlan 1
+                       ->  Materialize
+                             ->  Append
+                                   ->  Custom Scan (DecompressChunk) on _hyper_35_68_chunk
+                                         ->  Seq Scan on compress_hyper_36_71_chunk
+                                   ->  Seq Scan on _hyper_35_68_chunk
+                                   ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
+                                         ->  Seq Scan on compress_hyper_36_72_chunk
+                                   ->  Seq Scan on _hyper_35_69_chunk
+                                   ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
+                                         ->  Seq Scan on compress_hyper_36_73_chunk
+                                   ->  Seq Scan on _hyper_35_70_chunk
+               ->  Seq Scan on _hyper_35_69_chunk test_partials_2
+                     Filter: (SubPlan 1)
+               ->  Seq Scan on _hyper_35_70_chunk test_partials_3
+                     Filter: (SubPlan 1)
+(24 rows)
+
+DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+-- All 3 chunks will now become partially compressed chunks
+EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_partials
+   Order: test_partials."time"
+   ->  Merge Append
+         Sort Key: _hyper_35_68_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_35_68_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_36_71_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_36_71_chunk
+         ->  Sort
+               Sort Key: _hyper_35_68_chunk."time"
+               ->  Seq Scan on _hyper_35_68_chunk
+   ->  Merge Append
+         Sort Key: _hyper_35_69_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_36_72_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_36_72_chunk
+         ->  Sort
+               Sort Key: _hyper_35_69_chunk."time"
+               ->  Seq Scan on _hyper_35_69_chunk
+   ->  Merge Append
+         Sort Key: _hyper_35_70_chunk."time"
+         ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_36_73_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_36_73_chunk
+         ->  Sort
+               Sort Key: _hyper_35_70_chunk."time"
+               ->  Seq Scan on _hyper_35_70_chunk
+(29 rows)
+
+-- verify correct results
+SELECT * FROM test_partials ORDER BY time;
+             time             | a | b 
+------------------------------+---+---
+ Wed Jan 01 00:00:00 2020 PST | 1 | 2
+ Wed Jan 01 00:01:00 2020 PST | 2 | 2
+ Wed Jan 01 00:04:00 2020 PST | 1 | 2
+ Fri Jan 01 00:00:00 2021 PST | 1 | 2
+ Fri Jan 01 00:04:00 2021 PST | 1 | 2
+ Sat Jan 01 00:00:00 2022 PST | 1 | 2
+(6 rows)
+
+SELECT compress_chunk(show_chunks('test_partials'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_35_68_chunk
+ _timescaledb_internal._hyper_35_69_chunk
+ _timescaledb_internal._hyper_35_70_chunk
+(3 rows)
+
+-- fully compressed
+EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on test_partials
+   Order: test_partials."time"
+   ->  Custom Scan (DecompressChunk) on _hyper_35_68_chunk
+         ->  Sort
+               Sort Key: compress_hyper_36_74_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_74_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_35_69_chunk
+         ->  Sort
+               Sort Key: compress_hyper_36_75_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_75_chunk
+   ->  Custom Scan (DecompressChunk) on _hyper_35_70_chunk
+         ->  Sort
+               Sort Key: compress_hyper_36_76_chunk._ts_meta_sequence_num DESC
+               ->  Seq Scan on compress_hyper_36_76_chunk
+(14 rows)
+
+DROP TABLE test_partials;

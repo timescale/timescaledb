@@ -25,6 +25,7 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
 #include "ts_catalog/array_utils.h"
@@ -685,6 +686,8 @@ add_chunk_sorted_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 	}
 }
 
+#define IS_UPDL_CMD(parse)                                                                         \
+	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
 void
 ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 								   Chunk *chunk)
@@ -693,6 +696,31 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	ListCell *lc;
 	double new_row_estimate;
 	Index ht_relid = 0;
+	PlannerInfo *proot;
+	bool consider_partial = ts_chunk_is_partial(chunk);
+
+	/*
+	 * For UPDATE/DELETE commands, the executor decompresses and brings the rows into
+	 * the uncompressed chunk. Therefore, it's necessary to add the scan on the
+	 * uncompressed portion.
+	 */
+	if (ts_chunk_is_compressed(chunk) && ts_cm_functions->decompress_target_segments &&
+		!consider_partial)
+	{
+		for (proot = root->parent_root; proot != NULL && !consider_partial;
+			 proot = proot->parent_root)
+		{
+			/*
+			 * We could additionally check and compare that the relation involved in the subquery
+			 * and the DML target relation are one and the same. But these kinds of queries
+			 * should be rare.
+			 */
+			if (IS_UPDL_CMD(proot->parse))
+			{
+				consider_partial = true;
+			}
+		}
+	}
 
 	CompressionInfo *compression_info = build_compressioninfo(root, ht, chunk, chunk_rel);
 
@@ -720,11 +748,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 	compressed_rel->consider_parallel = chunk_rel->consider_parallel;
 	/* translate chunk_rel->baserestrictinfo */
-	pushdown_quals(root,
-				   compression_info->settings,
-				   chunk_rel,
-				   compressed_rel,
-				   ts_chunk_is_partial(chunk));
+	pushdown_quals(root, compression_info->settings, chunk_rel, compressed_rel, consider_partial);
 	set_baserel_size_estimates(root, compressed_rel);
 	new_row_estimate = compressed_rel->rows * DECOMPRESS_CHUNK_BATCH_SIZE;
 
@@ -863,7 +887,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * to a merge append path when we are able to generate the ordered result for the
 				 * compressed and uncompressed part of the chunk.
 				 */
-				if (!ts_chunk_is_partial(chunk))
+				if (!consider_partial)
 					add_path(chunk_rel, &batch_merge_path->custom_path.path);
 			}
 		}
@@ -916,7 +940,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * If this is a partially compressed chunk we have to combine data
 		 * from compressed and uncompressed chunk.
 		 */
-		if (ts_chunk_is_partial(chunk))
+		if (consider_partial)
 		{
 			Bitmapset *req_outer = PATH_REQ_OUTER(path);
 			Path *uncompressed_path =
@@ -1001,7 +1025,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 														 compressed_path->parallel_workers,
 														 compressed_path);
 
-			if (ts_chunk_is_partial(chunk))
+			if (consider_partial)
 			{
 				Bitmapset *req_outer = PATH_REQ_OUTER(path);
 				Path *uncompressed_path = NULL;
