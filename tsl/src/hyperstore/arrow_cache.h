@@ -45,7 +45,7 @@
 #include <storage/itemptr.h>
 #include <utils/hsearch.h>
 
-#include "arrow_c_data_interface.h"
+#include "compression/arrow_c_data_interface.h"
 
 typedef struct ArrowColumnCache
 {
