@@ -4,7 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include "chunk.h"
 #include <access/attnum.h>
 #include <access/heapam.h>
 #include <access/hio.h>
@@ -40,14 +39,13 @@
 #include <utils/palloc.h>
 #include <utils/typcache.h>
 
-#include "compression.h"
+#include "arrow_tts.h"
 #include "compression/api.h"
-#include "compression/arrow_cache.h"
-#include "compression/arrow_tts.h"
-#include "compressionam_handler.h"
-#include "create.h"
+#include "compression/compression.h"
+#include "compression/create.h"
 #include "debug_assert.h"
 #include "guc.h"
+#include "hyperstore_handler.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
