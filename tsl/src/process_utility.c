@@ -14,9 +14,9 @@
 #include <nodes/parsenodes.h>
 #include <storage/lockdefs.h>
 
-#include "compression/compressionam_handler.h"
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
+#include "hyperstore/hyperstore_handler.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"

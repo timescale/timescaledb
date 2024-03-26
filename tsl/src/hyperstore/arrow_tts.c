@@ -13,9 +13,10 @@
 
 #include "arrow_cache.h"
 #include "arrow_tts.h"
-#include "compression.h"
-#include "compression/compressionam_handler.h"
+#include "compression/compression.h"
+#include "compression/create.h"
 #include "custom_type_cache.h"
+#include "hyperstore_handler.h"
 #include "utils/palloc.h"
 
 Datum
