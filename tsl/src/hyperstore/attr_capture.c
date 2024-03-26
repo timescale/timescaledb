@@ -11,9 +11,11 @@
 #include <nodes/nodes.h>
 #include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
 
+#include "arrow_tts.h"
 #include "attr_capture.h"
-#include "compression/arrow_tts.h"
 
 struct CaptureAttributesContext
 {

@@ -21,10 +21,8 @@
 #include <utils/hsearch.h>
 #include <utils/palloc.h>
 
-#include "arrow_c_data_interface.h"
-#include "compression/arrow_cache.h"
-#include "compression/create.h"
-#include "nodes/decompress_chunk/detoaster.h"
+#include "arrow_cache.h"
+#include "compression/arrow_c_data_interface.h"
 
 #include <limits.h>
 
