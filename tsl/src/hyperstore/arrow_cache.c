@@ -18,7 +18,7 @@
 #include "arrow_cache.h"
 #include "arrow_cache_explain.h"
 #include "arrow_tts.h"
-#include "compression.h"
+#include "compression/compression.h"
 #include "debug_assert.h"
 #include <utils/palloc.h>
 
