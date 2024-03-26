@@ -124,11 +124,11 @@ job_execute_default_fn(BgwJob *job)
 	pg_unreachable();
 }
 
-static bool
+static Path *
 push_down_aggregation(PlannerInfo *root, AggPath *aggregation_path, Path *subpath)
 {
 	/* Don't skip adding the agg node on top of the path */
-	return false;
+	return NULL;
 }
 
 static bool

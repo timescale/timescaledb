@@ -268,10 +268,35 @@ copy_append_path(AppendPath *path, List *subpaths, PathTarget *pathtarget)
 {
 	AppendPath *newPath = makeNode(AppendPath);
 	memcpy(newPath, path, sizeof(AppendPath));
+
+	Assert(list_length(newPath->subpaths) == list_length(subpaths));
 	newPath->subpaths = subpaths;
 	newPath->path.pathtarget = copy_pathtarget(pathtarget);
 
-	cost_append(newPath);
+	/*
+	 * Note that we can't just call cost_append here, because when there is only
+	 * one child path, postgres inherits its pathkeys for append, but doesn't
+	 * reset append's parallel-aware flags, which leads to an assertion failure
+	 * in cost_append(). Below is a copy of how the create_append_path() handles
+	 * this case:
+	 *
+	 * If there's exactly one child path, the Append is a no-op and will be
+	 * discarded later (in setrefs.c); therefore, we can inherit the child's
+	 * size and cost, as well as its pathkeys if any (overriding whatever the
+	 * caller might've said).  Otherwise, we must do the normal costsize
+	 * calculation.
+	 */
+	if (list_length(newPath->subpaths) == 1)
+	{
+		Path	   *child = (Path *) linitial(newPath->subpaths);
+
+		newPath->path.rows = child->rows;
+		newPath->path.startup_cost = child->startup_cost;
+		newPath->path.total_cost = child->total_cost;
+		newPath->path.pathkeys = child->pathkeys;
+	}
+	else
+		cost_append(newPath);
 
 	return newPath;
 }
@@ -401,29 +426,42 @@ create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
  * Add partially aggregated subpath
  */
 static void
-add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
+add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *pathtarget_before_agg,
 								  PathTarget *partial_grouping_target, double d_num_groups,
 								  GroupPathExtraData *extra_data, bool can_sort, bool can_hash,
 								  Path *subpath, List **sorted_paths, List **hashed_paths)
 {
 	/* Translate targetlist for partition */
 	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, subpath->parent->relid, false);
-	PathTarget *chunktarget = copy_pathtarget(partial_grouping_target);
-	chunktarget->exprs =
-		castNode(List, adjust_appendrel_attrs(root, (Node *) chunktarget->exprs, 1, &appinfo));
+	PathTarget *chunk_grouping_target = copy_pathtarget(partial_grouping_target);
+	chunk_grouping_target->exprs =
+		castNode(List, adjust_appendrel_attrs(root, (Node *) chunk_grouping_target->exprs, 1, &appinfo));
+
+//	fprintf(stderr, "original subpath target:\n");
+//	my_print(subpath->pathtarget);
 
 	/* In declarative partitioning planning, this is done by appy_scanjoin_target_to_path */
-	Assert(list_length(subpath->pathtarget->exprs) == list_length(parent_path->pathtarget->exprs));
-	subpath->pathtarget->sortgrouprefs = parent_path->pathtarget->sortgrouprefs;
+//	Assert(list_length(subpath->pathtarget->exprs) == list_length(parent_path->pathtarget->exprs));
+//	subpath->pathtarget->sortgrouprefs = parent_path->pathtarget->sortgrouprefs;
+//	subpath->pathtarget = pathtarget_before_agg;
+
+	PathTarget *chunk_target_before_agg = copy_pathtarget(pathtarget_before_agg);
+	chunk_target_before_agg->exprs =
+		castNode(List, adjust_appendrel_attrs(root, (Node *) chunk_target_before_agg->exprs, 1, &appinfo));
+
+	Path *projected = apply_projection_to_path(root, subpath->parent, subpath,
+		chunk_target_before_agg);
+
 
 	if (can_sort)
 	{
 		AggPath *agg_path =
-			create_sorted_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
+			create_sorted_partial_agg_path(root, projected, chunk_grouping_target, d_num_groups, extra_data);
 
-		if (ts_cm_functions->push_down_aggregation(root, agg_path, subpath))
+		Path *pushed_down = ts_cm_functions->push_down_aggregation(root, agg_path, projected);
+		if (pushed_down)
 		{
-			*sorted_paths = lappend(*sorted_paths, subpath);
+			*sorted_paths = lappend(*sorted_paths, projected);
 		}
 		else
 		{
@@ -434,11 +472,12 @@ add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
 	if (can_hash)
 	{
 		AggPath *agg_path =
-			create_hashed_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
+			create_hashed_partial_agg_path(root, projected, chunk_grouping_target, d_num_groups, extra_data);
 
-		if (ts_cm_functions->push_down_aggregation(root, agg_path, subpath))
+		Path *pushed_down = ts_cm_functions->push_down_aggregation(root, agg_path, projected);
+		if (pushed_down)
 		{
-			*hashed_paths = lappend(*hashed_paths, subpath);
+			*hashed_paths = lappend(*hashed_paths, projected);
 		}
 		else
 		{
@@ -465,7 +504,27 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 
 	/* No subpaths available or unsupported append node */
 	if (subpaths == NIL)
+	{
 		return;
+	}
+
+	if (list_length(subpaths) < 2)
+	{
+		/*
+		 * Doesn't make sense to add per-chunk aggregation paths if there's
+		 * only one chunk.
+		 */
+		return;
+	}
+
+//	fprintf(stderr, "grouping target:\n");
+//	my_print(grouping_target);
+//	fprintf(stderr, "partial grouping target:\n");
+//	my_print(partial_grouping_target);
+//
+	PathTarget *pathtarget_before_agg = cheapest_total_path->pathtarget;
+//	fprintf(stderr, "pathtarget before agg:\n");
+//	my_print(pathtarget_before_agg);
 
 	if (list_length(subpaths) < 2)
 	{
@@ -505,7 +564,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 				Path *subsubpath = lfirst(lc2);
 
 				add_partially_aggregated_subpaths(root,
-												  cheapest_total_path,
+												  pathtarget_before_agg,
 												  partial_grouping_target,
 												  d_num_groups,
 												  extra_data,
@@ -537,7 +596,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		else
 		{
 			add_partially_aggregated_subpaths(root,
-											  cheapest_total_path,
+											  pathtarget_before_agg,
 											  partial_grouping_target,
 											  d_num_groups,
 											  extra_data,
@@ -595,6 +654,8 @@ generate_partial_agg_pushdown_path(PlannerInfo *root, Path *cheapest_partial_pat
 	if (subpaths == NIL)
 		return;
 
+	PathTarget *pathtarget_before_agg = cheapest_partial_path->pathtarget;
+
 	if (list_length(subpaths) < 2)
 	{
 		/*
@@ -619,7 +680,7 @@ generate_partial_agg_pushdown_path(PlannerInfo *root, Path *cheapest_partial_pat
 		Assert(get_subpaths_from_append_path(subpath, false) == NIL);
 
 		add_partially_aggregated_subpaths(root,
-										  cheapest_partial_path,
+										  pathtarget_before_agg,
 										  partial_grouping_target,
 										  d_num_groups,
 										  extra_data,
