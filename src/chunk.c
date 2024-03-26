@@ -841,6 +841,7 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 					const char *table_name, const char *prefix, int32 chunk_id)
 {
 	const Hyperspace *hs = ht->space;
+	const Hyperspace *ss = ht->correlated_space;
 	Chunk *chunk;
 	const char relkind = RELKIND_RELATION;
 
@@ -848,7 +849,8 @@ chunk_create_object(const Hypertable *ht, Hypercube *cube, const char *schema_na
 		schema_name = NameStr(ht->fd.associated_schema_name);
 
 	/* Create a new chunk based on the hypercube */
-	chunk = ts_chunk_create_base(chunk_id, hs->num_dimensions, relkind);
+	chunk =
+		ts_chunk_create_base(chunk_id, hs->num_dimensions + (ss ? ss->num_dimensions : 0), relkind);
 
 	chunk->fd.hypertable_id = hs->hypertable_id;
 	chunk->cube = cube;
@@ -1090,6 +1092,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  table_name,
 													  prefix,
 													  get_next_chunk_id());
+
+	/* Insert any new correlated constraint slices into metadata */
+	ts_correlated_constraints_dimension_slice_insert(ht, chunk);
 
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
@@ -3422,8 +3427,17 @@ ts_chunk_set_unordered(Chunk *chunk)
 bool
 ts_chunk_set_partial(Chunk *chunk)
 {
+	Cache *hcache;
+	bool set_status;
+	Hypertable *htable =
+		ts_hypertable_cache_get_cache_and_entry(chunk->hypertable_relid, CACHE_FLAG_NONE, &hcache);
 	Assert(ts_chunk_is_compressed(chunk));
-	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+	set_status = ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+	/* reset any correlated constraints after the partial uncompressed data */
+	if (htable->correlated_space)
+		ts_correlated_constraints_dimension_slice_calculate_update(htable, chunk, true);
+	ts_cache_release(hcache);
+	return set_status;
 }
 
 /* No inserts, updates, and deletes are permitted on a frozen chunk.
@@ -4782,7 +4796,7 @@ ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk, const Chunk *mer
 		ts_dimension_slice_insert(new_slice);
 	}
 
-	ts_chunk_constraint_update_slice_id(chunk->fd.id, slice->fd.id, new_slice->fd.id);
+	ts_chunk_constraint_update_slice_id_name(chunk->fd.id, slice->fd.id, new_slice->fd.id, NULL);
 	ChunkConstraints *ccs = ts_chunk_constraints_alloc(1, CurrentMemoryContext);
 	ScanIterator iterator =
 		ts_scan_iterator_create(CHUNK_CONSTRAINT, AccessShareLock, CurrentMemoryContext);

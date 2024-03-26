@@ -455,6 +455,15 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
+	/*
+	 * Calculate and add the correlated constraint dimension ranges for the src chunk. This has to
+	 * be done before the compression
+	 */
+	if (cxt.srcht->correlated_space)
+		ts_correlated_constraints_dimension_slice_calculate_update(cxt.srcht,
+																   cxt.srcht_chunk,
+																   false);
+
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
 
 	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
@@ -462,6 +471,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	 * directly on the hypertable or chunks.
 	 */
 	ts_chunk_drop_fks(cxt.srcht_chunk);
+
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
 
 	if (new_compressed_chunk)
@@ -595,6 +605,12 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	ts_chunk_validate_chunk_status_for_operation(chunk_state_after_lock, CHUNK_DECOMPRESS, true);
 
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
+
+	/* reset any correlated constraints after the decompression */
+	if (uncompressed_hypertable->correlated_space)
+		ts_correlated_constraints_dimension_slice_calculate_update(uncompressed_hypertable,
+																   uncompressed_chunk,
+																   true);
 
 	/* Recreate FK constraints, since they were dropped during compression. */
 	ts_chunk_create_fks(uncompressed_hypertable, uncompressed_chunk);

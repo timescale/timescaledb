@@ -39,6 +39,7 @@ typedef struct Dimension
 #define IS_CLOSED_DIMENSION(d) ((d)->type == DIMENSION_TYPE_CLOSED)
 #define IS_VALID_OPEN_DIM_TYPE(type)                                                               \
 	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || ts_type_is_int8_binary_compatible(type))
+#define IS_CORRELATED_CONSTRAINT(d) ((d)->fd.correlated == true)
 
 /*
  * A hyperspace defines how to partition in a N-dimensional space.
@@ -114,13 +115,16 @@ typedef struct DimensionInfo
 	bool num_slices_is_set;
 	bool adaptive_chunking; /* True if adaptive chunking is enabled */
 	Hypertable *ht;
+	bool correlated; /* True if this is a correlated constraint entry */
 } DimensionInfo;
 
 #define DIMENSION_INFO_IS_SET(di) (di != NULL && OidIsValid((di)->table_relid))
-#define DIMENSION_INFO_IS_VALID(di) (info->num_slices_is_set || OidIsValid(info->interval_type))
+#define DIMENSION_INFO_IS_VALID(di)                                                                \
+	(info->num_slices_is_set || OidIsValid(info->interval_type) || info->correlated)
 
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
+extern void ts_correlated_constraints_assign(Hypertable *h, MemoryContext mctx);
 extern DimensionSlice *ts_dimension_calculate_default_slice(const Dimension *dim, int64 value);
 extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(const Hyperspace *h, TupleTableSlot *slot);
 extern int ts_dimension_get_slice_ordinal(const Dimension *dim, const DimensionSlice *slice);
