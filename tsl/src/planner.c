@@ -13,9 +13,9 @@
 #include <parser/parsetree.h>
 
 #include "compat/compat.h"
-#include "compression/compressionam_handler.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
+#include "hyperstore/hyperstore_handler.h"
 #include "hypertable.h"
 #include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
