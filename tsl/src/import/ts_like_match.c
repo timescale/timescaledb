@@ -12,6 +12,8 @@
  *
  * This is a copy of backend/utils/adt/like_match.c from PG 15.0, git commit sha
  * 2a7ce2e2ce474504a707ec03e128fde66cfb8b48.
+ * It has one modification: the check_stack_depth() check is moved to happen
+ * before recursion to simplify the non-recursive code path.
  */
 
 /*--------------------
