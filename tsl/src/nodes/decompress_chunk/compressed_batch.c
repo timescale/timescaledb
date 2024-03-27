@@ -289,13 +289,13 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
  * result to the final predicate result.
  */
 static void
-translate_bitmap_from_dictionary(const ArrowArray *arrow, uint64 *restrict dict_result,
+translate_bitmap_from_dictionary(const ArrowArray *arrow, const uint64 *dict_result,
 								 uint64 *restrict final_result)
 {
 	Assert(arrow->dictionary != NULL);
 
 	const size_t n = arrow->length;
-	int16 *restrict indices = (int16 *) arrow->buffers[1];
+	const int16 *indices = (int16 *) arrow->buffers[1];
 	for (size_t outer = 0; outer < n / 64; outer++)
 	{
 		uint64 word = 0;
@@ -983,7 +983,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 * such as UUID.
 			 */
 			const uint8 value_bytes = column_values->decompression_type;
-			const char *restrict src = column_values->buffers[1];
+			const char *src = column_values->buffers[1];
 			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
@@ -1000,7 +1000,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 */
 			const uint8 value_bytes = column_values->decompression_type;
 			Assert(value_bytes <= SIZEOF_DATUM);
-			const char *restrict src = column_values->buffers[1];
+			const char *src = column_values->buffers[1];
 			memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
