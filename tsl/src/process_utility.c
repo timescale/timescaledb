@@ -41,13 +41,13 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_compressionam = (strcmp(cmd->name, "hyperstore") == 0);
-						if (!to_compressionam)
+						bool to_hyperstore = (strcmp(cmd->name, "hyperstore") == 0);
+						if (!to_hyperstore)
 						{
 							/* If neither the current tableam nor the desired tableam is hyperstore,
 							 * we do nothing. */
 							Relation rel = RelationIdGetRelation(relid);
-							if (rel->rd_tableam != compressionam_routine())
+							if (rel->rd_tableam != hyperstore_routine())
 								return;
 							RelationClose(rel);
 						}
@@ -57,7 +57,7 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 						Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 						if (chunk)
 						{
-							compressionam_alter_access_method_begin(relid, !to_compressionam);
+							hyperstore_alter_access_method_begin(relid, !to_hyperstore);
 							return;
 						}
 
@@ -168,8 +168,8 @@ tsl_ddl_command_end(EventTriggerData *command)
 					case AT_SetAccessMethod:
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
-						bool to_compressionam = (strcmp(cmd->name, "hyperstore") == 0);
-						compressionam_alter_access_method_finish(relid, !to_compressionam);
+						bool to_hyperstore = (strcmp(cmd->name, "hyperstore") == 0);
+						hyperstore_alter_access_method_finish(relid, !to_hyperstore);
 						break;
 					}
 #endif

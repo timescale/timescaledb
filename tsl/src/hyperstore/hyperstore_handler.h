@@ -3,8 +3,8 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_COMPRESSIONAM_HANDLER_H
-#define TIMESCALEDB_TSL_COMPRESSIONAM_HANDLER_H
+#ifndef TIMESCALEDB_TSL_HYPERSTORE_HANDLER_H
+#define TIMESCALEDB_TSL_HYPERSTORE_HANDLER_H
 
 #include <postgres.h>
 #include <access/tableam.h>
@@ -19,13 +19,13 @@
  * individual access methods, so use bit 16. */
 #define SK_NO_COMPRESSED 0x8000
 
-extern void compressionam_set_analyze_relid(Oid relid);
-extern const TableAmRoutine *compressionam_routine(void);
-extern void compressionam_handler_start_conversion(Oid relid, bool to_other_am);
-extern void compressionam_alter_access_method_begin(Oid relid, bool to_other_am);
-extern void compressionam_alter_access_method_finish(Oid relid, bool to_other_am);
-extern Datum compressionam_handler(PG_FUNCTION_ARGS);
-extern void compressionam_xact_event(XactEvent event, void *arg);
+extern void hyperstore_set_analyze_relid(Oid relid);
+extern const TableAmRoutine *hyperstore_routine(void);
+extern void hyperstore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht);
+extern void hyperstore_alter_access_method_begin(Oid relid, bool to_other_am);
+extern void hyperstore_alter_access_method_finish(Oid relid, bool to_other_am);
+extern Datum hyperstore_handler(PG_FUNCTION_ARGS);
+extern void hyperstore_xact_event(XactEvent event, void *arg);
 
 typedef struct ColumnCompressionSettings
 {
@@ -46,7 +46,7 @@ typedef struct ColumnCompressionSettings
  * This struct is cached in a relcache entry's rd_amcache pointer and needs to
  * have a structure that can be palloc'ed in a single memory chunk.
  */
-typedef struct CompressionAmInfo
+typedef struct HyperstoreInfo
 {
 	int32 hypertable_id;		  /* TimescaleDB ID of parent hypertable */
 	int32 relation_id;			  /* TimescaleDB ID of relation (chunk ID) */
@@ -60,8 +60,8 @@ typedef struct CompressionAmInfo
 							  * compressed rel */
 	/* Per-column information follows. */
 	ColumnCompressionSettings columns[FLEXIBLE_ARRAY_MEMBER];
-} CompressionAmInfo;
+} HyperstoreInfo;
 
-extern CompressionAmInfo *RelationGetCompressionAmInfo(Relation rel);
+extern HyperstoreInfo *RelationGetHyperstoreInfo(Relation rel);
 
-#endif /* TIMESCALEDB_TSL_COMPRESSIONAM_HANDLER_H */
+#endif /* TIMESCALEDB_TSL_HYPERSTORE_HANDLER_H */
