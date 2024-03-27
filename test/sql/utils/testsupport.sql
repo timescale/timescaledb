@@ -309,3 +309,29 @@ BEGIN
     RETURN dirPath;
 END;
 $BODY$;
+
+-- Wait for job to execute with success or failure
+CREATE OR REPLACE FUNCTION test.wait_for_job_to_run(job_param_id INTEGER, expected_runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS)
+RETURNS BOOLEAN LANGUAGE PLPGSQL AS
+$BODY$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR i in 1..spins
+    LOOP
+        SELECT total_successes, total_failures FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO r;
+        IF (r.total_failures > 0) THEN
+            RAISE INFO 'wait_for_job_to_run: job execution failed';
+            RETURN false;
+        ELSEIF (r.total_successes = expected_runs) THEN
+            RETURN true;
+        ELSEIF (r.total_successes > expected_runs) THEN
+            RAISE 'num_runs > expected';
+        ELSE
+            PERFORM pg_sleep(0.1);
+        END IF;
+    END LOOP;
+    RAISE INFO 'wait_for_job_to_run: timeout after % tries', spins;
+    RETURN false;
+END
+$BODY$;
