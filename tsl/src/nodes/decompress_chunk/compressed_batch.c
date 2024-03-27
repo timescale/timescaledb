@@ -404,7 +404,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		const size_t n_vector_result_words = (vector->length + 63) / 64;
 		Assert((predicate_result != default_value_predicate_result) ||
 			   n_vector_result_words == 1); /* to placate Coverity. */
-		const uint64 *restrict validity = (uint64 *restrict) vector->buffers[0];
+		const uint64 *validity = (const uint64 *) vector->buffers[0];
 		for (size_t i = 0; i < n_vector_result_words; i++)
 		{
 			predicate_result[i] &= validity[i];
@@ -850,7 +850,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 * such as UUID.
 			 */
 			const uint8 value_bytes = column_values->decompression_type;
-			const char *restrict src = column_values->buffers[1];
+			const char *src = column_values->buffers[1];
 			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
@@ -867,7 +867,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 */
 			const uint8 value_bytes = column_values->decompression_type;
 			Assert(value_bytes <= SIZEOF_DATUM);
-			const char *restrict src = column_values->buffers[1];
+			const char *src = column_values->buffers[1];
 			memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);

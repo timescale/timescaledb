@@ -49,7 +49,7 @@ vector_array_predicate_impl(VectorPredicate *vector_const_predicate, bool is_or,
 
 	const char *array_data = (const char *) ARR_DATA_PTR(arr);
 	const size_t nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
-	const uint64 *restrict array_null_bitmap = (uint64 *) ARR_NULLBITMAP(arr);
+	const uint64 *array_null_bitmap = (uint64 *) ARR_NULLBITMAP(arr);
 
 	for (size_t array_index = 0; array_index < nitems; array_index++)
 	{

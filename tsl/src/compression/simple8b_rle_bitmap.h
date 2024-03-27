@@ -22,23 +22,23 @@ typedef struct Simple8bRleBitmap
 } Simple8bRleBitmap;
 
 pg_attribute_always_inline static bool
-simple8brle_bitmap_get_at(Simple8bRleBitmap *bitmap, uint16 i)
+simple8brle_bitmap_get_at(const Simple8bRleBitmap *bitmap, uint16 i)
 {
 	/* We have some padding on the right but we shouldn't overrun it. */
 	Assert(i < ((bitmap->num_elements + 63) / 64 + 1) * 64);
 
-	return ((bool *restrict) bitmap->data)[i];
+	return ((const bool *) bitmap->data)[i];
 }
 
 pg_attribute_always_inline static uint16
-simple8brle_bitmap_prefix_sum(Simple8bRleBitmap *bitmap, uint16 i)
+simple8brle_bitmap_prefix_sum(const Simple8bRleBitmap *bitmap, uint16 i)
 {
 	Assert(i < ((bitmap->num_elements + 63) / 64 + 1) * 64);
-	return ((uint16 *restrict) bitmap->data)[i];
+	return ((const uint16 *) bitmap->data)[i];
 }
 
 pg_attribute_always_inline static uint16
-simple8brle_bitmap_num_ones(Simple8bRleBitmap *bitmap)
+simple8brle_bitmap_num_ones(const Simple8bRleBitmap *bitmap)
 {
 	return bitmap->num_ones;
 }
