@@ -65,7 +65,7 @@ extern void PGDLLEXPORT _PG_init(void);
 static void
 tsl_xact_event(XactEvent event, void *arg)
 {
-	compressionam_xact_event(event, arg);
+	hyperstore_xact_event(event, arg);
 }
 
 /*
@@ -172,7 +172,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.decompress_target_segments = decompress_target_segments,
-	.compressionam_handler = compressionam_handler,
+	.hyperstore_handler = hyperstore_handler,
 	.is_compressed_tid = tsl_is_compressed_tid,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
