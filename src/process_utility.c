@@ -3321,7 +3321,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = castNode(AlterTableStmt, args->parsetree);
 	Oid relid = AlterTableLookupRelation(stmt, NoLock);
-	bool to_compressionam = (strcmp(cmd->name, "hyperstore") == 0);
+	bool to_hyperstore = (strcmp(cmd->name, "hyperstore") == 0);
 	Cache *hcache;
 	Hypertable *ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
 	if (ht)
@@ -3330,7 +3330,7 @@ process_set_access_method(AlterTableCmd *cmd, ProcessUtilityArgs *args)
 		 * are setting the access method to be a hyperstore. */
 		DefElem *elem = makeDefElemExtended(EXTENSION_NAMESPACE,
 											"compress",
-											(Node *) makeInteger(to_compressionam),
+											(Node *) makeInteger(to_hyperstore),
 											DEFELEM_UNSPEC,
 											-1);
 
