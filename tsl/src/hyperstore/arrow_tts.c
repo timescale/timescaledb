@@ -53,7 +53,7 @@ arrow_slot_get_attribute_offset_map(TupleTableSlot *slot)
 	/* Get the mappings from the relation cache, but put them in the slot's
 	 * memory context since the cache might become invalidated and rebuilt. */
 	const Relation rel = RelationIdGetRelation(relid);
-	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 
 	for (int i = 0; i < caminfo->num_columns; i++)
 	{

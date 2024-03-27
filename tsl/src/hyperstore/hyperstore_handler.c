@@ -52,14 +52,14 @@
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 
-static const TableAmRoutine compressionam_methods;
-static void convert_to_compressionam_finish(Oid relid);
+static const TableAmRoutine hyperstore_methods;
+static void convert_to_hyperstore_finish(Oid relid);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transcation */
 
 #define COMPRESSION_AM_INFO_SIZE(natts)                                                            \
-	(sizeof(CompressionAmInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
+	(sizeof(HyperstoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
 
 static int32
 get_chunk_id_from_relid(Oid relid)
@@ -76,18 +76,18 @@ static const TableAmRoutine *
 switch_to_heapam(Relation rel)
 {
 	const TableAmRoutine *tableam = rel->rd_tableam;
-	Assert(tableam == compressionam_routine());
+	Assert(tableam == hyperstore_routine());
 	rel->rd_tableam = GetHeapamTableAmRoutine();
 	return tableam;
 }
 
-static CompressionAmInfo *
-lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok,
-									bool *compressed_relation_created)
+static HyperstoreInfo *
+lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
+								 bool *compressed_relation_created)
 {
 	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
 
-	CompressionAmInfo *caminfo;
+	HyperstoreInfo *caminfo;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
 	Oid hyper_relid = ts_hypertable_id_to_relid(hyper_id, false);
@@ -194,20 +194,19 @@ lazy_build_compressionam_info_cache(Relation rel, bool missing_compressed_ok,
 	return caminfo;
 }
 
-CompressionAmInfo *
-RelationGetCompressionAmInfo(Relation rel)
+HyperstoreInfo *
+RelationGetHyperstoreInfo(Relation rel)
 {
 	if (NULL == rel->rd_amcache)
-		rel->rd_amcache = lazy_build_compressionam_info_cache(rel, false, NULL);
+		rel->rd_amcache = lazy_build_hyperstore_info_cache(rel, false, NULL);
 
-	Assert(rel->rd_amcache &&
-		   OidIsValid(((CompressionAmInfo *) rel->rd_amcache)->compressed_relid));
+	Assert(rel->rd_amcache && OidIsValid(((HyperstoreInfo *) rel->rd_amcache)->compressed_relid));
 
 	return rel->rd_amcache;
 }
 
 static void
-build_segment_and_orderby_bms(const CompressionAmInfo *caminfo, Bitmapset **segmentby,
+build_segment_and_orderby_bms(const HyperstoreInfo *caminfo, Bitmapset **segmentby,
 							  Bitmapset **orderby)
 {
 	*segmentby = NULL;
@@ -230,7 +229,7 @@ build_segment_and_orderby_bms(const CompressionAmInfo *caminfo, Bitmapset **segm
  * ------------------------------------------------------------------------
  */
 static const TupleTableSlotOps *
-compressionam_slot_callbacks(Relation relation)
+hyperstore_slot_callbacks(Relation relation)
 {
 	return &TTSOpsArrowTuple;
 }
@@ -292,7 +291,7 @@ initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 	 */
 	if (NULL != keys && nkeys > 0)
 	{
-		const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(scan->rs_base.rs_rd);
+		const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(scan->rs_base.rs_rd);
 
 		for (int i = 0; i < nkeys; i++)
 		{
@@ -343,11 +342,11 @@ get_scan_type(uint32 flags)
 }
 
 static TableScanDesc
-compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
-						ParallelTableScanDesc parallel_scan, uint32 flags)
+hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
+					 ParallelTableScanDesc parallel_scan, uint32 flags)
 {
 	CompressionScanDesc scan;
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
 	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) parallel_scan;
 
 	RelationIncrementReferenceCount(relation);
@@ -420,8 +419,8 @@ compressionam_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey
 }
 
 static void
-compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_strat,
-					 bool allow_sync, bool allow_pagemode)
+hyperstore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_strat,
+				  bool allow_sync, bool allow_pagemode)
 {
 	CompressionScanDesc scan = (CompressionScanDesc) sscan;
 
@@ -439,7 +438,7 @@ compressionam_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool all
 }
 
 static void
-compressionam_endscan(TableScanDesc sscan)
+hyperstore_endscan(TableScanDesc sscan)
 {
 	CompressionScanDesc scan = (CompressionScanDesc) sscan;
 
@@ -467,7 +466,7 @@ compressionam_endscan(TableScanDesc sscan)
 }
 
 static bool
-compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
+hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
 {
 	CompressionScanDesc scan = (CompressionScanDesc) sscan;
 	TupleTableSlot *child_slot;
@@ -503,7 +502,7 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 		{
 			ExecClearTuple(slot);
 			scan->compressed_read_done = true;
-			return compressionam_getnextslot(sscan, direction, slot);
+			return hyperstore_getnextslot(sscan, direction, slot);
 		}
 
 		Assert(ItemPointerIsValid(&child_slot->tts_tid));
@@ -522,7 +521,7 @@ compressionam_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTab
 }
 
 static Size
-compressionam_parallelscan_estimate(Relation rel)
+hyperstore_parallelscan_estimate(Relation rel)
 {
 	return sizeof(CompressionParallelScanDescData);
 }
@@ -533,10 +532,10 @@ compressionam_parallelscan_estimate(Relation rel)
  * relation.
  */
 static Size
-compressionam_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
+hyperstore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 {
 	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_initialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
@@ -554,10 +553,10 @@ compressionam_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
  * when `pscan` was initialized by parallelscan_initialize.
  */
 static void
-compressionam_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
+hyperstore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 {
 	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_reinitialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
@@ -569,14 +568,14 @@ compressionam_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc psca
 }
 
 static void
-compressionam_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
+hyperstore_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
 {
 	FEATURE_NOT_SUPPORTED;
 }
 
 static void
-compressionam_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, CommandId cid,
-						   int options, BulkInsertStateData *bistate)
+hyperstore_multi_insert(Relation relation, TupleTableSlot **slots, int ntuples, CommandId cid,
+						int options, BulkInsertStateData *bistate)
 {
 	/* Inserts only supported in non-compressed relation, so simply forward to the heap AM */
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
@@ -604,10 +603,10 @@ typedef struct IndexFetchComprData
  * ------------------------------------------------------------------------
  */
 static IndexFetchTableData *
-compressionam_index_fetch_begin(Relation rel)
+hyperstore_index_fetch_begin(Relation rel)
 {
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 
 	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 	cscan->h_base.rel = rel;
@@ -624,7 +623,7 @@ compressionam_index_fetch_begin(Relation rel)
 }
 
 static void
-compressionam_index_fetch_reset(IndexFetchTableData *scan)
+hyperstore_index_fetch_reset(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	Relation rel = scan->rel;
@@ -638,7 +637,7 @@ compressionam_index_fetch_reset(IndexFetchTableData *scan)
 }
 
 static void
-compressionam_index_fetch_end(IndexFetchTableData *scan)
+hyperstore_index_fetch_end(IndexFetchTableData *scan)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	Relation rel = scan->rel;
@@ -657,9 +656,8 @@ compressionam_index_fetch_end(IndexFetchTableData *scan)
  * Return tuple for given TID via index scan.
  */
 static bool
-compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid,
-								Snapshot snapshot, TupleTableSlot *slot, bool *call_again,
-								bool *all_dead)
+hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, Snapshot snapshot,
+							 TupleTableSlot *slot, bool *call_again, bool *all_dead)
 {
 	IndexFetchComprData *cscan = (IndexFetchComprData *) scan;
 	TupleTableSlot *child_slot;
@@ -749,8 +747,8 @@ compressionam_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer ti
  */
 
 static bool
-compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapshot,
-								TupleTableSlot *slot)
+hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapshot,
+							 TupleTableSlot *slot)
 {
 	bool result;
 	ItemPointerData decoded_tid;
@@ -773,7 +771,7 @@ compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot sna
 	}
 	else
 	{
-		CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
 		Relation child_rel = table_open(caminfo->compressed_relid, AccessShareLock);
 		TupleTableSlot *child_slot =
 			arrow_slot_get_compressed_slot(slot, RelationGetDescr(child_rel));
@@ -791,7 +789,7 @@ compressionam_fetch_row_version(Relation relation, ItemPointer tid, Snapshot sna
 }
 
 static bool
-compressionam_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
+hyperstore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
 	ItemPointerData ctid;
@@ -810,9 +808,9 @@ compressionam_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 }
 
 static bool
-compressionam_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
+hyperstore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
 {
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 	bool result;
 
 	if (is_compressed_tid(&slot->tts_tid))
@@ -858,11 +856,11 @@ compressionam_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snaps
  * to delete.
  */
 static TransactionId
-compressionam_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
+hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
 	TM_IndexDeleteOp noncompr_delstate = *delstate;
 	TM_IndexDeleteOp compr_delstate = *delstate;
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 	/* Hash table setup for TID deduplication */
 	typedef struct TidEntry
 	{
@@ -1085,8 +1083,8 @@ typedef struct ConversionState
 static ConversionState *conversionstate = NULL;
 
 static void
-compressionam_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid, int options,
-						   BulkInsertStateData *bistate)
+hyperstore_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId cid, int options,
+						BulkInsertStateData *bistate)
 {
 	if (conversionstate)
 	{
@@ -1113,8 +1111,8 @@ compressionam_tuple_insert(Relation relation, TupleTableSlot *slot, CommandId ci
 }
 
 static void
-compressionam_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, CommandId cid,
-									   int options, BulkInsertStateData *bistate, uint32 specToken)
+hyperstore_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, CommandId cid,
+									int options, BulkInsertStateData *bistate, uint32 specToken)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
 	relation->rd_tableam
@@ -1123,8 +1121,8 @@ compressionam_tuple_insert_speculative(Relation relation, TupleTableSlot *slot, 
 }
 
 static void
-compressionam_tuple_complete_speculative(Relation relation, TupleTableSlot *slot, uint32 specToken,
-										 bool succeeded)
+hyperstore_tuple_complete_speculative(Relation relation, TupleTableSlot *slot, uint32 specToken,
+									  bool succeeded)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
 	relation->rd_tableam->tuple_complete_speculative(relation, slot, specToken, succeeded);
@@ -1132,8 +1130,8 @@ compressionam_tuple_complete_speculative(Relation relation, TupleTableSlot *slot
 }
 
 static TM_Result
-compressionam_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapshot snapshot,
-						   Snapshot crosscheck, bool wait, TM_FailureData *tmfd, bool changingPart)
+hyperstore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapshot snapshot,
+						Snapshot crosscheck, bool wait, TM_FailureData *tmfd, bool changingPart)
 {
 	if (!is_compressed_tid(tid))
 	{
@@ -1160,9 +1158,9 @@ typedef bool TU_UpdateIndexes;
 #endif
 
 static TM_Result
-compressionam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slot, CommandId cid,
-						   Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd,
-						   LockTupleMode *lockmode, TU_UpdateIndexes *update_indexes)
+hyperstore_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *slot, CommandId cid,
+						Snapshot snapshot, Snapshot crosscheck, bool wait, TM_FailureData *tmfd,
+						LockTupleMode *lockmode, TU_UpdateIndexes *update_indexes)
 {
 	if (!is_compressed_tid(otid))
 	{
@@ -1192,15 +1190,15 @@ compressionam_tuple_update(Relation relation, ItemPointer otid, TupleTableSlot *
 }
 
 static TM_Result
-compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
-						 TupleTableSlot *slot, CommandId cid, LockTupleMode mode,
-						 LockWaitPolicy wait_policy, uint8 flags, TM_FailureData *tmfd)
+hyperstore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, TupleTableSlot *slot,
+					  CommandId cid, LockTupleMode mode, LockWaitPolicy wait_policy, uint8 flags,
+					  TM_FailureData *tmfd)
 {
 	TM_Result result;
 
 	if (is_compressed_tid(tid))
 	{
-		CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
 		/* SELECT FOR UPDATE takes RowShareLock, so assume this
 		 * lockmode. Another option to consider is take same lock as currently
 		 * held on the non-compressed relation */
@@ -1253,10 +1251,10 @@ compressionam_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot,
 }
 
 static void
-compressionam_finish_bulk_insert(Relation rel, int options)
+hyperstore_finish_bulk_insert(Relation rel, int options)
 {
 	if (conversionstate)
-		convert_to_compressionam_finish(RelationGetRelid(rel));
+		convert_to_hyperstore_finish(RelationGetRelid(rel));
 }
 
 /* ------------------------------------------------------------------------
@@ -1271,9 +1269,9 @@ typedef RelFileNode RelFileLocator;
 #endif
 
 static void
-compressionam_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrlocator,
-										   char persistence, TransactionId *freezeXid,
-										   MultiXactId *minmulti)
+hyperstore_relation_set_new_filelocator(Relation rel, const RelFileLocator *newrlocator,
+										char persistence, TransactionId *freezeXid,
+										MultiXactId *minmulti)
 {
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	rel->rd_tableam->relation_set_new_filelocator(rel,
@@ -1285,31 +1283,31 @@ compressionam_relation_set_new_filelocator(Relation rel, const RelFileLocator *n
 }
 
 static void
-compressionam_relation_nontransactional_truncate(Relation rel)
+hyperstore_relation_nontransactional_truncate(Relation rel)
 {
 	RelationTruncate(rel, 0);
 }
 
 static void
-compressionam_relation_copy_data(Relation rel, const RelFileLocator *newrlocator)
+hyperstore_relation_copy_data(Relation rel, const RelFileLocator *newrlocator)
 {
 	FEATURE_NOT_SUPPORTED;
 }
 
 static void
-compressionam_relation_copy_for_cluster(Relation OldCompression, Relation NewCompression,
-										Relation OldIndex, bool use_sort, TransactionId OldestXmin,
-										TransactionId *xid_cutoff, MultiXactId *multi_cutoff,
-										double *num_tuples, double *tups_vacuumed,
-										double *tups_recently_dead)
+hyperstore_relation_copy_for_cluster(Relation OldCompression, Relation NewCompression,
+									 Relation OldIndex, bool use_sort, TransactionId OldestXmin,
+									 TransactionId *xid_cutoff, MultiXactId *multi_cutoff,
+									 double *num_tuples, double *tups_vacuumed,
+									 double *tups_recently_dead)
 {
 	FEATURE_NOT_SUPPORTED;
 }
 
 static void
-compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
+hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
 
@@ -1347,8 +1345,8 @@ compressionam_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrateg
  * compressed relation is sampled.
  */
 static bool
-compressionam_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
-									  BufferAccessStrategy bstrategy)
+hyperstore_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
+								   BufferAccessStrategy bstrategy)
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
 	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
@@ -1395,8 +1393,8 @@ compressionam_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
  * for compressed tuples.
  */
 static bool
-compressionam_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin,
-									  double *liverows, double *deadrows, TupleTableSlot *slot)
+hyperstore_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin, double *liverows,
+								   double *deadrows, TupleTableSlot *slot)
 {
 	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
 	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
@@ -1594,11 +1592,11 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
  * functionality in the index scan callbacks to return all values.
  */
 static double
-compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
-									 IndexInfo *indexInfo, bool allow_sync, bool anyvisible,
-									 bool progress, BlockNumber start_blockno,
-									 BlockNumber numblocks, IndexBuildCallback callback,
-									 void *callback_state, TableScanDesc scan)
+hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, IndexInfo *indexInfo,
+								  bool allow_sync, bool anyvisible, bool progress,
+								  BlockNumber start_blockno, BlockNumber numblocks,
+								  IndexBuildCallback callback, void *callback_state,
+								  TableScanDesc scan)
 {
 	/*
 	 * We can be called from ProcessUtility with a hypertable because we need
@@ -1611,7 +1609,7 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 	if (ts_is_hypertable(relation->rd_id))
 		return 0.0;
 
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
 
 	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
 	IndexCallbackState icstate = {
@@ -1695,9 +1693,8 @@ compressionam_index_build_range_scan(Relation relation, Relation indexRelation,
 }
 
 static void
-compressionam_index_validate_scan(Relation compressionRelation, Relation indexRelation,
-								  IndexInfo *indexInfo, Snapshot snapshot,
-								  ValidateIndexState *state)
+hyperstore_index_validate_scan(Relation compressionRelation, Relation indexRelation,
+							   IndexInfo *indexInfo, Snapshot snapshot, ValidateIndexState *state)
 {
 	FEATURE_NOT_SUPPORTED;
 }
@@ -1707,13 +1704,13 @@ compressionam_index_validate_scan(Relation compressionRelation, Relation indexRe
  * ------------------------------------------------------------------------
  */
 static bool
-compressionam_relation_needs_toast_table(Relation rel)
+hyperstore_relation_needs_toast_table(Relation rel)
 {
 	return false;
 }
 
 static Oid
-compressionam_relation_toast_am(Relation rel)
+hyperstore_relation_toast_am(Relation rel)
 {
 	FEATURE_NOT_SUPPORTED;
 	return InvalidOid;
@@ -1742,9 +1739,9 @@ compressionam_relation_toast_am(Relation rel)
  * set in process utility where the ANALYZE command is captured.
  */
 static uint64
-compressionam_relation_size(Relation rel, ForkNumber forkNumber)
+hyperstore_relation_size(Relation rel, ForkNumber forkNumber)
 {
-	CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 	uint64 ubytes = table_block_relation_size(rel, forkNumber);
 	/* For ANALYZE, need to return sum for both relations. */
 	Relation crel = try_relation_open(caminfo->compressed_relid, AccessShareLock);
@@ -1759,8 +1756,8 @@ compressionam_relation_size(Relation rel, ForkNumber forkNumber)
 }
 
 static void
-compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
-									 double *tuples, double *allvisfrac)
+hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
+								  double *tuples, double *allvisfrac)
 {
 	/*
 	 * We can be called from ProcessUtility with a hypertable because we need
@@ -1785,7 +1782,7 @@ compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumb
 	BlockNumber relallvisible;
 	Relation crel;
 
-	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	rel->rd_tableam->relation_estimate_size(rel, attr_widths, pages, tuples, allvisfrac);
@@ -1824,8 +1821,8 @@ compressionam_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumb
 }
 
 static void
-compressionam_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize, int32 sliceoffset,
-								int32 slicelength, struct varlena *result)
+hyperstore_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize, int32 sliceoffset,
+							 int32 slicelength, struct varlena *result)
 {
 	FEATURE_NOT_SUPPORTED;
 }
@@ -1836,15 +1833,15 @@ compressionam_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize, 
  */
 
 static bool
-compressionam_scan_sample_next_block(TableScanDesc scan, SampleScanState *scanstate)
+hyperstore_scan_sample_next_block(TableScanDesc scan, SampleScanState *scanstate)
 {
 	FEATURE_NOT_SUPPORTED;
 	return false;
 }
 
 static bool
-compressionam_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate,
-									 TupleTableSlot *slot)
+hyperstore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate,
+								  TupleTableSlot *slot)
 {
 	FEATURE_NOT_SUPPORTED;
 	return false;
@@ -1856,15 +1853,15 @@ compressionam_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanst
  * Need to setup the conversion state used to compress the data.
  */
 static void
-convert_to_compressionam(Oid relid)
+convert_to_hyperstore(Oid relid)
 {
 	MemoryContext oldcxt = MemoryContextSwitchTo(CurTransactionContext);
 	ConversionState *state = palloc0(sizeof(ConversionState));
 	Relation relation = table_open(relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	bool compress_chunk_created;
-	CompressionAmInfo *caminfo =
-		lazy_build_compressionam_info_cache(relation, true, &compress_chunk_created);
+	HyperstoreInfo *caminfo =
+		lazy_build_hyperstore_info_cache(relation, true, &compress_chunk_created);
 
 	state->relid = relid;
 
@@ -1977,7 +1974,7 @@ cleanup_compression_relations(void)
 }
 
 void
-compressionam_xact_event(XactEvent event, void *arg)
+hyperstore_xact_event(XactEvent event, void *arg)
 {
 	switch (event)
 	{
@@ -2024,7 +2021,7 @@ compressionam_xact_event(XactEvent event, void *arg)
 }
 
 static void
-convert_to_compressionam_finish(Oid relid)
+convert_to_hyperstore_finish(Oid relid)
 {
 	if (!conversionstate->tuplesortstate)
 	{
@@ -2095,7 +2092,7 @@ convert_to_compressionam_finish(Oid relid)
  * When this happens it is necessary to cleanup metadata.
  */
 static void
-convert_from_compressionam(Oid relid)
+convert_from_hyperstore(Oid relid)
 {
 	int32 chunk_id = get_chunk_id_from_relid(relid);
 	ts_compression_chunk_size_delete(chunk_id);
@@ -2106,19 +2103,19 @@ convert_from_compressionam(Oid relid)
 }
 
 void
-compressionam_alter_access_method_begin(Oid relid, bool to_other_am)
+hyperstore_alter_access_method_begin(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
-		convert_from_compressionam(relid);
+		convert_from_hyperstore(relid);
 	else
-		convert_to_compressionam(relid);
+		convert_to_hyperstore(relid);
 }
 
 /*
  * Called at the end of converting a chunk to a table access method.
  */
 void
-compressionam_alter_access_method_finish(Oid relid, bool to_other_am)
+hyperstore_alter_access_method_finish(Oid relid, bool to_other_am)
 {
 	if (to_other_am)
 		cleanup_compression_relations();
@@ -2132,15 +2129,15 @@ compressionam_alter_access_method_finish(Oid relid, bool to_other_am)
  * ------------------------------------------------------------------------
  */
 
-static const TableAmRoutine compressionam_methods = {
+static const TableAmRoutine hyperstore_methods = {
 	.type = T_TableAmRoutine,
 
-	.slot_callbacks = compressionam_slot_callbacks,
+	.slot_callbacks = hyperstore_slot_callbacks,
 
-	.scan_begin = compressionam_beginscan,
-	.scan_end = compressionam_endscan,
-	.scan_rescan = compressionam_rescan,
-	.scan_getnextslot = compressionam_getnextslot,
+	.scan_begin = hyperstore_beginscan,
+	.scan_end = hyperstore_endscan,
+	.scan_rescan = hyperstore_rescan,
+	.scan_getnextslot = hyperstore_getnextslot,
 #if PG14_GE
 	/*-----------
 	 * Optional functions to provide scanning for ranges of ItemPointers.
@@ -2154,44 +2151,44 @@ static const TableAmRoutine compressionam_methods = {
 	 * Parallel table scan related functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.parallelscan_estimate = compressionam_parallelscan_estimate,
-	.parallelscan_initialize = compressionam_parallelscan_initialize,
-	.parallelscan_reinitialize = compressionam_parallelscan_reinitialize,
+	.parallelscan_estimate = hyperstore_parallelscan_estimate,
+	.parallelscan_initialize = hyperstore_parallelscan_initialize,
+	.parallelscan_reinitialize = hyperstore_parallelscan_reinitialize,
 
 	/* ------------------------------------------------------------------------
 	 * Index Scan Callbacks
 	 * ------------------------------------------------------------------------
 	 */
-	.index_fetch_begin = compressionam_index_fetch_begin,
-	.index_fetch_reset = compressionam_index_fetch_reset,
-	.index_fetch_end = compressionam_index_fetch_end,
-	.index_fetch_tuple = compressionam_index_fetch_tuple,
+	.index_fetch_begin = hyperstore_index_fetch_begin,
+	.index_fetch_reset = hyperstore_index_fetch_reset,
+	.index_fetch_end = hyperstore_index_fetch_end,
+	.index_fetch_tuple = hyperstore_index_fetch_tuple,
 
 	/* ------------------------------------------------------------------------
 	 * Manipulations of physical tuples.
 	 * ------------------------------------------------------------------------
 	 */
-	.tuple_insert = compressionam_tuple_insert,
-	.tuple_insert_speculative = compressionam_tuple_insert_speculative,
-	.tuple_complete_speculative = compressionam_tuple_complete_speculative,
-	.multi_insert = compressionam_multi_insert,
-	.tuple_delete = compressionam_tuple_delete,
-	.tuple_update = compressionam_tuple_update,
-	.tuple_lock = compressionam_tuple_lock,
+	.tuple_insert = hyperstore_tuple_insert,
+	.tuple_insert_speculative = hyperstore_tuple_insert_speculative,
+	.tuple_complete_speculative = hyperstore_tuple_complete_speculative,
+	.multi_insert = hyperstore_multi_insert,
+	.tuple_delete = hyperstore_tuple_delete,
+	.tuple_update = hyperstore_tuple_update,
+	.tuple_lock = hyperstore_tuple_lock,
 
-	.finish_bulk_insert = compressionam_finish_bulk_insert,
+	.finish_bulk_insert = hyperstore_finish_bulk_insert,
 
 	/* ------------------------------------------------------------------------
 	 * Callbacks for non-modifying operations on individual tuples
 	 * ------------------------------------------------------------------------
 	 */
-	.tuple_fetch_row_version = compressionam_fetch_row_version,
+	.tuple_fetch_row_version = hyperstore_fetch_row_version,
 
-	.tuple_get_latest_tid = compressionam_get_latest_tid,
-	.tuple_tid_valid = compressionam_tuple_tid_valid,
-	.tuple_satisfies_snapshot = compressionam_tuple_satisfies_snapshot,
+	.tuple_get_latest_tid = hyperstore_get_latest_tid,
+	.tuple_tid_valid = hyperstore_tuple_tid_valid,
+	.tuple_satisfies_snapshot = hyperstore_tuple_satisfies_snapshot,
 #if PG14_GE
-	.index_delete_tuples = compressionam_index_delete_tuples,
+	.index_delete_tuples = hyperstore_index_delete_tuples,
 #endif
 
 /* ------------------------------------------------------------------------
@@ -2199,33 +2196,33 @@ static const TableAmRoutine compressionam_methods = {
  * ------------------------------------------------------------------------
  */
 #if PG16_GE
-	.relation_set_new_filelocator = compressionam_relation_set_new_filelocator,
+	.relation_set_new_filelocator = hyperstore_relation_set_new_filelocator,
 #else
-	.relation_set_new_filenode = compressionam_relation_set_new_filelocator,
+	.relation_set_new_filenode = hyperstore_relation_set_new_filelocator,
 #endif
-	.relation_nontransactional_truncate = compressionam_relation_nontransactional_truncate,
-	.relation_copy_data = compressionam_relation_copy_data,
-	.relation_copy_for_cluster = compressionam_relation_copy_for_cluster,
-	.relation_vacuum = compressionam_vacuum_rel,
-	.scan_analyze_next_block = compressionam_scan_analyze_next_block,
-	.scan_analyze_next_tuple = compressionam_scan_analyze_next_tuple,
-	.index_build_range_scan = compressionam_index_build_range_scan,
-	.index_validate_scan = compressionam_index_validate_scan,
+	.relation_nontransactional_truncate = hyperstore_relation_nontransactional_truncate,
+	.relation_copy_data = hyperstore_relation_copy_data,
+	.relation_copy_for_cluster = hyperstore_relation_copy_for_cluster,
+	.relation_vacuum = hyperstore_vacuum_rel,
+	.scan_analyze_next_block = hyperstore_scan_analyze_next_block,
+	.scan_analyze_next_tuple = hyperstore_scan_analyze_next_tuple,
+	.index_build_range_scan = hyperstore_index_build_range_scan,
+	.index_validate_scan = hyperstore_index_validate_scan,
 
 	/* ------------------------------------------------------------------------
 	 * Miscellaneous functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.relation_size = compressionam_relation_size,
-	.relation_needs_toast_table = compressionam_relation_needs_toast_table,
-	.relation_toast_am = compressionam_relation_toast_am,
-	.relation_fetch_toast_slice = compressionam_fetch_toast_slice,
+	.relation_size = hyperstore_relation_size,
+	.relation_needs_toast_table = hyperstore_relation_needs_toast_table,
+	.relation_toast_am = hyperstore_relation_toast_am,
+	.relation_fetch_toast_slice = hyperstore_fetch_toast_slice,
 
 	/* ------------------------------------------------------------------------
 	 * Planner related functions.
 	 * ------------------------------------------------------------------------
 	 */
-	.relation_estimate_size = compressionam_relation_estimate_size,
+	.relation_estimate_size = hyperstore_relation_estimate_size,
 
 	/* ------------------------------------------------------------------------
 	 * Executor related functions.
@@ -2236,18 +2233,18 @@ static const TableAmRoutine compressionam_methods = {
 	.scan_bitmap_next_block = NULL,
 	.scan_bitmap_next_tuple = NULL,
 
-	.scan_sample_next_block = compressionam_scan_sample_next_block,
-	.scan_sample_next_tuple = compressionam_scan_sample_next_tuple,
+	.scan_sample_next_block = hyperstore_scan_sample_next_block,
+	.scan_sample_next_tuple = hyperstore_scan_sample_next_tuple,
 };
 
 const TableAmRoutine *
-compressionam_routine(void)
+hyperstore_routine(void)
 {
-	return &compressionam_methods;
+	return &hyperstore_methods;
 }
 
 Datum
-compressionam_handler(PG_FUNCTION_ARGS)
+hyperstore_handler(PG_FUNCTION_ARGS)
 {
-	PG_RETURN_POINTER(&compressionam_methods);
+	PG_RETURN_POINTER(&hyperstore_methods);
 }
