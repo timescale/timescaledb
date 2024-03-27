@@ -18,6 +18,9 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/vector_predicates.h"
 
+/*
+ * Create a single-value ArrowArray of an arithmetic type.
+ */
 static ArrowArray *
 make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull)
 {
@@ -26,7 +29,8 @@ make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull
 		ArrowArray arrow;
 		uint64 arrow_buffers_array_storage[2];
 		uint64 validity_buffer[1];
-		uint64 values_buffer[8 /* 64-byte padding as required by Arrow. */];
+		/* The value buffer has 64-byte padding as required by Arrow. */
+		uint64 values_buffer[8];
 	};
 
 	struct ArrowWithBuffers *with_buffers = palloc0(sizeof(struct ArrowWithBuffers));
@@ -73,6 +77,9 @@ make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull
 	return arrow;
 }
 
+/*
+ * Create a single-value ArrowArray of text.
+ */
 static ArrowArray *
 make_single_value_arrow_text(Datum datum, bool isnull)
 {
@@ -82,7 +89,8 @@ make_single_value_arrow_text(Datum datum, bool isnull)
 		uint64 arrow_buffers_array_storage[3];
 		uint64 validity_buffer[1];
 		uint32 offsets_buffer[2];
-		uint64 values_buffer[8 /* 64-byte padding as required by Arrow. */];
+		/* The value buffer has 64-byte padding as required by Arrow. */
+		uint64 values_buffer[8];
 	};
 
 	struct ArrowWithBuffers *with_buffers = palloc0(sizeof(struct ArrowWithBuffers));

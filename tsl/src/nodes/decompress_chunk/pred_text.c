@@ -78,7 +78,8 @@ vector_const_textne(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 
 /*
  * Generate specializations for LIKE functions based on database encoding. This
- * follows the Postgres code from backend/utils/adt/like.c.
+ * follows the Postgres code from backend/utils/adt/like.c, version 15.0,
+ * commit sha 2a7ce2e2ce474504a707ec03e128fde66cfb8b48
  */
 
 #define LIKE_TRUE 1
@@ -117,6 +118,11 @@ vector_const_like_impl(const ArrowArray *arrow, const Datum constdatum, uint64 *
 		{
 			const size_t row = outer * 64 + inner;
 			const size_t bit_index = inner;
+			/*
+			 * The inner loop could have been an inline function, but it would have 5
+			 * parameters and one of them in/out, so a macro probably has better
+			 * readability.
+			 */
 #define INNER_LOOP                                                                                 \
 	const uint32 start = offsets[row];                                                             \
 	const uint32 end = offsets[row + 1];                                                           \
@@ -148,12 +154,12 @@ vector_const_like_impl(const ArrowArray *arrow, const Datum constdatum, uint64 *
 void
 vector_const_textlike_utf8(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result)
 {
-	vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, true);
+	vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, /* should_match = */ true);
 }
 
 void
 vector_const_textnlike_utf8(const ArrowArray *arrow, const Datum constdatum,
 							uint64 *restrict result)
 {
-	vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, false);
+	vector_const_like_impl(arrow, constdatum, result, UTF8_MatchText, /* should_match = */ false);
 }

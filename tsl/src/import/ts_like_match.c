@@ -10,7 +10,8 @@
  * PostgreSQL License. Please see the NOTICE at the top level
  * directory for a copy of the PostgreSQL License.
  *
- * This is a copy of backend/utils/adt/like_match.c.
+ * This is a copy of backend/utils/adt/like_match.c from PG 15.0, git commit sha
+ * 2a7ce2e2ce474504a707ec03e128fde66cfb8b48.
  */
 
 /*--------------------
