@@ -47,9 +47,9 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 	char typalign;
 	get_typlenbyvalalign(ARR_ELEMTYPE(arr), &typlen, &typbyval, &typalign);
 
-	const char *restrict array_data = (const char *) ARR_DATA_PTR(arr);
+	const char *array_data = (const char *) ARR_DATA_PTR(arr);
 	const size_t nitems = ArrayGetNItems(ARR_NDIM(arr), ARR_DIMS(arr));
-	const uint64 *restrict array_null_bitmap = (uint64 *) ARR_NULLBITMAP(arr);
+	const uint64 *array_null_bitmap = (uint64 *) ARR_NULLBITMAP(arr);
 
 	for (size_t array_index = 0; array_index < nitems; array_index++)
 	{
@@ -79,7 +79,7 @@ vector_array_predicate(VectorPredicate *vector_const_predicate, bool is_or,
 		}
 		Datum constvalue = fetch_att(array_data, typbyval, typlen);
 		array_data = att_addlength_pointer(array_data, typlen, array_data);
-		array_data = (char *restrict) att_align_nominal(array_data, typalign);
+		array_data = (const char *) att_align_nominal(array_data, typalign);
 
 		/*
 		 * For OR, we also need an intermediate storage for predicate result
