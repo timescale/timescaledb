@@ -111,11 +111,12 @@ apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path, 
 		 * directly */
 		decompress_path->perform_vectorized_aggregation = true;
 
-		decompress_path->custom_path.path.pathtarget = aggregation_path->path.pathtarget;
-
-		/* The decompress chunk node can perform the aggregation directly. No need for a dedicated
-		 * agg node on top. */
-		return true;
+		//		decompress_path->custom_path.path.pathtarget = aggregation_path->path.pathtarget;
+		//
+		//		/* The decompress chunk node can perform the aggregation directly. No need for a
+		//dedicated
+		//		 * agg node on top. */
+		//		return true;
 	}
 
 	/* PostgreSQL should handle the aggregation. Regular agg node on top is required. */
@@ -204,4 +205,7 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 	{
 		stmt->planTree = insert_vector_agg_node(stmt->planTree);
 	}
+
+	// fprintf(stderr, "postprocessed:\n");
+	// my_print(stmt->planTree);
 }

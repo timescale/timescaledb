@@ -1083,11 +1083,14 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
 	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
 	 */
-	if (dcpath->perform_vectorized_aggregation)
-	{
-		decompress_plan->custom_scan_tlist = decompressed_tlist;
-		decompress_plan->scan.plan.targetlist = decompressed_tlist;
-	}
+	//	if (dcpath->perform_vectorized_aggregation)
+	//	{
+	//		decompress_plan->custom_scan_tlist = decompressed_tlist;
+	//		decompress_plan->scan.plan.targetlist = decompressed_tlist;
+
+	//		fprintf(stderr, "when assigned, the decompressed tlist was:\n");
+	//		my_print(decompressed_tlist);
+	//	}
 
 	//	if (dcpath->perform_vectorized_aggregation)
 	//	{

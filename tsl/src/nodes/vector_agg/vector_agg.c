@@ -94,6 +94,38 @@ CustomBuildTargetList(List *tlist, Index varNo)
 	return result_tlist;
 }
 
+static Node *
+replace_special_vars_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return NULL;
+	}
+
+	if (!IsA(node, Var))
+	{
+		return expression_tree_mutator(node, replace_special_vars_mutator, context);
+	}
+
+	Var *var = castNode(Var, node);
+	if (var->varno != OUTER_VAR)
+	{
+		return node;
+	}
+
+	var = copyObject(var);
+	var->varno = DatumGetInt32(PointerGetDatum(context));
+	return (Node *) var;
+}
+
+static List *
+replace_special_vars(List *input, int target_varno)
+{
+	return castNode(List,
+					replace_special_vars_mutator((Node *) input,
+												 DatumGetPointer(Int32GetDatum(target_varno))));
+}
+
 Plan *
 vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 {
@@ -101,15 +133,18 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	custom->custom_plans = list_make1(decompress_chunk);
 	custom->methods = &scan_methods;
 	custom->scan.plan.targetlist = CustomBuildTargetList(agg->plan.targetlist, INDEX_VAR);
-	// custom->scan.plan.targetlist = agg->plan.targetlist;
+	// custom->scan.plan.targetlist = replace_special_vars(agg->plan.targetlist);
+	//  custom->scan.plan.targetlist = agg->plan.targetlist;
 	//	fprintf(stderr, "source agg tagetlist:\n");
 	//	my_print(agg->plan.targetlist);
 	//	fprintf(stderr, "build targetlist:\n");
 	//	my_print(custom->scan.plan.targetlist);
-	//  custom->custom_scan_tlist = CustomBuildTargetList(decompress_chunk->scan.plan.targetlist,
-	//  INDEX_VAR);
-	//  custom->custom_scan_tlist = decompress_chunk->scan.plan.targetlist;
-	custom->custom_scan_tlist = agg->plan.targetlist;
+	//   custom->custom_scan_tlist = CustomBuildTargetList(decompress_chunk->scan.plan.targetlist,
+	//   INDEX_VAR);
+	//   custom->custom_scan_tlist = decompress_chunk->scan.plan.targetlist;
+	// custom->custom_scan_tlist = custom->scan.plan.targetlist;
+	custom->custom_scan_tlist =
+		replace_special_vars(agg->plan.targetlist, decompress_chunk->scan.scanrelid);
 
 	// custom->scan.plan.lefttree = agg->plan.lefttree;
 
