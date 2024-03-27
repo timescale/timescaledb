@@ -79,7 +79,9 @@ vector_const_textne(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 /*
  * Generate specializations for LIKE functions based on database encoding. This
  * follows the Postgres code from backend/utils/adt/like.c, version 15.0,
- * commit sha 2a7ce2e2ce474504a707ec03e128fde66cfb8b48
+ * commit sha 2a7ce2e2ce474504a707ec03e128fde66cfb8b48.
+ * The copy of PG code begins here.
+ * ----------------------------------------------------------------------------
  */
 
 #define LIKE_TRUE 1
@@ -97,6 +99,11 @@ vector_const_textne(const ArrowArray *arrow, const Datum constdatum, uint64 *res
 #define MatchText UTF8_MatchText
 
 #include "import/ts_like_match.c"
+
+/*
+ * ----------------------------------------------------------------------------
+ * The copy of PG code ends here.
+ */
 
 static void
 vector_const_like_impl(const ArrowArray *arrow, const Datum constdatum, uint64 *restrict result,
