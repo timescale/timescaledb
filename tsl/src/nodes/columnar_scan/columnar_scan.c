@@ -63,7 +63,7 @@ match_relvar(Expr *expr, Index relid)
 }
 
 static ScanKey
-build_scan_keys(const CompressionAmInfo *caminfo, Index relid, List *clauses, int *num_keys,
+build_scan_keys(const HyperstoreInfo *caminfo, Index relid, List *clauses, int *num_keys,
 				List **scankey_quals)
 {
 	ListCell *lc;
@@ -691,7 +691,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	ColumnarScanState *cstate = (ColumnarScanState *) state;
 	Scan *scan = (Scan *) state->ss.ps.plan;
 	Relation rel = state->ss.ss_currentRelation;
-	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(rel);
+	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
 
 	/* The CustomScan state always creates a scan slot of type TTSOpsVirtual,
 	 * even if one sets scan->scanrelid to a valid index to indicate scan of a
@@ -969,7 +969,7 @@ is_not_runtime_constant(Node *node)
  * commuted copy. If not, return NULL.
  */
 static Node *
-make_vectorized_qual(Node *qual, const CompressionAmInfo *caminfo)
+make_vectorized_qual(Node *qual, const HyperstoreInfo *caminfo)
 {
 	/*
 	 * Currently we vectorize some "Var op Const" binary predicates,
@@ -1099,7 +1099,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
 	Relation relation = RelationIdGetRelation(rte->relid);
-	const CompressionAmInfo *caminfo = RelationGetCompressionAmInfo(relation);
+	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
 	List *vectorized_quals = NIL;
 	List *nonvectorized_quals = NIL;
 	ListCell *lc;
