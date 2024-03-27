@@ -6,18 +6,6 @@
 
 #include "utils.h"
 
-static void
-fill_values_text(int index, Datum *values, bool *nulls, char *value)
-{
-	if (value)
-	{
-		values[AttrNumberGetAttrOffset(index)] = PointerGetDatum(cstring_to_text(value));
-		nulls[AttrNumberGetAttrOffset(index)] = false;
-	}
-	else
-		nulls[AttrNumberGetAttrOffset(index)] = true;
-}
-
 enum
 {
 	Anum_cagg_validate_query_valid = 1,
@@ -29,31 +17,37 @@ enum
 	_Anum_cagg_validate_query_max
 };
 
+#define Natts_cagg_validate_query (_Anum_cagg_validate_query_max - 1)
+
 static Datum
 create_cagg_validate_query_datum(TupleDesc tupdesc, const bool is_valid_query,
 								 const ErrorData *edata)
 {
-	Datum values[_Anum_cagg_validate_query_max] = { 0 };
-	bool nulls[_Anum_cagg_validate_query_max] = { false };
+	NullableDatum datums[Natts_cagg_validate_query] = { { 0 } };
 	HeapTuple tuple;
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
-	values[AttrNumberGetAttrOffset(Anum_cagg_validate_query_valid)] = BoolGetDatum(is_valid_query);
+	ts_datum_set_bool(Anum_cagg_validate_query_valid, datums, is_valid_query);
+	ts_datum_set_text_from_cstring(Anum_cagg_validate_query_error_level,
+								   datums,
+								   edata->elevel > 0 ? error_severity(edata->elevel) : NULL);
+	ts_datum_set_text_from_cstring(Anum_cagg_validate_query_error_code,
+								   datums,
+								   edata->sqlerrcode > 0 ? unpack_sql_state(edata->sqlerrcode) :
+														   NULL);
+	ts_datum_set_text_from_cstring(Anum_cagg_validate_query_error_message,
+								   datums,
+								   edata->message ? edata->message : NULL);
+	ts_datum_set_text_from_cstring(Anum_cagg_validate_query_error_detail,
+								   datums,
+								   edata->detail ? edata->detail : NULL);
+	ts_datum_set_text_from_cstring(Anum_cagg_validate_query_error_hint,
+								   datums,
+								   edata->hint ? edata->hint : NULL);
 
-	fill_values_text(Anum_cagg_validate_query_error_level,
-					 values,
-					 nulls,
-					 edata->elevel > 0 ? (char *) error_severity(edata->elevel) : NULL);
-	fill_values_text(Anum_cagg_validate_query_error_code,
-					 values,
-					 nulls,
-					 edata->sqlerrcode > 0 ? unpack_sql_state(edata->sqlerrcode) : NULL);
-	fill_values_text(Anum_cagg_validate_query_error_message, values, nulls, edata->message);
-	fill_values_text(Anum_cagg_validate_query_error_detail, values, nulls, edata->detail);
-	fill_values_text(Anum_cagg_validate_query_error_hint, values, nulls, edata->hint);
-
-	tuple = heap_form_tuple(tupdesc, values, nulls);
+	Assert(tupdesc->natts == Natts_cagg_validate_query);
+	tuple = ts_heap_form_tuple(tupdesc, datums);
 
 	return HeapTupleGetDatum(tuple);
 }

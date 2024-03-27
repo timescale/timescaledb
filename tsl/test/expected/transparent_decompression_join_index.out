@@ -24,6 +24,7 @@ insert into test values
 create table test_copy as select * from test;
 -- compress the chunk
 alter table test set (timescaledb.compress, timescaledb.compress_segmentby='a, b');
+NOTICE:  default order by for hypertable "test" is set to ""time" DESC"
 select compress_chunk(show_chunks('test'));
              compress_chunk             
 ----------------------------------------

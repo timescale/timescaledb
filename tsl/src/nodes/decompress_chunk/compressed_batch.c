@@ -132,8 +132,9 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	}
 
 	/* Detoast the compressed datum. */
-	value = PointerGetDatum(
-		detoaster_detoast_attr((struct varlena *) DatumGetPointer(value), &dcontext->detoaster));
+	value = PointerGetDatum(detoaster_detoast_attr((struct varlena *) DatumGetPointer(value),
+												   &dcontext->detoaster,
+												   batch_state->per_batch_context));
 
 	/* Decompress the entire batch if it is supported. */
 	CompressedDataHeader *header = (CompressedDataHeader *) value;
@@ -158,19 +159,21 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 							   column_description->typid,
 							   batch_state->per_batch_context);
 
-		MemoryContextReset(dcontext->bulk_decompression_context);
-
 		MemoryContextSwitchTo(context_before_decompression);
+
+		MemoryContextReset(dcontext->bulk_decompression_context);
 	}
 
 	if (arrow == NULL)
 	{
 		/* As a fallback, decompress row-by-row. */
 		column_values->decompression_type = DT_Iterator;
+		MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
 		column_values->buffers[0] =
 			tsl_get_decompression_iterator_init(header->compression_algorithm,
 												dcontext->reverse)(PointerGetDatum(header),
 																   column_description->typid);
+		MemoryContextSwitchTo(old_context);
 		return;
 	}
 
@@ -537,7 +540,8 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 	 */
 	const size_t n_rows = batch_state->total_batch_rows;
 	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
-	batch_state->vector_qual_result = palloc(bitmap_bytes);
+	batch_state->vector_qual_result =
+		MemoryContextAlloc(batch_state->per_batch_context, bitmap_bytes);
 	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
 	if (n_rows % 64 != 0)
 	{
@@ -648,7 +652,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 						   TupleTableSlot *compressed_slot)
 {
 	/* Init memory context */
-	batch_state->per_batch_context = create_per_batch_mctx(dcontext->batch_memory_context_bytes);
+	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
 	Assert(batch_state->per_batch_context != NULL);
 
 	Assert(batch_state->compressed_slot == NULL);
@@ -746,7 +750,6 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 	batch_state->total_batch_rows = 0;
 	batch_state->next_batch_row = -1;
 
-	MemoryContext old_context = MemoryContextSwitchTo(batch_state->per_batch_context);
 	MemoryContextReset(batch_state->per_batch_context);
 
 	for (int i = 0; i < dcontext->num_total_columns; i++)
@@ -844,8 +847,6 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 			batch_state->vector_qual_result = NULL;
 		}
 	}
-
-	MemoryContextSwitchTo(old_context);
 }
 
 static void

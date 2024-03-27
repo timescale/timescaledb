@@ -30,7 +30,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * will lead to broken decompression results. The test case is in
 	 * test_delta4().
 	 */
-	uint16 num_deltas;
+	uint32 num_deltas;
 	const uint64 *restrict deltas_zigzag =
 		simple8brle_decompress_all_uint64(deltas_compressed, &num_deltas);
 
@@ -45,11 +45,11 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 * Pad the number of elements to multiple of 64 bytes if needed, so that we
 	 * can work in 64-byte blocks.
 	 */
-	const uint16 n_total = has_nulls ? nulls.num_elements : num_deltas;
-	const uint16 n_total_padded =
+	const uint32 n_total = has_nulls ? nulls.num_elements : num_deltas;
+	const uint32 n_total_padded =
 		((n_total * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
-	const uint16 n_notnull = num_deltas;
-	const uint16 n_notnull_padded =
+	const uint32 n_notnull = num_deltas;
+	const uint32 n_notnull_padded =
 		((n_notnull * sizeof(ELEMENT_TYPE) + 63) / 64) * 64 / sizeof(ELEMENT_TYPE);
 	Assert(n_total_padded >= n_total);
 	Assert(n_notnull_padded >= n_notnull);
@@ -81,9 +81,9 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 	 */
 #define INNER_LOOP_SIZE 8
 	Assert(n_notnull_padded % INNER_LOOP_SIZE == 0);
-	for (uint16 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
+	for (uint32 outer = 0; outer < n_notnull_padded; outer += INNER_LOOP_SIZE)
 	{
-		for (uint16 inner = 0; inner < INNER_LOOP_SIZE; inner++)
+		for (uint32 inner = 0; inner < INNER_LOOP_SIZE; inner++)
 		{
 			current_delta += zig_zag_decode(deltas_zigzag[outer + inner]);
 			current_element += current_delta;
@@ -135,7 +135,7 @@ FUNCTION_NAME(delta_delta_decompress_all, ELEMENT_TYPE)(Datum compressed, Memory
 			validity_bitmap[n_total / 64] &= tail_mask;
 
 #ifdef USE_ASSERT_CHECKING
-			for (int i = 0; i < 64; i++)
+			for (uint32 i = 0; i < 64; i++)
 			{
 				Assert(arrow_row_is_valid(validity_bitmap, (n_total / 64) * 64 + i) ==
 					   (i < n_total % 64));

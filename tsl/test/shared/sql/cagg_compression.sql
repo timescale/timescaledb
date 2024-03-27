@@ -104,7 +104,10 @@ CREATE MATERIALIZED VIEW comp_rename_cagg WITH (timescaledb.continuous, timescal
 SELECT time_bucket('1 week', time) AS bucket FROM comp_rename GROUP BY 1;
 
 ALTER MATERIALIZED VIEW comp_rename_cagg RENAME COLUMN bucket to "time";
+
+SET client_min_messages TO WARNING;
 ALTER MATERIALIZED VIEW comp_rename_cagg SET ( timescaledb.compress='true');
+RESET client_min_messages;
 
 DROP TABLE comp_rename CASCADE;
 

@@ -7,8 +7,8 @@
 
 #include "batch_queue.h"
 
-extern BatchQueue *batch_queue_heap_create(int num_compressed_cols, Size batch_memory_context_bytes,
-										   const List *sortinfo, const TupleDesc result_tupdesc,
+extern BatchQueue *batch_queue_heap_create(int num_compressed_cols, const List *sortinfo,
+										   const TupleDesc result_tupdesc,
 										   const BatchQueueFunctions *funcs);
 
 extern const struct BatchQueueFunctions BatchQueueFunctionsHeap;

@@ -793,7 +793,6 @@ typedef enum Anum_continuous_agg
 	Anum_continuous_agg_user_view_name,
 	Anum_continuous_agg_partial_view_schema,
 	Anum_continuous_agg_partial_view_name,
-	Anum_continuous_agg_bucket_width,
 	Anum_continuous_agg_direct_view_schema,
 	Anum_continuous_agg_direct_view_name,
 	Anum_continuous_agg_materialize_only,
@@ -812,18 +811,6 @@ typedef struct FormData_continuous_agg
 	NameData user_view_name;
 	NameData partial_view_schema;
 	NameData partial_view_name;
-	/*
-	 * bucket_width is BUCKET_WIDTH_VARIABLE (see continuous_agg.h) for buckets
-	 * with variable size - monthly buckets, buckets with timezone, etc. For such
-	 * buckets the information about the bucketing function is stored in
-	 * _timescaledb_catalog.continuous_aggs_bucket_function.
-	 *
-	 * When possible, don't access bucket_width directly. Use corresponding
-	 * procedures instead, such as:
-	 * - ts_continuous_agg_bucket_width_variable
-	 * - ts_continuous_agg_bucket_width
-	 */
-	int64 bucket_width;
 	NameData direct_view_schema;
 	NameData direct_view_name;
 	bool materialized_only;

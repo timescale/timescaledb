@@ -64,6 +64,11 @@
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/compression_chunk_size.h"
 
+StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
+				 "max row numbers must be harmonized");
+StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION <= INT16_MAX,
+				 "dictionary compression uses signed int16 indexes");
+
 static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORITHMS] = {
 	[COMPRESSION_ALGORITHM_ARRAY] = ARRAY_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DICTIONARY] = DICTIONARY_ALGORITHM_DEFINITION,
@@ -1066,7 +1071,7 @@ row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlo
 	}
 	bool changed_groups = row_compressor_new_row_is_in_new_group(row_compressor, slot);
 	bool compressed_row_is_full =
-		row_compressor->rows_compressed_into_current_value >= MAX_ROWS_PER_COMPRESSION;
+		row_compressor->rows_compressed_into_current_value >= TARGET_COMPRESSED_BATCH_SIZE;
 	if (compressed_row_is_full || changed_groups)
 	{
 		if (row_compressor->rows_compressed_into_current_value > 0)
@@ -1452,7 +1457,7 @@ build_decompressor(Relation in_rel, Relation out_rel)
 														ALLOCSET_DEFAULT_SIZES),
 		.estate = CreateExecutorState(),
 
-		.decompressed_slots = palloc0(sizeof(void *) * GLOBAL_MAX_ROWS_PER_COMPRESSION),
+		.decompressed_slots = palloc0(sizeof(void *) * TARGET_COMPRESSED_BATCH_SIZE),
 	};
 
 	create_per_compressed_column(&decompressor);
@@ -1649,7 +1654,8 @@ decompress_batch(RowDecompressor *decompressor)
 		Datum compressed_datum = PointerGetDatum(
 			detoaster_detoast_attr((struct varlena *) DatumGetPointer(
 									   decompressor->compressed_datums[input_column]),
-								   &decompressor->detoaster));
+								   &decompressor->detoaster,
+								   CurrentMemoryContext));
 		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
 		column_info->iterator =
 			definitions[header->compression_algorithm]

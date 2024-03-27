@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- statitics on
 CREATE TABLE "public"."metrics" (
@@ -29,6 +29,36 @@ ANALYZE metrics;
 CREATE UNIQUE INDEX test_idx ON metrics(device_id, time);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']);
+
+ALTER TABLE metrics SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
+
+ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
+
+--make sure all the GUC combinations work
+SET timescaledb.compression_segmentby_default_function = '';
+SET timescaledb.compression_orderby_default_function = '';
+ALTER TABLE metrics SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
+
+SET timescaledb.compression_segmentby_default_function   = '';
+RESET timescaledb.compression_orderby_default_function;
+ALTER TABLE metrics SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
+
+RESET timescaledb.compression_segmentby_default_function;
+SET timescaledb.compression_orderby_default_function = '';
+ALTER TABLE metrics SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
+
+RESET timescaledb.compression_segmentby_default_function;
+RESET timescaledb.compression_orderby_default_function;
 
 --opposite order of columns
 drop index test_idx;
@@ -72,6 +102,10 @@ drop index test_idx1;
 drop index test_idx2;
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY[]::text[]);
+
+ALTER TABLE metrics SET (timescaledb.compress = true);
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE metrics SET (timescaledb.compress = false);
 
 -- tables with no stats --
 drop table metrics;
@@ -153,3 +187,23 @@ drop index test_idx;
 CREATE UNIQUE INDEX test_idx ON metrics(device_id, time);
 SELECT _timescaledb_functions.get_segmentby_defaults('public.metrics');
 SELECT _timescaledb_functions.get_orderby_defaults('public.metrics', ARRAY['device_id']::text[]);
+
+--test on an empty order_by
+CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
+SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
+SELECT _timescaledb_functions.get_orderby_defaults('table1', ARRAY['col1']::text[]);
+ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
+SELECT * FROM _timescaledb_catalog.compression_settings;
+ALTER TABLE table1 SET (timescaledb.compress = false);
+
+\set ON_ERROR_STOP 0
+SET timescaledb.compression_segmentby_default_function = 'function_does_not_exist';
+SET timescaledb.compression_orderby_default_function = 'function_does_not_exist';
+--wrong function signatures
+SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_orderby_defaults';
+SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.get_segmentby_defaults';
+\set ON_ERROR_STOP 1
+SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.get_orderby_defaults';
+SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_segmentby_defaults';
+RESET timescaledb.compression_segmentby_default_function;
+RESET timescaledb.compression_orderby_default_function;

@@ -183,7 +183,7 @@ job_add(PG_FUNCTION_ARGS)
 										owner,
 										scheduled,
 										fixed_schedule,
-										0,
+										INVALID_HYPERTABLE_ID,
 										config,
 										initial_start,
 										valid_timezone);

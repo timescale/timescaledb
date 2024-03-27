@@ -99,7 +99,12 @@ cd ${EXE_DIR}/sql
 # create database and install timescaledb
 ${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d postgres -v ECHO=none -c "CREATE DATABASE \"${TEST_DBNAME}\";"
 ${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -c "SET client_min_messages=error; CREATE EXTENSION timescaledb;"
-${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} -v ECHO=none -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" < ${TEST_SUPPORT_FILE} >/dev/null 2>&1
+${PSQL} "$@" -U $TEST_ROLE_SUPERUSER -d ${TEST_DBNAME} \
+    -v ECHO=none \
+    -v MODULE_PATHNAME="'timescaledb-${EXT_VERSION}'" \
+    -v TSL_MODULE_PATHNAME="'timescaledb-tsl-${EXT_VERSION}'" \
+    -v TEST_SPINWAIT_ITERS=${TEST_SPINWAIT_ITERS} \
+    -f ${TEST_SUPPORT_FILE} >/dev/null 2>&1
 export TEST_DBNAME
 
 # we strip out any output between <exclude_from_test></exclude_from_test>

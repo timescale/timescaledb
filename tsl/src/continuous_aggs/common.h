@@ -68,21 +68,32 @@ typedef struct CAggTimebucketInfo
 	Oid htoid;						/* hypertable oid */
 	AttrNumber htpartcolno;			/* primary partitioning column of raw hypertable */
 									/* This should also be the column used by time_bucket */
-	Oid htpartcoltype;
-	int64 htpartcol_interval_len; /* interval length setting for primary partitioning column */
-	int64 bucket_width;			  /* bucket_width of time_bucket, stores BUCKET_WIDTH_VARIABLE for
-									 variable-sized buckets */
-	Oid bucket_width_type;		  /* type of bucket_width */
-	Interval *interval;			  /* stores the interval, NULL if not specified */
-	const char *timezone;		  /* the name of the timezone, NULL if not specified */
+	Oid htpartcoltype;				/* The collation type */
+	int64 htpartcol_interval_len;	/* interval length setting for primary partitioning column */
 
+	/* General bucket information */
 	FuncExpr *bucket_func; /* function call expr of the bucketing function */
-	/*
-	 * Custom origin value stored as UTC timestamp.
-	 * If not specified, stores infinity.
-	 */
-	TimestampTz origin;
+	Oid bucket_width_type; /* type of bucket_width */
+
+	/* Time based buckets */
+	Interval *bucket_time_width;	  /* stores the interval, NULL if not specified */
+	const char *bucket_time_timezone; /* the name of the timezone, NULL if not specified */
+	Interval *bucket_time_offset;	  /* the offset of set, NULL if not specified */
+	TimestampTz bucket_time_origin;	  /* origin as UTC timestamp. infinity if not specified */
+
+	/* Integer based buckets */
+	int64 bucket_integer_width;	 /* bucket_width of time_bucket */
+	int64 bucket_integer_offset; /* bucket offset of the time_bucket */
 } CAggTimebucketInfo;
+
+typedef enum CaggRefreshCallContext
+{
+	CAGG_REFRESH_CREATION,
+	CAGG_REFRESH_WINDOW,
+	CAGG_REFRESH_POLICY,
+} CaggRefreshCallContext;
+
+#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info) (bucket_info->bucket_width_type == INTERVALOID)
 
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
@@ -111,3 +122,30 @@ extern void mattablecolumninfo_init(MatTableColumnInfo *matcolinfo, List *groupl
 extern bool function_allowed_in_cagg_definition(Oid funcid);
 extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
+
+extern bool time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo);
+
+static inline int64
+cagg_get_time_min(const ContinuousAgg *cagg)
+{
+	if (cagg->bucket_function->bucket_fixed_interval == false)
+	{
+		/*
+		 * To determine inscribed/circumscribed refresh window for variable-sized
+		 * buckets we should be able to calculate time_bucket(window.begin) and
+		 * time_bucket(window.end). This, however, is not possible in general case.
+		 * As an example, the minimum date is 4714-11-24 BC, which is before any
+		 * reasonable default `origin` value. Thus for variable-sized buckets
+		 * instead of minimum date we use -infinity since time_bucket(-infinity)
+		 * is well-defined as -infinity.
+		 *
+		 * For more details see:
+		 * - ts_compute_inscribed_bucketed_refresh_window_variable()
+		 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
+		 */
+		return ts_time_get_nobegin_or_min(cagg->partition_type);
+	}
+
+	/* For fixed-sized buckets return min (start of time) */
+	return ts_time_get_min(cagg->partition_type);
+}

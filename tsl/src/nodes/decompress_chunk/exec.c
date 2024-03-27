@@ -375,54 +375,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		  sizeof(*dcontext->template_columns),
 		  compressed_column_cmp);
 	/*
-	 * Calculate the desired size of the batch memory context. Especially if we
-	 * use bulk decompression, the results should fit into the first page of the
-	 * context, otherwise it's going to do malloc/free on every
-	 * MemoryContextReset.
-	 *
-	 * Start with the default size.
-	 */
-	Size batch_memory_context_bytes = ALLOCSET_DEFAULT_INITSIZE;
-
-	if (dcontext->enable_bulk_decompression)
-	{
-		for (int i = 0; i < num_total; i++)
-		{
-			CompressionColumnDescription *column = &dcontext->template_columns[i];
-			if (column->bulk_decompression_supported)
-			{
-				/*
-				 * Values array, with 64 element padding (actually we have less).
-				 *
-				 * For variable-length types (we only have text) we can't
-				 * estimate the width currently.
-				 */
-				batch_memory_context_bytes += (GLOBAL_MAX_ROWS_PER_COMPRESSION + 64) *
-											  (column->value_bytes > 0 ? column->value_bytes : 16);
-				/* Nulls bitmap, one uint64 per 64 rows. */
-				batch_memory_context_bytes +=
-					((GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64) * sizeof(uint64);
-				/* Arrow data structure. */
-				batch_memory_context_bytes += sizeof(ArrowArray) + sizeof(void *) * 2 /* buffers */;
-				/* Memory context header overhead for the above parts. */
-				batch_memory_context_bytes += sizeof(void *) * 3;
-			}
-		}
-	}
-
-	/* Round up to even number of 4k pages. */
-	batch_memory_context_bytes = ((batch_memory_context_bytes + 4095) / 4096) * 4096;
-
-	/* As a precaution, limit it to 1MB. */
-	batch_memory_context_bytes = Min(batch_memory_context_bytes, 1 * 1024 * 1024);
-
-	elog(DEBUG3,
-		 "Batch memory context has initial capacity of %zu bytes",
-		 batch_memory_context_bytes);
-
-	dcontext->batch_memory_context_bytes = batch_memory_context_bytes;
-
-	/*
 	 * Choose which batch queue we are going to use: heap for batch sorted
 	 * merge, and one-element FIFO for normal decompression.
 	 */
@@ -430,7 +382,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		chunk_state->batch_queue =
 			batch_queue_heap_create(num_compressed,
-									batch_memory_context_bytes,
 									chunk_state->sortinfo,
 									dcontext->decompressed_slot->tts_tupleDescriptor,
 									&BatchQueueFunctionsHeap);
@@ -438,9 +389,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 	else
 	{
-		chunk_state->batch_queue = batch_queue_fifo_create(num_compressed,
-														   batch_memory_context_bytes,
-														   &BatchQueueFunctionsFifo);
+		chunk_state->batch_queue =
+			batch_queue_fifo_create(num_compressed, &BatchQueueFunctionsFifo);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 
@@ -513,8 +463,7 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 	/* Init per batch memory context */
 	Assert(batch_state != NULL);
 	Assert(batch_state->per_batch_context == NULL);
-	batch_state->per_batch_context =
-		create_per_batch_mctx(batch_queue->batch_array.batch_memory_context_bytes);
+	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
 	Assert(batch_state->per_batch_context != NULL);
 
 	/* Init bulk decompression memory context */
@@ -626,7 +575,8 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			CompressedDataHeader *header =
 				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
 																	value),
-																&dcontext->detoaster);
+																&dcontext->detoaster,
+																CurrentMemoryContext);
 
 			ArrowArray *arrow = NULL;
 
@@ -646,14 +596,17 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			MemoryContextReset(dcontext->bulk_decompression_context);
 			MemoryContextSwitchTo(batch_state->per_batch_context);
 
-			/* A compressed batch consists of 1000 tuples (see MAX_ROWS_PER_COMPRESSION). The
-			 * attribute value is a int32 with a max value of 2^32. Even if all tuples have the max
-			 * value, the max sum is = 1000 * 2^32 < 2^10 * 2^32 = 2^42. This is smaller than 2^64,
-			 * which is the max value of the int64 variable. The same is true for negative values).
-			 * Therefore, we don't need to check for overflows within the loop, which would slow
-			 * down the calculation. */
-			Assert(arrow->length <= MAX_ROWS_PER_COMPRESSION);
-			Assert(MAX_ROWS_PER_COMPRESSION <= 1024);
+			/*
+			 * We accumulate the sum as int64, so we can sum INT_MAX = 2^31 - 1
+			 * at least 2^31 times without incurrint an overflow of the int64
+			 * accumulator. The same is true for negative numbers. The
+			 * compressed batch size is currently capped at 1000 rows, but even
+			 * if it's changed in the future, it's unlikely that we support
+			 * batches larger than 65536 rows, not to mention 2^31. Therefore,
+			 * we don't need to check for overflows within the loop, which would
+			 * slow down the calculation.
+			 */
+			Assert(arrow->length <= INT_MAX);
 
 			int64 batch_sum = 0;
 			for (int i = 0; i < arrow->length; i++)

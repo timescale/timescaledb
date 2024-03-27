@@ -188,83 +188,6 @@ compression_chunk_size_catalog_update_merged(int32 chunk_id, const RelationSize 
 	return updated;
 }
 
-/*
- * This function updates catalog chunk compression statistics
- * for an existing compressed chunk after it has been recompressed
- * segmentwise in-place (as opposed to creating a new compressed chunk).
- * Note that because of this it is not possible to accurately report
- * the fields
- * uncompressed_chunk_size, uncompressed_index_size, uncompressed_toast_size
- * anymore, so these are not updated.
- */
-static int
-compression_chunk_size_catalog_update_recompressed(int32 uncompressed_chunk_id,
-												   int32 compressed_chunk_id,
-												   const RelationSize *recompressed_size,
-												   int64 rowcnt_pre_compression,
-												   int64 rowcnt_post_compression)
-{
-	ScanIterator iterator =
-		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, RowExclusiveLock, CurrentMemoryContext);
-	bool updated = false;
-
-	iterator.ctx.index =
-		catalog_get_index(ts_catalog_get(), COMPRESSION_CHUNK_SIZE, COMPRESSION_CHUNK_SIZE_PKEY);
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_compression_chunk_size_pkey_chunk_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(uncompressed_chunk_id));
-	ts_scanner_foreach(&iterator)
-	{
-		Datum values[Natts_compression_chunk_size];
-		bool replIsnull[Natts_compression_chunk_size] = { false };
-		bool repl[Natts_compression_chunk_size] = { false };
-		bool should_free;
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-		HeapTuple new_tuple;
-		heap_deform_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull);
-
-		/* Only update the information pertaining to the compressed chunk */
-		/* these fields are about the compressed chunk so they can be updated */
-		values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_heap_size)] =
-			Int64GetDatum(recompressed_size->heap_size);
-		repl[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_heap_size)] = true;
-
-		values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_toast_size)] =
-			Int64GetDatum(recompressed_size->toast_size);
-		repl[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_toast_size)] = true;
-
-		values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)] =
-			Int64GetDatum(recompressed_size->index_size);
-		repl[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)] = true;
-
-		values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_pre_compression)] =
-			Int64GetDatum(rowcnt_pre_compression);
-		repl[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_pre_compression)] = true;
-
-		values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_post_compression)] =
-			Int64GetDatum(rowcnt_post_compression);
-		repl[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_post_compression)] = true;
-
-		new_tuple =
-			heap_modify_tuple(tuple, ts_scanner_get_tupledesc(ti), values, replIsnull, repl);
-		ts_catalog_update(ti->scanrel, new_tuple);
-		heap_freetuple(new_tuple);
-
-		if (should_free)
-			heap_freetuple(tuple);
-
-		updated = true;
-		break;
-	}
-
-	ts_scan_iterator_end(&iterator);
-	ts_scan_iterator_close(&iterator);
-	return updated;
-}
-
 static void
 get_hypertable_or_cagg_name(Hypertable *ht, Name objname)
 {
@@ -820,7 +743,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			return uncompressed_chunk_id;
 		}
 
-		if (get_compressed_chunk_index_for_recompression(chunk))
+		if (ts_chunk_is_partial(chunk) && get_compressed_chunk_index_for_recompression(chunk))
 		{
 			uncompressed_chunk_id = recompress_chunk_segmentwise_impl(chunk);
 		}
@@ -1124,7 +1047,7 @@ tsl_recompress_chunk_segmentwise(PG_FUNCTION_ARGS)
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
-	if (!ts_chunk_needs_recompression(chunk))
+	if (!ts_chunk_is_partial(chunk))
 	{
 		int elevel = if_not_compressed ? NOTICE : ERROR;
 		elog(elevel,
@@ -1152,8 +1075,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 * 4: frozen
 	 * 8: compressed_partial
 	 */
-	if (!ts_chunk_is_compressed(uncompressed_chunk) &&
-		ts_chunk_needs_recompression(uncompressed_chunk))
+	if (!ts_chunk_is_compressed(uncompressed_chunk) && ts_chunk_is_partial(uncompressed_chunk))
 		elog(ERROR,
 			 "unexpected chunk status %d in chunk %s.%s",
 			 uncompressed_chunk->fd.status,
@@ -1179,14 +1101,8 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
 
-	/****** compression statistics ******/
-	RelationSize after_size;
-	int64 skipped_uncompressed_rows = 0;
-	int64 skipped_compressed_rows = 0;
-
-	Tuplesortstate *segment_tuplesortstate;
-
 	/*************** tuplesort state *************************/
+	Tuplesortstate *segment_tuplesortstate;
 	TupleDesc compressed_rel_tupdesc = RelationGetDescr(compressed_chunk_rel);
 	TupleDesc uncompressed_rel_tupdesc = RelationGetDescr(uncompressed_chunk_rel);
 
@@ -1284,9 +1200,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	TupleTableSlot *slot = table_slot_create(compressed_chunk_rel, NULL);
 	index_rescan(index_scan, NULL, 0, NULL, 0);
 
-	Datum val;
-	bool is_null;
-
 	while (index_getnext_slot(index_scan, ForwardScanDirection, slot))
 	{
 		slot_getallattrs(slot);
@@ -1346,12 +1259,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 		if (skip_current_segment)
 		{
-			val = slot_getattr(slot,
-							   AttrOffsetGetAttrNumber(row_compressor.count_metadata_column_offset),
-							   &is_null);
-			Assert(!is_null);
-			skipped_uncompressed_rows += DatumGetInt32(val);
-			skipped_compressed_rows++;
 			continue;
 		}
 
@@ -1419,29 +1326,17 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 		CommandCounterIncrement();
 	}
 
-	after_size = ts_relation_size_impl(compressed_chunk->table_id);
-	/* the compression size statistics we are able to update and accurately report are:
-	 * rowcount pre/post compression,
-	 * compressed chunk sizes */
-	row_compressor.rowcnt_pre_compression += skipped_uncompressed_rows;
-	row_compressor.num_compressed_rows += skipped_compressed_rows;
-	compression_chunk_size_catalog_update_recompressed(uncompressed_chunk->fd.id,
-													   compressed_chunk->fd.id,
-													   &after_size,
-													   row_compressor.rowcnt_pre_compression,
-													   row_compressor.num_compressed_rows);
-
 	row_compressor_close(&row_compressor);
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(index_scan);
 	UnregisterSnapshot(snapshot);
-	index_close(index_rel, ExclusiveLock);
+	index_close(index_rel, NoLock);
 	row_decompressor_close(&decompressor);
 
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
-	table_close(uncompressed_chunk_rel, ExclusiveLock);
-	table_close(compressed_chunk_rel, ExclusiveLock);
+	table_close(uncompressed_chunk_rel, NoLock);
+	table_close(compressed_chunk_rel, NoLock);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }

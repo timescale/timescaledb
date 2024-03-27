@@ -206,6 +206,9 @@ SELECT create_hypertable('pseudo','time');
 (1 row)
 
 ALTER TABLE pseudo SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "pseudo" is set to ""
+NOTICE:  default order by for hypertable "pseudo" is set to ""time" DESC"
 INSERT INTO pseudo SELECT '2000-01-01';
 SELECT compress_chunk(show_chunks('pseudo'));
              compress_chunk              

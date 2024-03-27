@@ -159,7 +159,6 @@ $PSQL -f pre.smoke.sql >>$LOGFILE 2>&1
 $PSQL -f setup.${TEST_VERSION}.sql >>$LOGFILE 2>&1
 # Run update on Upgrade. You now have a 2.0.2 version in Upgrade.
 $PSQL -c "ALTER EXTENSION timescaledb UPDATE TO '${UPDATE_TO_TAG}'" >>$LOGFILE 2>&1
-$PSQL -f <(echo '\c dn1';echo "ALTER EXTENSION timescaledb UPDATE TO '${UPDATE_TO_TAG}'") >>$LOGFILE 2>&1
 
 echo -n "Dumping the contents of Upgrade..."
 pg_dump -Fc -f $DUMPFILE >>$LOGFILE 2>&1

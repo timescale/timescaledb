@@ -60,11 +60,17 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	src->htpartcolno = hypertable_partition_colno;
 	src->htpartcoltype = hypertable_partition_coltype;
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
-	src->bucket_width = 0;				 /* invalid value */
 	src->bucket_width_type = InvalidOid; /* invalid oid */
-	src->interval = NULL;				 /* not specified by default */
-	src->timezone = NULL;				 /* not specified by default */
-	TIMESTAMP_NOBEGIN(src->origin);		 /* origin is not specified by default */
+
+	/* Time based buckets */
+	src->bucket_time_width = NULL;				/* not specified by default */
+	src->bucket_time_timezone = NULL;			/* not specified by default */
+	src->bucket_time_offset = NULL;				/* not specified by default */
+	TIMESTAMP_NOBEGIN(src->bucket_time_origin); /* origin is not specified by default */
+
+	/* Integer based buckets */
+	src->bucket_integer_width = 0;	/* invalid value */
+	src->bucket_integer_offset = 0; /* invalid value */
 }
 
 /*
@@ -156,9 +162,9 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 	Const *const_arg;
 
 	/* Make sure tbinfo was initialized. This assumption is used below. */
-	Assert(tbinfo->bucket_width == 0);
-	Assert(tbinfo->timezone == NULL);
-	Assert(TIMESTAMP_NOT_FINITE(tbinfo->origin));
+	Assert(tbinfo->bucket_integer_width == 0);
+	Assert(tbinfo->bucket_time_timezone == NULL);
+	Assert(TIMESTAMP_NOT_FINITE(tbinfo->bucket_time_origin));
 
 	foreach (l, groupClause)
 	{
@@ -201,8 +207,8 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg(
-							 "time bucket function must reference a hypertable dimension column")));
+						 errmsg("time bucket function must reference the primary hypertable "
+								"dimension column")));
 
 			if (list_length(fe->args) >= 3)
 			{
@@ -217,8 +223,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 								 errmsg("invalid timezone name \"%s\"", tz_name)));
 					}
 
-					tbinfo->timezone = tz_name;
-					tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
+					tbinfo->bucket_time_timezone = tz_name;
 				}
 			}
 
@@ -236,8 +241,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 								 errmsg("invalid timezone name \"%s\"", tz_name)));
 					}
 
-					tbinfo->timezone = tz_name;
-					tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
+					tbinfo->bucket_time_timezone = tz_name;
 				}
 			}
 
@@ -252,7 +256,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						custom_origin = true;
 						/* this function also takes care of named arguments */
 						const_arg = check_time_bucket_argument(arg, "third");
-						tbinfo->origin = DatumGetTimestamp(
+						tbinfo->bucket_time_origin = DatumGetTimestamp(
 							DirectFunctionCall1(date_timestamp, const_arg->constvalue));
 					}
 					break;
@@ -263,7 +267,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						Node *arg = lthird(fe->args);
 						custom_origin = true;
 						const_arg = check_time_bucket_argument(arg, "third");
-						tbinfo->origin = DatumGetTimestamp(const_arg->constvalue);
+						tbinfo->bucket_time_origin = DatumGetTimestamp(const_arg->constvalue);
 					}
 					break;
 				case TIMESTAMPTZOID:
@@ -271,7 +275,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 					if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
 					{
 						custom_origin = true;
-						tbinfo->origin =
+						tbinfo->bucket_time_origin =
 							DatumGetTimestampTz(castNode(Const, lthird(fe->args))->constvalue);
 					}
 					else if (list_length(fe->args) >= 4 &&
@@ -280,7 +284,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						custom_origin = true;
 						if (IsA(lfourth(fe->args), Const))
 						{
-							tbinfo->origin =
+							tbinfo->bucket_time_origin =
 								DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
 						}
 						/* could happen in a statement like time_bucket('1h', .., 'utc', origin =>
@@ -290,11 +294,11 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 							Const *constval =
 								check_time_bucket_argument(lfourth(fe->args), "fourth");
 
-							tbinfo->origin = DatumGetTimestampTz(constval->constvalue);
+							tbinfo->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
 						}
 					}
 			}
-			if (custom_origin && TIMESTAMP_NOT_FINITE(tbinfo->origin))
+			if (custom_origin && TIMESTAMP_NOT_FINITE(tbinfo->bucket_time_origin))
 			{
 				ereport(ERROR,
 						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
@@ -329,40 +333,35 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				{
 					if (width->consttype == INTERVALOID)
 					{
-						tbinfo->interval = DatumGetIntervalP(width->constvalue);
-						if (tbinfo->interval && tbinfo->interval->month != 0)
-							tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
+						tbinfo->bucket_time_width = DatumGetIntervalP(width->constvalue);
 					}
 
-					if (tbinfo->bucket_width != BUCKET_WIDTH_VARIABLE)
+					if (!IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo))
 					{
-						/* The bucket size is fixed. */
-						tbinfo->bucket_width =
+						tbinfo->bucket_integer_width =
 							ts_interval_value_to_internal(width->constvalue, width->consttype);
 					}
 				}
 			}
 			else
+			{
 				ereport(ERROR,
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("only immutable expressions allowed in time bucket function"),
 						 errhint("Use an immutable expression as first argument to the time bucket "
 								 "function.")));
-
-			if (tbinfo->interval && tbinfo->interval->month)
-			{
-				tbinfo->bucket_width = BUCKET_WIDTH_VARIABLE;
 			}
 		}
 	}
 
-	if (tbinfo->bucket_width == BUCKET_WIDTH_VARIABLE)
+	if (!time_bucket_info_has_fixed_width(tbinfo))
 	{
 		/* Variable-sized buckets can be used only with intervals. */
-		Assert(tbinfo->interval != NULL);
+		Assert(tbinfo->bucket_time_width != NULL);
+		Assert(IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo));
 
-		if ((tbinfo->interval->month != 0) &&
-			((tbinfo->interval->day != 0) || (tbinfo->interval->time != 0)))
+		if ((tbinfo->bucket_time_width->month != 0) &&
+			((tbinfo->bucket_time_width->day != 0) || (tbinfo->bucket_time_width->time != 0)))
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -501,11 +500,11 @@ get_bucket_width_datum(CAggTimebucketInfo bucket_info)
 		case INT8OID:
 		case INT4OID:
 		case INT2OID:
-			width = ts_internal_to_interval_value(bucket_info.bucket_width,
+			width = ts_internal_to_interval_value(bucket_info.bucket_integer_width,
 												  bucket_info.bucket_width_type);
 			break;
 		case INTERVALOID:
-			width = IntervalPGetDatum(bucket_info.interval);
+			width = IntervalPGetDatum(bucket_info.bucket_time_width);
 			break;
 		default:
 			Assert(false);
@@ -525,7 +524,7 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 		case INT8OID:
 		case INT4OID:
 		case INT2OID:
-			width = bucket_info.bucket_width;
+			width = bucket_info.bucket_integer_width;
 			break;
 		case INTERVALOID:
 		{
@@ -533,7 +532,7 @@ get_bucket_width(CAggTimebucketInfo bucket_info)
 			 * Original interval should not be changed, hence create a local copy
 			 * for this check.
 			 */
-			Interval interval = *bucket_info.interval;
+			Interval interval = *bucket_info.bucket_time_width;
 
 			/*
 			 * epoch will treat year as 365.25 days. This leads to the unexpected
@@ -905,8 +904,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								is_cagg_create);
 
 		/* Cannot create cagg with fixed bucket on top of variable bucket. */
-		if ((bucket_info_parent.bucket_width == BUCKET_WIDTH_VARIABLE &&
-			 bucket_info.bucket_width != BUCKET_WIDTH_VARIABLE))
+		if (time_bucket_info_has_fixed_width(&bucket_info_parent) == false &&
+			time_bucket_info_has_fixed_width(&bucket_info) == true)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1345,4 +1344,22 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	setop->colCollations = col_collations;
 
 	return query;
+}
+
+/*
+ * Returns true if the time bucket size is fixed
+ */
+bool
+time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo)
+{
+	if (!IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo))
+	{
+		return true;
+	}
+	else
+	{
+		/* Historically, we treat all buckets with timezones as variable. Buckets with only days are
+		 * treated as fixed. */
+		return tbinfo->bucket_time_width->month == 0 && tbinfo->bucket_time_timezone == NULL;
+	}
 }

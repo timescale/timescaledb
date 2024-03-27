@@ -311,7 +311,6 @@ CREATE TABLE _timescaledb_catalog.continuous_agg (
   user_view_name name NOT NULL,
   partial_view_schema name NOT NULL,
   partial_view_name name NOT NULL,
-  bucket_width bigint NOT NULL,
   direct_view_schema name NOT NULL,
   direct_view_name name NOT NULL,
   materialized_only bool NOT NULL DEFAULT FALSE,

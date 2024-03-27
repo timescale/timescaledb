@@ -134,6 +134,9 @@ SELECT table_name FROM create_hypertable('metrics_compressed','time');
 (1 row)
 
 ALTER TABLE metrics_compressed SET (timescaledb.compress);
+psql:include/modify_exclusion_load.sql:73: WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+psql:include/modify_exclusion_load.sql:73: NOTICE:  default segment by for hypertable "metrics_compressed" is set to ""
+psql:include/modify_exclusion_load.sql:73: NOTICE:  default order by for hypertable "metrics_compressed" is set to ""time" DESC"
 -- create first chunk and compress
 INSERT INTO metrics_compressed VALUES ('2000-01-01',1,0.5);
 SELECT count(compress_chunk(chunk)) FROM show_chunks('metrics_compressed') chunk;

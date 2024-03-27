@@ -9,7 +9,7 @@ SELECT table_name FROM create_hypertable('compress_unique','offset_timestamp');
 (1 row)
 
 CREATE UNIQUE INDEX uniq_expr ON compress_unique USING btree (lower((meter_id)::text), meter_channel_id, offset_timestamp, "timestamp");
-ALTER TABLE compress_unique SET (timescaledb.compress,timescaledb.compress_segmentby='meter_id,meter_channel_id');
+ALTER TABLE compress_unique SET (timescaledb.compress,timescaledb.compress_segmentby='meter_id,meter_channel_id', timescaledb.compress_orderby='offset_timestamp desc');
 WARNING:  column "timestamp" should be used for segmenting or ordering
 INSERT INTO compress_unique VALUES ('2000-01-01','m1','c1','2000-01-01');
 INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-01');

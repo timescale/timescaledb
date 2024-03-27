@@ -45,10 +45,10 @@ BEGIN
     INNER JOIN
       pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
     --right now stats are from the hypertable itself. Use chunks in the future.
-    INNER JOIN pg_statistic s ON (s.staattnum = a.attnum and s.starelid = relation)
+    INNER JOIN pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
     WHERE
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
-      AND s.stadistinct > 1
+      AND s.n_distinct > 1
     ORDER BY i.pos
     LIMIT 1;
 
@@ -75,10 +75,10 @@ BEGIN
     INNER JOIN
       pg_attribute a on (a.attnum = i.attnum AND a.attrelid = relation)
     --right now stats are from the hypertable itself. Use chunks in the future.
-    INNER JOIN pg_statistic s ON (s.staattnum = a.attnum and s.starelid = relation)
+    INNER JOIN pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
     WHERE
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
-      AND s.stadistinct > 1
+      AND s.n_distinct > 1
     ORDER BY i.pos
     LIMIT 1;
 
@@ -106,10 +106,10 @@ BEGIN
     LEFT JOIN
       pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
     LEFT JOIN
-      pg_statistic s ON (s.staattnum = a.attnum and s.starelid = relation)
+      pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
     WHERE
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
-      AND s.stadistinct is null
+      AND s.n_distinct is null
       AND a.attidentity = '' AND (ad.adbin IS NULL OR pg_get_expr(adbin, adrelid) not like 'nextval%')
     ORDER BY i.pos
     LIMIT 1;
@@ -141,10 +141,10 @@ BEGIN
     LEFT JOIN
       pg_catalog.pg_attrdef ad ON (ad.adrelid = relation AND ad.adnum = a.attnum)
     LEFT JOIN
-      pg_statistic s ON (s.staattnum = a.attnum and s.starelid = relation)
+      pg_stats s ON (s.attname = a.attname and s.schemaname = _schema_name and s.tablename = _table_name)
     WHERE
       a.attname NOT IN (SELECT column_name FROM _timescaledb_catalog.dimension d WHERE d.hypertable_id = _hypertable_row.id)
-      AND s.stadistinct is null
+      AND s.n_distinct is null
       AND a.attidentity = '' AND (ad.adbin IS NULL OR pg_get_expr(adbin, adrelid) not like 'nextval%')
     ORDER BY i.pos
     LIMIT 1;
@@ -285,12 +285,12 @@ BEGIN
 
     --add DESC to any dimensions
     SELECT
-      array_agg(
+      coalesce(array_agg(
       CASE WHEN d.column_name IS NULL THEN
-        a.colname
+        format('%I', a.colname)
       ELSE
-        a.colname || ' DESC'
-      END ORDER BY pos) INTO STRICT _orderby_clauses
+        format('%I DESC', a.colname)
+      END ORDER BY pos), array[]::text[]) INTO STRICT _orderby_clauses
     FROM unnest(_orderby_names) WITH ORDINALITY as a(colname, pos)
     LEFT JOIN _timescaledb_catalog.dimension d ON (d.column_name = a.colname AND d.hypertable_id = _hypertable_row.id);
 

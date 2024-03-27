@@ -94,8 +94,9 @@ SELECT add_continuous_aggregate_policy('test_continuous_agg_view', NULL, 4::inte
 SELECT id as raw_table_id FROM _timescaledb_catalog.hypertable WHERE table_name='test_continuous_agg_table' \gset
 
 -- min distance from end should be 1
-SELECT  mat_hypertable_id, user_view_schema, user_view_name, bucket_width
-FROM _timescaledb_catalog.continuous_agg;
+SELECT mat_hypertable_id, user_view_schema, user_view_name FROM _timescaledb_catalog.continuous_agg;
+SELECT mat_hypertable_id, bucket_width FROM _timescaledb_catalog.continuous_aggs_bucket_function;
+
 SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg \gset
 SELECT id AS job_id FROM _timescaledb_config.bgw_job where hypertable_id=:mat_hypertable_id \gset
 
@@ -150,28 +151,8 @@ BEGIN
 END
 $BODY$;
 
-CREATE FUNCTION wait_for_job_to_run(job_param_id INTEGER, expected_runs INTEGER, spins INTEGER=:TEST_SPINWAIT_ITERS) RETURNS BOOLEAN LANGUAGE PLPGSQL AS
-$BODY$
-DECLARE
-    num_runs INTEGER;
-BEGIN
-    FOR i in 1..spins
-    LOOP
-    SELECT total_successes FROM _timescaledb_internal.bgw_job_stat WHERE job_id=job_param_id INTO num_runs;
-    if (num_runs = expected_runs) THEN
-        RETURN true;
-    ELSEIF (num_runs > expected_runs) THEN
-        RAISE 'num_runs > expected';
-    ELSE
-        PERFORM pg_sleep(0.1);
-    END IF;
-    END LOOP;
-    RETURN false;
-END
-$BODY$;
-
 --make sure there is 1 job to start with
-SELECT wait_for_job_to_run(:job_id, 1);
+SELECT test.wait_for_job_to_run(:job_id, 1);
 
 SELECT ts_bgw_params_mock_wait_returns_immediately(:WAIT_FOR_OTHER_TO_ADVANCE);
 
@@ -183,7 +164,7 @@ SELECT wait_for_timer_to_run(0);
 --advance to 12:00 so that it runs one more time; now we know the
 --scheduler has loaded up the job with the old schedule_interval
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '12 hour')::bigint * 1000000, true);
-SELECT wait_for_job_to_run(:job_id, 2);
+SELECT test.wait_for_job_to_run(:job_id, 2);
 
 --advance clock 1us to make the scheduler realize the job is done
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+1, true);
@@ -196,7 +177,7 @@ WHERE job_id=:job_id;;
 
 --advance to 12:02, job should have run at 12:01
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute')::bigint * 1000000), true);
-SELECT wait_for_job_to_run(:job_id, 3);
+SELECT test.wait_for_job_to_run(:job_id, 3);
 
 --next run in 1 minute
 SELECT job_id, next_start-last_finish as until_next, total_runs
@@ -210,7 +191,7 @@ WHERE job_id=:job_id \gset
 SELECT alter_job(:job_id, next_start => :'NEW_NEXT_START');
 
 SELECT ts_bgw_params_reset_time((extract(epoch from interval '12 hour')::bigint * 1000000)+(extract(epoch from interval '2 minute 30 seconds')::bigint * 1000000), true);
-SELECT wait_for_job_to_run(:job_id, 4);
+SELECT test.wait_for_job_to_run(:job_id, 4);
 
 --advance clock to quit scheduler
 SELECT ts_bgw_params_reset_time(extract(epoch from interval '25 hour')::bigint * 1000000, true);
@@ -285,6 +266,26 @@ where cagg.view_name::text like '%test_continuous_agg_view'
 and cagg.materialization_hypertable_name = ps.hypertable_name;
 
 \x off
+
+-- test merged refresh (change data in two chunks)
+UPDATE test_continuous_agg_table SET data = 11;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+ALTER SYSTEM SET timescaledb.materializations_per_refresh_window = 0;
+SELECT pg_reload_conf();
+SET ROLE :ROLE_DEFAULT_PERM_USER;
+
+--advance time by 1day so that job runs one more time
+SELECT ts_bgw_params_reset_time(extract(epoch from interval '1day')::bigint * 1000000, true);
+
+SELECT ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish(50, 50);
+
+SELECT * FROM sorted_bgw_log;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+ALTER SYSTEM RESET timescaledb.materializations_per_refresh_window;
+SELECT pg_reload_conf();
+SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 DROP MATERIALIZED VIEW test_continuous_agg_view;
 

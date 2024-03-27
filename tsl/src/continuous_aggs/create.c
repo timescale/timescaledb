@@ -78,10 +78,9 @@
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,
-									  const char *partial_view, int64 bucket_width,
-									  bool materialized_only, const char *direct_schema,
-									  const char *direct_view, const bool finalized,
-									  const int32 parent_mat_hypertable_id);
+									  const char *partial_view, bool materialized_only,
+									  const char *direct_schema, const char *direct_view,
+									  const bool finalized, const int32 parent_mat_hypertable_id);
 static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
 												 const char *bucket_width, const char *origin,
 												 const char *offset, const char *timezone,
@@ -126,7 +125,7 @@ static Query *mattablecolumninfo_get_partial_select_query(MatTableColumnInfo *ma
 static void
 create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 						  const char *user_view, const char *partial_schema,
-						  const char *partial_view, int64 bucket_width, bool materialized_only,
+						  const char *partial_view, bool materialized_only,
 						  const char *direct_schema, const char *direct_view, const bool finalized,
 						  const int32 parent_mat_hypertable_id)
 {
@@ -167,7 +166,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 		NameGetDatum(&partial_schnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_partial_view_name)] =
 		NameGetDatum(&partial_viewnm);
-	values[AttrNumberGetAttrOffset(Anum_continuous_agg_bucket_width)] = Int64GetDatum(bucket_width);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_schema)] =
 		NameGetDatum(&direct_schnm);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_direct_view_name)] =
@@ -197,6 +195,9 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 	Datum values[Natts_continuous_aggs_bucket_function];
 	bool nulls[Natts_continuous_aggs_bucket_function] = { false };
 	CatalogSecurityContext sec_ctx;
+
+	Assert(OidIsValid(bucket_function));
+	Assert(bucket_width != NULL);
 
 	rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_BUCKET_FUNCTION),
 					 RowExclusiveLock);
@@ -801,6 +802,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	makeMaterializedTableName(relnamebuf, "_direct_view_%d", materialize_hypertable_id);
 	dum_rel = makeRangeVar(pstrdup(INTERNAL_SCHEMA_NAME), pstrdup(relnamebuf), -1);
 	create_view_for_query(orig_userview_query, dum_rel);
+
 	/* Step 4: Add catalog table entry for the objects we just created. */
 	nspid = RangeVarGetCreationNamespace(stmt->view);
 
@@ -810,39 +812,44 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 							  stmt->view->relname,
 							  part_rel->schemaname,
 							  part_rel->relname,
-							  bucket_info->bucket_width,
 							  materialized_only,
 							  dum_rel->schemaname,
 							  dum_rel->relname,
 							  finalized,
 							  bucket_info->parent_mat_hypertable_id);
 
-	if (bucket_info->bucket_width == BUCKET_WIDTH_VARIABLE)
+	char *bucket_origin = NULL;
+	char *bucket_offset = NULL;
+	char *bucket_width = NULL;
+
+	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info))
 	{
-		const char *bucket_origin = NULL;
-		const char *bucket_offset = NULL;
+		/* Bucketing on time */
+		Assert(bucket_info->bucket_time_width != NULL);
+		bucket_width = DatumGetCString(
+			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->bucket_time_width)));
 
-		/*
-		 * Variable-sized buckets work only with intervals.
-		 */
-		Assert(bucket_info->interval != NULL);
-		const char *bucket_width = DatumGetCString(
-			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->interval)));
-
-		if (!TIMESTAMP_NOT_FINITE(bucket_info->origin))
+		if (!TIMESTAMP_NOT_FINITE(bucket_info->bucket_time_origin))
 		{
 			bucket_origin = DatumGetCString(
-				DirectFunctionCall1(timestamptz_out, TimestampTzGetDatum(bucket_info->origin)));
+				DirectFunctionCall1(timestamptz_out,
+									TimestampTzGetDatum(bucket_info->bucket_time_origin)));
 		}
-
-		create_bucket_function_catalog_entry(materialize_hypertable_id,
-											 bucket_info->bucket_func->funcid,
-											 bucket_width,
-											 bucket_origin,
-											 bucket_offset,
-											 bucket_info->timezone,
-											 bucket_info->bucket_width != BUCKET_WIDTH_VARIABLE);
 	}
+	else
+	{
+		/* Bucket on integers */
+		bucket_width = palloc0(MAXINT8LEN + 1 * sizeof(char));
+		pg_lltoa(bucket_info->bucket_integer_width, bucket_width);
+	}
+
+	create_bucket_function_catalog_entry(materialize_hypertable_id,
+										 bucket_info->bucket_func->funcid,
+										 bucket_width,
+										 bucket_origin,
+										 bucket_offset,
+										 bucket_info->bucket_time_timezone,
+										 time_bucket_info_has_fixed_width(bucket_info));
 
 	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
 	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
@@ -958,9 +965,7 @@ tsl_process_continuous_agg_viewstmt(Node *node, const char *query_string, void *
 		 * - ts_compute_inscribed_bucketed_refresh_window_variable()
 		 * - ts_compute_circumscribed_bucketed_refresh_window_variable()
 		 */
-		refresh_window.start = ts_continuous_agg_bucket_width_variable(cagg) ?
-								   ts_time_get_nobegin(refresh_window.type) :
-								   ts_time_get_min(refresh_window.type);
+		refresh_window.start = cagg_get_time_min(cagg);
 		refresh_window.end = ts_time_get_noend_or_max(refresh_window.type);
 
 		continuous_agg_refresh_internal(cagg, &refresh_window, CAGG_REFRESH_CREATION, true, true);

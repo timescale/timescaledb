@@ -92,7 +92,7 @@ def build_release_config(overrides):
     release_config = dict(
         {
             "name": "Release",
-            "build_type": "Release",
+            "build_type": "RelWithDebInfo",
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON",
             "coverage": False,
         }
@@ -120,7 +120,7 @@ def build_apache_config(overrides):
     apache_config = dict(
         {
             "name": "ApacheOnly",
-            "build_type": "Release",
+            "build_type": "RelWithDebInfo",
             "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DREQUIRE_ALL_TESTS=ON -DAPACHE_ONLY=1",
             "coverage": False,
         }
