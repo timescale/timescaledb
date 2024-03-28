@@ -33,7 +33,7 @@
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/chunk_append/transform.h"
-#include "nodes/vector_agg/vector_agg.h"
+#include "nodes/vector_agg/exec.h"
 #include "vector_predicates.h"
 #include "ts_catalog/array_utils.h"
 
@@ -1091,11 +1091,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 		//			fprintf(stderr, "when assigned, the decompressed tlist was:\n");
 		//			my_print(decompressed_tlist);
 	}
-
-	//	if (dcpath->perform_vectorized_aggregation)
-	//	{
-	//		return vector_agg_plan_create(&decompress_plan->scan.plan);
-	//	}
 
 	return &decompress_plan->scan.plan;
 }

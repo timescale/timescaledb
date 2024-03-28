@@ -1,3 +1,4 @@
+
 /*
  * This file and its contents are licensed under the Timescale License.
  * Please see the included NOTICE for copyright information and
@@ -5,79 +6,129 @@
  */
 
 #include <postgres.h>
-#include <catalog/pg_operator.h>
-#include <miscadmin.h>
-#include <nodes/bitmapset.h>
+
+#include <commands/explain.h>
+#include <executor/executor.h>
+#include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
-#include <optimizer/cost.h>
-#include <optimizer/optimizer.h>
-#include <optimizer/pathnode.h>
-#include <optimizer/paths.h>
-#include <parser/parsetree.h>
-#include <utils/builtins.h>
-#include <utils/lsyscache.h>
-#include <utils/typcache.h>
 #include <utils/fmgroids.h>
 
-#include <planner.h>
+#include "plan.h"
 
-#include "compression/compression.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
-#include "partialize_agg.h"
+#include "exec.h"
 #include "utils.h"
-#include "debug_assert.h"
 
-#include "nodes/vector_agg/vector_agg.h"
+static struct CustomScanMethods scan_methods = { .CustomName = "VectorAgg",
+												 .CreateCustomScanState = vector_agg_state_create };
+
+void
+_vector_agg_init(void)
+{
+	TryRegisterCustomScanMethods(&scan_methods);
+}
 
 /*
- * Check if we can perform the computation of the aggregate in a vectorized manner directly inside
- * of the decompress chunk node. If this is possible, the decompress chunk node will emit partial
- * aggregates directly, and there is no need for the PostgreSQL aggregation node on top.
+ * Build an output targetlist for a custom node that just references all the
+ * custom scan targetlist entries.
  */
-bool
-apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path, Path *path)
+static inline List *
+build_trivial_custom_output_targetlist(List *scan_targetlist)
 {
-	return false;
-//
-//	if (!ts_guc_enable_vectorized_aggregation || !ts_guc_enable_bulk_decompression)
-//		return false;
-//
-//	Assert(path != NULL);
-//	Assert(aggregation_path->aggsplit == AGGSPLIT_INITIAL_SERIAL);
-//
-//	if (is_vectorizable_agg_path(root, aggregation_path, path))
-//	{
-//		Assert(ts_is_decompress_chunk_path(path));
-//		DecompressChunkPath *decompress_path = (DecompressChunkPath *) castNode(CustomPath, path);
-//
-//		/* Change the output of the path and let the decompress chunk node emit partial aggregates
-//		 * directly */
-//		decompress_path->perform_vectorized_aggregation = true;
-//
-//		decompress_path->custom_path.path.pathtarget = aggregation_path->path.pathtarget;
-//
-//		/* The decompress chunk node can perform the aggregation directly. No need for a
-//dedicated
-//		 * agg node on top. */
-//		return true;
-//	}
-//
-//	/* PostgreSQL should handle the aggregation. Regular agg node on top is required. */
-//	return false;
+	List *result = NIL;
+
+	ListCell *lc;
+	foreach (lc, scan_targetlist)
+	{
+		TargetEntry *scan_entry = (TargetEntry *) lfirst(lc);
+
+		Var *var = makeVar(INDEX_VAR,
+						   scan_entry->resno,
+						   exprType((Node *) scan_entry->expr),
+						   exprTypmod((Node *) scan_entry->expr),
+						   exprCollation((Node *) scan_entry->expr),
+						   /* varlevelsup = */ 0);
+
+		TargetEntry *output_entry = makeTargetEntry((Expr *) var,
+													scan_entry->resno,
+													scan_entry->resname,
+													scan_entry->resjunk);
+
+		result = lappend(result, output_entry);
+	}
+
+	return result;
+}
+
+static Node *
+replace_outer_special_vars_mutator(Node *node, void *context)
+{
+	if (node == NULL)
+	{
+		return NULL;
+	}
+
+	if (!IsA(node, Var))
+	{
+		return expression_tree_mutator(node, replace_outer_special_vars_mutator, context);
+	}
+
+	Var *var = castNode(Var, node);
+	if (var->varno != OUTER_VAR)
+	{
+		return node;
+	}
+
+	var = copyObject(var);
+	var->varno = DatumGetInt32(PointerGetDatum(context));
+	return (Node *) var;
+}
+
+/*
+ * Replace the OUTER_VAR special variables, that are used in the output
+ * targetlists of aggregation nodes, with the given other varno.
+ */
+static List *
+replace_outer_special_vars(List *input, int target_varno)
+{
+	return castNode(List,
+					replace_outer_special_vars_mutator((Node *) input,
+													   DatumGetPointer(
+														   Int32GetDatum(target_varno))));
 }
 
 static Plan *
-insert_vector_agg_node(Plan *plan)
+vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
+{
+	CustomScan *custom = (CustomScan *) makeNode(CustomScan);
+	custom->custom_plans = list_make1(decompress_chunk);
+	custom->methods = &scan_methods;
+
+	/*
+	 * Note that this is being called from the post-planning hook, and therefore
+	 * after set_plan_refs(). The meaning of output targetlists is different from
+	 * the previous planning stages, and they contain special varnos referencing
+	 * the scan targetlists.
+	 */
+	custom->custom_scan_tlist =
+		replace_outer_special_vars(agg->plan.targetlist, decompress_chunk->scan.scanrelid);
+	custom->scan.plan.targetlist =
+		build_trivial_custom_output_targetlist(custom->custom_scan_tlist);
+
+	return (Plan *) custom;
+}
+
+Plan *
+try_insert_vector_agg_node(Plan *plan)
 {
 	if (plan->lefttree)
 	{
-		plan->lefttree = insert_vector_agg_node(plan->lefttree);
+		plan->lefttree = try_insert_vector_agg_node(plan->lefttree);
 	}
 
 	if (plan->righttree)
 	{
-		plan->righttree = insert_vector_agg_node(plan->righttree);
+		plan->righttree = try_insert_vector_agg_node(plan->righttree);
 	}
 
 	if (IsA(plan, Append))
@@ -86,7 +137,7 @@ insert_vector_agg_node(Plan *plan)
 		ListCell *lc;
 		foreach (lc, plans)
 		{
-			lfirst(lc) = insert_vector_agg_node(lfirst(lc));
+			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc));
 		}
 	}
 
@@ -197,8 +248,8 @@ insert_vector_agg_node(Plan *plan)
 	/*
 	 * Check if this particular column is a segmentby or has bulk decompression
 	 * enabled. This hook is called after set_plan_refs, and at this stage the
-	 * aggregation node uses OUTER_VAR references into the child scan targetlist,
-	 * so first we have to translate this.
+	 * output targetlist of the aggregation node uses OUTER_VAR references into
+	 * the child scan targetlist, so first we have to translate this.
 	 */
 	Assert(aggregated_var->varno == OUTER_VAR);
 	TargetEntry *decompressed_target_entry =
@@ -265,19 +316,4 @@ insert_vector_agg_node(Plan *plan)
 	// mybt();
 
 	return vector_agg_plan_create(agg, custom);
-}
-
-void
-tsl_postprocess_plan(PlannedStmt *stmt)
-{
-	// mybt();
-	// my_print(stmt);
-
-	if (ts_guc_enable_vectorized_aggregation)
-	{
-		stmt->planTree = insert_vector_agg_node(stmt->planTree);
-	}
-
-	// fprintf(stderr, "postprocessed:\n");
-	// my_print(stmt->planTree);
 }

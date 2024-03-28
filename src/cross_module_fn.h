@@ -90,7 +90,6 @@ typedef struct CrossModuleFunctions
 	PGFunction move_chunk;
 
 	/* Vectorized queries */
-	bool (*push_down_aggregation)(PlannerInfo *root, AggPath *aggregation_path, Path *subpath);
 	void (*tsl_postprocess_plan)(PlannedStmt *stmt);
 
 	/* Continuous Aggregates */

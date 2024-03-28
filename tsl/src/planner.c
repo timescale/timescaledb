@@ -22,6 +22,7 @@
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/gapfill/gapfill.h"
+#include "nodes/vector_agg/plan.h"
 #include "planner.h"
 
 #include <math.h>
@@ -201,4 +202,22 @@ tsl_preprocess_query(Query *parse)
 	{
 		constify_cagg_watermark(parse);
 	}
+}
+
+/*
+ * Run plan postprocessing optimizations.
+ */
+void
+tsl_postprocess_plan(PlannedStmt *stmt)
+{
+	// mybt();
+	// my_print(stmt);
+
+	if (ts_guc_enable_vectorized_aggregation)
+	{
+		stmt->planTree = try_insert_vector_agg_node(stmt->planTree);
+	}
+
+	// fprintf(stderr, "postprocessed:\n");
+	// my_print(stmt->planTree);
 }

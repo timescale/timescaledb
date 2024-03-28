@@ -39,8 +39,7 @@
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/gapfill/gapfill_functions.h"
-#include "nodes/vector_agg/vector_agg.h"
-#include "partialize_agg.h"
+#include "nodes/vector_agg/plan.h"
 #include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"
@@ -119,7 +118,6 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policies_show = policies_show,
 
 	/* Vectorized queries */
-	.push_down_aggregation = apply_vectorized_agg_optimization,
 	.tsl_postprocess_plan = tsl_postprocess_plan,
 
 	/* Continuous Aggregates */
