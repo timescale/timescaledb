@@ -29,6 +29,7 @@
 #include "custom_type_cache.h"
 #include "guc.h"
 #include "import/planner.h"
+#include "import/list.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
@@ -1040,12 +1041,12 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 #endif
 
-	settings = list_make6_int(dcpath->info->hypertable_id,
-							  dcpath->info->chunk_rte->relid,
-							  dcpath->reverse,
-							  dcpath->batch_sorted_merge,
-							  enable_bulk_decompression,
-							  false /* FIXME */);
+	settings = pg_new_list(T_IntList, DCS_Count);
+	lfirst_int(list_nth_cell(settings, DCS_HypertableId)) = dcpath->info->hypertable_id;
+	lfirst_int(list_nth_cell(settings, DCS_ChunkRelid)) = dcpath->info->chunk_rte->relid;
+	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
+	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
+	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see
@@ -1054,12 +1055,15 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 */
 	decompress_plan->custom_exprs = list_make1(vectorized_quals);
 
-	decompress_plan->custom_private = list_make6(settings,
-												 dcpath->decompression_map,
-												 dcpath->is_segmentby_column,
-												 dcpath->bulk_decompression_column,
-												 NIL /* FIXME */,
-												 sort_options);
+	decompress_plan->custom_private = pg_new_list(T_List, DCP_Count);
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_Settings)) = settings;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_DecompressionMap)) =
+		dcpath->decompression_map;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_IsSegmentbyColumn)) =
+		dcpath->is_segmentby_column;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_BulkDecompressionColumn)) =
+		dcpath->bulk_decompression_column;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_SortInfo)) = sort_options;
 
 	/* input target list */
 	decompress_plan->custom_scan_tlist = NIL;

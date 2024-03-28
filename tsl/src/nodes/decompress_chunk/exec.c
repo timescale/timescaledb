@@ -61,21 +61,25 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->csstate.methods = &chunk_state->exec_methods;
 
 	Assert(IsA(cscan->custom_private, List));
-	Assert(list_length(cscan->custom_private) == 6);
-	List *settings = linitial(cscan->custom_private);
-	chunk_state->decompression_map = lsecond(cscan->custom_private);
-	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
-	chunk_state->bulk_decompression_column = lfourth(cscan->custom_private);
-	chunk_state->sortinfo = lsixth(cscan->custom_private);
+	Assert(list_length(cscan->custom_private) == DCP_Count);
+	List *settings = list_nth(cscan->custom_private, DCP_Settings);
+	chunk_state->decompression_map = list_nth(cscan->custom_private, DCP_DecompressionMap);
+	chunk_state->is_segmentby_column = list_nth(cscan->custom_private, DCP_IsSegmentbyColumn);
+	chunk_state->bulk_decompression_column =
+		list_nth(cscan->custom_private, DCP_BulkDecompressionColumn);
+	chunk_state->sortinfo = list_nth(cscan->custom_private, DCP_SortInfo);
+
 	chunk_state->custom_scan_tlist = cscan->custom_scan_tlist;
 
 	Assert(IsA(settings, IntList));
-	Assert(list_length(settings) == 6);
-	chunk_state->hypertable_id = linitial_int(settings);
-	chunk_state->chunk_relid = lsecond_int(settings);
-	chunk_state->decompress_context.reverse = lthird_int(settings);
-	chunk_state->decompress_context.batch_sorted_merge = lfourth_int(settings);
-	chunk_state->decompress_context.enable_bulk_decompression = lfifth_int(settings);
+	Assert(list_length(settings) == DCS_Count);
+	chunk_state->hypertable_id = list_nth_int(settings, DCS_HypertableId);
+	chunk_state->chunk_relid = list_nth_int(settings, DCS_ChunkRelid);
+	chunk_state->decompress_context.reverse = list_nth_int(settings, DCS_Reverse);
+	chunk_state->decompress_context.batch_sorted_merge =
+		list_nth_int(settings, DCS_BatchSortedMerge);
+	chunk_state->decompress_context.enable_bulk_decompression =
+		list_nth_int(settings, DCS_EnableBulkDecompression);
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);

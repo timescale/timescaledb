@@ -18,6 +18,7 @@
 
 #include "exec.h"
 #include "utils.h"
+#include "nodes/decompress_chunk/planner.h"
 
 static struct CustomScanMethods scan_methods = { .CustomName = "VectorAgg",
 												 .CreateCustomScanState = vector_agg_state_create };
@@ -271,9 +272,9 @@ try_insert_vector_agg_node(Plan *plan)
 	 * Now, we have to translate the decompressed varno into the compressed
 	 * column index, to check if the column supports bulk decompression.
 	 */
-	List *decompression_map = list_nth(custom->custom_private, 1);
-	List *is_segmentby_column = list_nth(custom->custom_private, 2);
-	List *bulk_decompression_column = list_nth(custom->custom_private, 3);
+	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
+	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
+	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
 	int compressed_column_index = 0;
 	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
 	{
@@ -289,7 +290,8 @@ try_insert_vector_agg_node(Plan *plan)
 
 	/* Bulk decompression can also be disabled globally. */
 	List *settings = linitial(custom->custom_private);
-	const bool bulk_decompression_enabled_globally = list_nth_int(settings, 4);
+	const bool bulk_decompression_enabled_globally =
+		list_nth_int(settings, DCS_EnableBulkDecompression);
 
 	/*
 	 * We support vectorized aggregation either for segmentby columns or for
