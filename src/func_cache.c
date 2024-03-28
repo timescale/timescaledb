@@ -204,20 +204,22 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Interval Bucket with origin */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPOID, TIMESTAMPOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Interval Bucket with offset */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPOID, INTERVALOID },
@@ -234,20 +236,22 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Interval Bucket with origin */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID, TIMESTAMPTZOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Interval Bucket with offset */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, TIMESTAMPTZOID, INTERVALOID },
@@ -264,20 +268,22 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Interval Bucket with origin */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, DATEOID, DATEOID },
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Interval Bucket with offset */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INTERVALOID, DATEOID, INTERVALOID },
@@ -294,10 +300,11 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Int2 Bucket with offset */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INT2OID, INT2OID, INT2OID },
@@ -314,10 +321,11 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Int4 Bucket with offset */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INT4OID, INT4OID, INT4OID },
@@ -334,10 +342,11 @@ static FuncInfo funcinfo[] = {
 		.group_estimate = time_bucket_group_estimate,
 		.sort_transform = time_bucket_sort_transform,
 	},
+	/* Int8 Bucket with offset */
 	{
 		.origin = ORIGIN_TIMESCALE,
 		.is_bucketing_func = true,
-		.allowed_in_cagg_definition = false,
+		.allowed_in_cagg_definition = true,
 		.funcname = "time_bucket",
 		.nargs = 3,
 		.arg_types = { INT8OID, INT8OID, INT8OID },

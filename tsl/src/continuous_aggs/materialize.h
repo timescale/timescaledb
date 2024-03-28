@@ -35,7 +35,8 @@ typedef struct InternalTimeRange
 	int64 end;	 /* exclusive */
 } InternalTimeRange;
 
-void continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName partial_view,
+void continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
+										   SchemaAndName partial_view,
 										   SchemaAndName materialization_table,
 										   const NameData *time_column_name,
 										   InternalTimeRange new_materialization_range,

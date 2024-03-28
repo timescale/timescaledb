@@ -301,12 +301,11 @@ SELECT * FROM cagg1;
 CREATE MATERIALIZED VIEW cagg2 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT') FROM metrics GROUP BY 1;
 SELECT * FROM cagg2;
 
--- custom origin
-CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', '2000-01-01'::timestamptz) FROM metrics GROUP BY 1;
-SELECT * FROM cagg3;
-
--- offset not supported atm
+-- custom origin - not supported due to variable size
 \set ON_ERROR_STOP 0
+CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', '2000-01-01'::timestamptz) FROM metrics GROUP BY 1;
+
+-- offset - not supported due to variable size
 CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
 \set ON_ERROR_STOP 1
 

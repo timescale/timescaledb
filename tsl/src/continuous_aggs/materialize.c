@@ -4,23 +4,24 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <executor/spi.h>
 #include <fmgr.h>
+#include <scan_iterator.h>
+#include <scanner.h>
+#include <time_utils.h>
+#include <compat/compat.h>
+#include <executor/spi.h>
 #include <lib/stringinfo.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
+#include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
-#include <utils/date.h>
 #include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
-#include <scanner.h>
-#include <compat/compat.h>
-#include <scan_iterator.h>
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include <time_utils.h>
 #include "debug_assert.h"
-
 #include "materialize.h"
 
 #define CHUNKIDFROMRELID "chunk_id_from_relid"
@@ -37,7 +38,8 @@ static Datum internal_to_time_value_or_infinite(int64 internal, Oid time_type,
  * materialization support *
  ***************************/
 
-static void spi_update_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
+static void spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
+										SchemaAndName partial_view,
 										SchemaAndName materialization_table,
 										const NameData *time_column_name,
 										TimeRange invalidation_range, const int32 chunk_id);
@@ -45,14 +47,16 @@ static void spi_delete_materializations(SchemaAndName materialization_table,
 										const NameData *time_column_name,
 										TimeRange invalidation_range,
 										const char *const chunk_condition);
-static void spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
+static void spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
+										SchemaAndName partial_view,
 										SchemaAndName materialization_table,
 										const NameData *time_column_name,
 										TimeRange materialization_range,
 										const char *const chunk_condition);
 
 void
-continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName partial_view,
+continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *cagg,
+									  SchemaAndName partial_view,
 									  SchemaAndName materialization_table,
 									  const NameData *time_column_name,
 									  InternalTimeRange new_materialization_range,
@@ -101,6 +105,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName partial_
 	if (range_length(invalidation_range) == 0 || !materialize_invalidations_separately)
 	{
 		spi_update_materializations(mat_ht,
+									cagg,
 									partial_view,
 									materialization_table,
 									time_column_name,
@@ -111,6 +116,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName partial_
 	else
 	{
 		spi_update_materializations(mat_ht,
+									cagg,
 									partial_view,
 									materialization_table,
 									time_column_name,
@@ -118,6 +124,7 @@ continuous_agg_update_materialization(Hypertable *mat_ht, SchemaAndName partial_
 									chunk_id);
 
 		spi_update_materializations(mat_ht,
+									cagg,
 									partial_view,
 									materialization_table,
 									time_column_name,
@@ -215,9 +222,10 @@ internal_time_range_to_time_range(InternalTimeRange internal)
 }
 
 static void
-spi_update_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
-							SchemaAndName materialization_table, const NameData *time_column_name,
-							TimeRange invalidation_range, const int32 chunk_id)
+spi_update_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
+							SchemaAndName partial_view, SchemaAndName materialization_table,
+							const NameData *time_column_name, TimeRange invalidation_range,
+							const int32 chunk_id)
 {
 	StringInfo chunk_condition = makeStringInfo();
 
@@ -235,6 +243,7 @@ spi_update_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
 								invalidation_range,
 								chunk_condition->data);
 	spi_insert_materializations(mat_ht,
+								cagg,
 								partial_view,
 								materialization_table,
 								time_column_name,
@@ -284,9 +293,10 @@ spi_delete_materializations(SchemaAndName materialization_table, const NameData 
 }
 
 static void
-spi_insert_materializations(Hypertable *mat_ht, SchemaAndName partial_view,
-							SchemaAndName materialization_table, const NameData *time_column_name,
-							TimeRange materialization_range, const char *const chunk_condition)
+spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
+							SchemaAndName partial_view, SchemaAndName materialization_table,
+							const NameData *time_column_name, TimeRange materialization_range,
+							const char *const chunk_condition)
 {
 	int res;
 	StringInfo command = makeStringInfo();
