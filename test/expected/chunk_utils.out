@@ -560,8 +560,8 @@ ORDER BY c.id;
  _timescaledb_internal | _hyper_3_17_chunk      | table | default_perm_user
  _timescaledb_internal | _hyper_3_18_chunk      | table | default_perm_user
  _timescaledb_internal | bgw_job_stat           | table | super_user
+ _timescaledb_internal | bgw_job_stat_history   | table | super_user
  _timescaledb_internal | bgw_policy_chunk_stats | table | super_user
- _timescaledb_internal | job_errors             | table | super_user
 (17 rows)
 
 -- next two calls of show_chunks should give same set of chunks as above when combined

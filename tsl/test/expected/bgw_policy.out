@@ -626,11 +626,11 @@ SELECT proc_name, count(*)
 FROM _timescaledb_config.bgw_job
 WHERE proc_name NOT LIKE '%telemetry%'
 GROUP BY proc_name;
-         proc_name          | count 
-----------------------------+-------
- policy_job_error_retention |     1
- policy_reorder             |     1
- policy_retention           |     2
+             proc_name             | count 
+-----------------------------------+-------
+ policy_reorder                    |     1
+ policy_job_stat_history_retention |     1
+ policy_retention                  |     2
 (3 rows)
 
 -- test retention with null arguments

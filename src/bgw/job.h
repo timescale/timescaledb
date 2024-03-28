@@ -15,9 +15,16 @@
 #define TELEMETRY_INITIAL_NUM_RUNS 12
 #define SCHEDULER_APPNAME "TimescaleDB Background Worker Scheduler"
 
+typedef struct BgwJobHistory
+{
+	int64 id;
+	TimestampTz execution_start;
+} BgwJobHistory;
+
 typedef struct BgwJob
 {
 	FormData_bgw_job fd;
+	BgwJobHistory job_history;
 } BgwJob;
 
 typedef bool job_main_func(void);
@@ -63,7 +70,6 @@ extern TSDLLEXPORT bool ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_
 														  int64 initial_runs,
 														  Interval *next_interval, bool atomic,
 														  bool mark);
-extern TSDLLEXPORT bool ts_job_errors_insert_tuple(const FormData_job_error *job_err);
 extern TSDLLEXPORT void ts_bgw_job_validate_schedule_interval(Interval *schedule_interval);
 extern TSDLLEXPORT char *ts_bgw_job_validate_timezone(Datum timezone);
 
