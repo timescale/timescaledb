@@ -19,7 +19,8 @@
 #include "nodes/decompress_chunk/vector_predicates.h"
 
 /*
- * Create a single-value ArrowArray of an arithmetic type.
+ * Create a single-value ArrowArray of an arithmetic type. This is a specialized
+ * function because arithmetic types have a particular layout of ArrowArrays.
  */
 static ArrowArray *
 make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull)
@@ -78,7 +79,8 @@ make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull
 }
 
 /*
- * Create a single-value ArrowArray of text.
+ * Create a single-value ArrowArray of text. This is a specialized function
+ * because the text ArrowArray has a specialized layout.
  */
 static ArrowArray *
 make_single_value_arrow_text(Datum datum, bool isnull)
