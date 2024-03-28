@@ -238,18 +238,6 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 				(DecompressChunkColumnCompression){ .bulk_decompression_possible =
 														bulk_decompression_possible };
 		}
-
-		if (path->perform_vectorized_aggregation)
-		{
-			Assert(list_length(path->custom_path.path.parent->reltarget->exprs) == 1);
-			Var *var = linitial(path->custom_path.path.parent->reltarget->exprs);
-			Assert((Index) var->varno == path->custom_path.path.parent->relid);
-			if (var->varattno == destination_attno_in_uncompressed_chunk)
-				path->aggregated_column_type =
-					lappend_int(path->aggregated_column_type, var->vartype);
-			else
-				path->aggregated_column_type = lappend_int(path->aggregated_column_type, -1);
-		}
 	}
 
 	/*
@@ -1057,7 +1045,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 							  dcpath->reverse,
 							  dcpath->batch_sorted_merge,
 							  enable_bulk_decompression,
-							  dcpath->perform_vectorized_aggregation);
+							  false /* FIXME */);
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see
@@ -1070,27 +1058,11 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 												 dcpath->decompression_map,
 												 dcpath->is_segmentby_column,
 												 dcpath->bulk_decompression_column,
-												 dcpath->aggregated_column_type,
+												 NIL /* FIXME */,
 												 sort_options);
 
 	/* input target list */
 	decompress_plan->custom_scan_tlist = NIL;
-
-	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
-	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
-	 *
-	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
-	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
-	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
-	 */
-	if (dcpath->perform_vectorized_aggregation)
-	{
-		decompress_plan->custom_scan_tlist = decompressed_tlist;
-		decompress_plan->scan.plan.targetlist = decompressed_tlist;
-
-		//			fprintf(stderr, "when assigned, the decompressed tlist was:\n");
-		//			my_print(decompressed_tlist);
-	}
 
 	return &decompress_plan->scan.plan;
 }

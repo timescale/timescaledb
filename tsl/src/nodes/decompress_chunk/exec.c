@@ -66,7 +66,6 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->decompression_map = lsecond(cscan->custom_private);
 	chunk_state->is_segmentby_column = lthird(cscan->custom_private);
 	chunk_state->bulk_decompression_column = lfourth(cscan->custom_private);
-	chunk_state->aggregated_column_type = lfifth(cscan->custom_private);
 	chunk_state->sortinfo = lsixth(cscan->custom_private);
 	chunk_state->custom_scan_tlist = cscan->custom_scan_tlist;
 
@@ -77,22 +76,12 @@ decompress_chunk_state_create(CustomScan *cscan)
 	chunk_state->decompress_context.reverse = lthird_int(settings);
 	chunk_state->decompress_context.batch_sorted_merge = lfourth_int(settings);
 	chunk_state->decompress_context.enable_bulk_decompression = lfifth_int(settings);
-	// chunk_state->perform_vectorized_aggregation = false; //lsixth_int(settings);
-	chunk_state->perform_vectorized_aggregation = lsixth_int(settings);
 
 	Assert(IsA(cscan->custom_exprs, List));
 	Assert(list_length(cscan->custom_exprs) == 1);
 	chunk_state->vectorized_quals_original = linitial(cscan->custom_exprs);
 	Assert(list_length(chunk_state->decompression_map) ==
 		   list_length(chunk_state->is_segmentby_column));
-
-#ifdef USE_ASSERT_CHECKING
-	if (chunk_state->perform_vectorized_aggregation)
-	{
-		Assert(list_length(chunk_state->decompression_map) ==
-			   list_length(chunk_state->aggregated_column_type));
-	}
-#endif
 
 	return (Node *) chunk_state;
 }
@@ -173,8 +162,6 @@ decompress_chunk_exec_heap(CustomScanState *node)
 	Assert(chunk_state->decompress_context.batch_sorted_merge);
 	return decompress_chunk_exec_impl(chunk_state, &BatchQueueFunctionsHeap);
 }
-
-static TupleTableSlot *decompress_chunk_exec_vector_agg(CustomScanState *node);
 
 /*
  * Complete initialization of the supplied CustomScanState.
@@ -294,22 +281,12 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 		if (column.output_attno > 0)
 		{
-			if (chunk_state->perform_vectorized_aggregation &&
-				lfirst_int(list_nth_cell(chunk_state->aggregated_column_type, compressed_index)) !=
-					-1)
-			{
-				column.typid = lfirst_int(
-					list_nth_cell(chunk_state->aggregated_column_type, compressed_index));
-			}
-			else
-			{
-				/* normal column that is also present in decompressed chunk */
-				Form_pg_attribute attribute =
-					TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
+			/* normal column that is also present in decompressed chunk */
+			Form_pg_attribute attribute =
+				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
 
-				column.typid = attribute->atttypid;
-				column.value_bytes = get_typlen(column.typid);
-			}
+			column.typid = attribute->atttypid;
+			column.value_bytes = get_typlen(column.typid);
 
 			if (list_nth_int(chunk_state->is_segmentby_column, compressed_index))
 				column.type = SEGMENTBY_COLUMN;
@@ -352,13 +329,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	 * Choose which batch queue we are going to use: heap for batch sorted
 	 * merge, and one-element FIFO for normal decompression.
 	 */
-	if (chunk_state->perform_vectorized_aggregation)
-	{
-		chunk_state->batch_queue =
-			batch_queue_fifo_create(num_compressed, &BatchQueueFunctionsFifo);
-		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_vector_agg;
-	}
-	else if (dcontext->batch_sorted_merge)
+	if (dcontext->batch_sorted_merge)
 	{
 		chunk_state->batch_queue =
 			batch_queue_heap_create(num_compressed,
@@ -684,18 +655,6 @@ decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
 	}
 }
 
-static TupleTableSlot *
-decompress_chunk_exec_vector_agg(CustomScanState *node)
-{
-	DecompressChunkState *chunk_state = (DecompressChunkState *) node;
-	Assert(!chunk_state->decompress_context.batch_sorted_merge);
-	Assert(chunk_state->perform_vectorized_aggregation);
-
-	CustomScanState *vector_agg_state = node;
-
-	return decompress_chunk_exec_vector_agg_impl(vector_agg_state, chunk_state);
-}
-
 /*
  * The exec function for the DecompressChunk node. It takes the explicit queue
  * functions pointer as an optimization, to allow these functions to be
@@ -709,8 +668,6 @@ decompress_chunk_exec_impl(DecompressChunkState *chunk_state, const BatchQueueFu
 	BatchQueue *bq = chunk_state->batch_queue;
 
 	Assert(bq->funcs == bqfuncs);
-
-	Assert(!chunk_state->perform_vectorized_aggregation);
 
 	bqfuncs->pop(bq, dcontext);
 
@@ -814,13 +771,6 @@ decompress_chunk_explain(CustomScanState *node, List *ancestors, ExplainState *e
 		{
 			ExplainPropertyBool("Bulk Decompression",
 								chunk_state->decompress_context.enable_bulk_decompression,
-								es);
-		}
-
-		if (chunk_state->perform_vectorized_aggregation)
-		{
-			ExplainPropertyBool("Vectorized Aggregation",
-								chunk_state->perform_vectorized_aggregation,
 								es);
 		}
 	}

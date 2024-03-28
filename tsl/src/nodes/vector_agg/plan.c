@@ -304,13 +304,6 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	//	bool perform_vectorized_aggregation = list_nth_int(linitial(custom->custom_private), 5);
-	//	if (!perform_vectorized_aggregation)
-	//	{
-	//		fprintf(stderr, "no vectorized aggregation\n");
-	//		return plan;
-	//	}
-
 	fprintf(stderr, "found!!!\n");
 	// my_print(plan);
 	// mybt();
