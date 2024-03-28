@@ -650,8 +650,7 @@ ts_bgw_job_stat_mark_start(BgwJob *job)
 	job->job_history.execution_start = ts_timer_get_current_timestamp();
 	job->job_history.id = INVALID_BGW_JOB_STAT_HISTORY_ID;
 
-	if (ts_guc_enable_job_execution_logging)
-		ts_bgw_job_stat_history_mark_start(job);
+	ts_bgw_job_stat_history_mark_start(job, false);
 
 	pgstat_report_activity(STATE_IDLE, NULL);
 }

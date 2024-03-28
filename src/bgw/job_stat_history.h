@@ -11,5 +11,5 @@
 
 #define INVALID_BGW_JOB_STAT_HISTORY_ID 0
 
-extern void ts_bgw_job_stat_history_mark_start(BgwJob *job);
+extern void ts_bgw_job_stat_history_mark_start(BgwJob *job, bool force);
 extern void ts_bgw_job_stat_history_mark_end(BgwJob *job, JobResult result, Jsonb *edata);

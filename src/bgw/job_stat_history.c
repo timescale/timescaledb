@@ -21,8 +21,12 @@ typedef struct BgwJobStatHistoryContext
 } BgwJobStatHistoryContext;
 
 void
-ts_bgw_job_stat_history_mark_start(BgwJob *job)
+ts_bgw_job_stat_history_mark_start(BgwJob *job, bool force)
 {
+	/* don't mark the start in case of the GUC be disabled and we're not forcing it */
+	if (!ts_guc_enable_job_execution_logging && !force)
+		return;
+
 	Relation rel = table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT_HISTORY),
 							  ShareRowExclusiveLock);
 	TupleDesc desc = RelationGetDescr(rel);
@@ -152,7 +156,7 @@ ts_bgw_job_stat_history_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
 	 * job execution */
 	if (!ts_guc_enable_job_execution_logging && result != JOB_SUCCESS)
 	{
-		ts_bgw_job_stat_history_mark_start(job);
+		ts_bgw_job_stat_history_mark_start(job, true);
 
 		/* the following mark end should see the inserted history job */
 		CommandCounterIncrement();
