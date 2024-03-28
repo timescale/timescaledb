@@ -18,6 +18,10 @@
 #include <optimizer/prep.h>
 #include <optimizer/restrictinfo.h>
 #include <parser/parsetree.h>
+#include <parser/parse_expr.h>
+#include <parser/parse_relation.h>
+#include <parser/parse_coerce.h>
+#include <parser/parse_collate.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
@@ -30,6 +34,9 @@
 #include "loader/lwlocks.h"
 #include "planner/planner.h"
 #include "transform.h"
+#include "dimension_slice.h"
+#include "chunk.h"
+#include "osm_callbacks.h"
 
 #define INVALID_SUBPLAN_INDEX (-1)
 #define NO_MATCHING_SUBPLANS (-2)
@@ -256,6 +263,43 @@ do_startup_exclusion(ChunkAppendState *state)
 			}
 			restrictinfos = constify_restrictinfos(&root, restrictinfos);
 
+#if PG14_GE
+			// this is where we run the OSM chunk exclusion code
+			chunk_startup_exclusion_hook_type osm_chunk_exclusion_hook =
+				ts_get_osm_chunk_startup_exclusion_hook();
+
+			if (osm_chunk_exclusion_hook)
+			{
+				Index rt_index = scan->scanrelid;
+				EState *estate = state->csstate.ss.ps.state;
+				RangeTblEntry *rte = rt_fetch(rt_index, estate->es_range_table);
+				// relation_constraints = ca_get_relation_constraints(rte->relid, rt_index, true);
+				// need to get chunk from the relid
+				Oid relid = rte->relid;
+				Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+				Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
+				int tiered_chunks_match = 0;
+				// Index varno = rt_index;
+				if (chunk && IS_OSM_CHUNK(chunk))
+				{
+					tiered_chunks_match = osm_chunk_exclusion_hook(NameStr(ht->fd.schema_name),
+																   NameStr(ht->fd.table_name),
+																   relid,
+																   (ForeignScan *) scan,
+																   restrictinfos,
+																   rt_index);
+					if (tiered_chunks_match == 0)
+					{
+						// the OSM chunk can be skipped entirely
+						if (i < state->first_partial_plan)
+							filtered_first_partial_plan--;
+
+						continue;
+					}
+				}
+				// root->simple_rte_array[scan->scanrelid]->relid
+			}
+#endif
 			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
 			{
 				if (i < state->first_partial_plan)
