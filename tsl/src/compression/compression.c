@@ -1498,9 +1498,9 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 * We want to prevent other decompressors from decompressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our decompression.
 	 * We may as well allow readers to keep reading the compressed data while
-	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
+	 * we are decompressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
-	Relation out_rel = table_open(out_table, AccessExclusiveLock);
+	Relation out_rel = table_open(out_table, ExclusiveLock);
 	Relation in_rel = table_open(in_table, ExclusiveLock);
 	int64 nrows_processed = 0;
 

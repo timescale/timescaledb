@@ -607,12 +607,14 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	/*
 	 * Lock the compressed chunk that is going to be deleted. At this point,
 	 * the reference to the compressed chunk is already removed from the
-	 * catalog. So, new readers do not include it in their operations.
+	 * catalog but we need to block readers from accessing this chunk
+	 * until the catalog changes are visible to them.
 	 *
 	 * Note: Calling performMultipleDeletions in chunk_index_tuple_delete
 	 * also requests an AccessExclusiveLock on the compressed_chunk. However,
 	 * this call makes the lock on the chunk explicit.
 	 */
+	LockRelationOid(uncompressed_chunk->table_id, AccessExclusiveLock);
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 	ts_cache_release(hcache);

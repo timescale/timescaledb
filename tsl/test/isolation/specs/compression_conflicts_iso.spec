@@ -49,11 +49,15 @@ step "SChunkStat" {  SELECT status from _timescaledb_catalog.chunk
        WHERE id = ( select min(ch.id) FROM _timescaledb_catalog.hypertable ht, _timescaledb_catalog.chunk ch WHERE ch.hypertable_id = ht.id AND ht.table_name like 'ts_device_table'); }
 
 session "S"
+step "SB" { BEGIN; }
+step "SR" { ROLLBACK; }
 step "S1" { SELECT count(*) from ts_device_table; }
 step "SC1" { SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1; }
 step "SH" { SELECT total_chunks, number_compressed_chunks from hypertable_compression_stats('ts_device_table'); }
 step "SA" { SELECT * FROM ts_device_table; }
 step "SU" { SELECT * FROM ts_device_table WHERE value IN (98,99); }
+# Step to confirm previous step finished
+step "SF" {}
 
 
 session "LCT"
@@ -97,6 +101,16 @@ step "CA1" {
   ORDER BY ch::text;
 }
 step "CAc" { COMMIT; }
+
+session "DecompressAll"
+step "DA1" {
+  BEGIN;
+  SELECT
+    CASE WHEN decompress_chunk(ch) IS NOT NULL THEN true ELSE false END AS compress
+  FROM show_chunks('ts_device_table') AS ch
+  ORDER BY ch::text;
+}
+step "DAc" { COMMIT; }
 
 session "RecompressChunk"
 step "RC" {
@@ -167,3 +181,14 @@ permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IBRR" "Iu1" "RC"  "Unloc
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IBS"  "Iu1" "RC"  "UnlockChunk" "Ic" "SH" "SA" "SChunkStat" "SU"
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "IN1"  "RC" "UnlockChunk" "INc" "SH" "SA" "SChunkStat"
 permutation "CA1" "CAc" "I1" "SChunkStat" "LockChunk1" "INu1" "RC" "UnlockChunk" "INc" "SH" "SA" "SChunkStat" "SU"
+
+# Decompressing a chunk should not stop any reads 
+# until the end when we drop the compressed chunk
+# which happens after updates to the chunk catalog tuple
+permutation "CA1" "CAc" "LockChunkTuple" "DA1" "SA" "SF" "UnlockChunkTuple" "DAc"
+
+# Compressing a chunk should not stop any reads
+# until it comes to truncating the uncompressed chunk
+# which happens at the end of the operations along with
+# catalog updates.
+permutation "SB" "SA" "CA1" "SA" "SF" "SR" "CAc"
