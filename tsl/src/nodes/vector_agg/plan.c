@@ -98,6 +98,10 @@ replace_outer_special_vars(List *input, int target_varno)
 														   Int32GetDatum(target_varno))));
 }
 
+/*
+ * Create a vectorized aggregation node to replace the given partial aggregation
+ * node.
+ */
 static Plan *
 vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 {
@@ -119,6 +123,10 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	return (Plan *) custom;
 }
 
+/*
+ * Where possible, replace the partial aggregation plan nodes with our own
+ * vectorized aggregation node. The replacement is done in-place.
+ */
 Plan *
 try_insert_vector_agg_node(Plan *plan)
 {
@@ -147,33 +155,37 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	fprintf(stderr, "found agg!\n");
-
 	Agg *agg = castNode(Agg, plan);
 
 	if (agg->aggsplit != AGGSPLIT_INITIAL_SERIAL)
 	{
-		fprintf(stderr, "wrong split %d\n", agg->aggsplit);
+		/* Can only vectorize partial aggregation node. */
 		return plan;
 	}
 
 	if (agg->plan.lefttree == NULL)
 	{
-		fprintf(stderr, "no leftnode?\n");
+		/*
+		 * Not sure what this would mean, but check for it just to be on the
+		 * safe side because we can effectively see any possible plan here.
+		 */
 		return plan;
 	}
 
 	if (!IsA(agg->plan.lefttree, CustomScan))
 	{
-		fprintf(stderr, "not custom\n");
-		// my_print(agg->plan.lefttree);
+		/*
+		 * Should have a Custom Scan under aggregation.
+		 */
 		return plan;
 	}
 
 	CustomScan *custom = castNode(CustomScan, agg->plan.lefttree);
 	if (strcmp(custom->methods->CustomName, "DecompressChunk") != 0)
 	{
-		fprintf(stderr, "not decompress chunk\n");
+		/*
+		 * It should be our DecompressChunk node.
+		 */
 		return plan;
 	}
 
@@ -244,7 +256,6 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 	Var *aggregated_var = castNode(Var, argument->expr);
-	// my_print(aggregated_var);
 
 	/*
 	 * Check if this particular column is a segmentby or has bulk decompression
@@ -255,7 +266,6 @@ try_insert_vector_agg_node(Plan *plan)
 	Assert(aggregated_var->varno == OUTER_VAR);
 	TargetEntry *decompressed_target_entry =
 		list_nth(custom->scan.plan.targetlist, AttrNumberGetAttrOffset(aggregated_var->varattno));
-	// my_print(decompressed_target_entry);
 
 	if (!IsA(decompressed_target_entry->expr, Var))
 	{
@@ -266,7 +276,6 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 	Var *decompressed_var = castNode(Var, decompressed_target_entry->expr);
-	// my_print(decompressed_var);
 
 	/*
 	 * Now, we have to translate the decompressed varno into the compressed
@@ -301,14 +310,12 @@ try_insert_vector_agg_node(Plan *plan)
 		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
 	{
 		/* Vectorized aggregation not possible for this particular column. */
-		fprintf(stderr, "compressed column index %d\n", compressed_column_index);
-		// my_print(bulk_decompression_column);
 		return plan;
 	}
 
-	fprintf(stderr, "found!!!\n");
-	// my_print(plan);
-	// mybt();
-
+	/*
+	 * Finally, all requirements are satisfied and we can vectorize this partial
+	 * aggregation node.
+	 */
 	return vector_agg_plan_create(agg, custom);
 }

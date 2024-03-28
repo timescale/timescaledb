@@ -634,11 +634,6 @@ decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
 	}
 
 	/* Determine which kind of vectorized aggregation we should perform */
-	// fprintf(stderr, "output tlist:\n");
-	// my_print(decompress_state->csstate.ss.ps.plan->targetlist);
-	// fprintf(stderr, "custom scan tlist:\n");
-	// my_print(decompress_state->custom_scan_tlist);
-
 	TargetEntry *tlentry = (TargetEntry *) linitial(aggregated_tlist);
 	Assert(IsA(tlentry->expr, Aggref));
 	Aggref *aggref = castNode(Aggref, tlentry->expr);

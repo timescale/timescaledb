@@ -210,14 +210,8 @@ tsl_preprocess_query(Query *parse)
 void
 tsl_postprocess_plan(PlannedStmt *stmt)
 {
-	// mybt();
-	// my_print(stmt);
-
 	if (ts_guc_enable_vectorized_aggregation)
 	{
 		stmt->planTree = try_insert_vector_agg_node(stmt->planTree);
 	}
-
-	// fprintf(stderr, "postprocessed:\n");
-	// my_print(stmt->planTree);
 }
