@@ -438,22 +438,23 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
 
 	int64 result_sum = 0;
 
-	if (value_column_description->type == SEGMENTBY_COLUMN)
+	while (true)
 	{
-		/*
-		 * To calculate the sum for a segment by value, we need to multiply the value of the segment
-		 * by column with the number of compressed tuples in this batch.
-		 */
-		while (true)
-		{
-			TupleTableSlot *compressed_slot =
-				ExecProcNode(linitial(decompress_state->csstate.custom_ps));
+		TupleTableSlot *compressed_slot =
+			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 
-			if (TupIsNull(compressed_slot))
-			{
-				/* All segment by values are processed. */
-				break;
-			}
+		if (TupIsNull(compressed_slot))
+		{
+			/* All values are processed. */
+			break;
+		}
+
+		if (value_column_description->type == SEGMENTBY_COLUMN)
+		{
+			/*
+			 * To calculate the sum for a segment by value, we need to multiply the value of the
+			 * segment by column with the number of compressed tuples in this batch.
+			 */
 
 			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
 			MemoryContextReset(batch_state->per_batch_context);
@@ -496,22 +497,11 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
 			}
 			MemoryContextSwitchTo(old_mctx);
 		}
-	}
-	else if (value_column_description->type == COMPRESSED_COLUMN)
-	{
-		Assert(dcontext->enable_bulk_decompression);
-		Assert(value_column_description->bulk_decompression_supported);
-		Assert(list_length(aggref->args) == 1);
-
-		while (true)
+		else if (value_column_description->type == COMPRESSED_COLUMN)
 		{
-			TupleTableSlot *compressed_slot =
-				ExecProcNode(linitial(decompress_state->csstate.custom_ps));
-			if (TupIsNull(compressed_slot))
-			{
-				/* All compressed batches are processed. */
-				break;
-			}
+			Assert(dcontext->enable_bulk_decompression);
+			Assert(value_column_description->bulk_decompression_supported);
+			Assert(list_length(aggref->args) == 1);
 
 			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
 			MemoryContextReset(batch_state->per_batch_context);
@@ -581,12 +571,11 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
 						 errmsg("bigint out of range")));
 			MemoryContextSwitchTo(old_mctx);
 		}
+		else
+		{
+			elog(ERROR, "unsupported column type");
+		}
 	}
-	else
-	{
-		elog(ERROR, "unsupported column type");
-	}
-
 	/* Use Int64GetDatum to store the result since a 64-bit value is not pass-by-value on 32-bit
 	 * systems */
 	aggregated_slot->tts_values[0] = Int64GetDatum(result_sum);
