@@ -91,23 +91,6 @@ typedef struct DecompressChunkPath
 	 */
 	DecompressChunkColumnCompression *uncompressed_chunk_attno_to_compression_info;
 
-	/*
-	 * Are we able to execute a vectorized aggregation
-	 */
-	bool perform_vectorized_aggregation;
-
-	/*
-	 * Columns that are used for vectorized aggregates. The list contains for each attribute -1 if
-	 * this is not an vectorized aggregate column or the Oid of the data type of the attribute.
-	 *
-	 * When creating vectorized aggregates, the decompression logic is not able to determine the
-	 * type of the compressed column based on the output column since we emit partial aggregates
-	 * for this attribute and the raw attribute is not found in the targetlist. So, build a map
-	 * with the used data types here, which is used later to create the compression info
-	 * properly.
-	 */
-	List *aggregated_column_type;
-
 	List *required_compressed_pathkeys;
 	bool needs_sequence_num;
 	bool reverse;

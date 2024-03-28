@@ -580,6 +580,8 @@ timescaledb_planner(Query *parse, const char *query_string, int cursor_opts,
 									AGGSPLITOP_SERIALIZE | AGGSPLITOP_SKIPFINAL;
 				}
 			}
+
+			ts_cm_functions->tsl_postprocess_plan(stmt);
 		}
 
 		if (reset_baserel_info)

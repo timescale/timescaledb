@@ -421,14 +421,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
 		AggPath *agg_path =
 			create_sorted_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
 
-		if (ts_cm_functions->push_down_aggregation(root, agg_path, subpath))
-		{
-			*sorted_paths = lappend(*sorted_paths, subpath);
-		}
-		else
-		{
-			*sorted_paths = lappend(*sorted_paths, (Path *) agg_path);
-		}
+		*sorted_paths = lappend(*sorted_paths, (Path *) agg_path);
 	}
 
 	if (can_hash)
@@ -436,14 +429,7 @@ add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
 		AggPath *agg_path =
 			create_hashed_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
 
-		if (ts_cm_functions->push_down_aggregation(root, agg_path, subpath))
-		{
-			*hashed_paths = lappend(*hashed_paths, subpath);
-		}
-		else
-		{
-			*hashed_paths = lappend(*hashed_paths, (Path *) agg_path);
-		}
+		*hashed_paths = lappend(*hashed_paths, (Path *) agg_path);
 	}
 }
 
