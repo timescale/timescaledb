@@ -19,28 +19,28 @@
 #include "nodes/decompress_chunk/vector_predicates.h"
 
 /*
- * Create a single value ArrowArray from Postgres Datum. This is used to run
- * the usual vectorized predicates on compressed columns with default values.
+ * Create a single-value ArrowArray of an arithmetic type. This is a specialized
+ * function because arithmetic types have a particular layout of ArrowArrays.
  */
 static ArrowArray *
-make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
+make_single_value_arrow_arithmetic(Oid arithmetic_type, Datum datum, bool isnull)
 {
 	struct ArrowWithBuffers
 	{
 		ArrowArray arrow;
-		uint64 buffers[2];
-		uint64 nulls_buffer;
-		uint64 values_buffer;
+		uint64 arrow_buffers_array_storage[2];
+		uint64 validity_buffer[1];
+		/* The value buffer has 64-byte padding as required by Arrow. */
+		uint64 values_buffer[8];
 	};
 
 	struct ArrowWithBuffers *with_buffers = palloc0(sizeof(struct ArrowWithBuffers));
 	ArrowArray *arrow = &with_buffers->arrow;
 	arrow->length = 1;
-	arrow->null_count = -1;
+	arrow->buffers = (const void **) with_buffers->arrow_buffers_array_storage;
 	arrow->n_buffers = 2;
-	arrow->buffers = (const void **) &with_buffers->buffers;
-	arrow->buffers[0] = &with_buffers->nulls_buffer;
-	arrow->buffers[1] = &with_buffers->values_buffer;
+	arrow->buffers[0] = with_buffers->validity_buffer;
+	arrow->buffers[1] = with_buffers->values_buffer;
 
 	if (isnull)
 	{
@@ -49,15 +49,18 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 		 * the Datum might be invalid if the value is null (important on i386
 		 * where it might be pass-by-reference), so don't read it.
 		 */
+		arrow->null_count = 1;
 		return arrow;
 	}
 
+	arrow_set_row_validity((uint64 *) arrow->buffers[0], 0, true);
+
 #define FOR_TYPE(PGTYPE, CTYPE, FROMDATUM)                                                         \
 	case PGTYPE:                                                                                   \
-		*((CTYPE *) &with_buffers->values_buffer) = FROMDATUM(datum);                              \
+		*((CTYPE *) arrow->buffers[1]) = FROMDATUM(datum);                                         \
 		break
 
-	switch (pgtype)
+	switch (arithmetic_type)
 	{
 		FOR_TYPE(INT8OID, int64, DatumGetInt64);
 		FOR_TYPE(INT4OID, int32, DatumGetInt32);
@@ -68,13 +71,71 @@ make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
 		FOR_TYPE(TIMESTAMPOID, Timestamp, DatumGetTimestamp);
 		FOR_TYPE(DATEOID, DateADT, DatumGetDateADT);
 		default:
-			elog(ERROR, "unexpected column type '%s'", format_type_be(pgtype));
+			elog(ERROR, "unexpected column type '%s'", format_type_be(arithmetic_type));
 			pg_unreachable();
 	}
 
-	arrow_set_row_validity(&with_buffers->nulls_buffer, 0, true);
-
 	return arrow;
+}
+
+/*
+ * Create a single-value ArrowArray of text. This is a specialized function
+ * because the text ArrowArray has a specialized layout.
+ */
+static ArrowArray *
+make_single_value_arrow_text(Datum datum, bool isnull)
+{
+	struct ArrowWithBuffers
+	{
+		ArrowArray arrow;
+		uint64 arrow_buffers_array_storage[3];
+		uint64 validity_buffer[1];
+		uint32 offsets_buffer[2];
+		/* The value buffer has 64-byte padding as required by Arrow. */
+		uint64 values_buffer[8];
+	};
+
+	struct ArrowWithBuffers *with_buffers = palloc0(sizeof(struct ArrowWithBuffers));
+	ArrowArray *arrow = &with_buffers->arrow;
+	arrow->length = 1;
+	arrow->buffers = (const void **) with_buffers->arrow_buffers_array_storage;
+	arrow->n_buffers = 3;
+	arrow->buffers[0] = with_buffers->validity_buffer;
+	arrow->buffers[1] = with_buffers->offsets_buffer;
+	arrow->buffers[2] = with_buffers->values_buffer;
+
+	if (isnull)
+	{
+		/*
+		 * The validity bitmap was initialized to invalid on allocation, and
+		 * the Datum might be invalid if the value is null (important on i386
+		 * where it might be pass-by-reference), so don't read it.
+		 */
+		arrow->null_count = 1;
+		return arrow;
+	}
+
+	arrow_set_row_validity((uint64 *) arrow->buffers[0], 0, true);
+
+	text *detoasted = PG_DETOAST_DATUM(datum);
+	((uint32 *) arrow->buffers[1])[1] = VARSIZE_ANY_EXHDR(detoasted);
+	arrow->buffers[2] = VARDATA(detoasted);
+	return arrow;
+}
+
+/*
+ * Create a single value ArrowArray from Postgres Datum. This is used to run
+ * the usual vectorized predicates on compressed columns with default values.
+ */
+static ArrowArray *
+make_single_value_arrow(Oid pgtype, Datum datum, bool isnull)
+{
+	if (pgtype == TEXTOID)
+	{
+		return make_single_value_arrow_text(datum, isnull);
+	}
+
+	return make_single_value_arrow_arithmetic(pgtype, datum, isnull);
 }
 
 static int
@@ -222,6 +283,50 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 			column_values->buffers[3] = arrow->buffers[1];
 		}
 	}
+}
+
+/*
+ * When we have a dictionary-encoded Arrow Array, and have run a predicate on
+ * the dictionary, this function is used to translate the dictionary predicate
+ * result to the final predicate result.
+ */
+static void
+translate_bitmap_from_dictionary(const ArrowArray *arrow, const uint64 *dict_result,
+								 uint64 *restrict final_result)
+{
+	Assert(arrow->dictionary != NULL);
+
+	const size_t n = arrow->length;
+	const int16 *indices = (int16 *) arrow->buffers[1];
+	for (size_t outer = 0; outer < n / 64; outer++)
+	{
+		uint64 word = 0;
+		for (size_t inner = 0; inner < 64; inner++)
+		{
+			const size_t row = outer * 64 + inner;
+			const size_t bit_index = inner;
+#define INNER_LOOP                                                                                 \
+	const int16 index = indices[row];                                                              \
+	const bool valid = arrow_row_is_valid(dict_result, index);                                     \
+	word |= ((uint64) valid) << bit_index;
+
+			INNER_LOOP
+		}
+		final_result[outer] &= word;
+	}
+
+	if (n % 64)
+	{
+		uint64 word = 0;
+		for (size_t row = (n / 64) * 64; row < n; row++)
+		{
+			const size_t bit_index = row % 64;
+
+			INNER_LOOP
+		}
+		final_result[n / 64] &= word;
+	}
+#undef INNER_LOOP
 }
 
 static void
@@ -381,19 +486,49 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		Ensure(!constnode->constisnull, "vectorized predicate called for a null value");
 
 		/*
+		 * If the data is dictionary-encoded, we are going to compute the
+		 * predicate on dictionary and then translate the results.
+		 */
+		const ArrowArray *vector_nodict = NULL;
+		uint64 *restrict predicate_result_nodict = NULL;
+		uint64 dict_result[(GLOBAL_MAX_ROWS_PER_COMPRESSION + 63) / 64];
+		if (vector->dictionary)
+		{
+			const size_t dict_rows = vector->dictionary->length;
+			const size_t dict_result_words = (dict_rows + 63) / 64;
+			memset(dict_result, 0xFF, dict_result_words * 8);
+			predicate_result_nodict = dict_result;
+			vector_nodict = vector->dictionary;
+		}
+		else
+		{
+			predicate_result_nodict = predicate_result;
+			vector_nodict = vector;
+		}
+
+		/*
 		 * At last, compute the predicate.
 		 */
 		if (saop)
 		{
 			vector_array_predicate(vector_const_predicate,
 								   saop->useOr,
-								   vector,
+								   vector_nodict,
 								   constnode->constvalue,
-								   predicate_result);
+								   predicate_result_nodict);
 		}
 		else
 		{
-			vector_const_predicate(vector, constnode->constvalue, predicate_result);
+			vector_const_predicate(vector_nodict, constnode->constvalue, predicate_result_nodict);
+		}
+
+		/*
+		 * If the vector is dictionary-encoded, we have just computed the
+		 * predicate for dictionary and now have to translate it.
+		 */
+		if (vector->dictionary)
+		{
+			translate_bitmap_from_dictionary(vector, predicate_result_nodict, predicate_result);
 		}
 
 		/*
@@ -850,7 +985,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 * such as UUID.
 			 */
 			const uint8 value_bytes = column_values->decompression_type;
-			const char *restrict src = column_values->buffers[1];
+			const char *src = column_values->buffers[1];
 			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
@@ -867,7 +1002,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			 */
 			const uint8 value_bytes = column_values->decompression_type;
 			Assert(value_bytes <= SIZEOF_DATUM);
-			const char *restrict src = column_values->buffers[1];
+			const char *src = column_values->buffers[1];
 			memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
