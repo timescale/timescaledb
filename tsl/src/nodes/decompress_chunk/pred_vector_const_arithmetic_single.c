@@ -29,7 +29,7 @@ FUNCTION_NAME(PREDICATE_NAME, VECTOR_CTYPE,
 
 	/* Now run the predicate itself. */
 	const CONST_CTYPE constvalue = CONST_CONVERSION(constdatum);
-	const VECTOR_CTYPE *restrict vector = (VECTOR_CTYPE *restrict) arrow->buffers[1];
+	const VECTOR_CTYPE *vector = (const VECTOR_CTYPE *) arrow->buffers[1];
 
 	for (size_t outer = 0; outer < n / 64; outer++)
 	{
