@@ -205,7 +205,7 @@ try_insert_vector_agg_node(Plan *plan)
 		/*
 		 * No HAVING support. Probably we can't have it in this node in any case,
 		 * because we only replace the partial aggregation nodes which can't
-		 * chech HAVING.
+		 * check the HAVING clause.
 		 */
 		return plan;
 	}
@@ -293,7 +293,7 @@ try_insert_vector_agg_node(Plan *plan)
 
 	/*
 	 * We support vectorized aggregation either for segmentby columns or for
-	 * columns wiht bulk decompression enabled.
+	 * columns with bulk decompression enabled.
 	 */
 	if (!list_nth_int(is_segmentby_column, compressed_column_index) &&
 		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
