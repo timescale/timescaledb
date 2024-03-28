@@ -1446,3 +1446,37 @@ DELETE FROM test_limit WHERE id > 0;
 \set ON_ERROR_STOP 1
 
 DROP TABLE test_limit;
+
+-- check partial compression with DML
+CREATE TABLE test_partials (time timestamptz NOT NULL, a int, b int);
+SELECT create_hypertable('test_partials', 'time');
+INSERT INTO test_partials
+VALUES -- chunk1
+  ('2020-01-01 00:00'::timestamptz, 1, 2),
+  ('2020-01-01 00:01'::timestamptz, 2, 2),
+  ('2020-01-01 00:04'::timestamptz, 1, 2),
+  -- chunk2
+  ('2021-01-01 00:00'::timestamptz, 1, 2),
+  ('2021-01-01 00:04'::timestamptz, 1, 2),
+  -- chunk3
+  ('2022-01-01 00:00'::timestamptz, 1, 2),
+  ('2022-01-01 00:04'::timestamptz, 1, 2);
+-- enable compression, compress all chunks
+ALTER TABLE test_partials SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('test_partials'));
+-- fully compressed
+EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+-- verify correct results
+SELECT * FROM test_partials ORDER BY time;
+-- check that DML causes transparent decompression and that
+-- data gets shifted to the uncompressed parts
+EXPLAIN (costs off) DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+DELETE FROM test_partials WHERE time >= ALL(SELECT time from test_partials);
+-- All 3 chunks will now become partially compressed chunks
+EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+-- verify correct results
+SELECT * FROM test_partials ORDER BY time;
+SELECT compress_chunk(show_chunks('test_partials'));
+-- fully compressed
+EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
+DROP TABLE test_partials;

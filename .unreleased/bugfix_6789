@@ -1,0 +1,2 @@
+Fixes: #6789 Fix deletes with subqueries and compression 
+Thanks: @Dzuzepppe for reporting an issue with DELETEs using subquery on compressed chunk working incorrectly.
