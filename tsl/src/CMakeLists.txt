@@ -2,7 +2,6 @@ set(SOURCES
     chunk_api.c
     chunk.c
     init.c
-    partialize_agg.c
     partialize_finalize.c
     planner.c
     process_utility.c

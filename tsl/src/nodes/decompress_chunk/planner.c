@@ -29,10 +29,12 @@
 #include "custom_type_cache.h"
 #include "guc.h"
 #include "import/planner.h"
+#include "import/list.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/chunk_append/transform.h"
+#include "nodes/vector_agg/exec.h"
 #include "vector_predicates.h"
 #include "ts_catalog/array_utils.h"
 
@@ -236,18 +238,6 @@ build_decompression_map(PlannerInfo *root, DecompressChunkPath *path, List *scan
 				[destination_attno_in_uncompressed_chunk] =
 				(DecompressChunkColumnCompression){ .bulk_decompression_possible =
 														bulk_decompression_possible };
-		}
-
-		if (path->perform_vectorized_aggregation)
-		{
-			Assert(list_length(path->custom_path.path.parent->reltarget->exprs) == 1);
-			Var *var = linitial(path->custom_path.path.parent->reltarget->exprs);
-			Assert((Index) var->varno == path->custom_path.path.parent->relid);
-			if (var->varattno == destination_attno_in_uncompressed_chunk)
-				path->aggregated_column_type =
-					lappend_int(path->aggregated_column_type, var->vartype);
-			else
-				path->aggregated_column_type = lappend_int(path->aggregated_column_type, -1);
 		}
 	}
 
@@ -734,18 +724,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	/* output target list */
 	decompress_plan->scan.plan.targetlist = decompressed_tlist;
-	/* input target list */
-	decompress_plan->custom_scan_tlist = NIL;
-
-	/* Make PostgreSQL aware that we emit partials. In apply_vectorized_agg_optimization the
-	 * pathtarget of the node is changed; the decompress chunk node now emits prtials directly.
-	 *
-	 * We have to set a custom_scan_tlist to make sure tlist_matches_tupdesc is true to prevent the
-	 * call of ExecAssignProjectionInfo in ExecConditionalAssignProjectionInfo. Otherwise,
-	 * PostgreSQL will error out since scan nodes are not intended to emit partial aggregates.
-	 */
-	if (dcpath->perform_vectorized_aggregation)
-		decompress_plan->custom_scan_tlist = decompressed_tlist;
 
 	if (IsA(compressed_path, IndexPath))
 	{
@@ -1075,12 +1053,12 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 #endif
 
-	settings = list_make6_int(dcpath->info->hypertable_id,
-							  dcpath->info->chunk_rte->relid,
-							  dcpath->reverse,
-							  dcpath->batch_sorted_merge,
-							  enable_bulk_decompression,
-							  dcpath->perform_vectorized_aggregation);
+	settings = ts_new_list(T_IntList, DCS_Count);
+	lfirst_int(list_nth_cell(settings, DCS_HypertableId)) = dcpath->info->hypertable_id;
+	lfirst_int(list_nth_cell(settings, DCS_ChunkRelid)) = dcpath->info->chunk_rte->relid;
+	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
+	lfirst_int(list_nth_cell(settings, DCS_BatchSortedMerge)) = dcpath->batch_sorted_merge;
+	lfirst_int(list_nth_cell(settings, DCS_EnableBulkDecompression)) = enable_bulk_decompression;
 
 	/*
 	 * Vectorized quals must go into custom_exprs, because Postgres has to see
@@ -1089,12 +1067,18 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 */
 	decompress_plan->custom_exprs = list_make1(vectorized_quals);
 
-	decompress_plan->custom_private = list_make6(settings,
-												 dcpath->decompression_map,
-												 dcpath->is_segmentby_column,
-												 dcpath->bulk_decompression_column,
-												 dcpath->aggregated_column_type,
-												 sort_options);
+	decompress_plan->custom_private = ts_new_list(T_List, DCP_Count);
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_Settings)) = settings;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_DecompressionMap)) =
+		dcpath->decompression_map;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_IsSegmentbyColumn)) =
+		dcpath->is_segmentby_column;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_BulkDecompressionColumn)) =
+		dcpath->bulk_decompression_column;
+	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_SortInfo)) = sort_options;
+
+	/* input target list */
+	decompress_plan->custom_scan_tlist = NIL;
 
 	return &decompress_plan->scan.plan;
 }
