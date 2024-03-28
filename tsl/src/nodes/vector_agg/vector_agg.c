@@ -45,10 +45,7 @@ vector_agg_exec(CustomScanState *node)
 {
 	// return ExecProcNode(linitial(node->custom_ps));
 	DecompressChunkState *ds = (DecompressChunkState *) linitial(node->custom_ps);
-	return decompress_chunk_exec_vector_agg_impl(node,
-												 castNode(CustomScan, node->ss.ps.plan)
-													 ->custom_scan_tlist,
-												 ds);
+	return decompress_chunk_exec_vector_agg_impl(node, ds);
 }
 
 static void
@@ -148,8 +145,8 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 
 	// custom->scan.plan.lefttree = agg->plan.lefttree;
 
-//	fprintf(stderr, "created:\n");
-//	my_print(custom);
+	//	fprintf(stderr, "created:\n");
+	//	my_print(custom);
 
 	(void) CustomBuildTargetList;
 

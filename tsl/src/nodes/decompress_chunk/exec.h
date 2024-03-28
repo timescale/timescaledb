@@ -51,5 +51,4 @@ typedef struct DecompressChunkState
 extern Node *decompress_chunk_state_create(CustomScan *cscan);
 
 TupleTableSlot *decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
-													  List *aggregated_tlist,
 													  DecompressChunkState *decompress_state);

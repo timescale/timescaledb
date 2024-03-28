@@ -96,31 +96,33 @@ is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
 bool
 apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path, Path *path)
 {
-	if (!ts_guc_enable_vectorized_aggregation || !ts_guc_enable_bulk_decompression)
-		return false;
-
-	Assert(path != NULL);
-	Assert(aggregation_path->aggsplit == AGGSPLIT_INITIAL_SERIAL);
-
-	if (is_vectorizable_agg_path(root, aggregation_path, path))
-	{
-		Assert(ts_is_decompress_chunk_path(path));
-		DecompressChunkPath *decompress_path = (DecompressChunkPath *) castNode(CustomPath, path);
-
-		/* Change the output of the path and let the decompress chunk node emit partial aggregates
-		 * directly */
-		decompress_path->perform_vectorized_aggregation = true;
-
-		//		decompress_path->custom_path.path.pathtarget = aggregation_path->path.pathtarget;
-		//
-		//		/* The decompress chunk node can perform the aggregation directly. No need for a
-		//dedicated
-		//		 * agg node on top. */
-		//		return true;
-	}
-
-	/* PostgreSQL should handle the aggregation. Regular agg node on top is required. */
 	return false;
+//
+//	if (!ts_guc_enable_vectorized_aggregation || !ts_guc_enable_bulk_decompression)
+//		return false;
+//
+//	Assert(path != NULL);
+//	Assert(aggregation_path->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+//
+//	if (is_vectorizable_agg_path(root, aggregation_path, path))
+//	{
+//		Assert(ts_is_decompress_chunk_path(path));
+//		DecompressChunkPath *decompress_path = (DecompressChunkPath *) castNode(CustomPath, path);
+//
+//		/* Change the output of the path and let the decompress chunk node emit partial aggregates
+//		 * directly */
+//		decompress_path->perform_vectorized_aggregation = true;
+//
+//		decompress_path->custom_path.path.pathtarget = aggregation_path->path.pathtarget;
+//
+//		/* The decompress chunk node can perform the aggregation directly. No need for a
+//dedicated
+//		 * agg node on top. */
+//		return true;
+//	}
+//
+//	/* PostgreSQL should handle the aggregation. Regular agg node on top is required. */
+//	return false;
 }
 
 static Plan *
@@ -181,12 +183,140 @@ insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	bool perform_vectorized_aggregation = list_nth_int(linitial(custom->custom_private), 5);
-	if (!perform_vectorized_aggregation)
+	if (custom->scan.plan.qual != NIL)
 	{
-		fprintf(stderr, "no vectorized aggregation\n");
+		/* Can't do vectorized aggregation if we have Postgres quals. */
 		return plan;
 	}
+
+	if (linitial(custom->custom_exprs) != NIL)
+	{
+		/* Even the vectorized filters are not supported at the moment. */
+		return plan;
+	}
+
+	if (agg->numCols != 0)
+	{
+		/* No GROUP BY support for now. */
+		return plan;
+	}
+
+	if (agg->groupingSets != NIL)
+	{
+		/* No GROUPING SETS support. */
+		return plan;
+	}
+
+	if (agg->plan.qual != NIL)
+	{
+		/*
+		 * No HAVING support. Probably we can't have it in this node in any case,
+		 * because we only replace the partial aggregation nodes which can't
+		 * chech HAVING.
+		 */
+		return plan;
+	}
+
+	if (list_length(agg->plan.targetlist) != 1)
+	{
+		/* We currently handle only one agg function per node. */
+		return plan;
+	}
+
+	Node *expr_node = (Node *) castNode(TargetEntry, linitial(agg->plan.targetlist))->expr;
+	if (!IsA(expr_node, Aggref))
+	{
+		return plan;
+	}
+
+	Aggref *aggref = castNode(Aggref, expr_node);
+
+	if (aggref->aggfilter != NULL)
+	{
+		/* Filter clause on aggregate is not supported. */
+		return plan;
+	}
+
+	if (aggref->aggfnoid != F_SUM_INT4)
+	{
+		/* We only support sum(int4) at the moment. */
+		return plan;
+	}
+
+	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
+	if (!IsA(argument->expr, Var))
+	{
+		/* Can aggregate only a bare decompressed column, not an expression. */
+		return plan;
+	}
+	Var *aggregated_var = castNode(Var, argument->expr);
+	// my_print(aggregated_var);
+
+	/*
+	 * Check if this particular column is a segmentby or has bulk decompression
+	 * enabled. This hook is called after set_plan_refs, and at this stage the
+	 * aggregation node uses OUTER_VAR references into the child scan targetlist,
+	 * so first we have to translate this.
+	 */
+	Assert(aggregated_var->varno == OUTER_VAR);
+	TargetEntry *decompressed_target_entry =
+		list_nth(custom->scan.plan.targetlist, AttrNumberGetAttrOffset(aggregated_var->varattno));
+	// my_print(decompressed_target_entry);
+
+	if (!IsA(decompressed_target_entry->expr, Var))
+	{
+		/*
+		 * Can only aggregate the plain Vars. Not sure if this is redundant with
+		 * the similar check above.
+		 */
+		return plan;
+	}
+	Var *decompressed_var = castNode(Var, decompressed_target_entry->expr);
+	// my_print(decompressed_var);
+
+	/*
+	 * Now, we have to translate the decompressed varno into the compressed
+	 * column index, to check if the column supports bulk decompression.
+	 */
+	List *decompression_map = list_nth(custom->custom_private, 1);
+	List *is_segmentby_column = list_nth(custom->custom_private, 2);
+	List *bulk_decompression_column = list_nth(custom->custom_private, 3);
+	int compressed_column_index = 0;
+	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
+	{
+		if (list_nth_int(decompression_map, compressed_column_index) == decompressed_var->varattno)
+		{
+			break;
+		}
+	}
+	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
+	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
+	const bool bulk_decompression_enabled_for_column =
+		list_nth_int(bulk_decompression_column, compressed_column_index);
+
+	/* Bulk decompression can also be disabled globally. */
+	List *settings = linitial(custom->custom_private);
+	const bool bulk_decompression_enabled_globally = list_nth_int(settings, 4);
+
+	/*
+	 * We support vectorized aggregation either for segmentby columns or for
+	 * columns wiht bulk decompression enabled.
+	 */
+	if (!list_nth_int(is_segmentby_column, compressed_column_index) &&
+		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
+	{
+		/* Vectorized aggregation not possible for this particular column. */
+		fprintf(stderr, "compressed column index %d\n", compressed_column_index);
+		// my_print(bulk_decompression_column);
+		return plan;
+	}
+
+	//	bool perform_vectorized_aggregation = list_nth_int(linitial(custom->custom_private), 5);
+	//	if (!perform_vectorized_aggregation)
+	//	{
+	//		fprintf(stderr, "no vectorized aggregation\n");
+	//		return plan;
+	//	}
 
 	fprintf(stderr, "found!!!\n");
 	// my_print(plan);
@@ -201,7 +331,7 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 	// mybt();
 	// my_print(stmt);
 
-	if (true)
+	if (ts_guc_enable_vectorized_aggregation)
 	{
 		stmt->planTree = insert_vector_agg_node(stmt->planTree);
 	}

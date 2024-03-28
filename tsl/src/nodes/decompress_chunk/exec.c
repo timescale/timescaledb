@@ -627,20 +627,22 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
  * directly before it is converted into row-based tuples.
  */
 TupleTableSlot *
-decompress_chunk_exec_vector_agg_impl(
-	CustomScanState *vector_agg_state,
-	/*
-	 * For some reason, the output targetlist of DecompressChunk with vectorized
-	 * aggregation is INDEX_VAR into its scan targetlist, which in turn contains the
-	 * Aggref we need. So here we have to specify the aggregated targetlist
-	 * separately, because we can't get it in a uniform way from both Agg and DC
-	 * nodes.
-	 */
-	List *aggregated_tlist, DecompressChunkState *decompress_state)
+decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
+									  DecompressChunkState *decompress_state)
 {
 	BatchQueue *bq = decompress_state->batch_queue;
 
-	Assert(list_length(aggregated_tlist) == 1); // FIXME
+	/*
+	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
+	 * of the custom scan node that is performing the vectorized aggregation.
+	 * We do this to avoid projections at this node, because the postgres
+	 * projection functions complain when they see an Aggref in a custom
+	 * node output targetlist.
+	 * The output targetlist, in turn, consists of just the INDEX_VAR references
+	 * into the custom_scan_tlist.
+	 */
+	List *aggregated_tlist = castNode(CustomScan, vector_agg_state->ss.ps.plan)->custom_scan_tlist;
+	Assert(list_length(aggregated_tlist) == 1);
 
 	/* Checked by planner */
 	Assert(ts_guc_enable_vectorized_aggregation);
@@ -691,9 +693,7 @@ decompress_chunk_exec_vector_agg(CustomScanState *node)
 
 	CustomScanState *vector_agg_state = node;
 
-	return decompress_chunk_exec_vector_agg_impl(vector_agg_state,
-												 chunk_state->custom_scan_tlist,
-												 chunk_state);
+	return decompress_chunk_exec_vector_agg_impl(vector_agg_state, chunk_state);
 }
 
 /*
