@@ -14,4 +14,4 @@
  * directory for a copy of the PostgreSQL License.
  */
 
-extern TSDLLEXPORT List *pg_new_list(NodeTag type, int min_size);
+extern TSDLLEXPORT List *ts_new_list(NodeTag type, int min_size);

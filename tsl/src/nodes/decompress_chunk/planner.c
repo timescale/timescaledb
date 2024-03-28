@@ -1041,7 +1041,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	}
 #endif
 
-	settings = pg_new_list(T_IntList, DCS_Count);
+	settings = ts_new_list(T_IntList, DCS_Count);
 	lfirst_int(list_nth_cell(settings, DCS_HypertableId)) = dcpath->info->hypertable_id;
 	lfirst_int(list_nth_cell(settings, DCS_ChunkRelid)) = dcpath->info->chunk_rte->relid;
 	lfirst_int(list_nth_cell(settings, DCS_Reverse)) = dcpath->reverse;
@@ -1055,7 +1055,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 */
 	decompress_plan->custom_exprs = list_make1(vectorized_quals);
 
-	decompress_plan->custom_private = pg_new_list(T_List, DCP_Count);
+	decompress_plan->custom_private = ts_new_list(T_List, DCP_Count);
 	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_Settings)) = settings;
 	lfirst(list_nth_cell(decompress_plan->custom_private, DCP_DecompressionMap)) =
 		dcpath->decompression_map;

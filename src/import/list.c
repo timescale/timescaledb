@@ -32,7 +32,7 @@
  * is responsible for filling in their data.
  */
 List *
-pg_new_list(NodeTag type, int min_size)
+ts_new_list(NodeTag type, int min_size)
 {
 	List *newlist;
 	int max_size;
