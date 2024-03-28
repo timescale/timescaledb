@@ -31,64 +31,6 @@
 #include "nodes/vector_agg/vector_agg.h"
 
 /*
- * Are we able to optimize the path by applying vectorized aggregation?
- */
-static bool
-is_vectorizable_agg_path(PlannerInfo *root, AggPath *agg_path, Path *path)
-{
-	Assert(agg_path->aggstrategy == AGG_SORTED || agg_path->aggstrategy == AGG_PLAIN ||
-		   agg_path->aggstrategy == AGG_HASHED);
-
-	/* Having is not supported at the moment */
-	if (root->hasHavingQual)
-		return false;
-
-	/* Only vectorizing within the decompress node is supported so far */
-	bool is_decompress_chunk = ts_is_decompress_chunk_path(path);
-	if (!is_decompress_chunk)
-		return false;
-
-#ifdef USE_ASSERT_CHECKING
-	DecompressChunkPath *decompress_path = (DecompressChunkPath *) path;
-	Assert(decompress_path->custom_path.custom_paths != NIL);
-
-	/* Hypertable compression info is already fetched from the catalog */
-	Assert(decompress_path->info != NULL);
-#endif
-
-	/* No filters on the compressed attributes are supported at the moment */
-	if ((list_length(path->parent->baserestrictinfo) > 0 || path->parent->joininfo != NULL))
-		return false;
-
-	/* We currently handle only one agg function per node */
-	if (list_length(agg_path->path.pathtarget->exprs) != 1)
-		return false;
-
-	/* Only sum on int 4 is supported at the moment */
-	Node *expr_node = linitial(agg_path->path.pathtarget->exprs);
-	if (!IsA(expr_node, Aggref))
-		return false;
-
-	Aggref *aggref = castNode(Aggref, expr_node);
-
-	/* Filter expressions in the aggregate are not supported */
-	if (aggref->aggfilter != NULL)
-		return false;
-
-	if (aggref->aggfnoid != F_SUM_INT4)
-		return false;
-
-	/* Can aggregate only a bare decompressed column, not an expression. */
-	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
-	if (!IsA(argument->expr, Var))
-	{
-		return false;
-	}
-
-	return true;
-}
-
-/*
  * Check if we can perform the computation of the aggregate in a vectorized manner directly inside
  * of the decompress chunk node. If this is possible, the decompress chunk node will emit partial
  * aggregates directly, and there is no need for the PostgreSQL aggregation node on top.
