@@ -62,7 +62,7 @@ build_trivial_custom_output_targetlist(List *scan_targetlist)
 }
 
 static Node *
-replace_outer_special_vars_mutator(Node *node, void *context)
+resolve_outer_special_vars_mutator(Node *node, void *context)
 {
 	if (node == NULL)
 	{
@@ -71,7 +71,7 @@ replace_outer_special_vars_mutator(Node *node, void *context)
 
 	if (!IsA(node, Var))
 	{
-		return expression_tree_mutator(node, replace_outer_special_vars_mutator, context);
+		return expression_tree_mutator(node, resolve_outer_special_vars_mutator, context);
 	}
 
 	Var *var = castNode(Var, node);
@@ -80,22 +80,21 @@ replace_outer_special_vars_mutator(Node *node, void *context)
 		return node;
 	}
 
-	var = copyObject(var);
-	var->varno = DatumGetInt32(PointerGetDatum(context));
-	return (Node *) var;
+	TargetEntry *decompress_chunk_tentry =
+		castNode(TargetEntry, list_nth(context, var->varattno - 1));
+	Var *uncompressed_var = castNode(Var, decompress_chunk_tentry->expr);
+	return (Node *) copyObject(uncompressed_var);
 }
 
 /*
- * Replace the OUTER_VAR special variables, that are used in the output
- * targetlists of aggregation nodes, with the given other varno.
+ * Resolve the OUTER_VAR special variables, that are used in the output
+ * targetlists of aggregation nodes, replacing them with the uncompressed chunk
+ * variables.
  */
 static List *
-replace_outer_special_vars(List *input, int target_varno)
+resolve_outer_special_vars(List *agg_tlist, List *outer_tlist)
 {
-	return castNode(List,
-					replace_outer_special_vars_mutator((Node *) input,
-													   DatumGetPointer(
-														   Int32GetDatum(target_varno))));
+	return castNode(List, resolve_outer_special_vars_mutator((Node *) agg_tlist, outer_tlist));
 }
 
 /*
@@ -116,7 +115,7 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	 * the scan targetlists.
 	 */
 	custom->custom_scan_tlist =
-		replace_outer_special_vars(agg->plan.targetlist, decompress_chunk->scan.scanrelid);
+		resolve_outer_special_vars(agg->plan.targetlist, decompress_chunk->scan.plan.targetlist);
 	custom->scan.plan.targetlist =
 		build_trivial_custom_output_targetlist(custom->custom_scan_tlist);
 
