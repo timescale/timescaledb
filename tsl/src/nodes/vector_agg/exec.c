@@ -177,8 +177,6 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	Assert(IsA(tlentry->expr, Aggref));
 	Aggref *aggref = castNode(Aggref, tlentry->expr);
 
-	my_print(aggref);
-
 	/* Partial result is a int8 */
 	Assert(aggref->aggtranstype == INT8OID);
 
@@ -219,15 +217,23 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	agg->agg_init(&aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
 	ExecClearTuple(aggregated_slot);
 
-	TupleTableSlot *compressed_slot = ExecProcNode(linitial(decompress_state->csstate.custom_ps));
-
-	if (TupIsNull(compressed_slot))
+	/*
+	 * Have to skip the batches that are fully filtered out. This condition also
+	 * handles the batch that was consumed on the previous step.
+	 */
+	while (batch_state->next_batch_row >= batch_state->total_batch_rows)
 	{
-		/* All values are processed. */
-		return NULL;
-	}
+		TupleTableSlot *compressed_slot =
+			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
 
-	compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+		if (TupIsNull(compressed_slot))
+		{
+			/* All values are processed. */
+			return NULL;
+		}
+
+		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+	}
 
 	ArrowArray *arrow = NULL;
 	if (value_column_description->type == COMPRESSED_COLUMN)

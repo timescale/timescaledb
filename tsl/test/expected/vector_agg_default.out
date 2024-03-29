@@ -75,6 +75,29 @@ select sum(c) from t where b in (0, 1, 3);
  10782
 (1 row)
 
+select sum(c) from t where b > 10;
+ sum 
+-----
+    
+(1 row)
+
+explain (costs off) select sum(c) from t where b in (0, 1, 3);
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                           Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
+                           ->  Parallel Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                           Vectorized Filter: (b = ANY ('{0,1,3}'::integer[]))
+                           ->  Parallel Seq Scan on compress_hyper_2_4_chunk
+(12 rows)
+
 select decompress_chunk(show_chunks('t'));
             decompress_chunk            
 ----------------------------------------

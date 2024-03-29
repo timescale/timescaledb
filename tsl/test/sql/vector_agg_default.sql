@@ -20,6 +20,9 @@ select sum(c) from t where b >= 0;
 select sum(c) from t where b = 0;
 select sum(c) from t where b in (0, 1);
 select sum(c) from t where b in (0, 1, 3);
+select sum(c) from t where b > 10;
+
+explain (costs off) select sum(c) from t where b in (0, 1, 3);
 
 select decompress_chunk(show_chunks('t'));
 select sum(c) from t;
