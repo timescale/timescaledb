@@ -179,24 +179,24 @@ SELECT sum(segment_by_value) FROM testtable WHERE segment_by_value > 0 AND int_v
  Finalize Aggregate
    Output: sum(_hyper_1_1_chunk.segment_by_value)
    ->  Append
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_1_1_chunk.segment_by_value)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                      Output: _hyper_1_1_chunk.segment_by_value
                      Vectorized Filter: (_hyper_1_1_chunk.int_value > 0)
                      ->  Index Scan using compress_hyper_2_11_chunk_segment_by_value__ts_meta_sequenc_idx on _timescaledb_internal.compress_hyper_2_11_chunk
                            Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk._ts_meta_sequence_num, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
                            Index Cond: (compress_hyper_2_11_chunk.segment_by_value > 0)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_1_2_chunk.segment_by_value)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                      Output: _hyper_1_2_chunk.segment_by_value
                      Vectorized Filter: (_hyper_1_2_chunk.int_value > 0)
                      ->  Index Scan using compress_hyper_2_12_chunk_segment_by_value__ts_meta_sequenc_idx on _timescaledb_internal.compress_hyper_2_12_chunk
                            Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk._ts_meta_sequence_num, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
                            Index Cond: (compress_hyper_2_12_chunk.segment_by_value > 0)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_1_3_chunk.segment_by_value)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                      Output: _hyper_1_3_chunk.segment_by_value
                      Vectorized Filter: (_hyper_1_3_chunk.int_value > 0)
@@ -250,22 +250,22 @@ SELECT sum(segment_by_value) FROM testtable WHERE int_value > 0;
          Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_1_1_chunk.segment_by_value)
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_1_chunk.int_value > 0)
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                                  Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk._ts_meta_sequence_num, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
-               ->  Custom Scan (VectorAgg)
-                     Output: (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_1_2_chunk.segment_by_value)
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_2_chunk.int_value > 0)
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
                                  Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk._ts_meta_sequence_num, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
-               ->  Custom Scan (VectorAgg)
-                     Output: (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_1_3_chunk.segment_by_value)
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                            Output: _hyper_1_3_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_3_chunk.int_value > 0)
@@ -318,22 +318,22 @@ SELECT sum(segment_by_value) FROM testtable WHERE float_value > 0;
          Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
          Workers Planned: 2
          ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     Output: (PARTIAL sum(_hyper_1_1_chunk.segment_by_value))
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_1_1_chunk.segment_by_value)
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk
                            Output: _hyper_1_1_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_1_chunk.float_value > '0'::double precision)
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_11_chunk
                                  Output: compress_hyper_2_11_chunk._ts_meta_count, compress_hyper_2_11_chunk._ts_meta_sequence_num, compress_hyper_2_11_chunk.segment_by_value, compress_hyper_2_11_chunk._ts_meta_min_1, compress_hyper_2_11_chunk._ts_meta_max_1, compress_hyper_2_11_chunk."time", compress_hyper_2_11_chunk.int_value, compress_hyper_2_11_chunk.float_value
-               ->  Custom Scan (VectorAgg)
-                     Output: (PARTIAL sum(_hyper_1_2_chunk.segment_by_value))
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_1_2_chunk.segment_by_value)
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_2_chunk
                            Output: _hyper_1_2_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_2_chunk.float_value > '0'::double precision)
                            ->  Parallel Seq Scan on _timescaledb_internal.compress_hyper_2_12_chunk
                                  Output: compress_hyper_2_12_chunk._ts_meta_count, compress_hyper_2_12_chunk._ts_meta_sequence_num, compress_hyper_2_12_chunk.segment_by_value, compress_hyper_2_12_chunk._ts_meta_min_1, compress_hyper_2_12_chunk._ts_meta_max_1, compress_hyper_2_12_chunk."time", compress_hyper_2_12_chunk.int_value, compress_hyper_2_12_chunk.float_value
-               ->  Custom Scan (VectorAgg)
-                     Output: (PARTIAL sum(_hyper_1_3_chunk.segment_by_value))
+               ->  Partial Aggregate
+                     Output: PARTIAL sum(_hyper_1_3_chunk.segment_by_value)
                      ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk
                            Output: _hyper_1_3_chunk.segment_by_value
                            Vectorized Filter: (_hyper_1_3_chunk.float_value > '0'::double precision)
@@ -2860,80 +2860,80 @@ SELECT sum(segment_by_value1) FROM testtable2 WHERE segment_by_value1 > 1000 AND
  Finalize Aggregate
    Output: sum(_hyper_3_101_chunk.segment_by_value1)
    ->  Append
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_101_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_101_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_101_chunk
                      Output: _hyper_3_101_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_101_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_111_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_111_chunk
                            Output: compress_hyper_4_111_chunk._ts_meta_count, compress_hyper_4_111_chunk._ts_meta_sequence_num, compress_hyper_4_111_chunk.segment_by_value1, compress_hyper_4_111_chunk.segment_by_value2, compress_hyper_4_111_chunk._ts_meta_min_1, compress_hyper_4_111_chunk._ts_meta_max_1, compress_hyper_4_111_chunk."time", compress_hyper_4_111_chunk.int_value, compress_hyper_4_111_chunk.float_value
                            Index Cond: (compress_hyper_4_111_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_102_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_102_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_102_chunk
                      Output: _hyper_3_102_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_102_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_112_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_112_chunk
                            Output: compress_hyper_4_112_chunk._ts_meta_count, compress_hyper_4_112_chunk._ts_meta_sequence_num, compress_hyper_4_112_chunk.segment_by_value1, compress_hyper_4_112_chunk.segment_by_value2, compress_hyper_4_112_chunk._ts_meta_min_1, compress_hyper_4_112_chunk._ts_meta_max_1, compress_hyper_4_112_chunk."time", compress_hyper_4_112_chunk.int_value, compress_hyper_4_112_chunk.float_value
                            Index Cond: (compress_hyper_4_112_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_103_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_103_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_103_chunk
                      Output: _hyper_3_103_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_103_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_113_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_113_chunk
                            Output: compress_hyper_4_113_chunk._ts_meta_count, compress_hyper_4_113_chunk._ts_meta_sequence_num, compress_hyper_4_113_chunk.segment_by_value1, compress_hyper_4_113_chunk.segment_by_value2, compress_hyper_4_113_chunk._ts_meta_min_1, compress_hyper_4_113_chunk._ts_meta_max_1, compress_hyper_4_113_chunk."time", compress_hyper_4_113_chunk.int_value, compress_hyper_4_113_chunk.float_value
                            Index Cond: (compress_hyper_4_113_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_104_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_104_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_104_chunk
                      Output: _hyper_3_104_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_104_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_114_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_114_chunk
                            Output: compress_hyper_4_114_chunk._ts_meta_count, compress_hyper_4_114_chunk._ts_meta_sequence_num, compress_hyper_4_114_chunk.segment_by_value1, compress_hyper_4_114_chunk.segment_by_value2, compress_hyper_4_114_chunk._ts_meta_min_1, compress_hyper_4_114_chunk._ts_meta_max_1, compress_hyper_4_114_chunk."time", compress_hyper_4_114_chunk.int_value, compress_hyper_4_114_chunk.float_value
                            Index Cond: (compress_hyper_4_114_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_105_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_105_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_105_chunk
                      Output: _hyper_3_105_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_105_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_115_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_115_chunk
                            Output: compress_hyper_4_115_chunk._ts_meta_count, compress_hyper_4_115_chunk._ts_meta_sequence_num, compress_hyper_4_115_chunk.segment_by_value1, compress_hyper_4_115_chunk.segment_by_value2, compress_hyper_4_115_chunk._ts_meta_min_1, compress_hyper_4_115_chunk._ts_meta_max_1, compress_hyper_4_115_chunk."time", compress_hyper_4_115_chunk.int_value, compress_hyper_4_115_chunk.float_value
                            Index Cond: (compress_hyper_4_115_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_106_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_106_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_106_chunk
                      Output: _hyper_3_106_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_106_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_116_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_116_chunk
                            Output: compress_hyper_4_116_chunk._ts_meta_count, compress_hyper_4_116_chunk._ts_meta_sequence_num, compress_hyper_4_116_chunk.segment_by_value1, compress_hyper_4_116_chunk.segment_by_value2, compress_hyper_4_116_chunk._ts_meta_min_1, compress_hyper_4_116_chunk._ts_meta_max_1, compress_hyper_4_116_chunk."time", compress_hyper_4_116_chunk.int_value, compress_hyper_4_116_chunk.float_value
                            Index Cond: (compress_hyper_4_116_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_107_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_107_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_107_chunk
                      Output: _hyper_3_107_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_107_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_117_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_117_chunk
                            Output: compress_hyper_4_117_chunk._ts_meta_count, compress_hyper_4_117_chunk._ts_meta_sequence_num, compress_hyper_4_117_chunk.segment_by_value1, compress_hyper_4_117_chunk.segment_by_value2, compress_hyper_4_117_chunk._ts_meta_min_1, compress_hyper_4_117_chunk._ts_meta_max_1, compress_hyper_4_117_chunk."time", compress_hyper_4_117_chunk.int_value, compress_hyper_4_117_chunk.float_value
                            Index Cond: (compress_hyper_4_117_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_108_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_108_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_108_chunk
                      Output: _hyper_3_108_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_108_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_118_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_118_chunk
                            Output: compress_hyper_4_118_chunk._ts_meta_count, compress_hyper_4_118_chunk._ts_meta_sequence_num, compress_hyper_4_118_chunk.segment_by_value1, compress_hyper_4_118_chunk.segment_by_value2, compress_hyper_4_118_chunk._ts_meta_min_1, compress_hyper_4_118_chunk._ts_meta_max_1, compress_hyper_4_118_chunk."time", compress_hyper_4_118_chunk.int_value, compress_hyper_4_118_chunk.float_value
                            Index Cond: (compress_hyper_4_118_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_109_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_109_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_109_chunk
                      Output: _hyper_3_109_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_109_chunk.int_value > 1000)
                      ->  Index Scan using compress_hyper_4_119_chunk_segment_by_value1_segment_by_val_idx on _timescaledb_internal.compress_hyper_4_119_chunk
                            Output: compress_hyper_4_119_chunk._ts_meta_count, compress_hyper_4_119_chunk._ts_meta_sequence_num, compress_hyper_4_119_chunk.segment_by_value1, compress_hyper_4_119_chunk.segment_by_value2, compress_hyper_4_119_chunk._ts_meta_min_1, compress_hyper_4_119_chunk._ts_meta_max_1, compress_hyper_4_119_chunk."time", compress_hyper_4_119_chunk.int_value, compress_hyper_4_119_chunk.float_value
                            Index Cond: (compress_hyper_4_119_chunk.segment_by_value1 > 1000)
-         ->  Custom Scan (VectorAgg)
-               Output: (PARTIAL sum(_hyper_3_110_chunk.segment_by_value1))
+         ->  Partial Aggregate
+               Output: PARTIAL sum(_hyper_3_110_chunk.segment_by_value1)
                ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_3_110_chunk
                      Output: _hyper_3_110_chunk.segment_by_value1
                      Vectorized Filter: (_hyper_3_110_chunk.int_value > 1000)
