@@ -164,8 +164,8 @@ pad_to_multiple(uint64 pad_to, uint64 source_value)
 static inline size_t
 arrow_num_valid(uint64 *bitmap, size_t total_rows)
 {
-#ifdef HAVE__BUILTIN_POPCOUNT
 	uint64 num_valid = 0;
+#ifdef HAVE__BUILTIN_POPCOUNT
 	const uint64 words = pad_to_multiple(64, total_rows) / 64;
 	for (uint64 i = 0; i < words; i++)
 	{
