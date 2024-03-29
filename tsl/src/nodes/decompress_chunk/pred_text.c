@@ -6,7 +6,6 @@
 
 #include "pred_text.h"
 
-#include <utils/pg_locale.h>
 #include <miscadmin.h>
 
 #include "compat/compat.h"
