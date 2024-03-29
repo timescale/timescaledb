@@ -45,7 +45,7 @@ vector_agg_rescan(CustomScanState *node)
 typedef struct
 {
 	void (*agg_init)(Datum *agg_value, bool *agg_isnull);
-	void (*agg_vector_all)(ArrowArray *vector, Datum *agg_value, bool *agg_isnull);
+	void (*agg_vector)(ArrowArray *vector, uint64 *filter, Datum *agg_value, bool *agg_isnull);
 	void (*agg_const)(Datum constvalue, bool constisnull, int n, Datum *agg_value,
 					  bool *agg_isnull);
 } VectorAggregate;
@@ -58,7 +58,7 @@ int4_sum_init(Datum *agg_value, bool *agg_isnull)
 }
 
 static void
-int4_sum_vector_all(ArrowArray *vector, Datum *agg_value, bool *agg_isnull)
+int4_sum_vector(ArrowArray *vector, uint64 *filter, Datum *agg_value, bool *agg_isnull)
 {
 	Assert(vector != NULL);
 	Assert(vector->length > 0);
@@ -94,7 +94,8 @@ int4_sum_vector_all(ArrowArray *vector, Datum *agg_value, bool *agg_isnull)
 		{
 			const int row = outer + inner;
 			const int32 arrow_value = ((int32 *) vector->buffers[1])[row];
-			batch_sum += arrow_value * arrow_row_is_valid(vector->buffers[0], row);
+			const bool passes_filter = filter ? arrow_row_is_valid(filter, row) : true;
+			batch_sum += passes_filter * arrow_value * arrow_row_is_valid(vector->buffers[0], row);
 		}
 	}
 #undef INNER_LOOP_SIZE
@@ -143,33 +144,67 @@ int4_sum_const(Datum constvalue, bool constisnull, int n, Datum *agg_value, bool
 	*agg_value = Int64GetDatum(tmp);
 }
 
-/*
- * Perform a vectorized aggregation.
- */
+static VectorAggregate int4_sum_agg = {
+	.agg_init = int4_sum_init,
+	.agg_const = int4_sum_const,
+	.agg_vector = int4_sum_vector,
+};
+
 static TupleTableSlot *
-perform_vectorized_agg(VectorAggregate agg, CustomScanState *vector_agg_state,
-					   DecompressChunkState *decompress_state)
+vector_agg_exec(CustomScanState *vector_agg_state)
 {
+	DecompressChunkState *decompress_state =
+		(DecompressChunkState *) linitial(vector_agg_state->custom_ps);
+
+	/*
+	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
+	 * of the custom scan node that is performing the vectorized aggregation.
+	 * We do this to avoid projections at this node, because the postgres
+	 * projection functions complain when they see an Aggref in a custom
+	 * node output targetlist.
+	 * The output targetlist, in turn, consists of just the INDEX_VAR references
+	 * into the custom_scan_tlist.
+	 */
+	List *aggregated_tlist = castNode(CustomScan, vector_agg_state->ss.ps.plan)->custom_scan_tlist;
+	Assert(list_length(aggregated_tlist) == 1);
+
+	/* Checked by planner */
+	Assert(ts_guc_enable_vectorized_aggregation);
+	Assert(ts_guc_enable_bulk_decompression);
+
+	/* Determine which kind of vectorized aggregation we should perform */
+	TargetEntry *tlentry = (TargetEntry *) linitial(aggregated_tlist);
+	Assert(IsA(tlentry->expr, Aggref));
+	Aggref *aggref = castNode(Aggref, tlentry->expr);
+
+	my_print(aggref);
+
+	/* Partial result is a int8 */
+	Assert(aggref->aggtranstype == INT8OID);
+
+	Assert(list_length(aggref->args) == 1);
+
+	/* The aggregate should be a partial aggregate */
+	Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+
+	Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
+
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 
-	/* Two columns are decompressed, the column that needs to be aggregated and the count column */
-	Assert(dcontext->num_total_columns == 2);
-
-	CompressionColumnDescription *value_column_description = &dcontext->template_columns[0];
-	CompressionColumnDescription *count_column_description = &dcontext->template_columns[1];
-	if (count_column_description->type != COUNT_COLUMN)
+	CompressionColumnDescription *value_column_description = NULL;
+	for (int i = 0; i < dcontext->num_total_columns; i++)
 	{
-		/*
-		 * The count and value columns can go in different order based on their
-		 * order in compressed chunk, so check which one we are seeing.
-		 */
-		CompressionColumnDescription *tmp = value_column_description;
-		value_column_description = count_column_description;
-		count_column_description = tmp;
+		CompressionColumnDescription *current_column = &dcontext->template_columns[i];
+		if (current_column->output_attno == var->varattno)
+		{
+			value_column_description = current_column;
+			break;
+		}
 	}
+	Ensure(value_column_description != NULL, "aggregated compressed column not found");
+
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
-	Assert(count_column_description->type == COUNT_COLUMN);
 
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
@@ -178,7 +213,10 @@ perform_vectorized_agg(VectorAggregate agg, CustomScanState *vector_agg_state,
 	TupleTableSlot *aggregated_slot = vector_agg_state->ss.ps.ps_ResultTupleSlot;
 	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 
-	agg.agg_init(&aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
+	Assert(aggref->aggfnoid == F_SUM_INT4);
+	VectorAggregate *agg = &int4_sum_agg;
+
+	agg->agg_init(&aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
 	ExecClearTuple(aggregated_slot);
 
 	TupleTableSlot *compressed_slot = ExecProcNode(linitial(decompress_state->csstate.custom_ps));
@@ -211,18 +249,28 @@ perform_vectorized_agg(VectorAggregate agg, CustomScanState *vector_agg_state,
 		/*
 		 * To calculate the sum for a segment by value or default compressed
 		 * column value, we need to multiply this value with the number of
-		 * compressed tuples in this batch.
+		 * passing decompressed tuples in this batch.
 		 */
+		int n = batch_state->total_batch_rows;
+		if (batch_state->vector_qual_result)
+		{
+			n = arrow_num_valid(batch_state->vector_qual_result, n);
+			Assert(n > 0);
+		}
+
 		int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
-		agg.agg_const(batch_state->decompressed_scan_slot_data.base.tts_values[offs],
-					  batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
-					  batch_state->total_batch_rows,
-					  &aggregated_slot->tts_values[0],
-					  &aggregated_slot->tts_isnull[0]);
+		agg->agg_const(batch_state->decompressed_scan_slot_data.base.tts_values[offs],
+					   batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
+					   n,
+					   &aggregated_slot->tts_values[0],
+					   &aggregated_slot->tts_isnull[0]);
 	}
 	else
 	{
-		agg.agg_vector_all(arrow, &aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
+		agg->agg_vector(arrow,
+						batch_state->vector_qual_result,
+						&aggregated_slot->tts_values[0],
+						&aggregated_slot->tts_isnull[0]);
 	}
 
 	compressed_batch_discard_tuples(batch_state);
@@ -231,61 +279,6 @@ perform_vectorized_agg(VectorAggregate agg, CustomScanState *vector_agg_state,
 	ExecStoreVirtualTuple(aggregated_slot);
 
 	return aggregated_slot;
-}
-
-static TupleTableSlot *
-vector_agg_exec(CustomScanState *vector_agg_state)
-{
-	DecompressChunkState *decompress_state =
-		(DecompressChunkState *) linitial(vector_agg_state->custom_ps);
-
-	/*
-	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
-	 * of the custom scan node that is performing the vectorized aggregation.
-	 * We do this to avoid projections at this node, because the postgres
-	 * projection functions complain when they see an Aggref in a custom
-	 * node output targetlist.
-	 * The output targetlist, in turn, consists of just the INDEX_VAR references
-	 * into the custom_scan_tlist.
-	 */
-	List *aggregated_tlist = castNode(CustomScan, vector_agg_state->ss.ps.plan)->custom_scan_tlist;
-	Assert(list_length(aggregated_tlist) == 1);
-
-	/* Checked by planner */
-	Assert(ts_guc_enable_vectorized_aggregation);
-	Assert(ts_guc_enable_bulk_decompression);
-
-	/* Determine which kind of vectorized aggregation we should perform */
-	TargetEntry *tlentry = (TargetEntry *) linitial(aggregated_tlist);
-	Assert(IsA(tlentry->expr, Aggref));
-	Aggref *aggref = castNode(Aggref, tlentry->expr);
-
-	/* Partial result is a int8 */
-	Assert(aggref->aggtranstype == INT8OID);
-
-	Assert(list_length(aggref->args) == 1);
-
-	/* The aggregate should be a partial aggregate */
-	Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
-
-	switch (aggref->aggfnoid)
-	{
-		case F_SUM_INT4:
-		{
-			VectorAggregate agg = {
-				.agg_init = int4_sum_init,
-				.agg_const = int4_sum_const,
-				.agg_vector_all = int4_sum_vector_all,
-			};
-			return perform_vectorized_agg(agg, vector_agg_state, decompress_state);
-		}
-		default:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("vectorized aggregation for function %d is not supported",
-							aggref->aggfnoid)));
-			pg_unreachable();
-	}
 }
 
 static void
