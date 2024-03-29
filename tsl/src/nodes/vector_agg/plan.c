@@ -204,12 +204,6 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (linitial(custom->custom_exprs) != NIL)
-	{
-		/* Even the vectorized filters are not supported at the moment. */
-		return plan;
-	}
-
 	if (agg->numCols != 0)
 	{
 		/* No GROUP BY support for now. */
