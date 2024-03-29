@@ -381,7 +381,6 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
 							DecompressChunkState *decompress_state)
 {
 	DecompressContext *dcontext = &decompress_state->decompress_context;
-	BatchQueue *batch_queue = decompress_state->batch_queue;
 
 	Assert(aggref != NULL);
 
@@ -407,178 +406,130 @@ perform_vectorized_sum_int4(CustomScanState *vector_agg_state, Aggref *aggref,
 		   value_column_description->type == SEGMENTBY_COLUMN);
 	Assert(count_column_description->type == COUNT_COLUMN);
 
-	/* Get a free batch slot */
-	const int new_batch_index = batch_array_get_unused_slot(&batch_queue->batch_array);
-
-	/* Nobody else should use batch states */
-	Assert(new_batch_index == 0);
-	DecompressBatchState *batch_state =
-		batch_array_get_at(&batch_queue->batch_array, new_batch_index);
-
-	/* Init per batch memory context */
-	Assert(batch_state != NULL);
-	Assert(batch_state->per_batch_context == NULL);
-	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
-	Assert(batch_state->per_batch_context != NULL);
-
-	/* Init bulk decompression memory context */
-	Assert(dcontext->bulk_decompression_context == NULL);
-	dcontext->bulk_decompression_context = create_bulk_decompression_mctx(CurrentMemoryContext);
-	Assert(dcontext->bulk_decompression_context != NULL);
+	BatchQueue *batch_queue = decompress_state->batch_queue;
+	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
 
 	/* Get a reference the the output TupleTableSlot */
 	TupleTableSlot *aggregated_slot = vector_agg_state->ss.ps.ps_ResultTupleSlot;
 	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 
-	/* Set all attributes of the result tuple to NULL. So, we return NULL if no data is processed
-	 * by our implementation. In addition, the call marks the slot as being used (i.e., no
-	 * ExecStoreVirtualTuple call is required). */
-	ExecStoreAllNullTuple(aggregated_slot);
-	Assert(!TupIsNull(aggregated_slot));
-
 	int64 result_sum = 0;
 
-	while (true)
+	aggregated_slot->tts_isnull[0] = true;
+	aggregated_slot->tts_values[0] = 0;
+	ExecClearTuple(aggregated_slot);
+
+	TupleTableSlot *compressed_slot = ExecProcNode(linitial(decompress_state->csstate.custom_ps));
+
+	if (TupIsNull(compressed_slot))
 	{
-		TupleTableSlot *compressed_slot =
-			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
+		/* All values are processed. */
+		return NULL;
+	}
 
-		if (TupIsNull(compressed_slot))
+	compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
+
+	ArrowArray *arrow = NULL;
+	if (value_column_description->type == COMPRESSED_COLUMN)
+	{
+		Assert(dcontext->enable_bulk_decompression);
+		Assert(value_column_description->bulk_decompression_supported);
+		Assert(list_length(aggref->args) == 1);
+		CompressedColumnValues *values =
+			&batch_state->compressed_columns[value_column_description - dcontext->template_columns];
+		Assert(values->decompression_type != DT_Invalid);
+		arrow = values->arrow;
+	}
+	else
+	{
+		Assert(value_column_description->type == SEGMENTBY_COLUMN);
+	}
+
+	if (arrow == NULL)
+	{
+		/*
+		 * To calculate the sum for a segment by value or default compressed
+		 * column value, we need to multiply this value with the number of
+		 * compressed tuples in this batch.
+		 */
+		int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
+		if (!batch_state->decompressed_scan_slot_data.base.tts_isnull[offs])
 		{
-			/* All values are processed. */
-			break;
-		}
-
-		if (value_column_description->type == SEGMENTBY_COLUMN)
-		{
-			/*
-			 * To calculate the sum for a segment by value, we need to multiply the value of the
-			 * segment by column with the number of compressed tuples in this batch.
-			 */
-
-			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
-			MemoryContextReset(batch_state->per_batch_context);
-
-			bool isnull_value, isnull_elements;
-			Datum value = slot_getattr(compressed_slot,
-									   value_column_description->compressed_scan_attno,
-									   &isnull_value);
-
-			/* We have multiple compressed tuples for this segment by value. Get number of
-			 * compressed tuples */
-			Datum elements = slot_getattr(compressed_slot,
-										  count_column_description->compressed_scan_attno,
-										  &isnull_elements);
-
-			if (!isnull_value && !isnull_elements)
-			{
-				int32 intvalue = DatumGetInt32(value);
-				int32 amount = DatumGetInt32(elements);
-				int64 batch_sum = 0;
-
-				Assert(amount > 0);
-
-				/* We have at least one value */
-				aggregated_slot->tts_isnull[0] = false;
-
-				/* Multiply the number of tuples with the actual value */
-				if (unlikely(pg_mul_s64_overflow(intvalue, amount, &batch_sum)))
-				{
-					ereport(ERROR,
-							(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-							 errmsg("bigint out of range")));
-				}
-
-				/* Add the value to our sum */
-				if (unlikely(pg_add_s64_overflow(result_sum, batch_sum, ((int64 *) &result_sum))))
-					ereport(ERROR,
-							(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
-							 errmsg("bigint out of range")));
-			}
-			MemoryContextSwitchTo(old_mctx);
-		}
-		else if (value_column_description->type == COMPRESSED_COLUMN)
-		{
-			Assert(dcontext->enable_bulk_decompression);
-			Assert(value_column_description->bulk_decompression_supported);
-			Assert(list_length(aggref->args) == 1);
-
-			MemoryContext old_mctx = MemoryContextSwitchTo(batch_state->per_batch_context);
-			MemoryContextReset(batch_state->per_batch_context);
-
-			/* Decompress data */
-			bool isnull;
-			Datum value = slot_getattr(compressed_slot,
-									   value_column_description->compressed_scan_attno,
-									   &isnull);
-
-			Ensure(isnull == false, "got unexpected NULL attribute value from compressed batch");
+			int32 intvalue =
+				DatumGetInt32(batch_state->decompressed_scan_slot_data.base.tts_values[offs]);
+			int64 batch_sum = 0;
 
 			/* We have at least one value */
 			aggregated_slot->tts_isnull[0] = false;
 
-			CompressedDataHeader *header =
-				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
-																	value),
-																&dcontext->detoaster,
-																CurrentMemoryContext);
-
-			ArrowArray *arrow = NULL;
-
-			DecompressAllFunction decompress_all =
-				tsl_get_decompress_all_function(header->compression_algorithm,
-												value_column_description->typid);
-			Assert(decompress_all != NULL);
-
-			MemoryContextSwitchTo(dcontext->bulk_decompression_context);
-
-			arrow = decompress_all(PointerGetDatum(header),
-								   value_column_description->typid,
-								   batch_state->per_batch_context);
-
-			Assert(arrow != NULL);
-
-			MemoryContextReset(dcontext->bulk_decompression_context);
-			MemoryContextSwitchTo(batch_state->per_batch_context);
-
-			/*
-			 * We accumulate the sum as int64, so we can sum INT_MAX = 2^31 - 1
-			 * at least 2^31 times without incurrint an overflow of the int64
-			 * accumulator. The same is true for negative numbers. The
-			 * compressed batch size is currently capped at 1000 rows, but even
-			 * if it's changed in the future, it's unlikely that we support
-			 * batches larger than 65536 rows, not to mention 2^31. Therefore,
-			 * we don't need to check for overflows within the loop, which would
-			 * slow down the calculation.
-			 */
-			Assert(arrow->length <= INT_MAX);
-
-			int64 batch_sum = 0;
-			for (int i = 0; i < arrow->length; i++)
+			/* Multiply the number of tuples with the actual value */
+			if (unlikely(pg_mul_s64_overflow(intvalue, batch_state->total_batch_rows, &batch_sum)))
 			{
-				const bool arrow_isnull = !arrow_row_is_valid(arrow->buffers[0], i);
-
-				if (likely(!arrow_isnull))
-				{
-					const int32 arrow_value = ((int32 *) arrow->buffers[1])[i];
-					batch_sum += arrow_value;
-				}
+				ereport(ERROR,
+						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
+						 errmsg("bigint out of range")));
 			}
 
+			/* Add the value to our sum */
 			if (unlikely(pg_add_s64_overflow(result_sum, batch_sum, ((int64 *) &result_sum))))
 				ereport(ERROR,
 						(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 						 errmsg("bigint out of range")));
-			MemoryContextSwitchTo(old_mctx);
-		}
-		else
-		{
-			elog(ERROR, "unsupported column type");
 		}
 	}
+	else
+	{
+		Assert(arrow != NULL);
+
+		/* We have at least one value */
+		aggregated_slot->tts_isnull[0] = false;
+
+		/*
+		 * We accumulate the sum as int64, so we can sum INT_MAX = 2^31 - 1
+		 * at least 2^31 times without incurring an overflow of the int64
+		 * accumulator. The same is true for negative numbers. The
+		 * compressed batch size is currently capped at 1000 rows, but even
+		 * if it's changed in the future, it's unlikely that we support
+		 * batches larger than 65536 rows, not to mention 2^31. Therefore,
+		 * we don't need to check for overflows within the loop, which would
+		 * slow down the calculation.
+		 */
+		Assert(arrow->length <= INT_MAX);
+
+		int64 batch_sum = 0;
+
+		/*
+		 * This loop is not unrolled automatically, so do it manually as usual.
+		 * The value buffer is padded to an even multiple of 64 bytes, i.e. to
+		 * 64 / 4 = 16 elements. The bitmap is an even multiple of 64 elements.
+		 * The number of elements in the inner loop must be less than both these
+		 * values so that we don't go out of bounds. The particular value was
+		 * chosen because it gives some speedup, and the larger values blow up
+		 * the generated code with no performance benefit (checked on clang 16).
+		 */
+#define INNER_LOOP_SIZE 4
+		const int outer_boundary = pad_to_multiple(INNER_LOOP_SIZE, arrow->length);
+		for (int outer = 0; outer < outer_boundary; outer += INNER_LOOP_SIZE)
+		{
+			for (int inner = 0; inner < INNER_LOOP_SIZE; inner++)
+			{
+				const int row = outer + inner;
+				const int32 arrow_value = ((int32 *) arrow->buffers[1])[row];
+				batch_sum += arrow_value * arrow_row_is_valid(arrow->buffers[0], row);
+			}
+		}
+#undef INNER_LOOP_SIZE
+
+		if (unlikely(pg_add_s64_overflow(result_sum, batch_sum, ((int64 *) &result_sum))))
+			ereport(ERROR,
+					(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
+	}
+
+	compressed_batch_discard_tuples(batch_state);
 	/* Use Int64GetDatum to store the result since a 64-bit value is not pass-by-value on 32-bit
 	 * systems */
 	aggregated_slot->tts_values[0] = Int64GetDatum(result_sum);
+	ExecStoreVirtualTuple(aggregated_slot);
 
 	return aggregated_slot;
 }
@@ -594,8 +545,6 @@ TupleTableSlot *
 decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
 									  DecompressChunkState *decompress_state)
 {
-	BatchQueue *bq = decompress_state->batch_queue;
-
 	/*
 	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
 	 * of the custom scan node that is performing the vectorized aggregation.
@@ -611,16 +560,6 @@ decompress_chunk_exec_vector_agg_impl(CustomScanState *vector_agg_state,
 	/* Checked by planner */
 	Assert(ts_guc_enable_vectorized_aggregation);
 	Assert(ts_guc_enable_bulk_decompression);
-
-	/*
-	 * When using vectorized aggregates, only one result tuple is produced. So, if we have
-	 * already initialized a batch state, the aggregation was already performed.
-	 */
-	if (batch_array_has_active_batches(&bq->batch_array))
-	{
-		ExecClearTuple(vector_agg_state->ss.ss_ScanTupleSlot);
-		return vector_agg_state->ss.ss_ScanTupleSlot;
-	}
 
 	/* Determine which kind of vectorized aggregation we should perform */
 	TargetEntry *tlentry = (TargetEntry *) linitial(aggregated_tlist);
