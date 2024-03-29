@@ -104,8 +104,6 @@ typedef struct
 	 * columns we can apply vectorized quals.
 	 */
 	DecompressChunkColumnCompression *uncompressed_chunk_attno_to_compression_info;
-
-	List *
 } DecompressionMapContext;
 
 /*
