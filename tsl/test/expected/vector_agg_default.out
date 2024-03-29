@@ -1,0 +1,67 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+create table t(a int);
+select create_hypertable('t', 'a', chunk_time_interval => 1000);
+NOTICE:  adding not-null constraint to column "a"
+ create_hypertable 
+-------------------
+ (1,public,t,t)
+(1 row)
+
+insert into t select generate_series(1, 999);
+alter table t set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "t" is set to ""
+NOTICE:  default order by for hypertable "t" is set to "a DESC"
+select compress_chunk(show_chunks('t'));
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+alter table t add column b int default 7;
+insert into t select x, 11 from generate_series(1001, 1999) x;
+select compress_chunk(show_chunks('t'));
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+(2 rows)
+
+explain (costs off) select sum(b) from t;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Finalize Aggregate
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                           ->  Parallel Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                           ->  Parallel Seq Scan on compress_hyper_2_4_chunk
+(10 rows)
+
+select sum(b) from t;
+  sum  
+-------
+ 17982
+(1 row)
+
+select decompress_chunk(show_chunks('t'));
+            decompress_chunk            
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+(2 rows)
+
+select sum(b) from t;
+  sum  
+-------
+ 17982
+(1 row)
+
+drop table t;

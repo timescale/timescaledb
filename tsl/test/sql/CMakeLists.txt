@@ -39,7 +39,8 @@ set(TEST_FILES
     skip_scan.sql
     size_utils_tsl.sql
     transparent_decompression_join_index.sql
-    vectorized_aggregation.sql)
+    vectorized_aggregation.sql
+    vector_agg_default.sql)
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
