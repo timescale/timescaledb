@@ -104,6 +104,8 @@ typedef struct
 	 * columns we can apply vectorized quals.
 	 */
 	DecompressChunkColumnCompression *uncompressed_chunk_attno_to_compression_info;
+
+	List *
 } DecompressionMapContext;
 
 /*
@@ -117,7 +119,7 @@ typedef struct
  */
 static void
 build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
-						DecompressChunkPath *path, List *scan_tlist,
+						DecompressChunkPath *path, List *compressed_scan_tlist,
 						Bitmapset *uncompressed_attrs_needed)
 {
 	/*
@@ -171,7 +173,7 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 	 */
 	context->have_bulk_decompression_columns = false;
 	context->decompression_map = NIL;
-	foreach (lc, scan_tlist)
+	foreach (lc, compressed_scan_tlist)
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
