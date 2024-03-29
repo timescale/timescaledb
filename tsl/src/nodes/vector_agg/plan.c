@@ -120,6 +120,16 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	custom->scan.plan.targetlist =
 		build_trivial_custom_output_targetlist(custom->custom_scan_tlist);
 
+	/*
+	 * Copy the costs from the normal aggregation node, so that they show up in
+	 * the EXPLAIN output. They are not used for any other purposes, because
+	 * this hook is called after the planning is finished.
+	 */
+	custom->scan.plan.plan_rows = agg->plan.plan_rows;
+	custom->scan.plan.plan_width = agg->plan.plan_width;
+	custom->scan.plan.startup_cost = agg->plan.startup_cost;
+	custom->scan.plan.total_cost = agg->plan.total_cost;
+
 	return (Plan *) custom;
 }
 
