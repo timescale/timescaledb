@@ -3223,58 +3223,6 @@ ts_chunk_recreate_all_constraints_for_dimension(Hypertable *ht, int32 dimension_
 }
 
 /*
- * Drops all FK constraints on a given chunk.
- * Currently it is used only for chunks, which have been compressed and
- * contain no data.
- */
-void
-ts_chunk_drop_fks(const Chunk *const chunk)
-{
-	Relation rel;
-	List *fks;
-	ListCell *lc;
-
-	ASSERT_IS_VALID_CHUNK(chunk);
-
-	rel = table_open(chunk->table_id, AccessShareLock);
-	fks = copyObject(RelationGetFKeyList(rel));
-	table_close(rel, AccessShareLock);
-
-	foreach (lc, fks)
-	{
-		const ForeignKeyCacheInfo *const fk = lfirst_node(ForeignKeyCacheInfo, lc);
-		ts_chunk_constraint_delete_by_constraint_name(chunk->fd.id,
-													  get_constraint_name(fk->conoid),
-													  true,
-													  true);
-	}
-}
-
-/*
- * Recreates all FK constraints on a chunk by using the constraints on the parent hypertable
- * as a template. Currently it is used only during chunk decompression, since FK constraints
- * are dropped during compression.
- */
-void
-ts_chunk_create_fks(const Hypertable *ht, const Chunk *const chunk)
-{
-	Relation rel;
-	List *fks;
-	ListCell *lc;
-
-	ASSERT_IS_VALID_CHUNK(chunk);
-
-	rel = table_open(chunk->hypertable_relid, AccessShareLock);
-	fks = copyObject(RelationGetFKeyList(rel));
-	table_close(rel, AccessShareLock);
-	foreach (lc, fks)
-	{
-		ForeignKeyCacheInfo *fk = lfirst_node(ForeignKeyCacheInfo, lc);
-		ts_chunk_constraint_create_on_chunk(ht, chunk, fk->conoid);
-	}
-}
-
-/*
  * Chunk catalog updates are done in three steps.
  * This is achieved by following this sequence:
  *   1: call lock_chunk_tuple: this finds most recent version of tuple,
