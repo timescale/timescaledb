@@ -1054,9 +1054,10 @@ SELECT constraint_schema, constraint_name, table_schema, table_name, constraint_
 FROM information_schema.table_constraints
 WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
- constraint_schema | constraint_name | table_schema | table_name | constraint_type 
--------------------+-----------------+--------------+------------+-----------------
-(0 rows)
+   constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
+-----------------------+---------------------------+-----------------------+--------------------+-----------------
+ _timescaledb_internal | 42_6_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+(1 row)
 
 -- Delete data from compressed chunk directly fails
 \set ON_ERROR_STOP 0
@@ -1094,7 +1095,7 @@ WHERE table_name = :'CHUNK_NAME' AND constraint_type = 'FOREIGN KEY'
 ORDER BY constraint_name;
    constraint_schema   |      constraint_name      |     table_schema      |     table_name     | constraint_type 
 -----------------------+---------------------------+-----------------------+--------------------+-----------------
- _timescaledb_internal | 42_8_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
+ _timescaledb_internal | 42_6_hyper_device_id_fkey | _timescaledb_internal | _hyper_18_42_chunk | FOREIGN KEY
 (1 row)
 
 -- create hypertable with 2 chunks

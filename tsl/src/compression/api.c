@@ -457,11 +457,6 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
 
-	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
-	 * cascading deleted data in FK-referenced tables, while blocking deleting data
-	 * directly on the hypertable or chunks.
-	 */
-	ts_chunk_drop_fks(cxt.srcht_chunk);
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
 
 	if (new_compressed_chunk)
@@ -596,9 +591,6 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 
 	decompress_chunk(compressed_chunk->table_id, uncompressed_chunk->table_id);
 
-	/* Recreate FK constraints, since they were dropped during compression. */
-	ts_chunk_create_fks(uncompressed_hypertable, uncompressed_chunk);
-
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
@@ -669,12 +661,6 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	/* Copy chunk constraints (including fkey) to compressed chunk */
 	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
 	ts_trigger_create_all_on_chunk(compress_ht_chunk);
-
-	/* Drop all FK constraints on the uncompressed chunk. This is needed to allow
-	 * cascading deleted data in FK-referenced tables, while blocking deleting data
-	 * directly on the hypertable or chunks.
-	 */
-	ts_chunk_drop_fks(cxt.srcht_chunk);
 
 	/* Insert empty stats to compression_chunk_size */
 	compression_chunk_size_catalog_insert(cxt.srcht_chunk->fd.id,
