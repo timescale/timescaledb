@@ -685,8 +685,6 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	ListCell *lc;
 	ChunkDispatchState *cds = NULL;
 
-	CHECK_FOR_INTERRUPTS();
-
 	/*
 	 * This should NOT get called during EvalPlanQual; we should have passed a
 	 * subplan tree to EvalPlanQual, instead.  Use a runtime test not just
@@ -786,6 +784,10 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	for (;;)
 	{
 		Oid resultoid = InvalidOid;
+
+		/* Check for cancel/die interrupts. */
+		CHECK_FOR_INTERRUPTS();
+
 		/*
 		 * Reset the per-output-tuple exprcontext.  This is needed because
 		 * triggers expect to use that context as workspace.  It's a bit ugly
