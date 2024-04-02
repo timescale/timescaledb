@@ -655,3 +655,20 @@ SELECT show_chunks('drop_chunk_test_ts');
 -- timestamp
 SELECT show_chunks('drop_chunk_test_ts', created_after => now() - INTERVAL '1 hour', created_before => now());
 SELECT drop_chunks('drop_chunk_test_ts', created_after => INTERVAL '1 hour', created_before => now());
+
+-- Test views on top of hypertables
+CREATE TABLE view_test (project_id INT, ts TIMESTAMPTZ NOT NULL);
+SELECT create_hypertable('view_test', by_range('ts', INTERVAL '1 day'));
+-- exactly one partition per project_id
+SELECT * FROM add_dimension('view_test', 'project_id', chunk_time_interval => 1); -- exactly one partition per project; works for *integer* types
+INSERT INTO view_test (project_id, ts)
+SELECT g % 25 + 1 AS project_id, i.ts + (g * interval '1 week') / i.total AS ts
+FROM (SELECT timestamptz '2024-01-01 00:00:00+0', 600) i(ts, total),
+generate_series(1, i.total) g;
+-- Create a view on top of this hypertable
+CREATE VIEW test_view_part_few AS SELECT project_id,
+    ts
+   FROM view_test
+  WHERE project_id = ANY (ARRAY[5, 10, 15]);
+-- Complicated query on a view involving a range check and a sort
+SELECT * FROM test_view_part_few WHERE ts BETWEEN '2024-01-04 00:00:00+00'AND '2024-01-05 00:00:00' ORDER BY ts LIMIT 1000;
