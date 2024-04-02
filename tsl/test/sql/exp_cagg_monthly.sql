@@ -31,6 +31,12 @@ INSERT INTO conditions (day, city, temperature) VALUES
 -- Check that buckets like '1 month 15 days' (fixed-sized + variable-sized) are not allowed
 
 \set ON_ERROR_STOP 0
+
+-- timebucket_ng is deprecated and can not be used in new CAggs anymore.
+-- However, using this GUC the restriction can be lifted in debug builds
+-- to ensure the functionality can be tested.
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
+
 CREATE MATERIALIZED VIEW conditions_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT city,
@@ -55,6 +61,9 @@ SELECT city,
 FROM conditions
 GROUP BY city, bucket
 WITH NO DATA;
+
+-- Reset GUC to check if the CAgg would also work in release builds
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT mat_hypertable_id AS cagg_id
 FROM _timescaledb_catalog.continuous_agg
@@ -161,6 +170,7 @@ SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id;
 
 -- Re-create cagg, this time WITH DATA
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT city,
@@ -169,6 +179,7 @@ SELECT city,
    MAX(temperature)
 FROM conditions
 GROUP BY city, bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 -- Make sure cagg was filled
 SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
@@ -221,6 +232,9 @@ WHERE hypertable_id = :ht_id;
 
 -- Create a real-time aggregate
 DROP MATERIALIZED VIEW conditions_summary;
+
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
+
 CREATE MATERIALIZED VIEW conditions_summary
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT city,
@@ -229,6 +243,8 @@ SELECT city,
    MAX(temperature)
 FROM conditions
 GROUP BY city, bucket;
+
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
 FROM conditions_summary
@@ -303,6 +319,7 @@ INSERT INTO conditions_large(day, temperature)
 SELECT ts, date_part('month', ts)*100 + date_part('day', ts)
 FROM generate_series('2010-01-01' :: date, '2020-01-01' :: date - interval '1 day', '1 day') as ts;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_2m
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -311,9 +328,11 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_2m ORDER BY bucket;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_3m
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -322,9 +341,11 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_3m ORDER BY bucket;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_4m
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -333,9 +354,11 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_4m ORDER BY bucket;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_5m
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -344,9 +367,11 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_5m ORDER BY bucket;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_6m
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -355,9 +380,11 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_6m ORDER BY bucket;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_1y
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -366,9 +393,11 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_1y ORDER BY bucket;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_1y1m
 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT
@@ -377,6 +406,7 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_1y1m ORDER BY bucket;
 
@@ -384,6 +414,7 @@ SELECT * FROM conditions_large_1y1m ORDER BY bucket;
 DROP MATERIALIZED VIEW conditions_large_1y;
 SET timescaledb.materializations_per_refresh_window = 0;
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_large_1y
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT
@@ -392,6 +423,7 @@ SELECT
    MAX(temperature)
 FROM conditions_large
 GROUP BY bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_large_1y ORDER BY bucket;
 
@@ -417,6 +449,7 @@ SELECT create_hypertable(
   chunk_time_interval => INTERVAL '1 day'
 );
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_summary_empty
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT city,
@@ -425,6 +458,7 @@ SELECT city,
    MAX(temperature)
 FROM conditions_empty
 GROUP BY city, bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT city, to_char(bucket, 'YYYY-MM-DD') AS month, min, max
 FROM conditions_summary_empty
@@ -484,6 +518,7 @@ INSERT INTO conditions_policy (day, city, temperature) VALUES
   ('2021-06-26', 'Moscow', 32),
   ('2021-06-27', 'Moscow', 31);
 
+SET timescaledb.debug_allow_cagg_with_deprecated_funcs = true;
 CREATE MATERIALIZED VIEW conditions_summary_policy
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT city,
@@ -492,6 +527,7 @@ SELECT city,
    MAX(temperature)
 FROM conditions_policy
 GROUP BY city, bucket;
+RESET timescaledb.debug_allow_cagg_with_deprecated_funcs;
 
 SELECT * FROM conditions_summary_policy;
 

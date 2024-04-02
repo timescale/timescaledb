@@ -310,12 +310,6 @@ CREATE MATERIALIZED VIEW temperature_tz_4h_ts
     FROM timestamptz_ht
     GROUP BY 1 ORDER BY 1;
 NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts"
-CREATE MATERIALIZED VIEW temperature_tz_4h_ts_ng
-  WITH  (timescaledb.continuous) AS
-  SELECT timescaledb_experimental.time_bucket_ng('4 hour', time, 'Asia/Shanghai'), avg(value)
-    FROM timestamptz_ht
-    GROUP BY 1 ORDER BY 1;
-NOTICE:  refreshing continuous aggregate "temperature_tz_4h_ts_ng"
 CREATE TABLE integer_ht(a integer, b integer, c integer);
 SELECT table_name FROM create_hypertable('integer_ht', 'a', chunk_time_interval=> 10);
 NOTICE:  adding not-null constraint to column "a"
@@ -341,16 +335,15 @@ NOTICE:  continuous aggregate "integer_ht_cagg" is already up-to-date
 SELECT user_view_name,
        cagg_get_bucket_function(mat_hypertable_id)
        FROM _timescaledb_catalog.continuous_agg
-       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_ng', 'integer_ht_cagg')
+       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'integer_ht_cagg')
        ORDER BY user_view_name;
-     user_view_name      |                               cagg_get_bucket_function                                
--------------------------+---------------------------------------------------------------------------------------
- integer_ht_cagg         | time_bucket(integer,integer)
- temperature_4h          | time_bucket(interval,timestamp without time zone)
- temperature_tz_4h       | time_bucket(interval,timestamp with time zone)
- temperature_tz_4h_ts    | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
- temperature_tz_4h_ts_ng | timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,text)
-(5 rows)
+    user_view_name    |                               cagg_get_bucket_function                                
+----------------------+---------------------------------------------------------------------------------------
+ integer_ht_cagg      | time_bucket(integer,integer)
+ temperature_4h       | time_bucket(interval,timestamp without time zone)
+ temperature_tz_4h    | time_bucket(interval,timestamp with time zone)
+ temperature_tz_4h_ts | time_bucket(interval,timestamp with time zone,text,timestamp with time zone,interval)
+(4 rows)
 
 --- Cleanup
 \c :TEST_DBNAME :ROLE_SUPERUSER
