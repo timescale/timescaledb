@@ -574,17 +574,8 @@ compressed_batch_discard_tuples(DecompressBatchState *batch_state)
 
 	if (batch_state->per_batch_context != NULL)
 	{
-		if (batch_state->compressed_slot != NULL)
-		{
-			/*
-			 * The compressed slot is not initialized by the current prototype
-			 * vectorized aggregation code. It's going to be refactored to make
-			 * it more uniform with the normal flow, but for now we have this
-			 * special check here.
-			 */
-			ExecClearTuple(batch_state->compressed_slot);
-			ExecClearTuple(&batch_state->decompressed_scan_slot_data.base);
-		}
+		ExecClearTuple(batch_state->compressed_slot);
+		ExecClearTuple(&batch_state->decompressed_scan_slot_data.base);
 		MemoryContextReset(batch_state->per_batch_context);
 	}
 	else
