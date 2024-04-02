@@ -1375,7 +1375,9 @@ ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 	FuncInfo *func_info = ts_func_cache_get(bucket_function);
 	Ensure(func_info != NULL, "unable to get function info for Oid %d", bucket_function);
 
-	Assert(func_info->allowed_in_cagg_definition);
+	/* The function has to be a currently allowed function or one of the deprecated bucketing
+	 * functions */
+	Assert(func_info->allowed_in_cagg_definition || IS_DEPRECATED_BUCKET_FUNC(func_info));
 
 	Oid first_bucket_arg = func_info->arg_types[0];
 

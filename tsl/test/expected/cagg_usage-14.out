@@ -473,7 +473,7 @@ CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.material
 ERROR:  cannot create continuous aggregate with variable-width bucket using offset or origin.
 -- offset - not supported due to variable size
 CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
-ERROR:  continuous aggregate view must include a valid time bucket function
+ERROR:  cannot create continuous aggregate with variable-width bucket using offset or origin.
 \set ON_ERROR_STOP 1
 --
 -- drop chunks tests
