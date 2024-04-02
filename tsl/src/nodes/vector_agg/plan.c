@@ -149,14 +149,28 @@ try_insert_vector_agg_node(Plan *plan)
 		plan->righttree = try_insert_vector_agg_node(plan->righttree);
 	}
 
+	List *append_plans = NIL;
 	if (IsA(plan, Append))
 	{
-		List *plans = castNode(Append, plan)->appendplans;
+		append_plans = castNode(Append, plan)->appendplans;
+	}
+	else if (IsA(plan, CustomScan))
+	{
+		CustomScan *custom = castNode(CustomScan, plan);
+		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		{
+			append_plans = custom->custom_plans;
+		}
+	}
+
+	if (append_plans)
+	{
 		ListCell *lc;
-		foreach (lc, plans)
+		foreach (lc, append_plans)
 		{
 			lfirst(lc) = try_insert_vector_agg_node(lfirst(lc));
 		}
+		return plan;
 	}
 
 	if (plan->type != T_Agg)

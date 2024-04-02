@@ -1,0 +1,67 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Test parameterized vector aggregation plans.
+create table pvagg(s int, a int);
+select create_hypertable('pvagg', 'a', chunk_time_interval => 1000);
+NOTICE:  adding not-null constraint to column "a"
+ create_hypertable  
+--------------------
+ (1,public,pvagg,t)
+(1 row)
+
+insert into pvagg select 1, generate_series(1, 999);
+insert into pvagg select 2, generate_series(1001, 1999);
+alter table pvagg set (timescaledb.compress, timescaledb.compress_segmentby = 's');
+NOTICE:  default order by for hypertable "pvagg" is set to "a DESC"
+select count(compress_chunk(x)) from show_chunks('pvagg') x;
+ count 
+-------
+     2
+(1 row)
+
+analyze pvagg;
+explain (costs off)
+select x, sum(a) from pvagg, generate_series(1, 2000, 500) x where a < x group by x;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ HashAggregate
+   Group Key: x.x
+   ->  Nested Loop
+         Join Filter: (_hyper_1_1_chunk.a < x.x)
+         ->  Function Scan on generate_series x
+         ->  Materialize
+               ->  Append
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_3_chunk
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+(11 rows)
+
+select x, sum(a) from pvagg, generate_series(1, 2000, 500) x where a < x group by x;
+  x   |   sum   
+------+---------
+ 1001 |  499500
+  501 |  125250
+ 1501 | 1124750
+(3 rows)
+
+explain (costs off)
+select * from unnest(array[0, 1, 2]::int[]) x, lateral (select sum(a) from pvagg where s = x) xx;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Nested Loop
+   ->  Function Scan on unnest x
+   ->  Finalize Aggregate
+         ->  Custom Scan (ChunkAppend) on pvagg
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                           ->  Seq Scan on compress_hyper_2_3_chunk
+                                 Filter: (s = x.x)
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
+                           ->  Seq Scan on compress_hyper_2_4_chunk
+                                 Filter: (s = x.x)
+(12 rows)
+
+drop table pvagg;
