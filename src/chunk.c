@@ -80,6 +80,7 @@ TS_FUNCTION_INFO_V1(ts_chunk_id_from_relid);
 TS_FUNCTION_INFO_V1(ts_chunk_show);
 TS_FUNCTION_INFO_V1(ts_chunk_create);
 TS_FUNCTION_INFO_V1(ts_chunk_status);
+TS_FUNCTION_INFO_V1(ts_chunk_drop_osm_table_chunk);
 
 static bool ts_chunk_add_status(Chunk *chunk, int32 status);
 
@@ -5188,4 +5189,43 @@ get_chunks_in_creation_time_range(Hypertable *ht, int64 older_than, int64 newer_
 	*num_chunks_returned = num_chunks;
 
 	return chunks;
+}
+
+Datum
+ts_chunk_drop_osm_table_chunk(PG_FUNCTION_ARGS)
+{
+	Oid hypertable_relid = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
+	Cache *hcache = ts_hypertable_cache_pin();
+	Hypertable *ht = ts_resolve_hypertable_from_table_or_cagg(hcache, hypertable_relid, true);
+
+	Oid chunk_relid = PG_ARGISNULL(1) ? InvalidOid : PG_GETARG_OID(1);
+	char *chunk_table_name = get_rel_name(chunk_relid);
+	char *chunk_schema_name = get_namespace_name(get_rel_namespace(chunk_relid));
+
+	const Chunk *ch = ts_chunk_get_by_name_with_memory_context(chunk_schema_name,
+															   chunk_table_name,
+															   CurrentMemoryContext,
+															   true);
+	Assert(ch != NULL);
+	if (!ch->fd.osm_chunk)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
+				 errmsg("attempting to drop chunk which is not an OSM chunk"),
+				 errhint("Use the drop_chunk() function instead")));
+	if (ch->fd.hypertable_id != ht->fd.id)
+		ereport(ERROR,
+				(errcode(ERRCODE_TS_UNEXPECTED),
+				 errmsg("OSM chunk %s.%s does not correspond to hypertable %s.%s",
+						chunk_schema_name,
+						chunk_table_name,
+						ht->fd.schema_name.data,
+						ht->fd.table_name.data)));
+	ts_chunk_validate_chunk_status_for_operation(ch, CHUNK_DROP, true /*throw_error */);
+	/* do not drop any chunk dependencies */
+	ts_chunk_drop(ch, DROP_RESTRICT, LOG);
+	/* reset hypertable OSM status */
+	ht->fd.status = HYPERTABLE_STATUS_DEFAULT;
+	ts_hypertable_update(ht);
+	ts_cache_release(hcache);
+	PG_RETURN_BOOL(true);
 }

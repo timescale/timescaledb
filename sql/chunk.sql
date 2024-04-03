@@ -75,3 +75,9 @@ CREATE OR REPLACE FUNCTION _timescaledb_functions.attach_osm_table_chunk(
    hypertable REGCLASS,
    chunk REGCLASS)
 RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_attach_osm_table_chunk' LANGUAGE C VOLATILE;
+
+-- internal API used by OSM extension to drop an OSM chunk table from the hypertable
+CREATE OR REPLACE FUNCTION _timescaledb_functions.drop_osm_table_chunk(
+   hypertable REGCLASS,
+   chunk REGCLASS)
+RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_drop_osm_table_chunk' LANGUAGE C VOLATILE;
