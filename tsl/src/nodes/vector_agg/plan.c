@@ -17,6 +17,7 @@
 #include "plan.h"
 
 #include "exec.h"
+#include "functions.h"
 #include "utils.h"
 #include "nodes/decompress_chunk/planner.h"
 
@@ -260,9 +261,8 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (aggref->aggfnoid != F_SUM_INT4)
+	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
 	{
-		/* We only support sum(int4) at the moment. */
 		return plan;
 	}
 
