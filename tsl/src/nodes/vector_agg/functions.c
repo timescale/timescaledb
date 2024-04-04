@@ -13,6 +13,8 @@
 
 #include "functions.h"
 
+#include "compat/compat.h"
+
 /*
  * Vectorized implementation of int4_sum.
  */
