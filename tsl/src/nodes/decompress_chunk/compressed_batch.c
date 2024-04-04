@@ -847,13 +847,26 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				if (!column_description->by_value &&
 					DatumGetPointer(decompressed_tuple->tts_values[attr]) != NULL)
 				{
-					decompressed_tuple->tts_values[attr] = PointerGetDatum(
-						detoaster_detoast_attr_copy((struct varlena *)
-														decompressed_tuple->tts_values[attr],
-													&dcontext->detoaster,
-													batch_state->per_batch_context));
+					if (column_description->value_bytes < 0)
+					{
+						/* This is a varlena type. */
+						decompressed_tuple->tts_values[attr] = PointerGetDatum(
+							detoaster_detoast_attr_copy((struct varlena *)
+															decompressed_tuple->tts_values[attr],
+														&dcontext->detoaster,
+														batch_state->per_batch_context));
+					}
+					else
+					{
+						/* This is a fixed-length by-reference type. */
+						void *tmp = MemoryContextAlloc(batch_state->per_batch_context,
+													   column_description->value_bytes);
+						memcpy(tmp,
+							   DatumGetPointer(decompressed_tuple->tts_values[attr]),
+							   column_description->value_bytes);
+						decompressed_tuple->tts_values[attr] = PointerGetDatum(tmp);
+					}
 				}
-
 				break;
 			}
 			case COUNT_COLUMN:
