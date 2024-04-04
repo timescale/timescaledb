@@ -156,8 +156,8 @@ get_max_text_datum_size(ArrowArray *text_array)
 }
 
 static void
-decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i,
-				  TupleTableSlot *compressed_slot)
+decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state,
+				  TupleTableSlot *compressed_slot, int i)
 {
 	CompressionColumnDescription *column_description = &dcontext->template_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
@@ -422,7 +422,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 * skip decompressing some columns if the entire batch doesn't pass
 		 * the quals.
 		 */
-		decompress_column(dcontext, batch_state, column_index, compressed_slot);
+		decompress_column(dcontext, batch_state, compressed_slot, column_index);
 		Assert(column_values->decompression_type != DT_Invalid);
 	}
 
@@ -933,7 +933,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 			if (column_values->decompression_type == DT_Invalid)
 			{
-				decompress_column(dcontext, batch_state, i, compressed_slot);
+				decompress_column(dcontext, batch_state, compressed_slot, i);
 				Assert(column_values->decompression_type != DT_Invalid);
 			}
 		}
