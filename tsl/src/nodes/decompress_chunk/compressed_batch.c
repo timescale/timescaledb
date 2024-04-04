@@ -187,9 +187,9 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	}
 
 	/* Detoast the compressed datum. */
-	value = PointerGetDatum(detoaster_detoast_attr((struct varlena *) DatumGetPointer(value),
-												   &dcontext->detoaster,
-												   batch_state->per_batch_context));
+	value = PointerGetDatum(detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(value),
+														&dcontext->detoaster,
+														batch_state->per_batch_context));
 
 	/* Decompress the entire batch if it is supported. */
 	CompressedDataHeader *header = (CompressedDataHeader *) value;
@@ -847,10 +847,11 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				if (!get_typbyval(column_description->typid) &&
 					DatumGetPointer(decompressed_tuple->tts_values[attr]) != NULL)
 				{
-					MemoryContext old = MemoryContextSwitchTo(decompressed_tuple->tts_mcxt);
-					decompressed_tuple->tts_values[attr] = PointerGetDatum(pg_detoast_datum_copy(
-						(struct varlena *) decompressed_tuple->tts_values[attr]));
-					MemoryContextSwitchTo(old);
+					decompressed_tuple->tts_values[attr] = PointerGetDatum(
+						detoaster_detoast_attr_copy((struct varlena *)
+														decompressed_tuple->tts_values[attr],
+													&dcontext->detoaster,
+													batch_state->per_batch_context));
 				}
 
 				break;

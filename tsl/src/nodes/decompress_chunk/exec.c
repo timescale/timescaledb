@@ -543,11 +543,10 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			/* We have at least one value */
 			decompressed_scan_slot->tts_isnull[0] = false;
 
-			CompressedDataHeader *header =
-				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
-																	value),
-																&dcontext->detoaster,
-																CurrentMemoryContext);
+			CompressedDataHeader *header = (CompressedDataHeader *)
+				detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(value),
+											&dcontext->detoaster,
+											CurrentMemoryContext);
 
 			ArrowArray *arrow = NULL;
 

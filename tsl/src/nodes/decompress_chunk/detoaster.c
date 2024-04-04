@@ -217,7 +217,7 @@ ts_fetch_toast(Detoaster *detoaster, struct varatt_external *toast_pointer, stru
 
 /*
  * The memory context is used to store intermediate data, and is supposed to
- * live over the calls to detoaster_detoast_attr().
+ * live over the calls to detoaster_detoast_attr_copy().
  * That function itself can be called in a short-lived memory context.
  */
 void
@@ -338,15 +338,25 @@ ts_toast_decompress_datum(struct varlena *attr)
 
 /*
  * Modification of Postgres' detoast_attr() where we use the stateful Detoaster
- * and skip some cases that don't occur for the toasted compressed data.
+ * and skip some cases that don't occur for the toasted compressed data. Even if
+ * the data is inline and no detoasting is needed, copies it into the destination
+ * memory context.
  */
 struct varlena *
-detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster, MemoryContext dest_mctx)
+detoaster_detoast_attr_copy(struct varlena *attr, Detoaster *detoaster, MemoryContext dest_mctx)
 {
 	if (!VARATT_IS_EXTENDED(attr))
 	{
-		/* Nothing to do here. */
-		return attr;
+		/*
+		 * This case is unlikely because the compressed data is almost always
+		 * toasted and not inline, but we still have to copy the data into the
+		 * destination memory context. The source compressed tuple may have
+		 * independent unknown lifetime.
+		 */
+		Size len = VARSIZE(attr);
+		struct varlena *result = (struct varlena *) MemoryContextAlloc(dest_mctx, len);
+		memcpy(result, attr, len);
+		return result;
 	}
 
 	if (VARATT_IS_EXTERNAL_ONDISK(attr))
