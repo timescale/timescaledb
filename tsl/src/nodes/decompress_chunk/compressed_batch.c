@@ -844,7 +844,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				 * Note that if it's not a by-value type, we should copy it into
 				 * the slot context.
 				 */
-				if (!get_typbyval(column_description->typid) &&
+				if (!column_description->by_value &&
 					DatumGetPointer(decompressed_tuple->tts_values[attr]) != NULL)
 				{
 					decompressed_tuple->tts_values[attr] = PointerGetDatum(
@@ -934,9 +934,6 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 			batch_state->vector_qual_result = NULL;
 		}
 	}
-
-	/* FIXME this is for testing, better done by the caller. */
-	ExecClearTuple(compressed_slot);
 }
 
 static void

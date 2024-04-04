@@ -27,7 +27,8 @@ typedef struct CompressionColumnDescription
 {
 	CompressionColumnType type;
 	Oid typid;
-	int value_bytes;
+	int16 value_bytes;
+	bool by_value;
 
 	/*
 	 * Attno of the decompressed column in the output of DecompressChunk node.
