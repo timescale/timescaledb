@@ -404,11 +404,35 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 			return (Scan *) plan;
 			break;
 		case T_CustomScan:
-			if (castNode(CustomScan, plan)->scan.scanrelid > 0)
+		{
+			CustomScan *custom = castNode(CustomScan, plan);
+			if (custom->scan.scanrelid > 0)
+			{
+				/*
+				 * The custom plan node is a scan itself. This handles the
+				 * DecompressChunk node.
+				 */
 				return (Scan *) plan;
-			else
-				return NULL;
-			break;
+			}
+
+			if (strcmp(custom->methods->CustomName, "VectorAgg") == 0)
+			{
+				/*
+				 * This is a vectorized aggregation node, we have to recurse
+				 * into its child, similar to the normal aggregation node.
+				 *
+				 * Unfortunately we have to hardcode the node name here, because
+				 * we can't depend on the TSL library.
+				 */
+				return ts_chunk_append_get_scan_plan(linitial(custom->custom_plans));
+			}
+
+			/*
+			 * This is some other unknown custom scan node, we can't recurse
+			 * into it.
+			 */
+			return NULL;
+		}
 		case T_Agg:
 			if (plan->lefttree != NULL)
 			{
