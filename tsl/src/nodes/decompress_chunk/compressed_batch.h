@@ -82,12 +82,6 @@ typedef struct DecompressBatchState
 	 */
 	VirtualTupleTableSlot decompressed_scan_slot_data;
 
-	/*
-	 * Compressed target slot. We have to keep a local copy when doing batch
-	 * sorted merge, because the segmentby column values might reference the
-	 * original tuple, and a batch outlives its source tuple.
-	 */
-	TupleTableSlot *compressed_slot;
 	uint16 total_batch_rows;
 	uint16 next_batch_row;
 	MemoryContext per_batch_context;

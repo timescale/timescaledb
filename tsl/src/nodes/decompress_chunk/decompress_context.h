@@ -63,21 +63,6 @@ typedef struct DecompressContext
 
 	TupleTableSlot *decompressed_slot;
 
-	/*
-	 * Make non-refcounted copies of the tupdesc for reuse across all batch states
-	 * and avoid spending CPU in ResourceOwner when creating a big number of table
-	 * slots. This happens because each new slot pins its tuple descriptor using
-	 * PinTupleDesc, and for reference-counting tuples this involves adding a new
-	 * reference to ResourceOwner, which is not very efficient for a large number of
-	 * references.
-	 *
-	 * We don't have to do this for the decompressed slot tuple descriptor,
-	 * because there we use custom tuple slot (de)initialization functions, which
-	 * don't use reference counting and just use a raw pointer to the tuple
-	 * descriptor.
-	 */
-	TupleDesc compressed_slot_tdesc;
-
 	PlanState *ps; /* Set for filtering and instrumentation */
 
 	Detoaster detoaster;
