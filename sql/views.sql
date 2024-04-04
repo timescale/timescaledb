@@ -268,7 +268,7 @@ ORDER BY hypertable_name,
   segmentby_column_index,
   orderby_column_index;
 
--- Job errors view that adds a security barrier on the job_errors
+-- Job errors view that adds a security barrier on the bgw_job_stat_history
 -- table in _timescaledb_internal. The view only allows users to view
 -- log entries belonging to jobs that are owned by any of the users
 -- role. A special case is added so that the superuser or the database
@@ -284,13 +284,13 @@ SELECT
     error_data->>'proc_schema' as proc_schema,
     error_data->>'proc_name' as proc_name,
     pid,
-    start_time,
-    finish_time,
+    execution_start AS start_time,
+    execution_finish AS finish_time,
     error_data->>'sqlerrcode' AS sqlerrcode,
     CASE WHEN error_data->>'message' IS NOT NULL THEN
       CASE WHEN error_data->>'detail' IS NOT NULL THEN
         CASE WHEN error_data->>'hint' IS NOT NULL THEN concat(error_data->>'message', '. ', error_data->>'detail', '. ', error_data->>'hint')
-        ELSE concat(error_data->>'message', ' ', error_data ->>'detail')
+        ELSE concat(error_data->>'message', ' ', error_data->>'detail')
         END
       ELSE
         CASE WHEN error_data->>'hint' IS NOT NULL THEN concat(error_data->>'message', '. ', error_data->>'hint')
@@ -302,16 +302,57 @@ SELECT
     END
     AS err_message
 FROM
-    _timescaledb_internal.job_errors
+    _timescaledb_internal.bgw_job_stat_history
 LEFT JOIN
-    _timescaledb_config.bgw_job ON (bgw_job.id = job_errors.job_id)
+    _timescaledb_config.bgw_job ON (bgw_job.id = bgw_job_stat_history.job_id)
 WHERE
-    pg_catalog.pg_has_role(current_user,
+    succeeded IS FALSE
+    AND (pg_catalog.pg_has_role(current_user,
 			   (SELECT pg_catalog.pg_get_userbyid(datdba)
 			      FROM pg_catalog.pg_database
 			     WHERE datname = current_database()),
 			   'MEMBER') IS TRUE
-    OR pg_catalog.pg_has_role(current_user, owner, 'MEMBER') IS TRUE;
+    OR pg_catalog.pg_has_role(current_user, owner, 'MEMBER') IS TRUE);
+
+CREATE OR REPLACE VIEW timescaledb_information.job_history
+WITH (security_barrier = true) AS
+SELECT
+    h.id,
+    h.job_id,
+    h.succeeded,
+    coalesce(h.error_data->>'proc_schema', j.proc_schema) as proc_schema,
+    coalesce(h.error_data->>'proc_name', j.proc_name) as proc_name,
+    h.pid,
+    h.execution_start AS start_time,
+    h.execution_finish AS finish_time,
+    h.config,
+    h.error_data->>'sqlerrcode' AS sqlerrcode,
+    CASE
+      WHEN h.succeeded IS FALSE AND h.error_data->>'message' IS NOT NULL THEN
+        CASE WHEN h.error_data->>'detail' IS NOT NULL THEN
+          CASE WHEN h.error_data->>'hint' IS NOT NULL THEN concat(h.error_data->>'message', '. ', h.error_data->>'detail', '. ', h.error_data->>'hint')
+          ELSE concat(h.error_data->>'message', ' ', h.error_data->>'detail')
+          END
+        ELSE
+          CASE WHEN h.error_data->>'hint' IS NOT NULL THEN concat(h.error_data->>'message', '. ', h.error_data->>'hint')
+          ELSE h.error_data->>'message'
+          END
+        END
+      WHEN h.succeeded IS FALSE AND h.execution_finish IS NOT NULL THEN
+        'job crash detected, see server logs'
+      WHEN h.execution_finish IS NULL THEN
+        E'job didn\'t finish yet'
+    END AS err_message
+FROM
+    _timescaledb_internal.bgw_job_stat_history h
+LEFT JOIN
+    _timescaledb_config.bgw_job j ON (j.id = h.job_id)
+WHERE (pg_catalog.pg_has_role(current_user,
+			   (SELECT pg_catalog.pg_get_userbyid(datdba)
+			      FROM pg_catalog.pg_database
+			     WHERE datname = current_database()),
+			   'MEMBER') IS TRUE
+    OR pg_catalog.pg_has_role(current_user, owner, 'MEMBER') IS TRUE);
 
 CREATE OR REPLACE VIEW timescaledb_information.hypertable_compression_settings AS
 	SELECT

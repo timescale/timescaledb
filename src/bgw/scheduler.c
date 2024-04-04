@@ -161,7 +161,7 @@ mark_job_as_started(ScheduledBgwJob *sjob)
 {
 	Assert(!sjob->may_need_mark_end);
 	sjob->consecutive_failed_launches = 0;
-	ts_bgw_job_stat_mark_start(sjob->job.fd.id);
+	ts_bgw_job_stat_mark_start(&sjob->job);
 	sjob->may_need_mark_end = true;
 }
 
@@ -169,7 +169,7 @@ static void
 mark_job_as_ended(ScheduledBgwJob *sjob, JobResult res)
 {
 	Assert(sjob->may_need_mark_end);
-	ts_bgw_job_stat_mark_end(&sjob->job, res);
+	ts_bgw_job_stat_mark_end(&sjob->job, res, NULL);
 	sjob->may_need_mark_end = false;
 }
 

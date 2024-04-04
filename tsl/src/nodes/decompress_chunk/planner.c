@@ -634,6 +634,18 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 		return NULL;
 	}
 
+	if (OidIsValid(var->varcollid) && !get_collation_isdeterministic(var->varcollid))
+	{
+		/*
+		 * Can't vectorize string equality with a nondeterministic collation.
+		 * Not sure if we have to check the collation of Const as well, but it
+		 * will be known only at planning time. Currently we don't check it at
+		 * all. Also this is untested because we don't have nondeterministic
+		 * collations in all test configurations.
+		 */
+		return NULL;
+	}
+
 	if (opexpr)
 	{
 		/*

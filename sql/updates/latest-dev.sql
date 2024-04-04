@@ -329,3 +329,66 @@ ANALYZE _timescaledb_catalog.continuous_agg;
 --
 -- END Rebuild the catalog table `_timescaledb_catalog.continuous_agg`
 --
+
+--
+-- START bgw_job_stat_history
+--
+DROP VIEW IF EXISTS timescaledb_information.job_errors;
+
+CREATE SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq MINVALUE 1;
+
+CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
+  id INTEGER NOT NULL DEFAULT nextval('_timescaledb_internal.bgw_job_stat_history_id_seq'),
+  job_id INTEGER NOT NULL,
+  pid INTEGER,
+  execution_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  execution_finish TIMESTAMPTZ,
+  succeeded boolean NOT NULL DEFAULT FALSE,
+  config jsonb,
+  error_data jsonb,
+  -- table constraints
+  CONSTRAINT bgw_job_stat_history_pkey PRIMARY KEY (id)
+);
+
+ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _timescaledb_internal.bgw_job_stat_history.id;
+
+CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
+
+REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;
+
+INSERT INTO _timescaledb_internal.bgw_job_stat_history (job_id, pid, execution_start, execution_finish, error_data)
+SELECT
+  job_id,
+  pid,
+  start_time,
+  finish_time,
+  error_data
+FROM
+  _timescaledb_internal.job_errors
+ORDER BY
+  job_id, start_time;
+
+ALTER EXTENSION timescaledb
+    DROP TABLE _timescaledb_internal.job_errors;
+
+DROP TABLE _timescaledb_internal.job_errors;
+
+UPDATE
+  _timescaledb_config.bgw_job
+SET
+  application_name = 'Job History Log Retention Policy [2]',
+  proc_schema = '_timescaledb_functions',
+  proc_name = 'policy_job_stat_history_retention',
+  check_schema = '_timescaledb_functions',
+  check_name = 'policy_job_stat_history_retention_check'
+WHERE
+  id = 2;
+
+DROP FUNCTION IF EXISTS _timescaledb_internal.policy_job_error_retention(job_id integer,config jsonb);
+DROP FUNCTION IF EXISTS _timescaledb_internal.policy_job_error_retention_check(config jsonb);
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_error_retention(job_id integer,config jsonb);
+DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_error_retention_check(config jsonb);
+
+--
+-- END bgw_job_stat_history
+--

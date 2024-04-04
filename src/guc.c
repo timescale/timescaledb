@@ -82,6 +82,7 @@ TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
+TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
@@ -646,6 +647,18 @@ _guc_init(void)
 							NULL,
 							assign_max_cached_chunks_per_hypertable_hook,
 							NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_job_execution_logging"),
+							 "Enable job execution logging",
+							 "Retain job run status in logging table",
+							 &ts_guc_enable_job_execution_logging,
+							 false,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
 #ifdef USE_TELEMETRY
 	DefineCustomEnumVariable(MAKE_EXTOPTION("telemetry_level"),
 							 "Telemetry settings level",

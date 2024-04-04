@@ -4,20 +4,22 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <access/xact.h>
-#include <utils/fmgrprotos.h>
-
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
+#include <utils/builtins.h>
+#include <utils/fmgrprotos.h>
+#include <utils/resowner.h>
 
+#include "guc.h"
+#include "job_stat_history.h"
 #include "job_stat.h"
+#include "jsonb_utils.h"
 #include "scanner.h"
+#include "time_bucket.h"
 #include "timer.h"
 #include "utils.h"
-#include "jsonb_utils.h"
-#include <utils/builtins.h>
-#include <utils/resowner.h>
-#include "time_bucket.h"
 
 #define MAX_INTERVALS_BACKOFF 5
 #define MAX_FAILURES_MULTIPLIER 20
@@ -627,7 +629,7 @@ bgw_job_stat_insert_relation(Relation rel, int32 bgw_job_id, bool mark_start,
 }
 
 void
-ts_bgw_job_stat_mark_start(int32 bgw_job_id)
+ts_bgw_job_stat_mark_start(BgwJob *job)
 {
 	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
 	 * job races and adds a job when we insert the relation as well since that
@@ -636,18 +638,25 @@ ts_bgw_job_stat_mark_start(int32 bgw_job_id)
 	 * requires a lock that it not NoLock). */
 	Relation rel =
 		table_open(catalog_get_table_id(ts_catalog_get(), BGW_JOB_STAT), ShareRowExclusiveLock);
-	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+	if (!bgw_job_stat_scan_job_id(job->fd.id,
 								  bgw_job_stat_tuple_mark_start,
 								  NULL,
 								  NULL,
 								  RowExclusiveLock))
-		bgw_job_stat_insert_relation(rel, bgw_job_id, true, DT_NOBEGIN);
+		bgw_job_stat_insert_relation(rel, job->fd.id, true, DT_NOBEGIN);
 	table_close(rel, NoLock);
+
+	/* We need to capture the execution start because failures are always logged */
+	job->job_history.execution_start = ts_timer_get_current_timestamp();
+	job->job_history.id = INVALID_BGW_JOB_STAT_HISTORY_ID;
+
+	ts_bgw_job_stat_history_mark_start(job);
+
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
 void
-ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
+ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
 {
 	JobResultCtx res = {
 		.job = job,
@@ -659,19 +668,33 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result)
 								  NULL,
 								  &res,
 								  ShareRowExclusiveLock))
-		elog(ERROR, "unable to find job statistics for job %d", job->fd.id);
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("unable to find job statistics for job %d", job->fd.id)));
+	}
+
+	ts_bgw_job_stat_history_mark_end(job, result, edata);
+
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
 void
-ts_bgw_job_stat_mark_crash_reported(int32 bgw_job_id)
+ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result, Jsonb *edata)
 {
-	if (!bgw_job_stat_scan_job_id(bgw_job_id,
+	if (!bgw_job_stat_scan_job_id(job->fd.id,
 								  bgw_job_stat_tuple_mark_crash_reported,
 								  NULL,
 								  NULL,
 								  RowExclusiveLock))
-		elog(ERROR, "unable to find job statistics for job %d", bgw_job_id);
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("unable to find job statistics for job %d", job->fd.id)));
+	}
+
+	ts_bgw_job_stat_history_mark_end(job, result, edata);
+
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
 
@@ -686,14 +709,22 @@ ts_bgw_job_stat_set_next_start(int32 job_id, TimestampTz next_start)
 {
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
 	if (next_start == DT_NOBEGIN)
-		elog(ERROR, "cannot set next start to -infinity");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot set next start to -infinity")));
+	}
 
 	if (!bgw_job_stat_scan_job_id(job_id,
 								  bgw_job_stat_tuple_set_next_start,
 								  NULL,
 								  &next_start,
 								  ShareRowExclusiveLock))
-		elog(ERROR, "unable to find job statistics for job %d", job_id);
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("unable to find job statistics for job %d", job_id)));
+	}
 }
 
 /* update next_start if job stat exists */
@@ -703,7 +734,11 @@ ts_bgw_job_stat_update_next_start(int32 job_id, TimestampTz next_start, bool all
 	bool found = false;
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
 	if (!allow_unset && next_start == DT_NOBEGIN)
-		elog(ERROR, "cannot set next start to -infinity");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot set next start to -infinity")));
+	}
 
 	found = bgw_job_stat_scan_job_id(job_id,
 									 bgw_job_stat_tuple_set_next_start,
@@ -718,7 +753,11 @@ ts_bgw_job_stat_upsert_next_start(int32 bgw_job_id, TimestampTz next_start)
 {
 	/* Cannot use DT_NOBEGIN as that's the value used to indicate "not set" */
 	if (next_start == DT_NOBEGIN)
-		elog(ERROR, "cannot set next start to -infinity");
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("cannot set next start to -infinity")));
+	}
 
 	/* We grab a ShareRowExclusiveLock here because we need to ensure that no
 	 * job races and adds a job when we insert the relation as well since that
@@ -761,26 +800,21 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		/* Update the errors table regarding the crash */
 		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
-			/* add the proc_schema, proc_name to the jsonb */
 			NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
+			JsonbParseState *parse_state = NULL;
+			JsonbValue *result = NULL;
+
+			/* add the proc_schema, proc_name to the jsonb */
 			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
 			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
-			JsonbParseState *parse_state = NULL;
+
+			/* build jsonb error data field */
 			pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 			ts_jsonb_add_str(parse_state, "proc_schema", NameStr(proc_schema));
 			ts_jsonb_add_str(parse_state, "proc_name", NameStr(proc_name));
-			JsonbValue *result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
+			result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
 
-			const FormData_job_error jerr = {
-				.error_data = JsonbValueToJsonb(result),
-				.start_time = jobstat->fd.last_start,
-				.finish_time = ts_timer_get_current_timestamp(),
-				.pid = -1,
-				.job_id = jobstat->fd.id,
-			};
-
-			ts_job_errors_insert_tuple(&jerr);
-			ts_bgw_job_stat_mark_crash_reported(jobstat->fd.id);
+			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE, JsonbValueToJsonb(result));
 		}
 
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
