@@ -18,10 +18,11 @@
 
 #include "exec.h"
 #include "functions.h"
-#include "utils.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/vector_agg.h"
+#include "utils.h"
 
-static struct CustomScanMethods scan_methods = { .CustomName = "VectorAgg",
+static struct CustomScanMethods scan_methods = { .CustomName = VECTOR_AGG_NODE_NAME,
 												 .CreateCustomScanState = vector_agg_state_create };
 
 void
@@ -129,6 +130,22 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	custom->scan.plan.plan_width = agg->plan.plan_width;
 	custom->scan.plan.startup_cost = agg->plan.startup_cost;
 	custom->scan.plan.total_cost = agg->plan.total_cost;
+
+	custom->scan.plan.parallel_aware = false;
+	custom->scan.plan.parallel_safe = decompress_chunk->scan.plan.parallel_safe;
+
+#if PG14_GE
+	custom->scan.plan.async_capable = false;
+#endif
+
+	custom->scan.plan.plan_node_id = agg->plan.plan_node_id;
+
+	Assert(agg->plan.qual == NIL);
+
+	custom->scan.plan.initPlan = agg->plan.initPlan;
+
+	custom->scan.plan.extParam = bms_copy(agg->plan.extParam);
+	custom->scan.plan.allParam = bms_copy(agg->plan.allParam);
 
 	return (Plan *) custom;
 }
@@ -248,10 +265,7 @@ try_insert_vector_agg_node(Plan *plan)
 	}
 
 	Node *expr_node = (Node *) castNode(TargetEntry, linitial(agg->plan.targetlist))->expr;
-	if (!IsA(expr_node, Aggref))
-	{
-		return plan;
-	}
+	Assert(IsA(expr_node, Aggref));
 
 	Aggref *aggref = castNode(Aggref, expr_node);
 

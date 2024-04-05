@@ -75,8 +75,12 @@ int4_sum_vector(ArrowArray *vector, uint64 *filter, Datum *agg_value, bool *agg_
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
-	*agg_value = Int64GetDatum(tmp);
 
+	/*
+	 * Use Int64GetDatum to store the result since a 64-bit value is not
+	 * pass-by-value on 32-bit systems.
+	 */
+	*agg_value = Int64GetDatum(tmp);
 	*agg_isnull = false;
 }
 
@@ -93,9 +97,6 @@ int4_sum_const(Datum constvalue, bool constisnull, int n, Datum *agg_value, bool
 	int32 intvalue = DatumGetInt32(constvalue);
 	int64 batch_sum = 0;
 
-	/* We have at least one value */
-	*agg_isnull = false;
-
 	/* Multiply the number of tuples with the actual value */
 	if (unlikely(pg_mul_s64_overflow(intvalue, n, &batch_sum)))
 	{
@@ -110,7 +111,13 @@ int4_sum_const(Datum constvalue, bool constisnull, int n, Datum *agg_value, bool
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
+
+	/*
+	 * Use Int64GetDatum to store the result since a 64-bit value is not
+	 * pass-by-value on 32-bit systems.
+	 */
 	*agg_value = Int64GetDatum(tmp);
+	*agg_isnull = false;
 }
 
 static VectorAggregate int4_sum_agg = {

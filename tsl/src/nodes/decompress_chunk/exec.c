@@ -18,6 +18,8 @@
 #include <utils/memutils.h>
 #include <utils/typcache.h>
 
+#include <tcop/tcopprot.h>
+
 #include "compat/compat.h"
 #include "compression/array.h"
 #include "compression/arrow_c_data_interface.h"

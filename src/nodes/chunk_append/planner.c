@@ -23,6 +23,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
 #include "nodes/hypertable_modify.h"
+#include "nodes/vector_agg.h"
 #include "import/planner.h"
 #include "guc.h"
 
@@ -415,7 +416,7 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 				return (Scan *) plan;
 			}
 
-			if (strcmp(custom->methods->CustomName, "VectorAgg") == 0)
+			if (strcmp(custom->methods->CustomName, VECTOR_AGG_NODE_NAME) == 0)
 			{
 				/*
 				 * This is a vectorized aggregation node, we have to recurse

@@ -4,6 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
+#pragma once
+
 #include <postgres.h>
 
 #include <nodes/execnodes.h>
