@@ -15,11 +15,19 @@ setup
   UPDATE _timescaledb_catalog.dimension_slice set range_start = 9223372036854775806, range_end = 9223372036854775807
   WHERE id IN (SELECT cc.dimension_slice_id FROM _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.chunk ch,
     _timescaledb_catalog.hypertable ht WHERE ht.id = ch.hypertable_id AND cc.chunk_id = ch.id AND ht.table_name IN ('osm_test', 'osm_test2'));
+
+  CREATE TABLE test_drop(time INTEGER, a INTEGER);
+  SELECT create_hypertable('test_drop', 'time', chunk_time_interval => 10);
+  INSERT INTO test_drop(time, a) VALUES (1,1);
+  UPDATE _timescaledb_catalog.hypertable set status = 1 WHERE table_name = 'test_drop';
+  UPDATE _timescaledb_catalog.chunk set osm_chunk = true WHERE hypertable_id IN (SELECT id FROM _timescaledb_catalog.hypertable WHERE table_name = 'test_drop');
+  INSERT INTO test_drop VALUES (11, 11), (22, 22);
 }
 
 teardown {
   DROP TABLE osm_test;
   DROP TABLE osm_test2;
+  DROP TABLE test_drop;
 }
 
 
@@ -84,6 +92,30 @@ step "Utest2b" { BEGIN; }
 step "Utest2u" { SELECT _timescaledb_functions.hypertable_osm_range_update('osm_test2', 0, 20); }
 step "Utest2c" { COMMIT; }
 
+session "DR1"
+step DR1b { BEGIN; }
+step DR1drop { 
+  SELECT _timescaledb_functions.drop_osm_table_chunk('test_drop', chunk_table::regclass)
+  FROM (
+    SELECT format('%I.%I', c.schema_name, c.table_name) as chunk_table
+    FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+    WHERE ht.id = c.hypertable_id AND ht.table_name = 'test_drop' AND c.osm_chunk IS TRUE
+  ) sq;
+}
+step DR1c { COMMIT; }
+
+session "DR2"
+step DR2b { BEGIN; }
+step DR2drop { 
+  SELECT _timescaledb_functions.drop_osm_table_chunk('test_drop', chunk_table::regclass)
+  FROM (
+    SELECT format('%I.%I', c.schema_name, c.table_name) as chunk_table
+    FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+    WHERE ht.id = c.hypertable_id AND ht.table_name = 'test_drop' AND c.osm_chunk IS TRUE
+  ) sq;
+}
+step DR2c { COMMIT; }
+
 # Concurrent updates will block one another
 # this previously deadlocked one of the two transactions
 permutation "LockDimSliceTuple" "UR1b" "UR1u" "UR2b" "UR2u" "UnlockDimSliceTuple" "UR1c" "UR2c"
@@ -104,3 +136,6 @@ permutation "Ab" "UR1b" "Aadd" "UR1u" "UR1c" "Ac"
 
 # test with two hypertables both having osm chunks. Should not block one another. So once tuple of hypertable1 is unlocked, 
 permutation "LHTb" "Utest2b" "UR1b" "LockHypertableTuple" "UR1u" "Utest2u" "Utest2c" "UnlockHypertableTuple" "UR1c"
+
+# test two sessions concurrently dropping the OSM chunk
+permutation "DR1b" "DR2b" "DR1drop" "DR2drop" "DR1c" "DR2c"
