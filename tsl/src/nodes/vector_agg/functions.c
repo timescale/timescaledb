@@ -120,13 +120,20 @@ int4_sum_const(Datum constvalue, bool constisnull, int n, Datum *agg_value, bool
 	*agg_isnull = false;
 }
 
-static VectorAggregate int4_sum_agg = {
+typedef struct
+{
+	int64 result;
+	bool is_null;
+} Int4SumState;
+
+static VectorAggFunctions int4_sum_agg = {
+	.state_bytes = sizeof(Int4SumState),
 	.agg_init = int4_sum_init,
 	.agg_const = int4_sum_const,
 	.agg_vector = int4_sum_vector,
 };
 
-VectorAggregate *
+VectorAggFunctions *
 get_vector_aggregate(Oid aggfnoid)
 {
 	switch (aggfnoid)

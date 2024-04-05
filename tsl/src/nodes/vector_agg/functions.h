@@ -13,6 +13,9 @@
  */
 typedef struct
 {
+	/* Size of the aggregate function state. */
+	size_t state_bytes;
+
 	/* Initialize the aggregate function state pointed to by agg_value and agg_isnull. */
 	void (*agg_init)(Datum *agg_value, bool *agg_isnull);
 
@@ -22,6 +25,6 @@ typedef struct
 	/* Aggregate a constant (like segmentby or column with default value). */
 	void (*agg_const)(Datum constvalue, bool constisnull, int n, Datum *agg_value,
 					  bool *agg_isnull);
-} VectorAggregate;
+} VectorAggFunctions;
 
-VectorAggregate *get_vector_aggregate(Oid aggfnoid);
+VectorAggFunctions *get_vector_aggregate(Oid aggfnoid);

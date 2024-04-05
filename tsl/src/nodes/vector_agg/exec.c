@@ -27,6 +27,60 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	CustomScan *cscan = castNode(CustomScan, node->ss.ps.plan);
 	node->custom_ps =
 		lappend(node->custom_ps, ExecInitNode(linitial(cscan->custom_plans), estate, eflags));
+
+	VectorAggState *vector_agg_state = (VectorAggState *) node;
+	vector_agg_state->input_ended = false;
+
+	DecompressChunkState *decompress_state =
+		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
+
+	List *aggregated_tlist =
+		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
+	ListCell *lc;
+	foreach (lc, aggregated_tlist)
+	{
+		/* Determine which kind of vectorized aggregation we should perform */
+		TargetEntry *tlentry = (TargetEntry *) lfirst(lc);
+		Assert(IsA(tlentry->expr, Aggref));
+		Aggref *aggref = castNode(Aggref, tlentry->expr);
+
+		Assert(list_length(aggref->args) == 1);
+
+		/* The aggregate should be a partial aggregate */
+		Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+
+		Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
+
+		DecompressContext *dcontext = &decompress_state->decompress_context;
+
+		CompressionColumnDescription *value_column_description = NULL;
+		for (int i = 0; i < dcontext->num_total_columns; i++)
+		{
+			CompressionColumnDescription *current_column = &dcontext->template_columns[i];
+			if (current_column->output_attno == var->varattno)
+			{
+				value_column_description = current_column;
+				break;
+			}
+		}
+		Ensure(value_column_description != NULL, "aggregated compressed column not found");
+
+		Assert(value_column_description->type == COMPRESSED_COLUMN ||
+			   value_column_description->type == SEGMENTBY_COLUMN);
+
+		VectorAggDef *def = palloc(sizeof(VectorAggDef));
+		VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
+		Assert(func != NULL);
+		def->func = func;
+		def->column = value_column_description - dcontext->template_columns;
+
+		vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
+
+		vector_agg_state->agg_state_row_bytes += MAXALIGN(func->state_bytes);
+	}
+
+	vector_agg_state->num_agg_state_rows = 1;
+	vector_agg_state->agg_states = palloc(vector_agg_state->agg_state_row_bytes);
 }
 
 static void
@@ -42,13 +96,25 @@ vector_agg_rescan(CustomScanState *node)
 		UpdateChangedParamSet(linitial(node->custom_ps), node->ss.ps.chgParam);
 
 	ExecReScan(linitial(node->custom_ps));
+
+	VectorAggState *state = (VectorAggState *) node;
+	state->input_ended = false;
 }
 
 static TupleTableSlot *
-vector_agg_exec(CustomScanState *vector_agg_state)
+vector_agg_exec(CustomScanState *node)
 {
+	/*
+	 * Early exit if the input has ended.
+	 */
+	VectorAggState *vector_agg_state = (VectorAggState *) node;
+	if (vector_agg_state->input_ended)
+	{
+		return NULL;
+	}
+
 	DecompressChunkState *decompress_state =
-		(DecompressChunkState *) linitial(vector_agg_state->custom_ps);
+		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
 
 	/*
 	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
@@ -59,7 +125,8 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	 * The output targetlist, in turn, consists of just the INDEX_VAR references
 	 * into the custom_scan_tlist.
 	 */
-	List *aggregated_tlist = castNode(CustomScan, vector_agg_state->ss.ps.plan)->custom_scan_tlist;
+	List *aggregated_tlist =
+		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
 	Assert(list_length(aggregated_tlist) == 1);
 
 	/* Checked by planner */
@@ -99,10 +166,10 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
 
 	/* Get a reference the the output TupleTableSlot */
-	TupleTableSlot *aggregated_slot = vector_agg_state->ss.ps.ps_ResultTupleSlot;
+	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
 	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 
-	VectorAggregate *agg = get_vector_aggregate(aggref->aggfnoid);
+	VectorAggFunctions *agg = get_vector_aggregate(aggref->aggfnoid);
 	Assert(agg != NULL);
 
 	agg->agg_init(&aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
@@ -120,6 +187,7 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 		if (TupIsNull(compressed_slot))
 		{
 			/* All values are processed. */
+			vector_agg_state->input_ended = true;
 			return NULL;
 		}
 
@@ -195,7 +263,7 @@ static struct CustomExecMethods exec_methods = {
 Node *
 vector_agg_state_create(CustomScan *cscan)
 {
-	CustomScanState *state = makeNode(CustomScanState);
-	state->methods = &exec_methods;
+	VectorAggState *state = (VectorAggState *) newNode(sizeof(VectorAggState), T_CustomScanState);
+	state->custom.methods = &exec_methods;
 	return (Node *) state;
 }
