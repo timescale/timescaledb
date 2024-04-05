@@ -21,7 +21,7 @@
 #include "utils.h"
 #include "nodes/decompress_chunk/planner.h"
 
-static struct CustomScanMethods scan_methods = { .CustomName = "VectorAgg",
+static struct CustomScanMethods scan_methods = { .CustomName = VECTOR_AGG_NODE_NAME,
 												 .CreateCustomScanState = vector_agg_state_create };
 
 void

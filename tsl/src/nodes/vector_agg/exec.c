@@ -70,9 +70,6 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	Assert(IsA(tlentry->expr, Aggref));
 	Aggref *aggref = castNode(Aggref, tlentry->expr);
 
-	/* Partial result is a int8 */
-	Assert(aggref->aggtranstype == INT8OID);
-
 	Assert(list_length(aggref->args) == 1);
 
 	/* The aggregate should be a partial aggregate */
@@ -104,8 +101,8 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	TupleTableSlot *aggregated_slot = vector_agg_state->ss.ps.ps_ResultTupleSlot;
 	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 
-	Assert(aggref->aggfnoid == F_SUM_INT4);
 	VectorAggregate *agg = get_vector_aggregate(aggref->aggfnoid);
+	Assert(agg != NULL);
 
 	agg->agg_init(&aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
 	ExecClearTuple(aggregated_slot);
@@ -173,8 +170,7 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	}
 
 	compressed_batch_discard_tuples(batch_state);
-	/* Use Int64GetDatum to store the result since a 64-bit value is not pass-by-value on 32-bit
-	 * systems */
+
 	ExecStoreVirtualTuple(aggregated_slot);
 
 	return aggregated_slot;
@@ -183,11 +179,11 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 static void
 vector_agg_explain(CustomScanState *node, List *ancestors, ExplainState *es)
 {
-	/* noop? */
+	/* No additional output is needed. */
 }
 
 static struct CustomExecMethods exec_methods = {
-	.CustomName = "VectorAgg",
+	.CustomName = VECTOR_AGG_NODE_NAME,
 	.BeginCustomScan = vector_agg_begin,
 	.ExecCustomScan = vector_agg_exec,
 	.EndCustomScan = vector_agg_end,
