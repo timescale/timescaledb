@@ -18,8 +18,9 @@
 
 #include "exec.h"
 #include "functions.h"
-#include "utils.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/vector_agg.h"
+#include "utils.h"
 
 static struct CustomScanMethods scan_methods = { .CustomName = VECTOR_AGG_NODE_NAME,
 												 .CreateCustomScanState = vector_agg_state_create };

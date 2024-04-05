@@ -16,9 +16,14 @@ alter table t add column c int default 7;
 insert into t select x, x % 5, 11 from generate_series(1001, 1999) x;
 select compress_chunk(show_chunks('t'));
 
+
+-- Just the most basic vectorized aggregation query on a table with default
+-- compressed column.
 explain (costs off) select sum(c) from t;
 select sum(c) from t;
 
+
+-- Vectorized aggregation should work with vectorized filters.
 select sum(c) from t where b >= 0;
 select sum(c) from t where b = 0;
 select sum(c) from t where b in (0, 1);
@@ -27,9 +32,18 @@ select sum(c) from t where b > 10;
 
 explain (costs off) select sum(c) from t where b in (0, 1, 3);
 
+
 -- The runtime chunk exclusion should work.
 explain (costs off) select sum(c) from t where a < stable_abs(1000);
 
+
+-- Some negative cases.
+explain (costs off) select sum(c) from t group by grouping sets ((), (a));
+
+explain (costs off) select sum(c) from t having sum(c) > 0;
+
+
+-- As a reference, the result on decompressed table.
 select decompress_chunk(show_chunks('t'));
 select sum(c) from t;
 

@@ -15,10 +15,11 @@
 #include "exec.h"
 
 #include "compression/arrow_c_data_interface.h"
+#include "functions.h"
+#include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
-#include "guc.h"
-#include "functions.h"
+#include "nodes/vector_agg.h"
 
 static void
 vector_agg_begin(CustomScanState *node, EState *estate, int eflags)

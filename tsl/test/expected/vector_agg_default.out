@@ -32,6 +32,8 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
  _timescaledb_internal._hyper_1_3_chunk
 (2 rows)
 
+-- Just the most basic vectorized aggregation query on a table with default
+-- compressed column.
 explain (costs off) select sum(c) from t;
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
@@ -53,6 +55,7 @@ select sum(c) from t;
  17982
 (1 row)
 
+-- Vectorized aggregation should work with vectorized filters.
 select sum(c) from t where b >= 0;
   sum  
 -------
@@ -113,6 +116,41 @@ explain (costs off) select sum(c) from t where a < stable_abs(1000);
                      ->  Seq Scan on compress_hyper_2_2_chunk
 (7 rows)
 
+-- Some negative cases.
+explain (costs off) select sum(c) from t group by grouping sets ((), (a));
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ MixedAggregate
+   Hash Key: _hyper_1_1_chunk.a
+   Group Key: ()
+   ->  Append
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_2_2_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_2_2_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+               ->  Sort
+                     Sort Key: compress_hyper_2_4_chunk._ts_meta_sequence_num DESC
+                     ->  Seq Scan on compress_hyper_2_4_chunk
+(12 rows)
+
+explain (costs off) select sum(c) from t having sum(c) > 0;
+                                 QUERY PLAN                                  
+-----------------------------------------------------------------------------
+ Finalize Aggregate
+   Filter: (sum(_hyper_1_1_chunk.c) > 0)
+   ->  Gather
+         Workers Planned: 2
+         ->  Parallel Append
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                           ->  Parallel Seq Scan on compress_hyper_2_2_chunk
+               ->  Custom Scan (VectorAgg)
+                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
+                           ->  Parallel Seq Scan on compress_hyper_2_4_chunk
+(11 rows)
+
+-- As a reference, the result on decompressed table.
 select decompress_chunk(show_chunks('t'));
             decompress_chunk            
 ----------------------------------------
