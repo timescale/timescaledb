@@ -249,10 +249,7 @@ try_insert_vector_agg_node(Plan *plan)
 	}
 
 	Node *expr_node = (Node *) castNode(TargetEntry, linitial(agg->plan.targetlist))->expr;
-	if (!IsA(expr_node, Aggref))
-	{
-		return plan;
-	}
+	Assert(IsA(expr_node, Aggref));
 
 	Aggref *aggref = castNode(Aggref, expr_node);
 
