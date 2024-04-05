@@ -14,9 +14,9 @@
 
 extern Datum continuous_agg_refresh(PG_FUNCTION_ARGS);
 extern void continuous_agg_calculate_merged_refresh_window(
-	const InternalTimeRange *refresh_window, const InvalidationStore *invalidations,
-	const ContinuousAggsBucketFunction *bucket_function, InternalTimeRange *merged_refresh_window,
-	const CaggRefreshCallContext callctx);
+	const ContinuousAgg *cagg, const InternalTimeRange *refresh_window,
+	const InvalidationStore *invalidations, const ContinuousAggsBucketFunction *bucket_function,
+	InternalTimeRange *merged_refresh_window, const CaggRefreshCallContext callctx);
 extern void continuous_agg_refresh_internal(const ContinuousAgg *cagg,
 											const InternalTimeRange *refresh_window,
 											const CaggRefreshCallContext callctx,

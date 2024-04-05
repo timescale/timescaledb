@@ -129,6 +129,11 @@ extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 
 #define is_inheritance_table(relid) (is_inheritance_child(relid) || is_inheritance_parent(relid))
 
+#define INIT_NULL_DATUM                                                                            \
+	{                                                                                              \
+		.value = 0, .isnull = true                                                                 \
+	}
+
 static inline int64
 int64_min(int64 a, int64 b)
 {

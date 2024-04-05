@@ -1811,29 +1811,36 @@ SELECT * FROM cashflows;
 -- 3. test named ts
 -- 4. test named bucket width
 -- named origin
+-- Currently not supported due to a bug in time_bucket (see comment in cagg_validate_query)
+\set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW cagg_named_origin WITH
 (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1h', time, 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
+ERROR:  cannot create continuous aggregate with variable-width bucket using offset or origin.
 -- named timezone
 CREATE MATERIALIZED VIEW cagg_named_tz_origin WITH
 (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1h', time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
+ERROR:  cannot create continuous aggregate with variable-width bucket using offset or origin.
 -- named ts
 CREATE MATERIALIZED VIEW cagg_named_ts_tz_origin WITH
 (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
+ERROR:  cannot create continuous aggregate with variable-width bucket using offset or origin.
 -- named bucket width
 CREATE MATERIALIZED VIEW cagg_named_all WITH
 (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(bucket_width => '1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
+ERROR:  cannot create continuous aggregate with variable-width bucket using offset or origin.
+\set ON_ERROR_STOP 1
 -- Refreshing from the beginning (NULL) of a CAGG with variable time bucket and
 -- using an INTERVAL for the end timestamp (issue #5534)
 CREATE MATERIALIZED VIEW transactions_montly
@@ -1916,7 +1923,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
     create_hypertable     
 --------------------------
- (52,public,conditions,t)
+ (48,public,conditions,t)
 (1 row)
 
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
@@ -1946,10 +1953,10 @@ WITH NO DATA;
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_53.location,
-    _materialized_hypertable_53.bucket,
-    _materialized_hypertable_53.avg
-   FROM _timescaledb_internal._materialized_hypertable_53;
+ SELECT _materialized_hypertable_49.location,
+    _materialized_hypertable_49.bucket,
+    _materialized_hypertable_49.avg
+   FROM _timescaledb_internal._materialized_hypertable_49;
 
 -- Should return NO ROWS
 SELECT * FROM conditions_daily ORDER BY bucket, avg;
@@ -1966,17 +1973,17 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=fals
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_53.location,
-    _materialized_hypertable_53.bucket,
-    _materialized_hypertable_53.avg
-   FROM _timescaledb_internal._materialized_hypertable_53
-  WHERE _materialized_hypertable_53.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(53)), '-infinity'::timestamp with time zone)
+ SELECT _materialized_hypertable_49.location,
+    _materialized_hypertable_49.bucket,
+    _materialized_hypertable_49.avg
+   FROM _timescaledb_internal._materialized_hypertable_49
+  WHERE _materialized_hypertable_49.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(49)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT conditions.location,
     time_bucket('@ 1 day'::interval, conditions."time") AS bucket,
     avg(conditions.temperature) AS avg
    FROM conditions
-  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(53)), '-infinity'::timestamp with time zone)
+  WHERE conditions."time" >= COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(49)), '-infinity'::timestamp with time zone)
   GROUP BY conditions.location, (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- Should return ROWS because now it is realtime
@@ -2001,10 +2008,10 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=true
  bucket   | timestamp with time zone |           |          |         | plain    | 
  avg      | double precision         |           |          |         | plain    | 
 View definition:
- SELECT _materialized_hypertable_53.location,
-    _materialized_hypertable_53.bucket,
-    _materialized_hypertable_53.avg
-   FROM _timescaledb_internal._materialized_hypertable_53;
+ SELECT _materialized_hypertable_49.location,
+    _materialized_hypertable_49.bucket,
+    _materialized_hypertable_49.avg
+   FROM _timescaledb_internal._materialized_hypertable_49;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT * FROM conditions_daily ORDER BY bucket, avg;
