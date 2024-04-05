@@ -131,6 +131,20 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	custom->scan.plan.startup_cost = agg->plan.startup_cost;
 	custom->scan.plan.total_cost = agg->plan.total_cost;
 
+	custom->scan.plan.parallel_aware = false;
+	custom->scan.plan.parallel_safe = decompress_chunk->scan.plan.parallel_safe;
+
+	custom->scan.plan.async_capable = false;
+
+	custom->scan.plan.plan_node_id = agg->plan.plan_node_id;
+
+	Assert(agg->plan.qual == NIL);
+
+	custom->scan.plan.initPlan = agg->plan.initPlan;
+
+	custom->scan.plan.extParam = bms_copy(agg->plan.extParam);
+	custom->scan.plan.allParam = bms_copy(agg->plan.allParam);
+
 	return (Plan *) custom;
 }
 
