@@ -98,7 +98,7 @@ typedef struct DecompressBatchState
 
 extern void compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 												  DecompressBatchState *batch_state,
-												  TupleTableSlot *subslot);
+												  TupleTableSlot *compressed_slot);
 
 extern void compressed_batch_advance(DecompressContext *dcontext,
 									 DecompressBatchState *batch_state);

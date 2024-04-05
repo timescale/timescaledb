@@ -1015,7 +1015,8 @@ invalidation_process_cagg_log(const ContinuousAgg *cagg, const InternalTimeRange
 	if (count && tuplestore_tuple_count(store->tupstore) > max_materializations)
 	{
 		InternalTimeRange merged_refresh_window;
-		continuous_agg_calculate_merged_refresh_window(refresh_window,
+		continuous_agg_calculate_merged_refresh_window(cagg,
+													   refresh_window,
 													   store,
 													   state.bucket_function,
 													   &merged_refresh_window,

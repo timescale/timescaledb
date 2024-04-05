@@ -156,8 +156,8 @@ get_max_text_datum_size(ArrowArray *text_array)
 }
 
 static void
-decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state, int i,
-				  TupleTableSlot *compressed_slot)
+decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state,
+				  TupleTableSlot *compressed_slot, int i)
 {
 	CompressionColumnDescription *column_description = &dcontext->template_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
@@ -422,7 +422,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 * skip decompressing some columns if the entire batch doesn't pass
 		 * the quals.
 		 */
-		decompress_column(dcontext, batch_state, column_index, compressed_slot);
+		decompress_column(dcontext, batch_state, compressed_slot, column_index);
 		Assert(column_values->decompression_type != DT_Invalid);
 	}
 
@@ -847,13 +847,26 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				if (!column_description->by_value &&
 					DatumGetPointer(decompressed_tuple->tts_values[attr]) != NULL)
 				{
-					decompressed_tuple->tts_values[attr] = PointerGetDatum(
-						detoaster_detoast_attr_copy((struct varlena *)
-														decompressed_tuple->tts_values[attr],
-													&dcontext->detoaster,
-													batch_state->per_batch_context));
+					if (column_description->value_bytes < 0)
+					{
+						/* This is a varlena type. */
+						decompressed_tuple->tts_values[attr] = PointerGetDatum(
+							detoaster_detoast_attr_copy((struct varlena *)
+															decompressed_tuple->tts_values[attr],
+														&dcontext->detoaster,
+														batch_state->per_batch_context));
+					}
+					else
+					{
+						/* This is a fixed-length by-reference type. */
+						void *tmp = MemoryContextAlloc(batch_state->per_batch_context,
+													   column_description->value_bytes);
+						memcpy(tmp,
+							   DatumGetPointer(decompressed_tuple->tts_values[attr]),
+							   column_description->value_bytes);
+						decompressed_tuple->tts_values[attr] = PointerGetDatum(tmp);
+					}
 				}
-
 				break;
 			}
 			case COUNT_COLUMN:
@@ -920,7 +933,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 			CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 			if (column_values->decompression_type == DT_Invalid)
 			{
-				decompress_column(dcontext, batch_state, i, compressed_slot);
+				decompress_column(dcontext, batch_state, compressed_slot, i);
 				Assert(column_values->decompression_type != DT_Invalid);
 			}
 		}
