@@ -172,7 +172,7 @@ vector_agg_exec(CustomScanState *node)
 	VectorAggFunctions *agg = get_vector_aggregate(aggref->aggfnoid);
 	Assert(agg != NULL);
 
-	agg->agg_init(&aggregated_slot->tts_values[0], &aggregated_slot->tts_isnull[0]);
+	agg->agg_init(vector_agg_state->agg_states);
 	ExecClearTuple(aggregated_slot);
 
 	/*
@@ -224,21 +224,21 @@ vector_agg_exec(CustomScanState *node)
 		}
 
 		int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
-		agg->agg_const(batch_state->decompressed_scan_slot_data.base.tts_values[offs],
+		agg->agg_const(vector_agg_state->agg_states,
+					   batch_state->decompressed_scan_slot_data.base.tts_values[offs],
 					   batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
-					   n,
-					   &aggregated_slot->tts_values[0],
-					   &aggregated_slot->tts_isnull[0]);
+					   n);
 	}
 	else
 	{
-		agg->agg_vector(arrow,
-						batch_state->vector_qual_result,
-						&aggregated_slot->tts_values[0],
-						&aggregated_slot->tts_isnull[0]);
+		agg->agg_vector(vector_agg_state->agg_states, arrow, batch_state->vector_qual_result);
 	}
 
 	compressed_batch_discard_tuples(batch_state);
+
+	agg->agg_emit(vector_agg_state->agg_states,
+				  &aggregated_slot->tts_values[0],
+				  &aggregated_slot->tts_isnull[0]);
 
 	ExecStoreVirtualTuple(aggregated_slot);
 

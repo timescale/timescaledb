@@ -18,17 +18,25 @@
 /*
  * Vectorized implementation of int4_sum.
  */
+typedef struct
+{
+	int64 result;
+	bool isnull;
+} Int4SumState;
 
 static void
-int4_sum_init(Datum *agg_value, bool *agg_isnull)
+int4_sum_init(void *agg_state)
 {
-	*agg_value = Int64GetDatum(0);
-	*agg_isnull = true;
+	Int4SumState *state = (Int4SumState *) agg_state;
+	state->result = 0;
+	state->isnull = true;
 }
 
 static void
-int4_sum_vector(ArrowArray *vector, uint64 *filter, Datum *agg_value, bool *agg_isnull)
+int4_sum_vector(void *agg_state, ArrowArray *vector, uint64 *filter)
 {
+	Int4SumState *state = (Int4SumState *) agg_state;
+
 	Assert(vector != NULL);
 	Assert(vector->length > 0);
 
@@ -69,25 +77,19 @@ int4_sum_vector(ArrowArray *vector, uint64 *filter, Datum *agg_value, bool *agg_
 	}
 #undef INNER_LOOP_SIZE
 
-	int64 tmp = DatumGetInt64(*agg_value);
-	if (unlikely(pg_add_s64_overflow(tmp, batch_sum, &tmp)))
+	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
 
-	/*
-	 * Use Int64GetDatum to store the result since a 64-bit value is not
-	 * pass-by-value on 32-bit systems.
-	 */
-	*agg_value = Int64GetDatum(tmp);
-	*agg_isnull = false;
+	state->isnull = false;
 }
 
 static void
-int4_sum_const(Datum constvalue, bool constisnull, int n, Datum *agg_value, bool *agg_isnull)
+int4_sum_const(void *agg_state, Datum constvalue, bool constisnull, int n)
 {
-	Assert(n > 0);
+	Int4SumState *state = (Int4SumState *) agg_state;
 
 	if (constisnull)
 	{
@@ -98,6 +100,7 @@ int4_sum_const(Datum constvalue, bool constisnull, int n, Datum *agg_value, bool
 	int64 batch_sum = 0;
 
 	/* Multiply the number of tuples with the actual value */
+	Assert(n > 0);
 	if (unlikely(pg_mul_s64_overflow(intvalue, n, &batch_sum)))
 	{
 		ereport(ERROR,
@@ -105,32 +108,28 @@ int4_sum_const(Datum constvalue, bool constisnull, int n, Datum *agg_value, bool
 	}
 
 	/* Add the value to our sum */
-	int64 tmp = DatumGetInt64(*agg_value);
-	if (unlikely(pg_add_s64_overflow(tmp, batch_sum, &tmp)))
+	if (unlikely(pg_add_s64_overflow(state->result, batch_sum, &state->result)))
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE), errmsg("bigint out of range")));
 	}
-
-	/*
-	 * Use Int64GetDatum to store the result since a 64-bit value is not
-	 * pass-by-value on 32-bit systems.
-	 */
-	*agg_value = Int64GetDatum(tmp);
-	*agg_isnull = false;
+	state->isnull = false;
 }
 
-typedef struct
+static void
+int4_sum_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 {
-	int64 result;
-	bool is_null;
-} Int4SumState;
+	Int4SumState *state = (Int4SumState *) agg_state;
+	*out_result = Int64GetDatum(state->result);
+	*out_isnull = state->isnull;
+}
 
 static VectorAggFunctions int4_sum_agg = {
 	.state_bytes = sizeof(Int4SumState),
 	.agg_init = int4_sum_init,
 	.agg_const = int4_sum_const,
 	.agg_vector = int4_sum_vector,
+	.agg_emit = int4_sum_emit,
 };
 
 VectorAggFunctions *
