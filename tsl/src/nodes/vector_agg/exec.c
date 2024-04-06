@@ -34,6 +34,15 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
 
+	/*
+	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
+	 * of the custom scan node that is performing the vectorized aggregation.
+	 * We do this to avoid projections at this node, because the postgres
+	 * projection functions complain when they see an Aggref in a custom
+	 * node output targetlist.
+	 * The output targetlist, in turn, consists of just the INDEX_VAR references
+	 * into the custom_scan_tlist.
+	 */
 	List *aggregated_tlist =
 		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
 	ListCell *lc;
@@ -116,48 +125,10 @@ vector_agg_exec(CustomScanState *node)
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
 
-	/*
-	 * The aggregated targetlist with Aggrefs is in the custom scan targetlist
-	 * of the custom scan node that is performing the vectorized aggregation.
-	 * We do this to avoid projections at this node, because the postgres
-	 * projection functions complain when they see an Aggref in a custom
-	 * node output targetlist.
-	 * The output targetlist, in turn, consists of just the INDEX_VAR references
-	 * into the custom_scan_tlist.
-	 */
-	List *aggregated_tlist =
-		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
-	Assert(list_length(aggregated_tlist) == 1);
-
-	/* Checked by planner */
-	Assert(ts_guc_enable_vectorized_aggregation);
-	Assert(ts_guc_enable_bulk_decompression);
-
-	/* Determine which kind of vectorized aggregation we should perform */
-	TargetEntry *tlentry = (TargetEntry *) linitial(aggregated_tlist);
-	Assert(IsA(tlentry->expr, Aggref));
-	Aggref *aggref = castNode(Aggref, tlentry->expr);
-
-	Assert(list_length(aggref->args) == 1);
-
-	/* The aggregate should be a partial aggregate */
-	Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
-
-	Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-
+	VectorAggDef *def = (VectorAggDef *) linitial(vector_agg_state->agg_defs);
 	DecompressContext *dcontext = &decompress_state->decompress_context;
-
-	CompressionColumnDescription *value_column_description = NULL;
-	for (int i = 0; i < dcontext->num_total_columns; i++)
-	{
-		CompressionColumnDescription *current_column = &dcontext->template_columns[i];
-		if (current_column->output_attno == var->varattno)
-		{
-			value_column_description = current_column;
-			break;
-		}
-	}
-	Ensure(value_column_description != NULL, "aggregated compressed column not found");
+	CompressionColumnDescription *value_column_description =
+		&dcontext->template_columns[def->column];
 
 	Assert(value_column_description->type == COMPRESSED_COLUMN ||
 		   value_column_description->type == SEGMENTBY_COLUMN);
@@ -169,10 +140,7 @@ vector_agg_exec(CustomScanState *node)
 	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
 	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 
-	VectorAggFunctions *agg = get_vector_aggregate(aggref->aggfnoid);
-	Assert(agg != NULL);
-
-	agg->agg_init(vector_agg_state->agg_states);
+	def->func->agg_init(vector_agg_state->agg_states);
 	ExecClearTuple(aggregated_slot);
 
 	/*
@@ -200,7 +168,7 @@ vector_agg_exec(CustomScanState *node)
 		Assert(dcontext->enable_bulk_decompression);
 		Assert(value_column_description->bulk_decompression_supported);
 		CompressedColumnValues *values =
-			&batch_state->compressed_columns[value_column_description - dcontext->template_columns];
+			&batch_state->compressed_columns[def->column];
 		Assert(values->decompression_type != DT_Invalid);
 		arrow = values->arrow;
 	}
@@ -224,21 +192,21 @@ vector_agg_exec(CustomScanState *node)
 		}
 
 		int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
-		agg->agg_const(vector_agg_state->agg_states,
-					   batch_state->decompressed_scan_slot_data.base.tts_values[offs],
-					   batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
-					   n);
+		def->func->agg_const(vector_agg_state->agg_states,
+							 batch_state->decompressed_scan_slot_data.base.tts_values[offs],
+							 batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
+							 n);
 	}
 	else
 	{
-		agg->agg_vector(vector_agg_state->agg_states, arrow, batch_state->vector_qual_result);
+		def->func->agg_vector(vector_agg_state->agg_states, arrow, batch_state->vector_qual_result);
 	}
 
 	compressed_batch_discard_tuples(batch_state);
 
-	agg->agg_emit(vector_agg_state->agg_states,
-				  &aggregated_slot->tts_values[0],
-				  &aggregated_slot->tts_isnull[0]);
+	def->func->agg_emit(vector_agg_state->agg_states,
+						&aggregated_slot->tts_values[0],
+						&aggregated_slot->tts_isnull[0]);
 
 	ExecStoreVirtualTuple(aggregated_slot);
 
