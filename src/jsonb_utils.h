@@ -23,6 +23,7 @@ extern TSDLLEXPORT void ts_jsonb_add_int64(JsonbParseState *state, const char *k
 										   const int64 value);
 extern TSDLLEXPORT void ts_jsonb_add_numeric(JsonbParseState *state, const char *key,
 											 const Numeric value);
+extern TSDLLEXPORT void ts_jsonb_set_value_by_type(JsonbValue *value, Oid typeid, Datum datum);
 
 extern void ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value);
 
