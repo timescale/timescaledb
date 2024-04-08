@@ -57,34 +57,76 @@ ts_jsonb_add_str(JsonbParseState *state, const char *key, const char *value)
 	ts_jsonb_add_value(state, key, &json_value);
 }
 
+static PGFunction
+get_convert_func(Oid typeid)
+{
+	switch (typeid)
+	{
+		case INT2OID:
+			return int2_numeric;
+		case INT4OID:
+			return int4_numeric;
+		case INT8OID:
+			return int8_numeric;
+		default:
+			return NULL;
+	}
+}
+
+void
+ts_jsonb_set_value_by_type(JsonbValue *value, Oid typeid, Datum datum)
+{
+	switch (typeid)
+	{
+		Oid typeOut;
+		bool isvarlena;
+		char *str;
+		PGFunction func;
+
+		case INT2OID:
+		case INT4OID:
+		case INT8OID:
+		case NUMERICOID:
+			func = get_convert_func(typeid);
+			value->type = jbvNumeric;
+			value->val.numeric = DatumGetNumeric(func ? DirectFunctionCall1(func, datum) : datum);
+			break;
+
+		default:
+			getTypeOutputInfo(typeid, &typeOut, &isvarlena);
+			str = OidOutputFunctionCall(typeOut, datum);
+			value->type = jbvString;
+			value->val.string.val = str;
+			value->val.string.len = strlen(str);
+			break;
+	}
+}
+
 void
 ts_jsonb_add_int32(JsonbParseState *state, const char *key, const int32 int_value)
 {
-	Numeric value;
+	JsonbValue json_value;
 
-	value = DatumGetNumeric(DirectFunctionCall1(int4_numeric, Int32GetDatum(int_value)));
-
-	ts_jsonb_add_numeric(state, key, value);
+	ts_jsonb_set_value_by_type(&json_value, INT4OID, Int32GetDatum(int_value));
+	ts_jsonb_add_value(state, key, &json_value);
 }
 
 void
 ts_jsonb_add_int64(JsonbParseState *state, const char *key, const int64 int_value)
 {
-	Numeric value;
+	JsonbValue json_value;
 
-	value = DatumGetNumeric(DirectFunctionCall1(int8_numeric, Int64GetDatum(int_value)));
-
-	ts_jsonb_add_numeric(state, key, value);
+	ts_jsonb_set_value_by_type(&json_value, INT8OID, Int64GetDatum(int_value));
+	ts_jsonb_add_value(state, key, &json_value);
 }
 
 void
 ts_jsonb_add_interval(JsonbParseState *state, const char *key, Interval *interval)
 {
-	char *value;
+	JsonbValue json_value;
 
-	value = DatumGetCString(DirectFunctionCall1(interval_out, IntervalPGetDatum(interval)));
-
-	ts_jsonb_add_str(state, key, value);
+	ts_jsonb_set_value_by_type(&json_value, INTERVALOID, IntervalPGetDatum(interval));
+	ts_jsonb_add_value(state, key, &json_value);
 }
 
 void
