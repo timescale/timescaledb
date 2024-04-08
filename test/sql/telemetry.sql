@@ -166,6 +166,13 @@ SELECT t -> 'db_metadata' FROM telemetry_report;
 -- check timescaledb_telemetry.cloud
 SELECT t -> 'instance_metadata' FROM telemetry_report;
 
+-- Check access methods
+SELECT t->'access_methods' ? 'btree',
+       t->'access_methods' ? 'heap',
+       CAST(t->'access_methods'->'btree'->'pages' AS int) > 0,
+       CAST(t->'access_methods'->'btree'->'instances' AS int) > 0
+  FROM telemetry_report;
+
 WITH t AS (
 	 SELECT t -> 'relations' AS rels
 	 FROM telemetry_report

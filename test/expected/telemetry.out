@@ -350,6 +350,7 @@ WHERE key != 'os_name_pretty';
  db_metadata
  replication
  build_os_name
+ access_methods
  functions_used
  install_method
  installed_time
@@ -377,7 +378,7 @@ WHERE key != 'os_name_pretty';
  num_compression_policies_fixed
  num_user_defined_actions_fixed
  num_continuous_aggs_policies_fixed
-(37 rows)
+(38 rows)
 
 CREATE MATERIALIZED VIEW telemetry_report AS
 SELECT t FROM get_telemetry_report() t;
@@ -393,6 +394,17 @@ SELECT t -> 'instance_metadata' FROM telemetry_report;
     ?column?     
 -----------------
  {"cloud": "ci"}
+(1 row)
+
+-- Check access methods
+SELECT t->'access_methods' ? 'btree',
+       t->'access_methods' ? 'heap',
+       CAST(t->'access_methods'->'btree'->'pages' AS int) > 0,
+       CAST(t->'access_methods'->'btree'->'instances' AS int) > 0
+  FROM telemetry_report;
+ ?column? | ?column? | ?column? | ?column? 
+----------+----------+----------+----------
+ t        | t        | t        | t
 (1 row)
 
 WITH t AS (
