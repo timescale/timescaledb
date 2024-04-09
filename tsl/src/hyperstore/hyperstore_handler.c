@@ -22,6 +22,7 @@
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
 #include <nodes/execnodes.h>
+#include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
 #include <nodes/plannodes.h>
@@ -39,8 +40,10 @@
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/hsearch.h>
+#include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
+#include <utils/rel.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
@@ -87,6 +90,39 @@ switch_to_heapam(Relation rel)
 	Assert(tableam == hyperstore_routine());
 	rel->rd_tableam = GetHeapamTableAmRoutine();
 	return tableam;
+}
+
+static void
+create_proxy_vacuum_index(Relation rel, Oid compressed_relid)
+{
+	Oid compressed_namespaceid = get_rel_namespace(compressed_relid);
+	char *compressed_namespace = get_namespace_name(compressed_namespaceid);
+	char *compressed_relname = get_rel_name(compressed_relid);
+	IndexElem elem = {
+		.type = T_IndexElem,
+		.name = COMPRESSION_COLUMN_METADATA_COUNT_NAME,
+		.indexcolname = NULL,
+	};
+	IndexStmt stmt = {
+		.type = T_IndexStmt,
+		.accessMethod = "hsproxy",
+		.idxcomment = "Hyperstore vacuum proxy index",
+		.idxname = psprintf("%s_ts_hsproxy_idx", compressed_relname),
+		.indexParams = list_make1(&elem),
+		.relation = makeRangeVar(compressed_namespace, compressed_relname, -1),
+	};
+
+	DefineIndexCompat(compressed_relid,
+					  &stmt,
+					  InvalidOid,
+					  InvalidOid,
+					  InvalidOid,
+					  -1,
+					  false,
+					  false,
+					  false,
+					  false,
+					  true);
 }
 
 static HyperstoreInfo *
@@ -146,6 +182,7 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 		{
 			ts_chunk_constraints_create(ht_compressed, c_chunk);
 			ts_trigger_create_all_on_chunk(c_chunk);
+			create_proxy_vacuum_index(rel, c_chunk->table_id);
 		}
 	}
 
@@ -1723,19 +1760,37 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 	tuplesort_end(tuplesort);
 }
 
+/*
+ * VACUUM (not VACUUM FULL).
+ *
+ * Vacuum the hyperstore by calling vacuum on both the non-compressed and
+ * compressed relations.
+ *
+ * Indexes on a heap are normally vacuumed as part of vacuuming the
+ * heap. However, a hyperstore index is defined on the non-compressed relation
+ * and contains tuples from both the non-compressed and compressed relations
+ * and therefore dead tuples vacuumed on the compressed relation won't be
+ * removed from a hyperstore index by default. The vacuuming of dead
+ * compressed tuples from the hyperstore index therefore requires special
+ * handling, which is triggered via a proxy index (hsproxy) that relays the
+ * clean up to the "correct" hyperstore indexes. (See hsproxy.c)
+ *
+ * For future: It would make sense to (re-)compress all non-compressed data as
+ * part of vacuum since (re-)compression is a kind of cleanup but also leaves
+ * a lot of garbage.
+ */
 static void
 hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
+	HyperstoreInfo *caminfo;
+
 	if (ts_is_hypertable(RelationGetRelid(rel)))
 		return;
 
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	caminfo = RelationGetHyperstoreInfo(rel);
+
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
-
-	const TableAmRoutine *oldtam = switch_to_heapam(rel);
-	rel->rd_tableam->relation_vacuum(rel, params, bstrategy);
-	rel->rd_tableam = oldtam;
 
 	/* Vacuum the compressed relation */
 	Relation crel = vacuum_open_relation(caminfo->compressed_relid,
@@ -1744,11 +1799,16 @@ hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy b
 										 params->log_min_duration >= 0,
 										 lmode);
 
-	if (!crel)
-		return;
+	if (crel)
+	{
+		crel->rd_tableam->relation_vacuum(crel, params, bstrategy);
+		table_close(crel, NoLock);
+	}
 
-	crel->rd_tableam->relation_vacuum(crel, params, bstrategy);
-	table_close(crel, NoLock);
+	/* Vacuum the non-compressed relation */
+	const TableAmRoutine *oldtam = switch_to_heapam(rel);
+	rel->rd_tableam->relation_vacuum(rel, params, bstrategy);
+	rel->rd_tableam = oldtam;
 }
 
 /*
@@ -2311,6 +2371,15 @@ hyperstore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate
 static Tuplesortstate *
 create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tupdesc)
 {
+	/*
+	 * We compress the existing non-compressed data in the table when moving
+	 * to a table access method.
+	 *
+	 * TODO: Consider if we should compress data when creating a
+	 * hyperstore. It might make more sense to just "adopt" the table in the
+	 * state they are and deal with compression as part of the normal
+	 * procedure.
+	 */
 	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * caminfo->num_keys);
 	Oid *sort_operators = palloc0(sizeof(*sort_operators) * caminfo->num_keys);
 	Oid *sort_collations = palloc0(sizeof(*sort_collations) * caminfo->num_keys);
@@ -2375,38 +2444,30 @@ create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tup
 static void
 convert_to_hyperstore(Oid relid)
 {
-	MemoryContext oldcxt = MemoryContextSwitchTo(CurTransactionContext);
-	ConversionState *state = palloc0(sizeof(ConversionState));
 	Relation relation = table_open(relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	bool compress_chunk_created;
 	HyperstoreInfo *caminfo =
 		lazy_build_hyperstore_info_cache(relation, true, false, &compress_chunk_created);
 
-	state->relid = relid;
-
 	if (!compress_chunk_created)
 	{
 		/* A compressed relation already exists, so converting from legacy
-		 * compression. It is only necessary to write the non-compressed data
-		 * to the new heap. */
+		 * compression. It is only necessary to create the proxy vacuum
+		 * index. */
+		create_proxy_vacuum_index(relation, caminfo->compressed_relid);
 		table_close(relation, AccessShareLock);
 		return;
 	}
 
-	/*
-	 * We compress the existing non-compressed data in the table when moving
-	 * to a table access method.
-	 *
-	 * TODO: Consider if we should compress data when creating a
-	 * hyperstore. It might make more sense to just "adopt" the table in the
-	 * state they are and deal with compression as part of the normal
-	 * procedure.
-	 */
+	MemoryContext oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
+	ConversionState *state = palloc0(sizeof(ConversionState));
 	state->tuplesortstate = create_tuplesort_for_compress(caminfo, tupdesc);
-	table_close(relation, AccessShareLock);
+	Assert(state->tuplesortstate);
+	state->relid = relid;
 	conversionstate = state;
 	MemoryContextSwitchTo(oldcxt);
+	table_close(relation, AccessShareLock);
 }
 
 /*
@@ -2452,8 +2513,16 @@ hyperstore_xact_event(XactEvent event, void *arg)
 			foreach (lc, partially_compressed_relids)
 			{
 				Oid relid = lfirst_oid(lc);
+				Relation rel = table_open(relid, AccessShareLock);
+				/* Calling RelationGetHyperstoreInfo() here will create the
+				 * compressed relation if not already created. */
+				HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+				Ensure(OidIsValid(hsinfo->compressed_relid),
+					   "hyperstore \"%s\" has no compressed data relation",
+					   get_rel_name(relid));
 				Chunk *chunk = ts_chunk_get_by_relid(relid, true);
 				ts_chunk_set_partial(chunk);
+				table_close(rel, NoLock);
 			}
 			break;
 		}
@@ -2489,7 +2558,7 @@ hyperstore_xact_event(XactEvent event, void *arg)
 static void
 convert_to_hyperstore_finish(Oid relid)
 {
-	if (!conversionstate->tuplesortstate)
+	if (!conversionstate)
 	{
 		/* Without a tuple sort state, conversion happens from legacy
 		 * compression where a compressed relation (chunk) already
@@ -2532,6 +2601,7 @@ convert_to_hyperstore_finish(Oid relid)
 
 	row_compressor_close(&row_compressor);
 	tuplesort_end(conversionstate->tuplesortstate);
+	conversionstate->tuplesortstate = NULL;
 
 	/* Update compression statistics */
 	RelationSize before_size = ts_relation_size_impl(chunk->table_id);
@@ -2550,6 +2620,7 @@ convert_to_hyperstore_finish(Oid relid)
 	 */
 	ts_chunk_constraints_create(ht_compressed, c_chunk);
 	ts_trigger_create_all_on_chunk(c_chunk);
+	create_proxy_vacuum_index(relation, RelationGetRelid(compressed_rel));
 
 	table_close(relation, NoLock);
 	table_close(compressed_rel, NoLock);

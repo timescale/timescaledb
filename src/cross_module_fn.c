@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/amapi.h>
 #include <fmgr.h>
 #include <utils/lsyscache.h>
 #include <utils/timestamp.h>
@@ -79,6 +80,7 @@ CROSSMODULE_WRAPPER(create_compressed_chunk);
 CROSSMODULE_WRAPPER(compress_chunk);
 CROSSMODULE_WRAPPER(decompress_chunk);
 CROSSMODULE_WRAPPER(hyperstore_handler);
+CROSSMODULE_WRAPPER(hsproxy_handler);
 
 /* continuous aggregate */
 CROSSMODULE_WRAPPER(continuous_agg_invalidation_trigger);
@@ -115,6 +117,32 @@ error_no_default_fn_community(void)
 					ts_guc_license),
 			 errhint("To access all features and the best time-series experience, try out "
 					 "Timescale Cloud.")));
+}
+
+static bytea *
+error_hsproxy_index_options(Datum reloptions, bool validate)
+{
+	error_no_default_fn_community();
+	return NULL;
+}
+
+/*
+ * An index AM always needs to return a IndexAmRoutine because the handler
+ * function is invoked when the default opclass for a type is defined in
+ * SQL. Therefore, return this dummy under non-TSL license and error out when
+ * parsing index options instead.
+ */
+static Datum
+error_pg_community_hsproxy_handler(PG_FUNCTION_ARGS)
+{
+	IndexAmRoutine *amroutine = makeNode(IndexAmRoutine);
+
+	amroutine->amstrategies = 0;
+	amroutine->amsupport = 1;
+	amroutine->amoptsprocnum = 0;
+	amroutine->amoptions = error_hsproxy_index_options;
+
+	PG_RETURN_POINTER(amroutine);
 }
 
 static bool
@@ -368,6 +396,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.array_compressor_append = error_no_default_fn_pg_community,
 	.array_compressor_finish = error_no_default_fn_pg_community,
 	.hyperstore_handler = error_no_default_fn_pg_community,
+	.hsproxy_handler = error_pg_community_hsproxy_handler,
 	.is_compressed_tid = error_no_default_fn_pg_community,
 
 	.show_chunk = error_no_default_fn_pg_community,
