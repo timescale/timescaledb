@@ -4,5 +4,6 @@ set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/arrow_array.c
     ${CMAKE_CURRENT_SOURCE_DIR}/arrow_cache_explain.c
     ${CMAKE_CURRENT_SOURCE_DIR}/attr_capture.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/hyperstore_handler.c)
+    ${CMAKE_CURRENT_SOURCE_DIR}/hyperstore_handler.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/hsproxy.c)
 target_sources(${TSL_LIBRARY_NAME} PRIVATE ${SOURCES})
