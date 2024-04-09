@@ -3,28 +3,28 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 \c :TEST_DBNAME :ROLE_SUPERUSER
 create function stable_abs(x int4) returns int4 as 'int4abs' language internal stable;
-create table t(a int, b int);
-select create_hypertable('t', 'a', chunk_time_interval => 1000);
+create table dvagg(a int, b int);
+select create_hypertable('dvagg', 'a', chunk_time_interval => 1000);
 NOTICE:  adding not-null constraint to column "a"
- create_hypertable 
--------------------
- (1,public,t,t)
+ create_hypertable  
+--------------------
+ (1,public,dvagg,t)
 (1 row)
 
-insert into t select x, x % 5 from generate_series(1, 999) x;
-alter table t set (timescaledb.compress);
+insert into dvagg select x, x % 5 from generate_series(1, 999) x;
+alter table dvagg set (timescaledb.compress);
 WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "t" is set to ""
-NOTICE:  default order by for hypertable "t" is set to "a DESC"
-select compress_chunk(show_chunks('t'));
+NOTICE:  default segment by for hypertable "dvagg" is set to ""
+NOTICE:  default order by for hypertable "dvagg" is set to "a DESC"
+select compress_chunk(show_chunks('dvagg'));
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
 (1 row)
 
-alter table t add column c int default 7;
-insert into t select x, x % 5, 11 from generate_series(1001, 1999) x;
-select compress_chunk(show_chunks('t'));
+alter table dvagg add column c int default 7;
+insert into dvagg select x, x % 5, 11 from generate_series(1001, 1999) x;
+select compress_chunk(show_chunks('dvagg'));
 NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
              compress_chunk             
 ----------------------------------------
@@ -34,7 +34,7 @@ NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
 
 -- Just the most basic vectorized aggregation query on a table with default
 -- compressed column.
-explain (costs off) select sum(c) from t;
+explain (costs off) select sum(c) from dvagg;
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
  Finalize Aggregate
@@ -49,44 +49,44 @@ explain (costs off) select sum(c) from t;
                            ->  Parallel Seq Scan on compress_hyper_2_4_chunk
 (10 rows)
 
-select sum(c) from t;
+select sum(c) from dvagg;
   sum  
 -------
  17982
 (1 row)
 
 -- Vectorized aggregation should work with vectorized filters.
-select sum(c) from t where b >= 0;
+select sum(c) from dvagg where b >= 0;
   sum  
 -------
  17982
 (1 row)
 
-select sum(c) from t where b = 0;
+select sum(c) from dvagg where b = 0;
  sum  
 ------
  3582
 (1 row)
 
-select sum(c) from t where b in (0, 1);
+select sum(c) from dvagg where b in (0, 1);
  sum  
 ------
  7182
 (1 row)
 
-select sum(c) from t where b in (0, 1, 3);
+select sum(c) from dvagg where b in (0, 1, 3);
   sum  
 -------
  10782
 (1 row)
 
-select sum(c) from t where b > 10;
+select sum(c) from dvagg where b > 10;
  sum 
 -----
     
 (1 row)
 
-explain (costs off) select sum(c) from t where b in (0, 1, 3);
+explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
  Finalize Aggregate
@@ -104,11 +104,11 @@ explain (costs off) select sum(c) from t where b in (0, 1, 3);
 (12 rows)
 
 -- The runtime chunk exclusion should work.
-explain (costs off) select sum(c) from t where a < stable_abs(1000);
+explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
                              QUERY PLAN                              
 ---------------------------------------------------------------------
  Finalize Aggregate
-   ->  Custom Scan (ChunkAppend) on t
+   ->  Custom Scan (ChunkAppend) on dvagg
          Chunks excluded during startup: 1
          ->  Custom Scan (VectorAgg)
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
@@ -117,7 +117,7 @@ explain (costs off) select sum(c) from t where a < stable_abs(1000);
 (7 rows)
 
 -- Some negative cases.
-explain (costs off) select sum(c) from t group by grouping sets ((), (a));
+explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  MixedAggregate
@@ -134,7 +134,7 @@ explain (costs off) select sum(c) from t group by grouping sets ((), (a));
                      ->  Seq Scan on compress_hyper_2_4_chunk
 (12 rows)
 
-explain (costs off) select sum(c) from t having sum(c) > 0;
+explain (costs off) select sum(c) from dvagg having sum(c) > 0;
                                  QUERY PLAN                                  
 -----------------------------------------------------------------------------
  Finalize Aggregate
@@ -151,17 +151,17 @@ explain (costs off) select sum(c) from t having sum(c) > 0;
 (11 rows)
 
 -- As a reference, the result on decompressed table.
-select decompress_chunk(show_chunks('t'));
+select decompress_chunk(show_chunks('dvagg'));
             decompress_chunk            
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_3_chunk
 (2 rows)
 
-select sum(c) from t;
+select sum(c) from dvagg;
   sum  
 -------
  17982
 (1 row)
 
-drop table t;
+drop table dvagg;
