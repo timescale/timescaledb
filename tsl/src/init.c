@@ -37,6 +37,7 @@
 #include "hyperstore/arrow_cache_explain.h"
 #include "hyperstore/arrow_tts.h"
 #include "hyperstore/attr_capture.h"
+#include "hyperstore/hsproxy.h"
 #include "hyperstore/hyperstore_handler.h"
 #include "hypertable.h"
 #include "license_guc.h"
@@ -173,6 +174,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.decompress_batches_for_insert = decompress_batches_for_insert,
 	.decompress_target_segments = decompress_target_segments,
 	.hyperstore_handler = hyperstore_handler,
+	.hsproxy_handler = hsproxy_handler,
 	.is_compressed_tid = tsl_is_compressed_tid,
 	.ddl_command_start = tsl_ddl_command_start,
 	.ddl_command_end = tsl_ddl_command_end,
@@ -213,6 +215,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_attr_capture_init();
 	_skip_scan_init();
 	_vector_agg_init();
+
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);

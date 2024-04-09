@@ -120,6 +120,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_columnar.sql
     hyperstore_types.sql
     hyperstore_update.sql
+    hyperstore_vacuum.sql
     hyperstore_vacuum_full.sql
     merge_compress.sql)
 endif()

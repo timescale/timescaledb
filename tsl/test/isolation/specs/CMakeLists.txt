@@ -28,7 +28,8 @@ if(PG_VERSION VERSION_GREATER_EQUAL "14.0")
 endif()
 
 if(PG_VERSION VERSION_GREATER_EQUAL "15.0")
-  list(APPEND TEST_FILES hyperstore_tuple_lock.spec)
+  list(APPEND TEST_FILES hyperstore_tuple_lock.spec
+       hyperstore_concurrent_vacuum.spec)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
