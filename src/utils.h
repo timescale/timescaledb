@@ -17,6 +17,7 @@
 #include <nodes/pathnodes.h>
 #include <utils/builtins.h>
 #include <utils/datetime.h>
+#include <utils/jsonb.h>
 
 #include "compat/compat.h"
 
@@ -127,6 +128,11 @@ extern TSDLLEXPORT List *ts_get_reloptions(Oid relid);
 	(find_inheritance_children(table_relid, AccessShareLock) != NIL)
 
 #define is_inheritance_table(relid) (is_inheritance_child(relid) || is_inheritance_parent(relid))
+
+#define INIT_NULL_DATUM                                                                            \
+	{                                                                                              \
+		.value = 0, .isnull = true                                                                 \
+	}
 
 static inline int64
 int64_min(int64 a, int64 b)
@@ -262,4 +268,40 @@ ts_datum_set_bool(const AttrNumber attno, NullableDatum *datums, const bool valu
 {
 	datums[AttrNumberGetAttrOffset(attno)].value = BoolGetDatum(value);
 	datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+}
+
+static inline void
+ts_datum_set_int32(const AttrNumber attno, NullableDatum *datums, const int32 value,
+				   const bool isnull)
+{
+	datums[AttrNumberGetAttrOffset(attno)].value = Int32GetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
+}
+
+static inline void
+ts_datum_set_int64(const AttrNumber attno, NullableDatum *datums, const int64 value,
+				   const bool isnull)
+{
+	datums[AttrNumberGetAttrOffset(attno)].value = Int64GetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
+}
+
+static inline void
+ts_datum_set_timestamptz(const AttrNumber attno, NullableDatum *datums, const TimestampTz value,
+						 const bool isnull)
+{
+	datums[AttrNumberGetAttrOffset(attno)].value = TimestampTzGetDatum(value);
+	datums[AttrNumberGetAttrOffset(attno)].isnull = isnull;
+}
+
+static inline void
+ts_datum_set_jsonb(const AttrNumber attno, NullableDatum *datums, const Jsonb *value)
+{
+	if (value != NULL)
+	{
+		datums[AttrNumberGetAttrOffset(attno)].value = JsonbPGetDatum(value);
+		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	}
+	else
+		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
 }

@@ -1,0 +1,327 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_SUPERUSER
+CREATE PROCEDURE custom_job_ok(job_id int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  RAISE INFO 'custom_job';
+END
+$$;
+CREATE PROCEDURE custom_job_error(job_id int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  PERFORM 1/0;
+END
+$$;
+-- Do not log all jobs, only FAILED executions
+SHOW timescaledb.enable_job_execution_logging;
+ timescaledb.enable_job_execution_logging 
+------------------------------------------
+ off
+(1 row)
+
+-- Start Background Workers
+SELECT _timescaledb_functions.start_background_workers();
+ start_background_workers 
+--------------------------
+ t
+(1 row)
+
+SELECT pg_sleep(6);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT add_job('custom_job_ok', '1h', initial_start := now()) AS job_id_1 \gset
+SELECT add_job('custom_job_error', '1h', initial_start := now()) AS job_id_2 \gset
+SELECT test.wait_for_job_to_run(:job_id_1, 1);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_2, 1);
+INFO:  wait_for_job_to_run: job execution failed
+ wait_for_job_to_run 
+---------------------
+ f
+(1 row)
+
+-- only 1 failure
+SELECT count(*), succeeded FROM timescaledb_information.job_history WHERE job_id >= 1000 GROUP BY 2 ORDER BY 2;
+ count | succeeded 
+-------+-----------
+     1 | f
+(1 row)
+
+SELECT proc_schema, proc_name, sqlerrcode, err_message FROM timescaledb_information.job_history WHERE job_id >= 1000 AND succeeded IS FALSE;
+ proc_schema |    proc_name     | sqlerrcode |   err_message    
+-------------+------------------+------------+------------------
+ public      | custom_job_error | 22012      | division by zero
+(1 row)
+
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+
+-- Check current jobs status
+SELECT job_id, job_status, total_runs, total_successes, total_failures
+FROM timescaledb_information.job_stats
+WHERE job_id >= 1000
+ORDER BY job_id;
+ job_id | job_status | total_runs | total_successes | total_failures 
+--------+------------+------------+-----------------+----------------
+   1000 | Scheduled  |          1 |               1 |              0
+   1001 | Scheduled  |          1 |               0 |              1
+(2 rows)
+
+-- Log all executions
+ALTER SYSTEM SET timescaledb.enable_job_execution_logging TO ON;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.start_background_workers();
+ start_background_workers 
+--------------------------
+ t
+(1 row)
+
+SELECT pg_sleep(6);
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_1, 2);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_2, 2);
+INFO:  wait_for_job_to_run: job execution failed
+ wait_for_job_to_run 
+---------------------
+ f
+(1 row)
+
+-- 1 succeeded 2 failures
+SELECT count(*), succeeded FROM timescaledb_information.job_history WHERE job_id >= 1000 GROUP BY 2 ORDER BY 2;
+ count | succeeded 
+-------+-----------
+     2 | f
+     1 | t
+(2 rows)
+
+-- Check current jobs status
+SELECT job_id, job_status, total_runs, total_successes, total_failures
+FROM timescaledb_information.job_stats
+WHERE job_id >= 1000
+ORDER BY job_id;
+ job_id | job_status | total_runs | total_successes | total_failures 
+--------+------------+------------+-----------------+----------------
+   1000 | Scheduled  |          2 |               2 |              0
+   1001 | Scheduled  |          2 |               0 |              2
+(2 rows)
+
+-- Check config changes over time
+SELECT scheduled FROM alter_job(:job_id_1, config => '{"foo": 1}'::jsonb);
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT scheduled FROM alter_job(:job_id_2, config => '{"bar": 1}'::jsonb);
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT scheduled FROM alter_job(:job_id_2, next_start => now());
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_1, 3);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_2, 3);
+INFO:  wait_for_job_to_run: job execution failed
+ wait_for_job_to_run 
+---------------------
+ f
+(1 row)
+
+-- Check job execution history
+SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+FROM timescaledb_information.job_history
+WHERE job_id >= 1000
+ORDER BY id;
+ proc_schema |    proc_name     | succeeded |   config   | sqlerrcode |   err_message    
+-------------+------------------+-----------+------------+------------+------------------
+ public      | custom_job_error | f         |            | 22012      | division by zero
+ public      | custom_job_ok    | t         |            |            | 
+ public      | custom_job_error | f         |            | 22012      | division by zero
+ public      | custom_job_ok    | t         | {"foo": 1} |            | 
+ public      | custom_job_error | f         | {"bar": 1} | 22012      | division by zero
+(5 rows)
+
+-- Changing the config of one job
+SELECT scheduled FROM alter_job(:job_id_1, config => '{"foo": 2, "bar": 1}'::jsonb);
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_1, 4);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+-- Check job execution history
+SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+FROM timescaledb_information.job_history
+WHERE job_id = :job_id_1
+ORDER BY id;
+ proc_schema |   proc_name   | succeeded |        config        | sqlerrcode | err_message 
+-------------+---------------+-----------+----------------------+------------+-------------
+ public      | custom_job_ok | t         |                      |            | 
+ public      | custom_job_ok | t         | {"foo": 1}           |            | 
+ public      | custom_job_ok | t         | {"bar": 1, "foo": 2} |            | 
+(3 rows)
+
+-- Change the job procedure to alter the job configuration during the execution
+CREATE OR REPLACE PROCEDURE custom_job_ok(job_id int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  RAISE INFO 'custom_job';
+  PERFORM alter_job(job_id, config => '{"config_changed_by_job_execution": 1}'::jsonb);
+END
+$$;
+-- Run the job
+SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_1, 5);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+-- Check job execution history
+SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+FROM timescaledb_information.job_history
+WHERE job_id = :job_id_1
+ORDER BY id;
+ proc_schema |   proc_name   | succeeded |                 config                 | sqlerrcode | err_message 
+-------------+---------------+-----------+----------------------------------------+------------+-------------
+ public      | custom_job_ok | t         |                                        |            | 
+ public      | custom_job_ok | t         | {"foo": 1}                             |            | 
+ public      | custom_job_ok | t         | {"bar": 1, "foo": 2}                   |            | 
+ public      | custom_job_ok | t         | {"config_changed_by_job_execution": 1} |            | 
+(4 rows)
+
+-- Change the job procedure to alter the job configuration during the execution
+CREATE OR REPLACE PROCEDURE custom_job_ok(job_id int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  RAISE INFO 'custom_job';
+  PERFORM alter_job(job_id, config => '{"change_not_logged": 1}'::jsonb);
+  COMMIT;
+  PERFORM alter_job(job_id, config => '{"only_last_change_is_logged": 1}'::jsonb);
+  COMMIT;
+END
+$$;
+-- Run the job
+SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
+ scheduled 
+-----------
+ t
+(1 row)
+
+SELECT test.wait_for_job_to_run(:job_id_1, 6);
+ wait_for_job_to_run 
+---------------------
+ t
+(1 row)
+
+-- Check job execution history
+SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+FROM timescaledb_information.job_history
+WHERE job_id = :job_id_1
+ORDER BY id;
+ proc_schema |   proc_name   | succeeded |                 config                 | sqlerrcode | err_message 
+-------------+---------------+-----------+----------------------------------------+------------+-------------
+ public      | custom_job_ok | t         |                                        |            | 
+ public      | custom_job_ok | t         | {"foo": 1}                             |            | 
+ public      | custom_job_ok | t         | {"bar": 1, "foo": 2}                   |            | 
+ public      | custom_job_ok | t         | {"config_changed_by_job_execution": 1} |            | 
+ public      | custom_job_ok | t         | {"only_last_change_is_logged": 1}      |            | 
+(5 rows)
+
+SELECT delete_job(:job_id_1);
+ delete_job 
+------------
+ 
+(1 row)
+
+SELECT delete_job(:job_id_2);
+ delete_job 
+------------
+ 
+(1 row)
+
+ALTER SYSTEM RESET timescaledb.enable_job_execution_logging;
+SELECT pg_reload_conf();
+ pg_reload_conf 
+----------------
+ t
+(1 row)
+
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT _timescaledb_functions.stop_background_workers();
+ stop_background_workers 
+-------------------------
+ t
+(1 row)
+

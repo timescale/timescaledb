@@ -498,11 +498,11 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	const uint32 n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
 	CheckCompressedData(n_total >= n_notnull);
 
-	uint32 *restrict offsets =
-		(uint32 *) MemoryContextAllocZero(dest_mctx,
-										  pad_to_multiple(64, sizeof(*offsets) * (n_total + 1)));
-	uint8 *restrict arrow_bodies =
-		(uint8 *) MemoryContextAllocZero(dest_mctx, pad_to_multiple(64, si->len - si->cursor));
+	uint32 *offsets =
+		(uint32 *) MemoryContextAlloc(dest_mctx,
+									  pad_to_multiple(64, sizeof(*offsets) * (n_total + 1)));
+	uint8 *arrow_bodies =
+		(uint8 *) MemoryContextAlloc(dest_mctx, pad_to_multiple(64, si->len - si->cursor));
 
 	uint32 offset = 0;
 	for (uint32 i = 0; i < n_notnull; i++)

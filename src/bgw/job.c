@@ -64,6 +64,8 @@ ts_bgw_job_start(BgwJob *job, Oid user_oid)
 {
 	BgwParams bgw_params = {
 		.job_id = Int32GetDatum(job->fd.id),
+		.job_history_id = job->job_history.id,
+		.job_history_execution_start = job->job_history.execution_start,
 		.user_oid = user_oid,
 	};
 
@@ -1124,46 +1126,6 @@ zero_guc(const char *guc_name)
 				(errcode(ERRCODE_INTERNAL_ERROR), errmsg("could not set \"%s\" guc", guc_name)));
 }
 
-/*
- * This function creates an entry in the job_errors table
- * when a background job throws a runtime error or the job scheduler
- * detects that the job crashed
- */
-bool
-ts_job_errors_insert_tuple(const FormData_job_error *job_err)
-{
-	Catalog *catalog = ts_catalog_get();
-	Relation rel = table_open(catalog_get_table_id(catalog, JOB_ERRORS), RowExclusiveLock);
-	TupleDesc desc = RelationGetDescr(rel);
-	Datum values[Natts_job_error];
-	bool nulls[Natts_job_error] = { false };
-	CatalogSecurityContext sec_ctx;
-
-	values[AttrNumberGetAttrOffset(Anum_job_error_job_id)] = Int32GetDatum(job_err->job_id);
-	values[AttrNumberGetAttrOffset(Anum_job_error_start_time)] =
-		TimestampTzGetDatum(job_err->start_time);
-	values[AttrNumberGetAttrOffset(Anum_job_error_finish_time)] =
-		TimestampTzGetDatum(job_err->finish_time);
-
-	if (job_err->pid > 0)
-		values[AttrNumberGetAttrOffset(Anum_job_error_pid)] = Int64GetDatum(job_err->pid);
-	else
-		nulls[AttrNumberGetAttrOffset(Anum_job_error_pid)] = true;
-	if (job_err->error_data)
-		values[AttrNumberGetAttrOffset(Anum_job_error_error_data)] =
-			JsonbPGetDatum(job_err->error_data);
-	else
-		nulls[AttrNumberGetAttrOffset(Anum_job_error_error_data)] = true;
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
-
-	table_close(rel, RowExclusiveLock);
-
-	return true;
-}
-
 extern Datum
 ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 {
@@ -1210,18 +1172,19 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 									SESSION_LOCK,
 									/* block */ true,
 									&got_lock);
-
 	CommitTransactionCommand();
 
 	if (job == NULL)
 		elog(ERROR, "job %d not found when running the background worker", params.job_id);
 
+	/* get parameters from bgworker */
+	job->job_history.id = params.job_history_id;
+	job->job_history.execution_start = params.job_history_execution_start;
+
 	elog(DEBUG2, "job %d (%s) found", params.job_id, NameStr(job->fd.application_name));
 
 	pgstat_report_appname(NameStr(job->fd.application_name));
 	MemoryContext oldcontext = CurrentMemoryContext;
-	TimestampTz start_time = DT_NOBEGIN, finish_time = DT_NOBEGIN;
-	NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
 
 	PG_TRY();
 	{
@@ -1234,6 +1197,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		zero_guc("max_parallel_maintenance_workers");
 
 		res = ts_bgw_job_execute(job);
+
 		/* The job is responsible for committing or aborting it's own txns */
 		if (IsTransactionState())
 			elog(ERROR,
@@ -1242,6 +1206,9 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	}
 	PG_CATCH();
 	{
+		ErrorData *edata;
+		NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
+
 		if (IsTransactionState())
 			/* If there was an error, rollback what was done before the error */
 			AbortCurrentTransaction();
@@ -1255,6 +1222,10 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		{
 			pfree(job);
 		}
+
+		/* switch away from error context to not lose the data */
+		MemoryContextSwitchTo(oldcontext);
+		edata = CopyErrorData();
 
 		/*
 		 * Note that the mark_start happens in the scheduler right before the
@@ -1270,10 +1241,16 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 										&got_lock);
 		if (job != NULL)
 		{
-			ts_bgw_job_stat_mark_end(job, JOB_FAILURE);
-			ts_bgw_job_check_max_retries(job);
 			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
 			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
+
+			job->job_history.id = params.job_history_id;
+			job->job_history.execution_start = params.job_history_execution_start;
+
+			ts_bgw_job_stat_mark_end(job,
+									 JOB_FAILURE,
+									 ts_errdata_to_jsonb(edata, &proc_schema, &proc_name));
+			ts_bgw_job_check_max_retries(job);
 			pfree(job);
 		}
 
@@ -1282,28 +1259,6 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 		 * error
 		 */
 		elog(LOG, "job %d threw an error", params.job_id);
-
-		ErrorData *edata;
-		FormData_job_error jerr = { 0 };
-		// switch away from error context to not lose the data
-		MemoryContextSwitchTo(oldcontext);
-		edata = CopyErrorData();
-
-		BgwJobStat *job_stat = ts_bgw_job_stat_find(params.job_id);
-		if (job_stat != NULL)
-		{
-			start_time = job_stat->fd.last_start;
-			finish_time = job_stat->fd.last_finish;
-		}
-		/* We include the procname in the error data and expose it in the view
-		 to avoid adding an extra field in the table */
-		jerr.error_data = ts_errdata_to_jsonb(edata, &proc_schema, &proc_name);
-		jerr.job_id = params.job_id;
-		jerr.start_time = start_time;
-		jerr.finish_time = finish_time;
-		jerr.pid = MyProcPid;
-
-		ts_job_errors_insert_tuple(&jerr);
 
 		CommitTransactionCommand();
 		FlushErrorState();
@@ -1319,7 +1274,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	 * Note that the mark_start happens in the scheduler right before the job
 	 * is launched
 	 */
-	ts_bgw_job_stat_mark_end(job, res);
+	ts_bgw_job_stat_mark_end(job, res, NULL);
 
 	CommitTransactionCommand();
 
@@ -1375,12 +1330,12 @@ ts_bgw_job_run_and_set_next_start(BgwJob *job, job_main_func func, int64 initial
 		StartTransactionCommand();
 
 	if (mark)
-		ts_bgw_job_stat_mark_start(job->fd.id);
+		ts_bgw_job_stat_mark_start(job);
 
 	result = func();
 
 	if (mark)
-		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE);
+		ts_bgw_job_stat_mark_end(job, result ? JOB_SUCCESS : JOB_FAILURE, NULL);
 
 	/* Now update next_start. */
 	job_stat = ts_bgw_job_stat_find(job->fd.id);

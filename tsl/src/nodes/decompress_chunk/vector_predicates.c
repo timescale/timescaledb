@@ -12,6 +12,7 @@
 
 #include <utils/date.h>
 #include <utils/fmgroids.h>
+#include <mb/pg_wchar.h>
 
 #include "compression/arrow_c_data_interface.h"
 
@@ -27,6 +28,8 @@
  */
 #include "pred_vector_const_arithmetic_all.c"
 
+#include "pred_text.h"
+
 /*
  * Look up the vectorized implementation for a Postgres predicate, specified by
  * its Oid in pg_proc. Note that this Oid is different from the opcode.
@@ -39,7 +42,26 @@ get_vector_const_predicate(Oid pg_predicate)
 #define GENERATE_DISPATCH_TABLE
 #include "pred_vector_const_arithmetic_all.c"
 #undef GENERATE_DISPATCH_TABLE
+
+		case F_TEXTEQ:
+			return vector_const_texteq;
+
+		case F_TEXTNE:
+			return vector_const_textne;
 	}
+
+	if (GetDatabaseEncoding() == PG_UTF8)
+	{
+		/* We have some simple LIKE vectorization for case-sensitive UTF8. */
+		switch (pg_predicate)
+		{
+			case F_TEXTLIKE:
+				return vector_const_textlike_utf8;
+			case F_TEXTNLIKE:
+				return vector_const_textnlike_utf8;
+		}
+	}
+
 	return NULL;
 }
 

@@ -316,6 +316,26 @@ select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 777 and me
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 12);
 select count(*) from vectorqual where ts > '2024-01-01' or (metric3 = 888 and metric2 = 666);
 
+
+-- On versions >= 14, the Postgres planner chooses to build a hash table for
+-- large arrays. We currently don't vectorize in this case.
+select 1 from set_config('timescaledb.debug_require_vector_qual',
+    case when current_setting('server_version_num')::int >= 140000 then 'forbid' else 'only' end,
+    false);
+
+select count(*) from singlebatch where metric2 = any(array[
+ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,
+10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+50, 51, 52, 53, 54, 55, 56, 57, 58, 59,
+60, 61, 62, 63, 64, 65, 66, 67, 68, 69,
+70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
+80, 81, 82, 83, 84, 85, 86, 87, 88, 89,
+90, 91, 92, 93, 94, 95, 96, 97, 98, 99
+]::int8[]);
+
 reset timescaledb.enable_bulk_decompression;
 reset timescaledb.debug_require_vector_qual;
 
@@ -381,7 +401,7 @@ select * from date_table where ts <= '2021-01-02';
 select * from date_table where ts <  '2021-01-02';
 select * from date_table where ts <  CURRENT_DATE;
 
--- Text columns. Only tests bulk decompression for now.
+-- Text columns.
 create table text_table(ts int, d int);
 select create_hypertable('text_table', 'ts');
 alter table text_table set (timescaledb.compress, timescaledb.compress_segmentby = 'd');
@@ -406,6 +426,7 @@ insert into text_table select x + 100, 8, repeat((101 - x)::text || 'b', (101 - 
 insert into text_table select x + 200, 8, repeat((101 - x)::text || 'c', (101 - x)) from generate_series(1, 100) x;
 insert into text_table select x + 300, 8, repeat(        x::text || 'd',         x) from generate_series(1, 100) x;
 
+-- Use uncompressed table as reference.
 set timescaledb.debug_require_vector_qual to 'forbid';
 select sum(length(a)) from text_table;
 select count(distinct a) from text_table;
@@ -413,8 +434,81 @@ select count(distinct a) from text_table;
 select count(compress_chunk(x, true)) from show_chunks('text_table') x;
 select compress_chunk(x) from show_chunks('text_table') x;
 
+-- Check result with decompression.
 set timescaledb.enable_bulk_decompression to on;
 set timescaledb.debug_require_vector_qual to 'forbid';
 
 select sum(length(a)) from text_table;
 select count(distinct a) from text_table;
+
+
+-- Test vectorized predicates.
+set timescaledb.debug_require_vector_qual to 'only';
+-- -- Uncomment to generate the test reference w/o the vector optimizations.
+-- set timescaledb.enable_bulk_decompression to off;
+-- set timescaledb.debug_require_vector_qual to 'forbid';
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'default';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a != 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'одинаковый';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'same-with-nulls';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = '異なる1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different1000';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different-with-nulls999';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same', 'different500');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('same-with-nulls', 'different-with-nulls499');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a in ('different500', 'default');
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a = 'different500' or a = 'default';
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is null;
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a is not null;
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%same%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одинаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одилаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%одимаковый%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異なる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異オる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%異にる%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '異_る_';
+
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like '%different1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%%1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%__';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%___';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%_1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%nulls_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different1%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\%';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_%1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different_1';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'same_';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a not like '%different1%';
+
+\set ON_ERROR_STOP 0
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different\';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a like 'different%\';
+\set ON_ERROR_STOP 1
+
+
+-- We don't vectorize comparison operators with text because they are probably
+-- not very useful.
+set timescaledb.debug_require_vector_qual to 'forbid';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a < 'same';
+select count(*), min(ts), max(ts), min(d), max(d) from text_table where a > 'same';
+
+
+reset timescaledb.debug_require_vector_qual;
+reset timescaledb.enable_bulk_decompression;
+

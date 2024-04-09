@@ -1383,8 +1383,9 @@ ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 }
 
 /*
- * Calls one of time_bucket_ng() versions depending on the arguments. This is
- * a common procedure used by ts_compute_* below.
+ * Calls the desired time bucket function depending on the arguments. If the experimental flag is
+ * set on ContinuousAggsBucketFunction, one of time_bucket_ng() versions is used. This is a common
+ * procedure used by ts_compute_* below.
  */
 static Datum
 generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
@@ -1524,7 +1525,8 @@ void
 ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 													  const ContinuousAggsBucketFunction *bf)
 {
-	Datum start_old, end_old, start_new, end_new;
+	Datum start_old, end_old, start_aligned, end_aliged;
+
 	/*
 	 * It's OK to use TIMESTAMPOID here. Variable-sized buckets can be used
 	 * only for dates, timestamps and timestamptz's. For all these types our
@@ -1535,16 +1537,16 @@ ts_compute_inscribed_bucketed_refresh_window_variable(int64 *start, int64 *end,
 	start_old = ts_internal_to_time_value(*start, TIMESTAMPOID);
 	end_old = ts_internal_to_time_value(*end, TIMESTAMPOID);
 
-	start_new = generic_time_bucket(bf, start_old);
-	end_new = generic_time_bucket(bf, end_old);
+	start_aligned = generic_time_bucket(bf, start_old);
+	end_aliged = generic_time_bucket(bf, end_old);
 
-	if (DatumGetTimestamp(start_new) != DatumGetTimestamp(start_old))
+	if (DatumGetTimestamp(start_aligned) != DatumGetTimestamp(start_old))
 	{
-		start_new = generic_add_interval(bf, start_new);
+		start_aligned = generic_add_interval(bf, start_aligned);
 	}
 
-	*start = ts_time_value_to_internal(start_new, TIMESTAMPOID);
-	*end = ts_time_value_to_internal(end_new, TIMESTAMPOID);
+	*start = ts_time_value_to_internal(start_aligned, TIMESTAMPOID);
+	*end = ts_time_value_to_internal(end_aliged, TIMESTAMPOID);
 }
 
 /*

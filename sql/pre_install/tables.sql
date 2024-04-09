@@ -269,6 +269,25 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat (
   CONSTRAINT bgw_job_stat_job_id_fkey FOREIGN KEY (job_id) REFERENCES _timescaledb_config.bgw_job (id) ON DELETE CASCADE
 );
 
+CREATE SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq MINVALUE 1;
+
+CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
+  id BIGINT NOT NULL DEFAULT nextval('_timescaledb_internal.bgw_job_stat_history_id_seq'),
+  job_id INTEGER NOT NULL,
+  pid INTEGER,
+  execution_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  execution_finish TIMESTAMPTZ,
+  succeeded boolean NOT NULL DEFAULT FALSE,
+  config jsonb,
+  error_data jsonb,
+  -- table constraints
+  CONSTRAINT bgw_job_stat_history_pkey PRIMARY KEY (id)
+);
+
+ALTER SEQUENCE _timescaledb_internal.bgw_job_stat_history_id_seq OWNED BY _timescaledb_internal.bgw_job_stat_history.id;
+
+CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_stat_history (job_id);
+
 --The job_stat table is not dumped by pg_dump on purpose because
 --the statistics probably aren't very meaningful across instances.
 -- Now we define a special stats table for each job/chunk pair. This will be used by the scheduler
@@ -475,14 +494,6 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg_
 
 SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_catalog.continuous_agg_migrate_plan_step', 'step_id'), '');
 
-CREATE TABLE _timescaledb_internal.job_errors (
-  job_id integer not null,
-  pid integer,
-  start_time timestamptz,
-  finish_time timestamptz,
-  error_data jsonb
-);
-
 -- Set table permissions
 -- We need to grant SELECT to PUBLIC for all tables even those not
 -- marked as being dumped because pg_dump will try to access all
@@ -500,6 +511,6 @@ GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_config TO PUBLIC;
 
 GRANT SELECT ON ALL SEQUENCES IN SCHEMA _timescaledb_internal TO PUBLIC;
 
--- We want to restrict access to the job errors to only work through
--- the job_errors view.
-REVOKE ALL ON _timescaledb_internal.job_errors FROM PUBLIC;
+-- We want to restrict access to the bgw_job_stat_history to only work through
+-- the job_errors and job_history views.
+REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;

@@ -348,9 +348,6 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 			List *merge_childs = NIL;
 			MergeAppendPath *append;
 
-			if (flat == NULL)
-				break;
-
 			/*
 			 * For each lc_oid, there will be 0, 1, or 2 matches in flat_list: 0 matches
 			 * if child was pruned, 1 match if the chunk is uncompressed or fully compressed,
@@ -363,6 +360,10 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 #ifdef USE_ASSERT_CHECKING
 				int nmatches = 0;
 #endif
+				/* Before entering the "DO" loop, check for a valid path entry */
+				if (flat == NULL)
+					break;
+
 				do
 				{
 					Path *child = (Path *) lfirst(flat);

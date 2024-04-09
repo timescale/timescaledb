@@ -39,18 +39,24 @@ jobs:
         contains(github.event.issue.labels.*.name, 'security') )
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-      SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL_SECURITY }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-
-      - name: Generate message
-        run: |
-          gh api ${{ github.event.issue.url }} --template="{\"channel\": \"$SLACK_CHANNEL\", \"text\": \"Issue <{{.url}}|#{{.number}} {{.title}}> needs attention\"}" | tee message.json
-
-      - name: Send slack message
-        uses: krider2010/slack-bot-action@1.0.1
-        env:
-          MESSAGE_FILE: message.json
+      - name: Post to Security Channel
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: '${{ secrets.SLACK_CHANNEL_SECURITY }}'
+          payload: |
+            {
+              "text": "Issue #${{github.event.issue.number}} (${{github.event.issue.title}})> needs attention",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Issue <${{github.event.issue.url}}|#${{github.event.issue.number}} ${{github.event.issue.title}}> needs attention"
+                  }
+                }
+              ]
+            }
 
   close-issue:
     name: Issue is closed
