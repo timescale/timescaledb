@@ -15,7 +15,7 @@
 typedef struct Simple8bRleBitmap
 {
 	/* Either the bools or prefix sums, depending on the decompression method. */
-	void *data;
+	const void *data;
 
 	uint16 num_elements;
 	uint16 num_ones;
