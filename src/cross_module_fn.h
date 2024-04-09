@@ -148,6 +148,7 @@ typedef struct CrossModuleFunctions
 	PGFunction array_compressor_append;
 	PGFunction array_compressor_finish;
 	PGFunction hyperstore_handler;
+	PGFunction hsproxy_handler;
 	PGFunction is_compressed_tid;
 
 	PGFunction create_chunk;
