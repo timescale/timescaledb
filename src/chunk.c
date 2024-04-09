@@ -3389,7 +3389,9 @@ ts_chunk_set_name(Chunk *chunk, const char *newname)
 {
 	FormData_chunk form;
 	ItemPointerData tid;
-	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
 	Assert(found);
 
 	namestrcpy(&form.table_name, newname);
@@ -3403,7 +3405,9 @@ ts_chunk_set_schema(Chunk *chunk, const char *newschema)
 {
 	FormData_chunk form;
 	ItemPointerData tid;
-	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
 	Assert(found);
 
 	namestrcpy(&form.schema_name, newschema);
@@ -3484,7 +3488,9 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 
 	FormData_chunk form;
 	ItemPointerData tid;
-	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
 	Assert(found);
 
 	/* applying the flags after locking the metadata tuple */
@@ -3515,7 +3521,9 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 	}
 	FormData_chunk form;
 	ItemPointerData tid;
-	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
 	Assert(found);
 
 	/* Somebody could update the status before we are able to lock it so check again */
@@ -3563,7 +3571,9 @@ ts_chunk_set_compressed_chunk(Chunk *chunk, int32 compressed_chunk_id)
 
 	FormData_chunk form;
 	ItemPointerData tid;
-	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
 	Assert(found);
 
 	/* Somebody could update the status before we are able to lock it so check again */
@@ -3611,7 +3621,9 @@ ts_chunk_clear_compressed_chunk(Chunk *chunk)
 
 	FormData_chunk form;
 	ItemPointerData tid;
-	bool found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
+	bool PG_USED_FOR_ASSERTS_ONLY found;
+
+	found = lock_chunk_tuple(chunk->fd.id, &tid, &form);
 	Assert(found);
 
 	/* Somebody could update the status before we are able to lock it so check again */
