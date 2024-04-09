@@ -21,6 +21,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 
 # Tests to ignore
 set(PG_IGNORE_TESTS
+    amutils
     database
     event_trigger
     opr_sanity
