@@ -3,6 +3,17 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 \ir include/setup_hyperstore.sql
+\ir include/hyperstore_helpers.sql
+
+\set ECHO queries
+
+-- Redefine the indexes to include one value field in the index and
+-- check that index-only scans work also for included attributes.
+drop index hypertable_location_id_idx;
+drop index hypertable_device_id_idx;
+
+create index hypertable_location_id_idx on :hypertable (location_id) include (humidity);
+create index hypertable_device_id_idx on :hypertable (device_id) include (humidity);
 
 create view chunk_indexes as
 select ch::regclass as chunk, indexrelid::regclass as index, attname
@@ -76,3 +87,115 @@ select ctid, created_at, location_id, temp from :chunk2 order by location_id, cr
 explain (costs off)
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
+
+select twist_chunk(show_chunks(:'hypertable'));
+
+vacuum analyze :hypertable;
+
+set max_parallel_workers_per_gather to 0;
+
+-- Test sequence scan
+set enable_indexscan to off;
+select explain_anonymize(format('select * from %s where owner_id = 3', :'hypertable'));
+
+-- TODO(timescale/timescaledb-private#1117): the Decompress Count here
+-- is not correct, but the result shows correctly.
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select * from :chunk1 where owner_id = 3;
+reset enable_indexscan;
+
+-- Test index scan on non-segmentby column
+select explain_anonymize(format($$
+   select device_id, avg(temp) from %s where device_id between 10 and 20
+   group by device_id
+$$, :'hypertable'));
+
+select explain_anonymize(format($$
+    select device_id, avg(temp) from %s where device_id between 10 and 20
+    group by device_id
+$$, :'chunk1'));
+
+-- Test index scan on segmentby column
+select explain_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id between 5 and 10
+$$, :'hypertable'));
+
+select explain_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id between 5 and 10
+$$, :'chunk1'));
+
+-- These should generate decompressions as above, but for all columns.
+select explain_anonymize(format($$
+    select * from %s where location_id between 5 and 10
+$$, :'hypertable'));
+
+select explain_anonymize(format($$
+    select * from %s where location_id between 5 and 10
+$$, :'chunk1'));
+
+--
+-- Test index only scan
+--
+
+create table saved_hypertable as select * from :hypertable;
+
+-- This will not use index-only scan because it is using a segment-by
+-- column, but we check that it works as expected though.
+--
+-- Note that the number of columns decompressed should be zero, since
+-- we do not have to decompress any columns.
+select explain_anonymize(format($$
+    select location_id from %s where location_id between 5 and 10
+$$, :'hypertable'));
+
+-- We just compare the counts here, not the full content.
+select heapam.count as heapam, hyperstore.count as hyperstore
+  from (select count(location_id) from :hypertable where location_id between 5 and 10) heapam,
+       (select count(location_id) from :hypertable where location_id between 5 and 10) hyperstore;
+
+drop table saved_hypertable;
+
+-- This should use index-only scan
+select explain_anonymize(format($$
+    select device_id from %s where device_id between 5 and 10
+$$, :'hypertable'));
+
+select explain_anonymize(format($$
+    select location_id from %s where location_id between 5 and 10
+$$, :'chunk1'));
+select explain_anonymize(format($$
+    select device_id from %s where device_id between 5 and 10
+$$, :'chunk1'));
+
+-- Test index only scan with covering indexes
+select explain_anonymize(format($$
+    select location_id, avg(humidity) from %s where location_id between 5 and 10
+    group by location_id order by location_id
+$$, :'hypertable'));
+
+select explain_anonymize(format($$
+    select device_id, avg(humidity) from %s where device_id between 5 and 10
+    group by device_id order by device_id
+$$, :'hypertable'));
+
+select explain_anonymize(format($$
+    select location_id, avg(humidity) from %s where location_id between 5 and 10
+    group by location_id order by location_id
+$$, :'chunk1'));
+
+select explain_anonymize(format($$
+    select device_id, avg(humidity) from %s where device_id between 5 and 10
+    group by device_id order by device_id
+$$, :'chunk1'));
+
+select location_id, round(avg(humidity)) from :hypertable where location_id between 5 and 10
+group by location_id order by location_id;
+
+select location_id, round(avg(humidity)) from :chunk1 where location_id between 5 and 10
+group by location_id order by location_id;
+
+select device_id, round(avg(humidity)) from :hypertable where device_id between 5 and 10
+group by device_id order by device_id;
+
+select device_id, round(avg(humidity)) from :chunk1 where device_id between 5 and 10
+group by device_id order by device_id;
