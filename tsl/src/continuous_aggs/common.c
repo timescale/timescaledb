@@ -938,8 +938,13 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		(bucket_info.bucket_time_offset != NULL) ||
 		(TIMESTAMP_NOT_FINITE(bucket_info.bucket_time_origin) == false);
 
+	/* At this point, we should have a valid bucket function. Otherwise, we have errored out before.
+	 */
+	Ensure(bucket_info.bucket_func != NULL, "unable to find valid bucket function");
+
 	/* Ignore time_bucket_ng in this check, since offset and origin were allowed in the past */
 	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bucket_info.bucket_func->funcid);
+	Ensure(func_info != NULL, "bucket function is not found in function cache");
 	bool is_time_bucket_ng = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
 
 	/*
