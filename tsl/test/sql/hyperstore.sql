@@ -55,6 +55,8 @@ WHERE location = 1;
 ALTER TABLE :chunk SET ACCESS METHOD hyperstore;
 SET timescaledb.enable_transparent_decompression TO false;
 
+vacuum analyze readings;
+
 -- Show access method used on chunk
 SELECT c.relname, a.amname FROM pg_class c
 INNER JOIN pg_am a ON (c.relam = a.oid)
@@ -182,7 +184,8 @@ WHERE oid = 'chunk_data'::regclass;
 CREATE VIEW chunk_data_attrstats AS
 SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
 FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = 'chunk_data'::regclass;
+WHERE format('%I.%I', schemaname, tablename)::regclass = 'chunk_data'::regclass
+ORDER BY attname;
 
 SELECT * FROM chunk_data_relstats;
 SELECT * FROM chunk_data_attrstats ORDER BY attname;
@@ -195,7 +198,8 @@ WHERE oid = :'chunk'::regclass;
 
 SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
 FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass;
+WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
+ORDER BY attname;
 
 -- ANALYZE directly on chunk
 ANALYZE :chunk;
@@ -212,7 +216,8 @@ SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_comm
 FROM pg_stats
 WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
 EXCEPT
-SELECT * FROM chunk_data_attrstats ORDER BY attname;
+SELECT * FROM chunk_data_attrstats
+ORDER BY attname;
 
 -- ANALYZE also via hypertable root and show that it will
 -- recurse to another chunk
@@ -223,7 +228,8 @@ WHERE oid = :'chunk2'::regclass;
 
 SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
 FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass;
+WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass
+ORDER BY attname;
 
 SELECT count(*) FROM :chunk2;
 
@@ -235,7 +241,8 @@ WHERE oid = :'chunk2'::regclass;
 
 SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
 FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass;
+WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass
+ORDER BY attname;
 
 ALTER TABLE :chunk2 SET ACCESS METHOD heap;
 
