@@ -51,7 +51,7 @@ select setseed(1);
 --
 -- The timestamps for the original rows will have timestamps every 10
 -- seconds. Any other timestamps are inserted as part of the test.
-insert into :hypertable (created_at, location_id, owner_id, device_id, temp, humidity)
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
 alter table :hypertable set (
@@ -70,15 +70,46 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
  order by chunk2 asc
  limit 1 offset 1 \gset
+\ir include/hyperstore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, 'Rows Removed by Filter: \d+', 'Rows Removed by Filter: N');
+	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
+        return next ln;
+    end loop;
+end;
+$$;
+\set ECHO queries
+drop index hypertable_location_id_idx;
+drop index hypertable_device_id_idx;
+create index hypertable_location_id_idx on readings (location_id) include (humidity);
+create index hypertable_device_id_idx on readings (device_id) include (humidity);
 create view chunk_indexes as
 select ch::regclass as chunk, indexrelid::regclass as index, attname
 from pg_attribute att inner join pg_index ind
 on (att.attrelid=ind.indrelid and att.attnum=ind.indkey[0])
-inner join show_chunks(:'hypertable') ch on (ch = att.attrelid)
+inner join show_chunks('readings') ch on (ch = att.attrelid)
 order by chunk, index;
--- save some reference data from an index (only) scan
 explain (costs off)
-select location_id, count(*) into orig from :hypertable
+select location_id, count(*) into orig from readings
 where location_id in (3,4,5) group by location_id;
                                                   QUERY PLAN                                                   
 ---------------------------------------------------------------------------------------------------------------
@@ -113,28 +144,24 @@ where location_id in (3,4,5) group by location_id;
                            Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
 (29 rows)
 
-select location_id, count(*) into orig from :hypertable
+select location_id, count(*) into orig from readings
 where location_id in (3,4,5) group by location_id;
--- show index size before switching to hyperstore
 select index, pg_relation_size(index)
 from chunk_indexes
-where chunk=:'chunk2'::regclass and (attname='location_id' or attname='device_id' or attname='owner_id');
+where chunk='_timescaledb_internal._hyper_1_2_chunk'::regclass and (attname='location_id' or attname='device_id' or attname='owner_id');
                                index                               | pg_relation_size 
 -------------------------------------------------------------------+------------------
- _timescaledb_internal._hyper_1_2_chunk_hypertable_location_id_idx |           425984
- _timescaledb_internal._hyper_1_2_chunk_hypertable_device_id_idx   |           425984
+ _timescaledb_internal._hyper_1_2_chunk_hypertable_location_id_idx |          1933312
+ _timescaledb_internal._hyper_1_2_chunk_hypertable_device_id_idx   |          1933312
 (2 rows)
 
-alter table :chunk2 set access method hyperstore;
--- count without indexes
-select owner_id, count(*) into owner_orig from :hypertable
+alter table _timescaledb_internal._hyper_1_2_chunk set access method hyperstore;
+select owner_id, count(*) into owner_orig from readings
 where owner_id in (3,4,5) group by owner_id;
--- create indexes on all segmentby columns
-create index hypertable_owner_idx on :hypertable (owner_id);
-create index hypertable_location_id_owner_id_idx on :hypertable (location_id, owner_id);
--- Result should be the same with indexes
+create index hypertable_owner_idx on readings (owner_id);
+create index hypertable_location_id_owner_id_idx on readings (location_id, owner_id);
 explain (costs off)
-select owner_id, count(*) into owner_comp from :hypertable
+select owner_id, count(*) into owner_comp from readings
 where owner_id in (3,4,5) group by owner_id;
                                                QUERY PLAN                                                
 ---------------------------------------------------------------------------------------------------------
@@ -169,30 +196,26 @@ where owner_id in (3,4,5) group by owner_id;
                            Index Cond: (owner_id = ANY ('{3,4,5}'::integer[]))
 (29 rows)
 
-select owner_id, count(*) into owner_comp from :hypertable
+select owner_id, count(*) into owner_comp from readings
 where owner_id in (3,4,5) group by owner_id;
 select * from owner_orig join owner_comp using (owner_id) where owner_orig.count != owner_comp.count;
  owner_id | count | count 
 ----------+-------+-------
 (0 rows)
 
--- the indexes on segmentby columns should be smaller on hyperstore
--- while the device_id index remains the same size
 select index, pg_relation_size(index)
 from chunk_indexes
-where chunk=:'chunk2'::regclass and (attname='location_id' or attname='device_id' or attname='owner_id');
+where chunk='_timescaledb_internal._hyper_1_2_chunk'::regclass and (attname='location_id' or attname='device_id' or attname='owner_id');
                                    index                                    | pg_relation_size 
 ----------------------------------------------------------------------------+------------------
- _timescaledb_internal._hyper_1_2_chunk_hypertable_location_id_idx          |            16384
- _timescaledb_internal._hyper_1_2_chunk_hypertable_device_id_idx            |           442368
+ _timescaledb_internal._hyper_1_2_chunk_hypertable_location_id_idx          |          1933312
+ _timescaledb_internal._hyper_1_2_chunk_hypertable_device_id_idx            |          1933312
  _timescaledb_internal._hyper_1_2_chunk_hypertable_owner_idx                |            16384
  _timescaledb_internal._hyper_1_2_chunk_hypertable_location_id_owner_id_idx |            16384
 (4 rows)
 
--- the query should not use index-only scan on the hypestore chunk
--- (number 2) because it is not supported on segmentby indexes
 explain (costs off)
-select location_id, count(*) into comp from :hypertable
+select location_id, count(*) into comp from readings
 where location_id in (3,4,5) group by location_id;
                                                        QUERY PLAN                                                       
 ------------------------------------------------------------------------------------------------------------------------
@@ -227,44 +250,37 @@ where location_id in (3,4,5) group by location_id;
                            Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
 (29 rows)
 
--- result should be the same
-select location_id, count(*) into comp from :hypertable where location_id in (3,4,5) group by location_id;
+select location_id, count(*) into comp from readings where location_id in (3,4,5) group by location_id;
 select * from orig join comp using (location_id) where orig.count != comp.count;
  location_id | count | count 
 -------------+-------+-------
 (0 rows)
 
---
--- test that indexes work after updates
---
-select ctid, created_at, location_id, temp from :chunk2 order by location_id, created_at desc limit 2;
+select ctid, created_at, location_id, temp from _timescaledb_internal._hyper_1_2_chunk order by location_id, created_at desc limit 2;
        ctid       |          created_at          | location_id |       temp       
 ------------------+------------------------------+-------------+------------------
- (2147483676,253) | Wed Jun 08 16:57:50 2022 PDT |           1 | 4.61673551524566
- (2147483683,280) | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
+ (2147483684,2)   | Wed Jun 08 16:57:50 2022 PDT |           1 | 4.61673551524566
+ (2147483676,231) | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
 (2 rows)
 
--- first update moves the value from the compressed rel to the non-compressed (seen via ctid)
-update :hypertable set temp=1.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
-select ctid, created_at, location_id, temp from :chunk2 order by location_id, created_at desc limit 2;
+update readings set temp=1.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
+select ctid, created_at, location_id, temp from _timescaledb_internal._hyper_1_2_chunk order by location_id, created_at desc limit 2;
        ctid       |          created_at          | location_id |       temp       
 ------------------+------------------------------+-------------+------------------
- (1,102)          | Wed Jun 08 16:57:50 2022 PDT |           1 |                1
- (2147483683,280) | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
+ (2,24)           | Wed Jun 08 16:57:50 2022 PDT |           1 |                1
+ (2147483676,231) | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
 (2 rows)
 
--- second update should be a hot update (tuple in same block after update, as shown by ctid)
-update :hypertable set temp=2.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
-select ctid, created_at, location_id, temp from :chunk2 order by location_id, created_at desc limit 2;
+update readings set temp=2.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
+select ctid, created_at, location_id, temp from _timescaledb_internal._hyper_1_2_chunk order by location_id, created_at desc limit 2;
        ctid       |          created_at          | location_id |       temp       
 ------------------+------------------------------+-------------+------------------
- (1,103)          | Wed Jun 08 16:57:50 2022 PDT |           1 |                2
- (2147483683,280) | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
+ (2,25)           | Wed Jun 08 16:57:50 2022 PDT |           1 |                2
+ (2147483676,231) | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
 (2 rows)
 
--- make sure query uses a segmentby index and returns the correct data for the update value
 explain (costs off)
-select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
+select created_at, location_id, temp from _timescaledb_internal._hyper_1_2_chunk where location_id=1 and temp=2.0;
                                         QUERY PLAN                                         
 -------------------------------------------------------------------------------------------
  Index Scan using _hyper_1_2_chunk_hypertable_location_id_owner_id_idx on _hyper_1_2_chunk
@@ -272,9 +288,420 @@ select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2
    Filter: (temp = '2'::double precision)
 (3 rows)
 
-select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
+select created_at, location_id, temp from _timescaledb_internal._hyper_1_2_chunk where location_id=1 and temp=2.0;
           created_at          | location_id | temp 
 ------------------------------+-------------+------
  Wed Jun 08 16:57:50 2022 PDT |           1 |    2
 (1 row)
+
+select twist_chunk(show_chunks('readings'));
+              twist_chunk               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+vacuum analyze readings;
+set max_parallel_workers_per_gather to 0;
+set enable_indexscan to off;
+select explain_anonymize(format('select * from %s where owner_id = 3', 'readings'));
+                              explain_anonymize                               
+------------------------------------------------------------------------------
+ Append (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (owner_id = 3)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (owner_id = 3)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (owner_id = 3)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (owner_id = 3)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (owner_id = 3)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (owner_id = 3)
+ Arrays read from cache: N
+ Arrays decompressed: 12
+(15 rows)
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select * from _timescaledb_internal._hyper_1_1_chunk where owner_id = 3;
+                                QUERY PLAN                                 
+---------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1187 loops=1)
+   Scankey: (owner_id = 3)
+ Arrays read from cache: 0
+ Arrays decompressed: 2
+(4 rows)
+
+reset enable_indexscan;
+select explain_anonymize(format($$
+   select device_id, avg(temp) from %s where device_id between 10 and 20
+   group by device_id
+$$, 'readings'));
+                                                       explain_anonymize                                                        
+--------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate (actual rows=N loops=N)
+   Group Key: _hyper_I_N_chunk.device_id
+   ->  Sort (actual rows=N loops=N)
+         Sort Key: _hyper_I_N_chunk.device_id
+         Sort Method: quicksort 
+         ->  Append (actual rows=N loops=N)
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_2_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_3_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_4_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_5_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 10) AND (device_id <= 20))
+ Arrays read from cache: N
+ Arrays decompressed: 998
+(32 rows)
+
+select explain_anonymize(format($$
+    select device_id, avg(temp) from %s where device_id between 10 and 20
+    group by device_id
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                                              explain_anonymize                                               
+--------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=N loops=N)
+   Group Key: device_id
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 10) AND (device_id <= 20))
+ Arrays read from cache: N
+ Arrays decompressed: 201
+(6 rows)
+
+select explain_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id between 5 and 10
+$$, 'readings'));
+                                                    explain_anonymize                                                    
+-------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_2_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_3_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_4_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_5_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 600
+(15 rows)
+
+select explain_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id between 5 and 10
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                                                 explain_anonymize                                                 
+-------------------------------------------------------------------------------------------------------------------
+ Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+   Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 60
+(4 rows)
+
+select explain_anonymize(format($$
+    select * from %s where location_id between 5 and 10
+$$, 'readings'));
+                                                    explain_anonymize                                                    
+-------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_2_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_3_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_4_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_5_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(15 rows)
+
+select explain_anonymize(format($$
+    select * from %s where location_id between 5 and 10
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                                                 explain_anonymize                                                 
+-------------------------------------------------------------------------------------------------------------------
+ Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+   Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(4 rows)
+
+create table saved_hypertable as select * from readings;
+select explain_anonymize(format($$
+    select location_id from %s where location_id between 5 and 10
+$$, 'readings'));
+                                                    explain_anonymize                                                    
+-------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_2_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_3_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_4_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_5_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(15 rows)
+
+select heapam.count as heapam, hyperstore.count as hyperstore
+  from (select count(location_id) from readings where location_id between 5 and 10) heapam,
+       (select count(location_id) from readings where location_id between 5 and 10) hyperstore;
+ heapam | hyperstore 
+--------+------------
+ 155776 |     155776
+(1 row)
+
+drop table saved_hypertable;
+select explain_anonymize(format($$
+    select device_id from %s where device_id between 5 and 10
+$$, 'readings'));
+                                                 explain_anonymize                                                 
+-------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=N loops=N)
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 5) AND (device_id <= 10))
+         Heap Fetches: N
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_2_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 5) AND (device_id <= 10))
+         Heap Fetches: N
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_3_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 5) AND (device_id <= 10))
+         Heap Fetches: N
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_4_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 5) AND (device_id <= 10))
+         Heap Fetches: N
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_5_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 5) AND (device_id <= 10))
+         Heap Fetches: N
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 5) AND (device_id <= 10))
+         Heap Fetches: N
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(21 rows)
+
+select explain_anonymize(format($$
+    select location_id from %s where location_id between 5 and 10
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                                                 explain_anonymize                                                 
+-------------------------------------------------------------------------------------------------------------------
+ Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+   Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(4 rows)
+
+select explain_anonymize(format($$
+    select device_id from %s where device_id between 5 and 10
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                                              explain_anonymize                                              
+-------------------------------------------------------------------------------------------------------------
+ Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+   Index Cond: ((device_id >= 5) AND (device_id <= 10))
+   Heap Fetches: N
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(5 rows)
+
+select explain_anonymize(format($$
+    select location_id, avg(humidity) from %s where location_id between 5 and 10
+    group by location_id order by location_id
+$$, 'readings'));
+                                                             explain_anonymize                                                             
+-------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate (actual rows=N loops=N)
+   Group Key: _hyper_I_N_chunk.location_id
+   ->  Sort (actual rows=N loops=N)
+         Sort Key: _hyper_I_N_chunk.location_id
+         Sort Method: quicksort 
+         ->  Append (actual rows=N loops=N)
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.location_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+                           Index Cond: ((location_id >= 5) AND (location_id <= 10))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.location_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_2_chunk (actual rows=N loops=N)
+                           Index Cond: ((location_id >= 5) AND (location_id <= 10))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.location_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_3_chunk (actual rows=N loops=N)
+                           Index Cond: ((location_id >= 5) AND (location_id <= 10))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.location_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_4_chunk (actual rows=N loops=N)
+                           Index Cond: ((location_id >= 5) AND (location_id <= 10))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.location_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_5_chunk (actual rows=N loops=N)
+                           Index Cond: ((location_id >= 5) AND (location_id <= 10))
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.location_id
+                     ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
+                           Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 300
+(32 rows)
+
+select explain_anonymize(format($$
+    select device_id, avg(humidity) from %s where device_id between 5 and 10
+    group by device_id order by device_id
+$$, 'readings'));
+                                                          explain_anonymize                                                          
+-------------------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate (actual rows=N loops=N)
+   Group Key: _hyper_I_N_chunk.device_id
+   ->  Sort (actual rows=N loops=N)
+         Sort Key: _hyper_I_N_chunk.device_id
+         Sort Method: quicksort 
+         ->  Append (actual rows=N loops=N)
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 5) AND (device_id <= 10))
+                           Heap Fetches: N
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_2_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 5) AND (device_id <= 10))
+                           Heap Fetches: N
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_3_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 5) AND (device_id <= 10))
+                           Heap Fetches: N
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_4_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 5) AND (device_id <= 10))
+                           Heap Fetches: N
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_5_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 5) AND (device_id <= 10))
+                           Heap Fetches: N
+               ->  Partial GroupAggregate (actual rows=N loops=N)
+                     Group Key: _hyper_I_N_chunk.device_id
+                     ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
+                           Index Cond: ((device_id >= 5) AND (device_id <= 10))
+                           Heap Fetches: N
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(38 rows)
+
+select explain_anonymize(format($$
+    select location_id, avg(humidity) from %s where location_id between 5 and 10
+    group by location_id order by location_id
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                                                    explain_anonymize                                                    
+-------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=N loops=N)
+   Group Key: location_id
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+         Index Cond: ((location_id >= 5) AND (location_id <= 10))
+ Arrays read from cache: N
+ Arrays decompressed: 150
+(6 rows)
+
+select explain_anonymize(format($$
+    select device_id, avg(humidity) from %s where device_id between 5 and 10
+    group by device_id order by device_id
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                                                 explain_anonymize                                                 
+-------------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=N loops=N)
+   Group Key: device_id
+   ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+         Index Cond: ((device_id >= 5) AND (device_id <= 10))
+         Heap Fetches: N
+ Arrays read from cache: N
+ Arrays decompressed: 0
+(7 rows)
+
+select location_id, round(avg(humidity)) from readings where location_id between 5 and 10
+group by location_id order by location_id;
+ location_id | round 
+-------------+-------
+           5 |    50
+           6 |    50
+           7 |    50
+           8 |    50
+           9 |    50
+          10 |    50
+(6 rows)
+
+select location_id, round(avg(humidity)) from _timescaledb_internal._hyper_1_1_chunk where location_id between 5 and 10
+group by location_id order by location_id;
+ location_id | round 
+-------------+-------
+           5 |    50
+           6 |    51
+           7 |    51
+           8 |    51
+           9 |    51
+          10 |    49
+(6 rows)
+
+select device_id, round(avg(humidity)) from readings where device_id between 5 and 10
+group by device_id order by device_id;
+ device_id | round 
+-----------+-------
+         5 |    50
+         6 |    50
+         7 |    50
+         8 |    50
+         9 |    50
+        10 |    50
+(6 rows)
+
+select device_id, round(avg(humidity)) from _timescaledb_internal._hyper_1_1_chunk where device_id between 5 and 10
+group by device_id order by device_id;
+ device_id | round 
+-----------+-------
+         5 |    52
+         6 |    49
+         7 |    53
+         8 |    45
+         9 |    49
+        10 |    54
+(6 rows)
 
