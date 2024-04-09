@@ -741,7 +741,6 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 	Cache *hcache;
 	HeapTuple tuple;
 	TupleDesc tupdesc;
-	CatalogSecurityContext sec_ctx;
 	Datum values[2];
 	bool nulls[2] = { false, false };
 
@@ -793,10 +792,7 @@ ts_chunk_adaptive_set(PG_FUNCTION_ARGS)
 
 	/* Update the hypertable entry */
 	ht->fd.chunk_target_size = info.target_size_bytes;
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_hypertable_update(ht);
-	ts_catalog_restore_user(&sec_ctx);
-
+	ts_hypertable_update_chunk_sizing(ht);
 	ts_cache_release(hcache);
 
 	tuple = heap_form_tuple(tupdesc, values, nulls);
