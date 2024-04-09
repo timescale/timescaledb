@@ -4655,7 +4655,7 @@ add_foreign_table_as_chunk(Oid relid, Hypertable *parent_ht)
 	parent_ht->fd.status =
 		ts_set_flags_32(parent_ht->fd.status,
 						HYPERTABLE_STATUS_OSM | HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
-	ts_hypertable_update(parent_ht);
+	ts_hypertable_update_status_osm(parent_ht);
 }
 
 void
