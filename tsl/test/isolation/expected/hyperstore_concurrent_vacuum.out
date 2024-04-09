@@ -1,0 +1,137 @@
+Parsed test spec with 3 sessions
+
+starting permutation: s3_select s1_start_transaction s1_select s3_delete_half s3_select s2_vacuum s3_select s1_commit s3_select s2_vacuum s3_select
+step s3_select: 
+	select count(*) from metrics where temp > 20;
+	select tuple_count as tuples_temp_idx, dead_tuple_count as dead_tuples_temp_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_temp_idx');
+	select tuple_count as tuples_device_id_idx, dead_tuple_count as dead_tuples_device_id_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_device_id_idx');
+
+count
+-----
+ 5182
+(1 row)
+
+tuples_temp_idx|dead_tuples_temp_idx
+---------------+--------------------
+            510|                   0
+(1 row)
+
+tuples_device_id_idx|dead_tuples_device_id_idx
+--------------------+-------------------------
+                  30|                        0
+(1 row)
+
+step s1_start_transaction: 
+	start transaction;
+
+step s1_select: 
+	select count(*) from _timescaledb_internal.test_chunk_1 where metric_id = 10;
+
+count
+-----
+    1
+(1 row)
+
+step s3_delete_half: 
+    set timescaledb.enable_compressed_direct_batch_delete=false;
+	delete from metrics where device_id > 15;
+
+step s3_select: 
+	select count(*) from metrics where temp > 20;
+	select tuple_count as tuples_temp_idx, dead_tuple_count as dead_tuples_temp_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_temp_idx');
+	select tuple_count as tuples_device_id_idx, dead_tuple_count as dead_tuples_device_id_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_device_id_idx');
+
+count
+-----
+ 2574
+(1 row)
+
+tuples_temp_idx|dead_tuples_temp_idx
+---------------+--------------------
+            775|                   0
+(1 row)
+
+tuples_device_id_idx|dead_tuples_device_id_idx
+--------------------+-------------------------
+                 295|                        0
+(1 row)
+
+step s2_vacuum: 
+	vacuum _timescaledb_internal.test_chunk_1;
+
+step s3_select: 
+	select count(*) from metrics where temp > 20;
+	select tuple_count as tuples_temp_idx, dead_tuple_count as dead_tuples_temp_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_temp_idx');
+	select tuple_count as tuples_device_id_idx, dead_tuple_count as dead_tuples_device_id_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_device_id_idx');
+
+count
+-----
+ 2574
+(1 row)
+
+tuples_temp_idx|dead_tuples_temp_idx
+---------------+--------------------
+            775|                   0
+(1 row)
+
+tuples_device_id_idx|dead_tuples_device_id_idx
+--------------------+-------------------------
+                 295|                        0
+(1 row)
+
+step s1_commit: 
+	commit;
+
+step s3_select: 
+	select count(*) from metrics where temp > 20;
+	select tuple_count as tuples_temp_idx, dead_tuple_count as dead_tuples_temp_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_temp_idx');
+	select tuple_count as tuples_device_id_idx, dead_tuple_count as dead_tuples_device_id_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_device_id_idx');
+
+count
+-----
+ 2574
+(1 row)
+
+tuples_temp_idx|dead_tuples_temp_idx
+---------------+--------------------
+            333|                 442
+(1 row)
+
+tuples_device_id_idx|dead_tuples_device_id_idx
+--------------------+-------------------------
+                 295|                        0
+(1 row)
+
+step s2_vacuum: 
+	vacuum _timescaledb_internal.test_chunk_1;
+
+step s3_select: 
+	select count(*) from metrics where temp > 20;
+	select tuple_count as tuples_temp_idx, dead_tuple_count as dead_tuples_temp_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_temp_idx');
+	select tuple_count as tuples_device_id_idx, dead_tuple_count as dead_tuples_device_id_idx
+	  from pgstattuple('_timescaledb_internal.test_chunk_1_metrics_device_id_idx');
+
+count
+-----
+ 2574
+(1 row)
+
+tuples_temp_idx|dead_tuples_temp_idx
+---------------+--------------------
+            245|                   0
+(1 row)
+
+tuples_device_id_idx|dead_tuples_device_id_idx
+--------------------+-------------------------
+                  15|                        0
+(1 row)
+
