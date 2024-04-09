@@ -1439,7 +1439,9 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
 
-	/* Need to rebuild indexes if the relation is using hyperstore TAM */
+	/* Need to rebuild indexes if the relation is using hyperstore
+	 * TAM. Alternatively, we could insert into indexes when inserting into
+	 * the compressed rel. */
 	if (uncompressed_chunk_rel->rd_tableam == hyperstore_routine())
 	{
 #if PG14_GE
