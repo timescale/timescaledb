@@ -836,10 +836,6 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 								 column_description->compressed_scan_attno,
 								 &decompressed_tuple->tts_isnull[attr]);
 
-				//				fprintf(stderr, "segmentby column [%d]: value %p, null %d\n",
-				//					attr, (void*) decompressed_tuple->tts_values[attr],
-				//						decompressed_tuple->tts_isnull[attr]);
-
 				/*
 				 * Note that if it's not a by-value type, we should copy it into
 				 * the slot context.
@@ -976,8 +972,6 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 	Assert(batch_state->total_batch_rows > 0);
 	Assert(batch_state->next_batch_row < batch_state->total_batch_rows);
 
-	//	fprintf(stderr, "make next tuple [%d]\n", batch_state->next_batch_row);
-
 	for (int i = 0; i < num_compressed_columns; i++)
 	{
 		CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
@@ -993,10 +987,6 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 
 			*column_values->output_isnull = result.is_null;
 			*column_values->output_value = result.val;
-
-			//				fprintf(stderr, "iterator column #%d: value %p, null %d\n",
-			//					i, (void*) *column_values->output_value,
-			//						*column_values->output_isnull);
 		}
 		else if (column_values->decompression_type > SIZEOF_DATUM)
 		{
@@ -1011,10 +1001,6 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			*column_values->output_value = PointerGetDatum(&src[value_bytes * arrow_row]);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
-
-			//				fprintf(stderr, "by-ref column #%d: value %p, null %d\n",
-			//					i, (void*) *column_values->output_value,
-			//						*column_values->output_isnull);
 		}
 		else if (column_values->decompression_type > 0)
 		{
@@ -1032,20 +1018,12 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			memcpy(column_values->output_value, &src[value_bytes * arrow_row], SIZEOF_DATUM);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
-
-			//				fprintf(stderr, "by-val column #%d: value %p, null %d\n",
-			//					i, (void*) *column_values->output_value,
-			//						*column_values->output_isnull);
 		}
 		else if (column_values->decompression_type == DT_ArrowText)
 		{
 			store_text_datum(column_values, arrow_row);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
-
-			//				fprintf(stderr, "arrow text column #%d: value %p, null %d\n",
-			//					i, (void*) *column_values->output_value,
-			//						*column_values->output_isnull);
 		}
 		else if (column_values->decompression_type == DT_ArrowTextDict)
 		{
@@ -1053,19 +1031,11 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_com
 			store_text_datum(column_values, index);
 			*column_values->output_isnull =
 				!arrow_row_is_valid(column_values->buffers[0], arrow_row);
-
-			//				fprintf(stderr, "arrow text dict column #%d: value %p, null %d\n",
-			//					i, (void*) *column_values->output_value,
-			//						*column_values->output_isnull);
 		}
 		else
 		{
 			/* A compressed column with default value, do nothing. */
 			Assert(column_values->decompression_type == DT_Default);
-
-			//				fprintf(stderr, "default column #%d: value %p, null %d\n",
-			//					i, (void*) *column_values->output_value,
-			//						*column_values->output_isnull);
 		}
 	}
 
