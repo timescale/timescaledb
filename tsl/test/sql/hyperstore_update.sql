@@ -58,7 +58,7 @@ select _timescaledb_debug.is_compressed_tid(ctid),
        metric_id, created_at
   into to_update
   from :hypertable
- where metric_id between 1000 and 1005
+ where metric_id between 6330 and 6340
 order by metric_id for update;
 
 select * from to_update order by metric_id;
