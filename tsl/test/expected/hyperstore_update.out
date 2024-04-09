@@ -52,7 +52,7 @@ select setseed(1);
 --
 -- The timestamps for the original rows will have timestamps every 10
 -- seconds. Any other timestamps are inserted as part of the test.
-insert into :hypertable (created_at, location_id, owner_id, device_id, temp, humidity)
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
 alter table :hypertable set (
@@ -117,8 +117,8 @@ select * from :hypertable order by created_at offset 577 limit 1;
 metric_id   | 578
 created_at  | Wed Jun 01 01:36:10 2022 PDT
 location_id | 5
-owner_id    | 19
-device_id   | 4
+owner_id    | 4
+device_id   | 19
 temp        | 14.8028647461121
 humidity    | 32.8888982411381
 
@@ -144,8 +144,8 @@ select * from :hypertable where created_at = :'created_at';
 metric_id   | 578
 created_at  | Wed Jun 01 01:36:10 2022 PDT
 location_id | 5
-owner_id    | 19
-device_id   | 4
+owner_id    | 4
+device_id   | 19
 temp        | 14.8028647461121
 humidity    | 32.8888982411381
 
@@ -155,8 +155,8 @@ select * from :hypertable where created_at = :'created_at';
 metric_id   | 578
 created_at  | Wed Jun 01 01:36:10 2022 PDT
 location_id | 5
-owner_id    | 19
-device_id   | 4
+owner_id    | 4
+device_id   | 19
 temp        | 100
 humidity    | 32.8888982411381
 
@@ -217,30 +217,40 @@ select _timescaledb_debug.is_compressed_tid(ctid),
        metric_id, created_at
   into to_update
   from :hypertable
- where metric_id between 1000 and 1005
+ where metric_id between 6330 and 6340
 order by metric_id for update;
 select * from to_update order by metric_id;
  is_compressed_tid | metric_id |          created_at          
 -------------------+-----------+------------------------------
- t                 |      1000 | Wed Jun 01 02:46:30 2022 PDT
- f                 |      1001 | Wed Jun 01 02:46:40 2022 PDT
- t                 |      1002 | Wed Jun 01 02:46:50 2022 PDT
- t                 |      1003 | Wed Jun 01 02:47:00 2022 PDT
- t                 |      1004 | Wed Jun 01 02:47:10 2022 PDT
- t                 |      1005 | Wed Jun 01 02:47:20 2022 PDT
-(6 rows)
+ f                 |      6330 | Wed Jun 01 17:34:50 2022 PDT
+ t                 |      6331 | Wed Jun 01 17:35:00 2022 PDT
+ t                 |      6332 | Wed Jun 01 17:35:10 2022 PDT
+ f                 |      6333 | Wed Jun 01 17:35:20 2022 PDT
+ t                 |      6334 | Wed Jun 01 17:35:30 2022 PDT
+ t                 |      6335 | Wed Jun 01 17:35:40 2022 PDT
+ t                 |      6336 | Wed Jun 01 17:35:50 2022 PDT
+ t                 |      6337 | Wed Jun 01 17:36:00 2022 PDT
+ t                 |      6338 | Wed Jun 01 17:36:10 2022 PDT
+ t                 |      6339 | Wed Jun 01 17:36:20 2022 PDT
+ t                 |      6340 | Wed Jun 01 17:36:30 2022 PDT
+(11 rows)
 
 update :hypertable set humidity = 200.0, temp = 500.0
 where (created_at, metric_id) in (select created_at, metric_id from to_update);
 select * from :hypertable where humidity = 200.0 order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
 -----------+------------------------------+-------------+----------+-----------+------+----------
-      1000 | Wed Jun 01 02:46:30 2022 PDT |           3 |        1 |         1 |  500 |      200
-      1001 | Wed Jun 01 02:46:40 2022 PDT |           8 |       14 |         2 |  500 |      200
-      1002 | Wed Jun 01 02:46:50 2022 PDT |           7 |       30 |         1 |  500 |      200
-      1003 | Wed Jun 01 02:47:00 2022 PDT |          10 |        5 |         5 |  500 |      200
-      1004 | Wed Jun 01 02:47:10 2022 PDT |           4 |        5 |         3 |  500 |      200
-      1005 | Wed Jun 01 02:47:20 2022 PDT |           1 |        1 |         1 |  500 |      200
-(6 rows)
+      6330 | Wed Jun 01 17:34:50 2022 PDT |           5 |        4 |         6 |  500 |      200
+      6331 | Wed Jun 01 17:35:00 2022 PDT |           9 |        3 |        12 |  500 |      200
+      6332 | Wed Jun 01 17:35:10 2022 PDT |           1 |        1 |        15 |  500 |      200
+      6333 | Wed Jun 01 17:35:20 2022 PDT |           5 |        1 |        24 |  500 |      200
+      6334 | Wed Jun 01 17:35:30 2022 PDT |           7 |        5 |        25 |  500 |      200
+      6335 | Wed Jun 01 17:35:40 2022 PDT |           4 |        4 |        10 |  500 |      200
+      6336 | Wed Jun 01 17:35:50 2022 PDT |           6 |        5 |        23 |  500 |      200
+      6337 | Wed Jun 01 17:36:00 2022 PDT |           2 |        3 |         1 |  500 |      200
+      6338 | Wed Jun 01 17:36:10 2022 PDT |           7 |        3 |        27 |  500 |      200
+      6339 | Wed Jun 01 17:36:20 2022 PDT |           1 |        1 |        24 |  500 |      200
+      6340 | Wed Jun 01 17:36:30 2022 PDT |          10 |        3 |        21 |  500 |      200
+(11 rows)
 
 commit;
