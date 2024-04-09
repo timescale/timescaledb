@@ -494,7 +494,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	Simple8bRleSerialized *sizes_serialized = bytes_deserialize_simple8b_and_advance(si);
 
 	uint32 n_notnull;
-	uint32 *restrict sizes = simple8brle_decompress_all_uint32(sizes_serialized, &n_notnull);
+	const uint32 *sizes = simple8brle_decompress_all_uint32(sizes_serialized, &n_notnull);
 	const uint32 n_total = has_nulls ? nulls_serialized->num_elements : n_notnull;
 	CheckCompressedData(n_total >= n_notnull);
 
@@ -507,7 +507,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 	uint32 offset = 0;
 	for (uint32 i = 0; i < n_notnull; i++)
 	{
-		void *unaligned = consumeCompressedData(si, sizes[i]);
+		const void *unaligned = consumeCompressedData(si, sizes[i]);
 
 		/*
 		 * We start reading from the end of previous datum, but this pointer
@@ -517,7 +517,8 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		 *
 		 * See the corresponding row-by-row code in bytes_to_datum_and_advance().
 		 */
-		void *vardata = DatumGetPointer(att_align_pointer(unaligned, TYPALIGN_INT, -1, unaligned));
+		const void *vardata =
+			DatumGetPointer(att_align_pointer(unaligned, TYPALIGN_INT, -1, unaligned));
 
 		/*
 		 * Check for potentially corrupt varlena headers since we're reading them
@@ -578,7 +579,7 @@ text_array_decompress_all_serialized_no_header(StringInfo si, bool has_nulls,
 		 * We have decompressed the data with nulls skipped, reshuffle it
 		 * according to the nulls bitmap.
 		 */
-		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
+		const Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
 		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
 
 		int current_notnull_element = n_notnull - 1;
