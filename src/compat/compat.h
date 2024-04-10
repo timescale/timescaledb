@@ -972,6 +972,7 @@ object_ownercheck(Oid classid, Oid objectid, Oid roleid)
 
 #if PG14_LT
 #define F_SUM_INT4 2108
+#define F_COUNT_ 2803
 #endif
 
 /*
