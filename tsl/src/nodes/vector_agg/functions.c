@@ -148,7 +148,7 @@ static void
 count_emit(void *agg_state, Datum *out_result, bool *out_isnull)
 {
 	CountState *state = (CountState *) agg_state;
-	*out_result = state->count;
+	*out_result = Int64GetDatum(state->count);
 	*out_isnull = false;
 }
 
