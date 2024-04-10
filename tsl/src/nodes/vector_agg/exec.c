@@ -122,16 +122,13 @@ vector_agg_exec(CustomScanState *node)
 		return NULL;
 	}
 
+	VectorAggDef *def = (VectorAggDef *) linitial(vector_agg_state->agg_defs);
+	def->func->agg_init(vector_agg_state->agg_states);
+
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
 
-	VectorAggDef *def = (VectorAggDef *) linitial(vector_agg_state->agg_defs);
 	DecompressContext *dcontext = &decompress_state->decompress_context;
-	CompressionColumnDescription *value_column_description =
-		&dcontext->template_columns[def->column];
-
-	Assert(value_column_description->type == COMPRESSED_COLUMN ||
-		   value_column_description->type == SEGMENTBY_COLUMN);
 
 	BatchQueue *batch_queue = decompress_state->batch_queue;
 	DecompressBatchState *batch_state = batch_array_get_at(&batch_queue->batch_array, 0);
@@ -139,70 +136,79 @@ vector_agg_exec(CustomScanState *node)
 	/* Get a reference the the output TupleTableSlot */
 	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
 	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
-
-	def->func->agg_init(vector_agg_state->agg_states);
 	ExecClearTuple(aggregated_slot);
 
-	/*
-	 * Have to skip the batches that are fully filtered out. This condition also
-	 * handles the batch that was consumed on the previous step.
-	 */
-	while (batch_state->next_batch_row >= batch_state->total_batch_rows)
-	{
-		TupleTableSlot *compressed_slot =
-			ExecProcNode(linitial(decompress_state->csstate.custom_ps));
-
-		if (TupIsNull(compressed_slot))
-		{
-			/* All values are processed. */
-			vector_agg_state->input_ended = true;
-			return NULL;
-		}
-
-		compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
-	}
-
-	ArrowArray *arrow = NULL;
-	if (value_column_description->type == COMPRESSED_COLUMN)
-	{
-		Assert(dcontext->enable_bulk_decompression);
-		Assert(value_column_description->bulk_decompression_supported);
-		CompressedColumnValues *values =
-			&batch_state->compressed_columns[def->column];
-		Assert(values->decompression_type != DT_Invalid);
-		arrow = values->arrow;
-	}
-	else
-	{
-		Assert(value_column_description->type == SEGMENTBY_COLUMN);
-	}
-
-	if (arrow == NULL)
+	for (;;)
 	{
 		/*
-		 * To calculate the sum for a segment by value or default compressed
-		 * column value, we need to multiply this value with the number of
-		 * passing decompressed tuples in this batch.
+		 * Have to skip the batches that are fully filtered out. This condition also
+		 * handles the batch that was consumed on the previous step.
 		 */
-		int n = batch_state->total_batch_rows;
-		if (batch_state->vector_qual_result)
+		while (batch_state->next_batch_row >= batch_state->total_batch_rows)
 		{
-			n = arrow_num_valid(batch_state->vector_qual_result, n);
-			Assert(n > 0);
+			TupleTableSlot *compressed_slot =
+				ExecProcNode(linitial(decompress_state->csstate.custom_ps));
+
+			if (TupIsNull(compressed_slot))
+			{
+				/* All values are processed. */
+				vector_agg_state->input_ended = true;
+				break;
+			}
+
+			compressed_batch_set_compressed_tuple(dcontext, batch_state, compressed_slot);
 		}
 
-		int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
-		def->func->agg_const(vector_agg_state->agg_states,
-							 batch_state->decompressed_scan_slot_data.base.tts_values[offs],
-							 batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
-							 n);
-	}
-	else
-	{
-		def->func->agg_vector(vector_agg_state->agg_states, arrow, batch_state->vector_qual_result);
-	}
+		if (vector_agg_state->input_ended)
+		{
+			break;
+		}
 
-	compressed_batch_discard_tuples(batch_state);
+		ArrowArray *arrow = NULL;
+		CompressionColumnDescription *value_column_description =
+			&dcontext->template_columns[def->column];
+		if (value_column_description->type == COMPRESSED_COLUMN)
+		{
+			Assert(dcontext->enable_bulk_decompression);
+			Assert(value_column_description->bulk_decompression_supported);
+			CompressedColumnValues *values = &batch_state->compressed_columns[def->column];
+			Assert(values->decompression_type != DT_Invalid);
+			arrow = values->arrow;
+		}
+		else
+		{
+			Assert(value_column_description->type == SEGMENTBY_COLUMN);
+		}
+
+		if (arrow == NULL)
+		{
+			/*
+			 * To calculate the sum for a segment by value or default compressed
+			 * column value, we need to multiply this value with the number of
+			 * passing decompressed tuples in this batch.
+			 */
+			int n = batch_state->total_batch_rows;
+			if (batch_state->vector_qual_result)
+			{
+				n = arrow_num_valid(batch_state->vector_qual_result, n);
+				Assert(n > 0);
+			}
+
+			int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
+			def->func->agg_const(vector_agg_state->agg_states,
+								 batch_state->decompressed_scan_slot_data.base.tts_values[offs],
+								 batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
+								 n);
+		}
+		else
+		{
+			def->func->agg_vector(vector_agg_state->agg_states,
+								  arrow,
+								  batch_state->vector_qual_result);
+		}
+
+		compressed_batch_discard_tuples(batch_state);
+	}
 
 	def->func->agg_emit(vector_agg_state->agg_states,
 						&aggregated_slot->tts_values[0],
