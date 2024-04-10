@@ -177,7 +177,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 * The column will have a default value for the entire batch,
 		 * set it now.
 		 */
-		column_values->decompression_type = DT_Default;
+		column_values->decompression_type = DT_Scalar;
 
 		*column_values->output_value =
 			getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
@@ -443,7 +443,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 		 * with this default value, check if it passes the predicate, and apply
 		 * it to the entire batch.
 		 */
-		Assert(column_values->decompression_type == DT_Default);
+		Assert(column_values->decompression_type == DT_Scalar);
 
 		/*
 		 * We saved the actual default value into the decompressed scan slot
@@ -547,7 +547,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	/* Translate the result if the column had a default value. */
 	if (column_values->arrow == NULL)
 	{
-		Assert(column_values->decompression_type == DT_Default);
+		Assert(column_values->decompression_type == DT_Scalar);
 		if (!(default_value_predicate_result[0] & 1))
 		{
 			/*
@@ -837,7 +837,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 
 				Assert(i < dcontext->num_data_columns);
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
-				column_values->decompression_type = DT_Default;
+				column_values->decompression_type = DT_Scalar;
 
 				/*
 				 * Note that if it's not a by-value type, we should copy it into
@@ -1038,7 +1038,7 @@ make_next_tuple(DecompressBatchState *batch_state, uint16 arrow_row, int num_dat
 		else
 		{
 			/* A compressed column with default value, do nothing. */
-			Assert(column_values->decompression_type == DT_Default);
+			Assert(column_values->decompression_type == DT_Scalar);
 		}
 	}
 
