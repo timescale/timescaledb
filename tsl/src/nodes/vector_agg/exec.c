@@ -187,33 +187,22 @@ vector_agg_exec(CustomScanState *node)
 
 		if (def->column >= 0)
 		{
-			ArrowArray *arrow = NULL;
-			CompressionColumnDescription *value_column_description =
-				&dcontext->compressed_chunk_columns[def->column];
-			if (value_column_description->type == COMPRESSED_COLUMN)
+			CompressedColumnValues *values = &batch_state->compressed_columns[def->column];
+			Assert(values->decompression_type != DT_Invalid);
+			Assert(values->decompression_type != DT_Iterator);
+
+			if (values->arrow == NULL)
 			{
-				Assert(dcontext->enable_bulk_decompression);
-				Assert(value_column_description->bulk_decompression_supported);
-				CompressedColumnValues *values = &batch_state->compressed_columns[def->column];
-				Assert(values->decompression_type != DT_Invalid);
-				Assert(values->decompression_type != DT_Iterator);
-				arrow = values->arrow;
-			}
-			else
-			{
-				Assert(value_column_description->type == SEGMENTBY_COLUMN);
-			}
-			if (arrow == NULL)
-			{
-				const int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
-				const Datum value = batch_state->decompressed_scan_slot_data.base.tts_values[offs];
-				const bool is_null = batch_state->decompressed_scan_slot_data.base.tts_isnull[offs];
-				def->func->agg_const(vector_agg_state->agg_states, value, is_null, n);
+				Assert(values->decompression_type == DT_Scalar);
+				def->func->agg_const(vector_agg_state->agg_states,
+									 *values->output_value,
+									 *values->output_isnull,
+									 n);
 			}
 			else
 			{
 				def->func->agg_vector(vector_agg_state->agg_states,
-									  arrow,
+									  values->arrow,
 									  batch_state->vector_qual_result);
 			}
 		}
