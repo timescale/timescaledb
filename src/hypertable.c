@@ -1320,11 +1320,14 @@ TS_FUNCTION_INFO_V1(ts_hypertable_insert_blocker);
 Datum
 ts_hypertable_insert_blocker(PG_FUNCTION_ARGS)
 {
-	TriggerData *trigdata = (TriggerData *) fcinfo->context;
-	const char *relname = get_rel_name(trigdata->tg_relation->rd_id);
-
 	if (!CALLED_AS_TRIGGER(fcinfo))
 		elog(ERROR, "insert_blocker: not called by trigger manager");
+
+	TriggerData *trigdata = (TriggerData *) fcinfo->context;
+	Ensure(trigdata != NULL, "trigdata has to be set");
+	Ensure(trigdata->tg_relation != NULL, "tg_relation has to be set");
+
+	const char *relname = get_rel_name(trigdata->tg_relation->rd_id);
 
 	if (ts_guc_restoring)
 		ereport(ERROR,
