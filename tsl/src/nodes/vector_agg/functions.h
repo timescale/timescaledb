@@ -25,7 +25,7 @@ typedef struct
 	/* Aggregate a constant (like segmentby or column with default value). */
 	void (*agg_const)(void *agg_state, Datum constvalue, bool constisnull, int n);
 
-	/* Emit a parital result. */
+	/* Emit a partial result. */
 	void (*agg_emit)(void *agg_state, Datum *out_result, bool *out_isnull);
 } VectorAggFunctions;
 
