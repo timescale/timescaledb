@@ -829,15 +829,20 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				 * and our output tuples are read-only, so it's enough to only
 				 * save it once per batch, which we do here.
 				 */
-				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
-				decompressed_tuple->tts_values[attr] =
-					slot_getattr(compressed_slot,
-								 column_description->compressed_scan_attno,
-								 &decompressed_tuple->tts_isnull[attr]);
-
 				Assert(i < dcontext->num_data_columns);
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->decompression_type = DT_Scalar;
+				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
+				column_values->output_value =
+					&compressed_batch_current_tuple(batch_state)->tts_values[attr];
+				column_values->output_isnull =
+					&compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
+				column_values->arrow = NULL;
+
+				*column_values->output_value =
+					slot_getattr(compressed_slot,
+								 column_description->compressed_scan_attno,
+								 column_values->output_isnull);
 
 				/*
 				 * Note that if it's not a by-value type, we should copy it into
