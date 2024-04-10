@@ -1,0 +1,1 @@
+Implements: #6798 Prevent usage of deprecated time_bucket_ng in CAgg definition 

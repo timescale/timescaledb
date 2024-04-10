@@ -154,12 +154,6 @@ CREATE MATERIALIZED VIEW temperature_tz_4h_ts
     FROM timestamptz_ht
     GROUP BY 1 ORDER BY 1;
 
-CREATE MATERIALIZED VIEW temperature_tz_4h_ts_ng
-  WITH  (timescaledb.continuous) AS
-  SELECT timescaledb_experimental.time_bucket_ng('4 hour', time, 'Asia/Shanghai'), avg(value)
-    FROM timestamptz_ht
-    GROUP BY 1 ORDER BY 1;
-
 CREATE TABLE integer_ht(a integer, b integer, c integer);
 SELECT table_name FROM create_hypertable('integer_ht', 'a', chunk_time_interval=> 10);
 
@@ -176,7 +170,7 @@ CREATE MATERIALIZED VIEW integer_ht_cagg
 SELECT user_view_name,
        cagg_get_bucket_function(mat_hypertable_id)
        FROM _timescaledb_catalog.continuous_agg
-       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'temperature_tz_4h_ts_ng', 'integer_ht_cagg')
+       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'integer_ht_cagg')
        ORDER BY user_view_name;
 
 --- Cleanup

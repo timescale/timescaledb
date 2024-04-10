@@ -1147,7 +1147,7 @@ CREATE MATERIALIZED VIEW cagg_4_hours_offset_and_origin
   SELECT time_bucket('4 hour', time, "offset"=>'30m'::interval, origin=>'2000-01-01 01:00:00 PST'::timestamptz, timezone=>'UTC'), max(value)
     FROM temperature
     GROUP BY 1 ORDER BY 1;
-ERROR:  continuous aggregate view must include a valid time bucket function
+ERROR:  using offset and origin in a time_bucket function at the same time is not supported
 \set ON_ERROR_STOP 1
 ---
 -- Tests with CAgg processing
