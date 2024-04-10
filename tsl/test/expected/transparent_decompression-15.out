@@ -1635,17 +1635,17 @@ ORDER BY time,
 :PREFIX
 SELECT count(*)
 FROM :TEST_TABLE;
-                                           QUERY PLAN                                           
-------------------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Finalize Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1800 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
          ->  Partial Aggregate (actual rows=1 loops=1)
                ->  Seq Scan on _hyper_1_2_chunk (actual rows=2520 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=2520 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
                      ->  Seq Scan on compress_hyper_5_16_chunk (actual rows=5 loops=1)
 (10 rows)
 
@@ -2016,9 +2016,9 @@ WHERE device_id = 1;
  Finalize Aggregate (actual rows=1 loops=1)
    Output: count(*)
    ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*)
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=360 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*))
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (never executed)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=1 loops=1)
                            Output: compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk._ts_meta_sequence_num, compress_hyper_5_15_chunk.device_id, compress_hyper_5_15_chunk.device_id_peer, compress_hyper_5_15_chunk._ts_meta_min_3, compress_hyper_5_15_chunk._ts_meta_max_3, compress_hyper_5_15_chunk."time", compress_hyper_5_15_chunk._ts_meta_min_1, compress_hyper_5_15_chunk._ts_meta_max_1, compress_hyper_5_15_chunk.v0, compress_hyper_5_15_chunk._ts_meta_min_2, compress_hyper_5_15_chunk._ts_meta_max_2, compress_hyper_5_15_chunk.v1, compress_hyper_5_15_chunk.v2, compress_hyper_5_15_chunk.v3
@@ -2028,9 +2028,9 @@ WHERE device_id = 1;
                ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=504 loops=1)
                      Filter: (_hyper_1_2_chunk.device_id = 1)
                      Rows Removed by Filter: 2016
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*)
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=504 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*))
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (never executed)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_5_16_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=1 loops=1)
                            Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk._ts_meta_min_3, compress_hyper_5_16_chunk._ts_meta_max_3, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk._ts_meta_min_1, compress_hyper_5_16_chunk._ts_meta_max_1, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk._ts_meta_min_2, compress_hyper_5_16_chunk._ts_meta_max_2, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
@@ -5781,18 +5781,18 @@ ORDER BY time,
 :PREFIX
 SELECT count(*)
 FROM :TEST_TABLE;
-                                           QUERY PLAN                                            
--------------------------------------------------------------------------------------------------
+                                      QUERY PLAN                                       
+---------------------------------------------------------------------------------------
  Finalize Aggregate (actual rows=1 loops=1)
    ->  Append (actual rows=9 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=360 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=1080 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (actual rows=360 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=1 loops=1)
          ->  Partial Aggregate (actual rows=1 loops=1)
                ->  Seq Scan on _hyper_2_7_chunk (actual rows=504 loops=1)
@@ -5800,11 +5800,11 @@ FROM :TEST_TABLE;
                ->  Seq Scan on _hyper_2_8_chunk (actual rows=1512 loops=1)
          ->  Partial Aggregate (actual rows=1 loops=1)
                ->  Seq Scan on _hyper_2_9_chunk (actual rows=504 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (actual rows=504 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_20_chunk (actual rows=1 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (actual rows=1512 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (never executed)
                      ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=3 loops=1)
          ->  Partial Aggregate (actual rows=1 loops=1)
                ->  Seq Scan on _hyper_2_12_chunk (actual rows=504 loops=1)
@@ -6257,9 +6257,9 @@ WHERE device_id = 1;
  Finalize Aggregate (actual rows=1 loops=1)
    Output: count(*)
    ->  Append (actual rows=3 loops=1)
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*)
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk (actual rows=360 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*))
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk (never executed)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_6_17_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_6_17_chunk (actual rows=1 loops=1)
                            Output: compress_hyper_6_17_chunk._ts_meta_count, compress_hyper_6_17_chunk._ts_meta_sequence_num, compress_hyper_6_17_chunk.device_id, compress_hyper_6_17_chunk.device_id_peer, compress_hyper_6_17_chunk._ts_meta_min_3, compress_hyper_6_17_chunk._ts_meta_max_3, compress_hyper_6_17_chunk."time", compress_hyper_6_17_chunk._ts_meta_min_1, compress_hyper_6_17_chunk._ts_meta_max_1, compress_hyper_6_17_chunk.v0, compress_hyper_6_17_chunk._ts_meta_min_2, compress_hyper_6_17_chunk._ts_meta_max_2, compress_hyper_6_17_chunk.v1, compress_hyper_6_17_chunk.v2, compress_hyper_6_17_chunk.v3
@@ -6269,9 +6269,9 @@ WHERE device_id = 1;
                ->  Index Only Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _timescaledb_internal._hyper_2_7_chunk (actual rows=504 loops=1)
                      Index Cond: (_hyper_2_7_chunk.device_id = 1)
                      Heap Fetches: 504
-         ->  Partial Aggregate (actual rows=1 loops=1)
-               Output: PARTIAL count(*)
-               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (actual rows=504 loops=1)
+         ->  Custom Scan (VectorAgg) (actual rows=1 loops=1)
+               Output: (PARTIAL count(*))
+               ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_10_chunk (never executed)
                      Bulk Decompression: false
                      ->  Index Scan using compress_hyper_6_20_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_6_20_chunk (actual rows=1 loops=1)
                            Output: compress_hyper_6_20_chunk._ts_meta_count, compress_hyper_6_20_chunk._ts_meta_sequence_num, compress_hyper_6_20_chunk.device_id, compress_hyper_6_20_chunk.device_id_peer, compress_hyper_6_20_chunk._ts_meta_min_3, compress_hyper_6_20_chunk._ts_meta_max_3, compress_hyper_6_20_chunk."time", compress_hyper_6_20_chunk._ts_meta_min_1, compress_hyper_6_20_chunk._ts_meta_max_1, compress_hyper_6_20_chunk.v0, compress_hyper_6_20_chunk._ts_meta_min_2, compress_hyper_6_20_chunk._ts_meta_max_2, compress_hyper_6_20_chunk.v1, compress_hyper_6_20_chunk.v2, compress_hyper_6_20_chunk.v3

@@ -219,10 +219,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 
 	/*
-	 * Determine which columns we are going to decompress. Since in the hottest
-	 * loop we work only with compressed columns, we'll put them in front of the
-	 * array. So first, count how many compressed and not compressed columns
-	 * we have.
+	 * Count the actual data columns we have to decompress, skipping the
+	 * metadata columns.
 	 */
 	int num_compressed = 0;
 	int num_total = 0;
@@ -242,7 +240,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			continue;
 		}
 
-		if (output_attno > 0 && !lfirst_int(is_segmentby_cell))
+		if (output_attno > 0)
 		{
 			/*
 			 * Not a metadata column and not a segmentby column, hence a
@@ -255,9 +253,9 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	}
 
 	Assert(num_compressed <= num_total);
-	dcontext->num_compressed_columns = num_compressed;
-	dcontext->num_total_columns = num_total;
-	dcontext->template_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
+	dcontext->num_data_columns = num_compressed;
+	dcontext->num_columns_with_metadata = num_total;
+	dcontext->compressed_chunk_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
 	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
 	dcontext->ps = &node->ss.ps;
 
@@ -316,15 +314,17 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			}
 		}
 
-		if (column.type == COMPRESSED_COLUMN)
+		if (column.output_attno > 0)
 		{
+			/* Data column. */
 			Assert(current_compressed < num_total);
-			dcontext->template_columns[current_compressed++] = column;
+			dcontext->compressed_chunk_columns[current_compressed++] = column;
 		}
 		else
 		{
+			/* Metadata column. */
 			Assert(current_not_compressed < num_total);
-			dcontext->template_columns[current_not_compressed++] = column;
+			dcontext->compressed_chunk_columns[current_not_compressed++] = column;
 		}
 	}
 

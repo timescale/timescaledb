@@ -70,9 +70,10 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			DecompressContext *dcontext = &decompress_state->decompress_context;
 
 			CompressionColumnDescription *value_column_description = NULL;
-			for (int i = 0; i < dcontext->num_total_columns; i++)
+			for (int i = 0; i < dcontext->num_data_columns; i++)
 			{
-				CompressionColumnDescription *current_column = &dcontext->template_columns[i];
+				CompressionColumnDescription *current_column =
+					&dcontext->compressed_chunk_columns[i];
 				if (current_column->output_attno == var->varattno)
 				{
 					value_column_description = current_column;
@@ -84,7 +85,7 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			Assert(value_column_description->type == COMPRESSED_COLUMN ||
 				   value_column_description->type == SEGMENTBY_COLUMN);
 
-			def->column = value_column_description - dcontext->template_columns;
+			def->column = value_column_description - dcontext->compressed_chunk_columns;
 		}
 		else
 		{
@@ -188,7 +189,7 @@ vector_agg_exec(CustomScanState *node)
 		{
 			ArrowArray *arrow = NULL;
 			CompressionColumnDescription *value_column_description =
-				&dcontext->template_columns[def->column];
+				&dcontext->compressed_chunk_columns[def->column];
 			if (value_column_description->type == COMPRESSED_COLUMN)
 			{
 				Assert(dcontext->enable_bulk_decompression);
@@ -218,7 +219,7 @@ vector_agg_exec(CustomScanState *node)
 		}
 		else
 		{
-		    /*
+			/*
 			 * We have only one function w/o arguments -- count(*). Unfortunately
 			 * it has to have a special code path everywhere.
 			 */

@@ -93,6 +93,12 @@ typedef struct DecompressBatchState
 	 */
 	uint64 *restrict vector_qual_result;
 
+	/*
+	 * This follows DecompressContext.compressed_chunk_columns, but does not
+	 * include the trailing metadata columns, but only the leading data columns.
+	 * These columns are compressed and segmentby columns, their total number is
+	 * given by DecompressContext.num_data_columns.
+	 */
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 
