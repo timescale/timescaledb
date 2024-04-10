@@ -55,6 +55,8 @@ select sum(c) from dvagg;
  17982
 (1 row)
 
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off;
 -- Vectorized aggregation should work with vectorized filters.
 select sum(c) from dvagg where b >= 0;
   sum  
@@ -86,6 +88,36 @@ select sum(c) from dvagg where b > 10;
     
 (1 row)
 
+select count(*) from dvagg where b >= 0;
+ count 
+-------
+  1998
+(1 row)
+
+select count(*) from dvagg where b = 0;
+ count 
+-------
+   398
+(1 row)
+
+select count(*) from dvagg where b in (0, 1);
+ count 
+-------
+   798
+(1 row)
+
+select count(*) from dvagg where b in (0, 1, 3);
+ count 
+-------
+  1198
+(1 row)
+
+select count(*) from dvagg where b > 10;
+ count 
+-------
+     0
+(1 row)
+
 explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
                                   QUERY PLAN                                   
 -------------------------------------------------------------------------------
@@ -103,6 +135,7 @@ explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
                            ->  Parallel Seq Scan on compress_hyper_2_4_chunk
 (12 rows)
 
+reset timescaledb.enable_vectorized_aggregation;
 -- The runtime chunk exclusion should work.
 explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
                              QUERY PLAN                              

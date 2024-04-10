@@ -204,6 +204,34 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
+	if (agg->numCols != 0)
+	{
+		/* No GROUP BY support for now. */
+		return plan;
+	}
+
+	if (agg->groupingSets != NIL)
+	{
+		/* No GROUPING SETS support. */
+		return plan;
+	}
+
+	if (agg->plan.qual != NIL)
+	{
+		/*
+		 * No HAVING support. Probably we can't have it in this node in any case,
+		 * because we only replace the partial aggregation nodes which can't
+		 * check the HAVING clause.
+		 */
+		return plan;
+	}
+
+	if (list_length(agg->plan.targetlist) != 1)
+	{
+		/* We currently handle only one agg function per node. */
+		return plan;
+	}
+
 	if (agg->plan.lefttree == NULL)
 	{
 		/*
@@ -236,34 +264,7 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (agg->numCols != 0)
-	{
-		/* No GROUP BY support for now. */
-		return plan;
-	}
-
-	if (agg->groupingSets != NIL)
-	{
-		/* No GROUPING SETS support. */
-		return plan;
-	}
-
-	if (agg->plan.qual != NIL)
-	{
-		/*
-		 * No HAVING support. Probably we can't have it in this node in any case,
-		 * because we only replace the partial aggregation nodes which can't
-		 * check the HAVING clause.
-		 */
-		return plan;
-	}
-
-	if (list_length(agg->plan.targetlist) != 1)
-	{
-		/* We currently handle only one agg function per node. */
-		return plan;
-	}
-
+	/* Now check the aggregate function itself. */
 	Node *expr_node = (Node *) castNode(TargetEntry, linitial(agg->plan.targetlist))->expr;
 	Assert(IsA(expr_node, Aggref));
 
@@ -277,15 +278,28 @@ try_insert_vector_agg_node(Plan *plan)
 
 	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
 	{
+		/*
+		 * We don't have a vectorized implementation for this particular
+		 * aggregate function.
+		 */
 		return plan;
 	}
 
+	if (aggref->args == NIL)
+	{
+		/* This must be count(*), we can vectorize it. */
+		return vector_agg_plan_create(agg, custom);
+	}
+
+	/* The function must have one argument, check it. */
+	Assert(list_length(aggref->args) == 1);
 	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
 	if (!IsA(argument->expr, Var))
 	{
 		/* Can aggregate only a bare decompressed column, not an expression. */
 		return plan;
 	}
+
 	Var *aggregated_var = castNode(Var, argument->expr);
 
 	/*
@@ -328,7 +342,11 @@ try_insert_vector_agg_node(Plan *plan)
 	const bool bulk_decompression_enabled_for_column =
 		list_nth_int(bulk_decompression_column, compressed_column_index);
 
-	/* Bulk decompression can also be disabled globally. */
+	/*
+	 * Bulk decompression can be disabled for all columns in the DecompressChunk
+	 * node settings, we can't do vectorized aggregation for compressed columns
+	 * in that case. For segmentby columns it's still possible.
+	 */
 	List *settings = linitial(custom->custom_private);
 	const bool bulk_decompression_enabled_globally =
 		list_nth_int(settings, DCS_EnableBulkDecompression);

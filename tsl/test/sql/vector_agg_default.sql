@@ -23,6 +23,9 @@ explain (costs off) select sum(c) from dvagg;
 select sum(c) from dvagg;
 
 
+---- Uncomment to generate reference.
+--set timescaledb.enable_vectorized_aggregation to off;
+
 -- Vectorized aggregation should work with vectorized filters.
 select sum(c) from dvagg where b >= 0;
 select sum(c) from dvagg where b = 0;
@@ -30,7 +33,15 @@ select sum(c) from dvagg where b in (0, 1);
 select sum(c) from dvagg where b in (0, 1, 3);
 select sum(c) from dvagg where b > 10;
 
+select count(*) from dvagg where b >= 0;
+select count(*) from dvagg where b = 0;
+select count(*) from dvagg where b in (0, 1);
+select count(*) from dvagg where b in (0, 1, 3);
+select count(*) from dvagg where b > 10;
+
 explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
+
+reset timescaledb.enable_vectorized_aggregation;
 
 
 -- The runtime chunk exclusion should work.

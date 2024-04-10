@@ -132,6 +132,40 @@ static VectorAggFunctions int4_sum_agg = {
 	.agg_emit = int4_sum_emit,
 };
 
+typedef struct
+{
+	int64 count;
+} CountState;
+
+static void
+count_init(void *agg_state)
+{
+	CountState *state = (CountState *) agg_state;
+	state->count = 0;
+}
+
+static void
+count_emit(void *agg_state, Datum *out_result, bool *out_isnull)
+{
+	CountState *state = (CountState *) agg_state;
+	*out_result = state->count;
+	*out_isnull = false;
+}
+
+static void
+count_star_const(void *agg_state, Datum constvalue, bool constisnull, int n)
+{
+	CountState *state = (CountState *) agg_state;
+	state->count += n;
+}
+
+VectorAggFunctions count_star_agg = {
+	.state_bytes = sizeof(CountState),
+	.agg_init = count_init,
+	.agg_const = count_star_const,
+	.agg_emit = count_emit,
+};
+
 VectorAggFunctions *
 get_vector_aggregate(Oid aggfnoid)
 {
@@ -139,6 +173,8 @@ get_vector_aggregate(Oid aggfnoid)
 	{
 		case F_SUM_INT4:
 			return &int4_sum_agg;
+		case F_COUNT_:
+			return &count_star_agg;
 		default:
 			return NULL;
 	}

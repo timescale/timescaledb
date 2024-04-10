@@ -53,35 +53,43 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 		Assert(IsA(tlentry->expr, Aggref));
 		Aggref *aggref = castNode(Aggref, tlentry->expr);
 
-		Assert(list_length(aggref->args) == 1);
-
-		/* The aggregate should be a partial aggregate */
-		Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
-
-		Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-
-		DecompressContext *dcontext = &decompress_state->decompress_context;
-
-		CompressionColumnDescription *value_column_description = NULL;
-		for (int i = 0; i < dcontext->num_total_columns; i++)
-		{
-			CompressionColumnDescription *current_column = &dcontext->template_columns[i];
-			if (current_column->output_attno == var->varattno)
-			{
-				value_column_description = current_column;
-				break;
-			}
-		}
-		Ensure(value_column_description != NULL, "aggregated compressed column not found");
-
-		Assert(value_column_description->type == COMPRESSED_COLUMN ||
-			   value_column_description->type == SEGMENTBY_COLUMN);
-
-		VectorAggDef *def = palloc(sizeof(VectorAggDef));
+		VectorAggDef *def = palloc0(sizeof(VectorAggDef));
 		VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
 		Assert(func != NULL);
 		def->func = func;
-		def->column = value_column_description - dcontext->template_columns;
+
+		if (list_length(aggref->args) > 0)
+		{
+			Assert(list_length(aggref->args) == 1);
+
+			/* The aggregate should be a partial aggregate */
+			Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+
+			Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
+
+			DecompressContext *dcontext = &decompress_state->decompress_context;
+
+			CompressionColumnDescription *value_column_description = NULL;
+			for (int i = 0; i < dcontext->num_total_columns; i++)
+			{
+				CompressionColumnDescription *current_column = &dcontext->template_columns[i];
+				if (current_column->output_attno == var->varattno)
+				{
+					value_column_description = current_column;
+					break;
+				}
+			}
+			Ensure(value_column_description != NULL, "aggregated compressed column not found");
+
+			Assert(value_column_description->type == COMPRESSED_COLUMN ||
+				   value_column_description->type == SEGMENTBY_COLUMN);
+
+			def->column = value_column_description - dcontext->template_columns;
+		}
+		else
+		{
+			def->column = -1;
+		}
 
 		vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
 
@@ -164,47 +172,57 @@ vector_agg_exec(CustomScanState *node)
 			break;
 		}
 
-		ArrowArray *arrow = NULL;
-		CompressionColumnDescription *value_column_description =
-			&dcontext->template_columns[def->column];
-		if (value_column_description->type == COMPRESSED_COLUMN)
+		/*
+		 * To calculate the sum for a segment by value or default compressed
+		 * column value, we need to multiply this value with the number of
+		 * passing decompressed tuples in this batch.
+		 */
+		int n = batch_state->total_batch_rows;
+		if (batch_state->vector_qual_result)
 		{
-			Assert(dcontext->enable_bulk_decompression);
-			Assert(value_column_description->bulk_decompression_supported);
-			CompressedColumnValues *values = &batch_state->compressed_columns[def->column];
-			Assert(values->decompression_type != DT_Invalid);
-			arrow = values->arrow;
-		}
-		else
-		{
-			Assert(value_column_description->type == SEGMENTBY_COLUMN);
+			n = arrow_num_valid(batch_state->vector_qual_result, n);
+			Assert(n > 0);
 		}
 
-		if (arrow == NULL)
+		if (def->column >= 0)
 		{
-			/*
-			 * To calculate the sum for a segment by value or default compressed
-			 * column value, we need to multiply this value with the number of
-			 * passing decompressed tuples in this batch.
-			 */
-			int n = batch_state->total_batch_rows;
-			if (batch_state->vector_qual_result)
+			ArrowArray *arrow = NULL;
+			CompressionColumnDescription *value_column_description =
+				&dcontext->template_columns[def->column];
+			if (value_column_description->type == COMPRESSED_COLUMN)
 			{
-				n = arrow_num_valid(batch_state->vector_qual_result, n);
-				Assert(n > 0);
+				Assert(dcontext->enable_bulk_decompression);
+				Assert(value_column_description->bulk_decompression_supported);
+				CompressedColumnValues *values = &batch_state->compressed_columns[def->column];
+				Assert(values->decompression_type != DT_Invalid);
+				Assert(values->decompression_type != DT_Iterator);
+				arrow = values->arrow;
 			}
-
-			int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
-			def->func->agg_const(vector_agg_state->agg_states,
-								 batch_state->decompressed_scan_slot_data.base.tts_values[offs],
-								 batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
-								 n);
+			else
+			{
+				Assert(value_column_description->type == SEGMENTBY_COLUMN);
+			}
+			if (arrow == NULL)
+			{
+				const int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
+				const Datum value = batch_state->decompressed_scan_slot_data.base.tts_values[offs];
+				const bool is_null = batch_state->decompressed_scan_slot_data.base.tts_isnull[offs];
+				def->func->agg_const(vector_agg_state->agg_states, value, is_null, n);
+			}
+			else
+			{
+				def->func->agg_vector(vector_agg_state->agg_states,
+									  arrow,
+									  batch_state->vector_qual_result);
+			}
 		}
 		else
 		{
-			def->func->agg_vector(vector_agg_state->agg_states,
-								  arrow,
-								  batch_state->vector_qual_result);
+		    /*
+			 * We have only one function w/o arguments -- count(*). Unfortunately
+			 * it has to have a special code path everywhere.
+			 */
+			def->func->agg_const(vector_agg_state->agg_states, 0, true, n);
 		}
 
 		compressed_batch_discard_tuples(batch_state);

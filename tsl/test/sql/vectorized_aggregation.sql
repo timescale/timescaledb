@@ -132,11 +132,17 @@ SELECT sum(int_value) FROM testtable;
 
 RESET timescaledb.enable_vectorized_aggregation;
 
--- Vectorized aggregation NOT possible without bulk decompression
+-- Vectorized aggregation without bullk decompression only possible for
+-- segmentby columns.
 SET timescaledb.enable_bulk_decompression = OFF;
 
 :EXPLAIN
 SELECT sum(int_value) FROM testtable;
+
+:EXPLAIN
+SELECT sum(segment_by_value) FROM testtable;
+
+SELECT sum(segment_by_value) FROM testtable;
 
 RESET timescaledb.enable_bulk_decompression;
 
