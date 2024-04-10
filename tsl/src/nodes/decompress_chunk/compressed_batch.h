@@ -14,13 +14,23 @@ typedef struct ArrowArray ArrowArray;
 typedef enum
 {
 	DT_ArrowTextDict = -4,
+
 	DT_ArrowText = -3,
-	DT_Default = -2,
+
+	/*
+	 * The decompressed value is already in the decompressed slot. This is used
+	 * for segmentby and compressed columns with default value in batch.
+	 */
+	DT_Scalar = -2,
+
 	DT_Iterator = -1,
+
 	DT_Invalid = 0,
+
 	/*
 	 * Any positive number is also valid for the decompression type. It means
-	 * arrow array of a fixed-size by-value type, with size given by the number.
+	 * arrow array of a fixed-size by-value type, with size in bytes given by
+	 * the number.
 	 */
 } DecompressionType;
 
@@ -99,6 +109,12 @@ typedef struct DecompressBatchState
 	 */
 	uint64 *restrict vector_qual_result;
 
+	/*
+	 * This follows DecompressContext.compressed_chunk_columns, but does not
+	 * include the trailing metadata columns, but only the leading data columns.
+	 * These columns are compressed and segmentby columns, their total number is
+	 * given by DecompressContext.num_data_columns.
+	 */
 	CompressedColumnValues compressed_columns[FLEXIBLE_ARRAY_MEMBER];
 } DecompressBatchState;
 

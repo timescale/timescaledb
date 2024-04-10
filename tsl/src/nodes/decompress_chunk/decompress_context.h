@@ -47,9 +47,23 @@ typedef struct CompressionColumnDescription
 
 typedef struct DecompressContext
 {
-	CompressionColumnDescription *template_columns;
-	int num_total_columns;
-	int num_compressed_columns;
+	/*
+	 * Note that this array contains only those columns that are decompressed
+	 * (output_attno != 0), and the order is different from the compressed chunk
+	 * tuple order: first go the actual data columns, and after that the metadata
+	 * columns.
+	 */
+	CompressionColumnDescription *compressed_chunk_columns;
+
+	/*
+	 * This includes all decompressed columns (output_attno != 0), including the
+	 * metadata columns.
+	 */
+	int num_columns_with_metadata;
+
+	/* This excludes the metadata columns. */
+	int num_data_columns;
+
 	List *vectorized_quals_constified;
 	bool reverse;
 	bool batch_sorted_merge; /* Merge append optimization enabled */
