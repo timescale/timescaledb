@@ -21,53 +21,6 @@
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "hypertable.h"
 
-typedef struct ContinuousAggregateWatermark
-{
-	int32 mat_hypertable_id;
-	MemoryContext mctx;
-	MemoryContextCallback cb;
-	CommandId cid;
-	int64 value;
-} ContinuousAggregateWatermark;
-
-/*
- * Cache the watermark in the current transaction for better performance
- * (by avoiding repeated max bucket calculations). The watermark will be
- * reset at the end of the transaction, when the watermark function's input
- * argument (materialized hypertable ID) changes, or when a new command is
- * executed.
- *
- * One could potentially create a hashtable of watermarks keyed on materialized
- * hypertable ID, but this is left as a future optimization since it doesn't
- * seem to be common case that multiple continuous aggregates exist in the same
- * query. Besides, the planner can constify calls to the watermark function
- * during planning since the function is STABLE. Therefore, this is only a
- * fallback if the planner needs to constify it many times (e.g., if used as
- * an index condition on many chunks).
- */
-static ContinuousAggregateWatermark *cagg_watermark_cache = NULL;
-
-/*
- * Callback handler to reset the watermark after the transaction ends. This is
- * triggered by the deletion of the associated memory context.
- */
-static void
-cagg_watermark_reset(void *arg)
-{
-	cagg_watermark_cache = NULL;
-}
-
-/*
- * ContinuousAggregateWatermark is valid for the duration of one command execution on the same
- * materialized hypertable.
- */
-static bool
-cagg_watermark_is_valid(const ContinuousAggregateWatermark *cagg_watermark, int32 mat_hypertable_id)
-{
-	return cagg_watermark != NULL && cagg_watermark->mat_hypertable_id == mat_hypertable_id &&
-		   cagg_watermark->cid == GetCurrentCommandId(false);
-}
-
 static void
 cagg_watermark_init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)
 {
@@ -128,37 +81,6 @@ ts_cagg_watermark_get(int32 hypertable_id)
 	return DatumGetInt64(watermark);
 }
 
-static ContinuousAggregateWatermark *
-cagg_watermark_create(const ContinuousAgg *cagg, MemoryContext top_mctx)
-{
-	Hypertable *ht;
-	ContinuousAggregateWatermark *watermark;
-	MemoryContext mctx = AllocSetContextCreate(top_mctx,
-											   "ContinuousAggregateWatermark function",
-											   ALLOCSET_DEFAULT_SIZES);
-
-	watermark = MemoryContextAllocZero(mctx, sizeof(ContinuousAggregateWatermark));
-	watermark->mctx = mctx;
-	watermark->mat_hypertable_id = cagg->data.mat_hypertable_id;
-	watermark->cid = GetCurrentCommandId(false);
-	watermark->cb.func = cagg_watermark_reset;
-	MemoryContextRegisterResetCallback(mctx, &watermark->cb);
-
-	/* Hypertable associated to the Continuous Aggregate */
-	ht = ts_hypertable_get_by_id(cagg->data.mat_hypertable_id);
-
-	if (NULL == ht)
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-				 errmsg("invalid materialization hypertable ID: %d",
-						cagg->data.mat_hypertable_id)));
-
-	/* Get the stored watermark */
-	watermark->value = ts_cagg_watermark_get(cagg->data.mat_hypertable_id);
-
-	return watermark;
-}
-
 TS_FUNCTION_INFO_V1(ts_continuous_agg_watermark);
 
 /*
@@ -183,14 +105,6 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	ContinuousAgg *cagg;
 	AclResult aclresult;
 
-	if (NULL != cagg_watermark_cache)
-	{
-		if (cagg_watermark_is_valid(cagg_watermark_cache, mat_hypertable_id))
-			PG_RETURN_INT64(cagg_watermark_cache->value);
-
-		MemoryContextDelete(cagg_watermark_cache->mctx);
-	}
-
 	cagg = ts_continuous_agg_find_by_mat_hypertable_id(mat_hypertable_id, false);
 
 	/*
@@ -199,9 +113,10 @@ ts_continuous_agg_watermark(PG_FUNCTION_ARGS)
 	 */
 	aclresult = pg_class_aclcheck(cagg->relid, GetUserId(), ACL_SELECT);
 	aclcheck_error(aclresult, OBJECT_MATVIEW, get_rel_name(cagg->relid));
-	cagg_watermark_cache = cagg_watermark_create(cagg, TopTransactionContext);
 
-	PG_RETURN_INT64(cagg_watermark_cache->value);
+	int64 watermark = ts_cagg_watermark_get(cagg->data.mat_hypertable_id);
+
+	PG_RETURN_INT64(watermark);
 }
 
 static int64
