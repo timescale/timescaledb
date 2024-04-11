@@ -106,6 +106,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     net.sql
     pg_dump.sql
     symbol_conflict.sql
+    test_tss_callbacks.sql
     test_utils.sql
     ${LOADER_TEST_FILE}.sql)
   if(USE_TELEMETRY)

@@ -1,12 +1,13 @@
 set(SOURCES
-    metadata.c
     adt_tests.c
+    metadata.c
     symbol_conflict.c
+    test_scanner.c
     test_time_to_internal.c
-    test_with_clause_parser.c
     test_time_utils.c
+    test_tss_callbacks.c
     test_utils.c
-    test_scanner.c)
+    test_with_clause_parser.c)
 
 include(${PROJECT_SOURCE_DIR}/src/build-defs.cmake)
 

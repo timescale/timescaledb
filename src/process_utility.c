@@ -3,75 +3,75 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <catalog/pg_class_d.h>
 #include <postgres.h>
-#include <nodes/parsenodes.h>
-#include <nodes/nodes.h>
-#include <nodes/makefuncs.h>
-#include <tcop/utility.h>
-#include <catalog/namespace.h>
-#include <catalog/index.h>
-#include <catalog/objectaddress.h>
-#include <catalog/pg_trigger.h>
-#include <catalog/pg_authid.h>
-#include <commands/copy.h>
-#include <commands/vacuum.h>
-#include <commands/defrem.h>
-#include <commands/trigger.h>
-#include <commands/tablecmds.h>
-#include <commands/cluster.h>
-#include <commands/event_trigger.h>
-#include <commands/prepare.h>
-#include <access/htup_details.h>
-#include <commands/alter.h>
-#include <access/xact.h>
-#include <storage/lmgr.h>
-#include <utils/acl.h>
-#include <utils/rel.h>
-#include <utils/inval.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/builtins.h>
-#include <utils/guc.h>
-#include <utils/snapmgr.h>
-#include <parser/parse_utilcmd.h>
-#include <commands/tablespace.h>
 
+#include <access/htup_details.h>
+#include <access/xact.h>
+#include <catalog/index.h>
+#include <catalog/namespace.h>
+#include <catalog/objectaddress.h>
+#include <catalog/pg_authid.h>
+#include <catalog/pg_class_d.h>
 #include <catalog/pg_constraint.h>
 #include <catalog/pg_inherits.h>
-#include "compat/compat.h"
-
+#include <catalog/pg_trigger.h>
+#include <commands/alter.h>
+#include <commands/cluster.h>
+#include <commands/copy.h>
+#include <commands/defrem.h>
+#include <commands/event_trigger.h>
+#include <commands/prepare.h>
+#include <commands/tablecmds.h>
+#include <commands/tablespace.h>
+#include <commands/trigger.h>
+#include <commands/vacuum.h>
 #include <miscadmin.h>
+#include <nodes/makefuncs.h>
+#include <nodes/nodes.h>
+#include <nodes/parsenodes.h>
+#include <parser/parse_utilcmd.h>
+#include <storage/lmgr.h>
+#include <tcop/utility.h>
+#include <utils/acl.h>
+#include <utils/builtins.h>
+#include <utils/guc.h>
+#include <utils/inval.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
+#include <utils/snapmgr.h>
+#include <utils/syscache.h>
 
 #include "annotations.h"
-#include "export.h"
-#include "extension_constants.h"
-#include "process_utility.h"
-#include "ts_catalog/catalog.h"
-#include "chunk.h"
 #include "chunk_index.h"
+#include "chunk.h"
+#include "compat/compat.h"
+#include "compression_with_clause.h"
 #include "copy.h"
+#include "cross_module_fn.h"
+#include "debug_assert.h"
+#include "debug_point.h"
+#include "dimension_vector.h"
 #include "errors.h"
 #include "event_trigger.h"
+#include "export.h"
+#include "extension_constants.h"
 #include "extension.h"
 #include "hypercube.h"
-#include "hypertable.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/compression_settings.h"
-#include "ts_catalog/array_utils.h"
-#include "dimension_vector.h"
+#include "hypertable.h"
 #include "indexing.h"
+#include "partitioning.h"
+#include "process_utility.h"
 #include "scan_iterator.h"
 #include "time_utils.h"
 #include "trigger.h"
+#include "ts_catalog/array_utils.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
+#include "ts_catalog/continuous_agg.h"
+#include "tss_callbacks.h"
 #include "utils.h"
 #include "with_clause_parser.h"
-#include "cross_module_fn.h"
-#include "ts_catalog/continuous_agg.h"
-#include "compression_with_clause.h"
-#include "partitioning.h"
-#include "debug_point.h"
-#include "debug_assert.h"
 
 #ifdef USE_TELEMETRY
 #include "telemetry/functions.h"
@@ -537,6 +537,8 @@ process_copy(ProcessUtilityArgs *args)
 {
 	CopyStmt *stmt = (CopyStmt *) args->parsetree;
 
+	ts_begin_tss_store_callback();
+
 	/*
 	 * Needed to add the appropriate number of tuples to the completion tag
 	 */
@@ -591,6 +593,12 @@ process_copy(ProcessUtilityArgs *args)
 	add_hypertable_to_process_args(args, ht);
 
 	ts_cache_release(hcache);
+
+	ts_end_tss_store_callback(args->query_string,
+							  args->pstmt->stmt_location,
+							  args->pstmt->stmt_len,
+							  args->pstmt->queryId,
+							  args->completion_tag->nprocessed);
 
 	return DDL_DONE;
 }
