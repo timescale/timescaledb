@@ -15,7 +15,8 @@
 typedef struct
 {
 	VectorAggFunctions *func;
-	int column;
+	int input_offset;
+	int output_offset;
 } VectorAggDef;
 
 typedef struct
@@ -24,16 +25,15 @@ typedef struct
 
 	List *agg_defs;
 
-	int agg_state_row_bytes;
-	int num_agg_state_rows;
-	void *agg_states;
-
 	/*
 	 * We can't call the underlying scan after it has ended, or it will be
 	 * restarted. This is the behavior of Postgres heap scans. So we have to
 	 * track whether it has ended to avoid this.
 	 */
 	bool input_ended;
+
+	/* The following fields are related to the grouping policy. */
+	List *agg_states;
 } VectorAggState;
 
 extern Node *vector_agg_state_create(CustomScan *cscan);

@@ -45,11 +45,11 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	 */
 	List *aggregated_tlist =
 		castNode(CustomScan, vector_agg_state->custom.ss.ps.plan)->custom_scan_tlist;
-	ListCell *lc;
-	foreach (lc, aggregated_tlist)
+	const int naggs = list_length(aggregated_tlist);
+	for (int i = 0; i < naggs; i++)
 	{
 		/* Determine which kind of vectorized aggregation we should perform */
-		TargetEntry *tlentry = (TargetEntry *) lfirst(lc);
+		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
 		Assert(IsA(tlentry->expr, Aggref));
 		Aggref *aggref = castNode(Aggref, tlentry->expr);
 
@@ -85,20 +85,25 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 			Assert(value_column_description->type == COMPRESSED_COLUMN ||
 				   value_column_description->type == SEGMENTBY_COLUMN);
 
-			def->column = value_column_description - dcontext->compressed_chunk_columns;
+			def->input_offset = value_column_description - dcontext->compressed_chunk_columns;
 		}
 		else
 		{
-			def->column = -1;
+			def->input_offset = -1;
 		}
 
-		vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
+		def->output_offset = i;
 
-		vector_agg_state->agg_state_row_bytes += MAXALIGN(func->state_bytes);
+		vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
 	}
 
-	vector_agg_state->num_agg_state_rows = 1;
-	vector_agg_state->agg_states = palloc(vector_agg_state->agg_state_row_bytes);
+	ListCell *lc;
+	foreach (lc, vector_agg_state->agg_defs)
+	{
+		VectorAggDef *def = lfirst(lc);
+		vector_agg_state->agg_states =
+			lappend(vector_agg_state->agg_states, palloc0(def->func->state_bytes));
+	}
 }
 
 static void
@@ -119,6 +124,47 @@ vector_agg_rescan(CustomScanState *node)
 	state->input_ended = false;
 }
 
+static void
+compute_single_aggregate(DecompressBatchState *batch_state, VectorAggDef *agg_def, void *agg_state)
+{
+	/*
+	 * To calculate the sum for a segment by value or default compressed
+	 * column value, we need to multiply this value with the number of
+	 * passing decompressed tuples in this batch.
+	 */
+	int n = batch_state->total_batch_rows;
+	if (batch_state->vector_qual_result)
+	{
+		n = arrow_num_valid(batch_state->vector_qual_result, n);
+		Assert(n > 0);
+	}
+
+	if (agg_def->input_offset >= 0)
+	{
+		CompressedColumnValues *values = &batch_state->compressed_columns[agg_def->input_offset];
+		Assert(values->decompression_type != DT_Invalid);
+		Assert(values->decompression_type != DT_Iterator);
+
+		if (values->arrow == NULL)
+		{
+			Assert(values->decompression_type == DT_Scalar);
+			agg_def->func->agg_const(agg_state, *values->output_value, *values->output_isnull, n);
+		}
+		else
+		{
+			agg_def->func->agg_vector(agg_state, values->arrow, batch_state->vector_qual_result);
+		}
+	}
+	else
+	{
+		/*
+		 * We have only one function w/o arguments -- count(*). Unfortunately
+		 * it has to have a special code path everywhere.
+		 */
+		agg_def->func->agg_const(agg_state, 0, true, n);
+	}
+}
+
 static TupleTableSlot *
 vector_agg_exec(CustomScanState *node)
 {
@@ -131,8 +177,13 @@ vector_agg_exec(CustomScanState *node)
 		return NULL;
 	}
 
-	VectorAggDef *def = (VectorAggDef *) linitial(vector_agg_state->agg_defs);
-	def->func->agg_init(vector_agg_state->agg_states);
+	const int naggs = list_length(vector_agg_state->agg_defs);
+	for (int i = 0; i < naggs; i++)
+	{
+		VectorAggDef *agg_def = (VectorAggDef *) list_nth(vector_agg_state->agg_defs, i);
+		void *agg_state = (void *) list_nth(vector_agg_state->agg_states, i);
+		agg_def->func->agg_init(agg_state);
+	}
 
 	DecompressChunkState *decompress_state =
 		(DecompressChunkState *) linitial(vector_agg_state->custom.custom_ps);
@@ -173,54 +224,24 @@ vector_agg_exec(CustomScanState *node)
 			break;
 		}
 
-		/*
-		 * To calculate the sum for a segment by value or default compressed
-		 * column value, we need to multiply this value with the number of
-		 * passing decompressed tuples in this batch.
-		 */
-		int n = batch_state->total_batch_rows;
-		if (batch_state->vector_qual_result)
+		for (int i = 0; i < naggs; i++)
 		{
-			n = arrow_num_valid(batch_state->vector_qual_result, n);
-			Assert(n > 0);
-		}
-
-		if (def->column >= 0)
-		{
-			CompressedColumnValues *values = &batch_state->compressed_columns[def->column];
-			Assert(values->decompression_type != DT_Invalid);
-			Assert(values->decompression_type != DT_Iterator);
-
-			if (values->arrow == NULL)
-			{
-				Assert(values->decompression_type == DT_Scalar);
-				def->func->agg_const(vector_agg_state->agg_states,
-									 *values->output_value,
-									 *values->output_isnull,
-									 n);
-			}
-			else
-			{
-				def->func->agg_vector(vector_agg_state->agg_states,
-									  values->arrow,
-									  batch_state->vector_qual_result);
-			}
-		}
-		else
-		{
-			/*
-			 * We have only one function w/o arguments -- count(*). Unfortunately
-			 * it has to have a special code path everywhere.
-			 */
-			def->func->agg_const(vector_agg_state->agg_states, 0, true, n);
+			VectorAggDef *agg_def = (VectorAggDef *) list_nth(vector_agg_state->agg_defs, i);
+			void *agg_state = (void *) list_nth(vector_agg_state->agg_states, i);
+			compute_single_aggregate(batch_state, agg_def, agg_state);
 		}
 
 		compressed_batch_discard_tuples(batch_state);
 	}
 
-	def->func->agg_emit(vector_agg_state->agg_states,
-						&aggregated_slot->tts_values[0],
-						&aggregated_slot->tts_isnull[0]);
+	for (int i = 0; i < naggs; i++)
+	{
+		VectorAggDef *agg_def = (VectorAggDef *) list_nth(vector_agg_state->agg_defs, i);
+		void *agg_state = (void *) list_nth(vector_agg_state->agg_states, i);
+		agg_def->func->agg_emit(agg_state,
+								&aggregated_slot->tts_values[agg_def->output_offset],
+								&aggregated_slot->tts_isnull[agg_def->output_offset]);
+	}
 
 	ExecStoreVirtualTuple(aggregated_slot);
 
