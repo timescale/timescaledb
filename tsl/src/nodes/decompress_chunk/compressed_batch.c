@@ -833,30 +833,28 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->decompression_type = DT_Scalar;
 				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
-				column_values->output_value =
-					&compressed_batch_current_tuple(batch_state)->tts_values[attr];
-				column_values->output_isnull =
-					&compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
+				Datum *output_value = &decompressed_tuple->tts_values[attr];
+				bool *output_isnull = &decompressed_tuple->tts_isnull[attr];
+				column_values->output_value = output_value;
+				column_values->output_isnull = output_isnull;
 				column_values->arrow = NULL;
 
-				*column_values->output_value =
-					slot_getattr(compressed_slot,
-								 column_description->compressed_scan_attno,
-								 column_values->output_isnull);
+				*output_value = slot_getattr(compressed_slot,
+											 column_description->compressed_scan_attno,
+											 output_isnull);
 
 				/*
 				 * Note that if it's not a by-value type, we should copy it into
 				 * the slot context.
 				 */
-				if (!column_description->by_value &&
-					DatumGetPointer(decompressed_tuple->tts_values[attr]) != NULL)
+				if (!column_description->by_value && !*output_isnull &&
+					DatumGetPointer(*output_value) != NULL)
 				{
 					if (column_description->value_bytes < 0)
 					{
 						/* This is a varlena type. */
-						decompressed_tuple->tts_values[attr] = PointerGetDatum(
-							detoaster_detoast_attr_copy((struct varlena *)
-															decompressed_tuple->tts_values[attr],
+						*output_value = PointerGetDatum(
+							detoaster_detoast_attr_copy((struct varlena *) *output_value,
 														&dcontext->detoaster,
 														batch_state->per_batch_context));
 					}
@@ -866,9 +864,9 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 						void *tmp = MemoryContextAlloc(batch_state->per_batch_context,
 													   column_description->value_bytes);
 						memcpy(tmp,
-							   DatumGetPointer(decompressed_tuple->tts_values[attr]),
+							   DatumGetPointer(*output_value),
 							   column_description->value_bytes);
-						decompressed_tuple->tts_values[attr] = PointerGetDatum(tmp);
+						*output_value = PointerGetDatum(tmp);
 					}
 				}
 				break;
