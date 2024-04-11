@@ -305,7 +305,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 					TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
 
 				column.typid = attribute->atttypid;
-				column.value_bytes = get_typlen(column.typid);
+				get_typlenbyval(column.typid, &column.value_bytes, &column.by_value);
 			}
 
 			if (list_nth_int(chunk_state->is_segmentby_column, compressed_index))
@@ -543,11 +543,10 @@ perform_vectorized_sum_int4(DecompressChunkState *chunk_state, Aggref *aggref)
 			/* We have at least one value */
 			decompressed_scan_slot->tts_isnull[0] = false;
 
-			CompressedDataHeader *header =
-				(CompressedDataHeader *) detoaster_detoast_attr((struct varlena *) DatumGetPointer(
-																	value),
-																&dcontext->detoaster,
-																CurrentMemoryContext);
+			CompressedDataHeader *header = (CompressedDataHeader *)
+				detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(value),
+											&dcontext->detoaster,
+											CurrentMemoryContext);
 
 			ArrowArray *arrow = NULL;
 
