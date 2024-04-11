@@ -27,5 +27,5 @@ typedef struct Detoaster
 
 void detoaster_init(Detoaster *detoaster, MemoryContext mctx);
 void detoaster_close(Detoaster *detoaster);
-struct varlena *detoaster_detoast_attr(struct varlena *attr, Detoaster *detoaster,
-									   MemoryContext dest_mctx);
+struct varlena *detoaster_detoast_attr_copy(struct varlena *attr, Detoaster *detoaster,
+											MemoryContext dest_mctx);

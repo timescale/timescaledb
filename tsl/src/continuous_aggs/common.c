@@ -9,6 +9,8 @@
 #include <utils/date.h>
 #include <utils/timestamp.h>
 
+#include "guc.h"
+
 static Const *check_time_bucket_argument(Node *arg, char *position);
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
@@ -87,7 +89,15 @@ function_allowed_in_cagg_definition(Oid funcid)
 	if (finfo == NULL)
 		return false;
 
-	return finfo->allowed_in_cagg_definition;
+	if (finfo->allowed_in_cagg_definition)
+		return true;
+
+	/* Allow creation of CAggs with deprecated bucket function in debug builds for testing purposes
+	 */
+	if (ts_guc_debug_allow_cagg_with_deprecated_funcs && IS_DEPRECATED_BUCKET_FUNC(finfo))
+		return true;
+
+	return false;
 }
 
 /*
@@ -239,16 +249,28 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			Node *width_arg;
 			Node *col_arg;
 
-			if (!function_allowed_in_cagg_definition(fe->funcid))
+			/* Filter any non bucketing functions */
+			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
+			if (finfo == NULL || !finfo->is_bucketing_func)
+			{
 				continue;
+			}
 
-			/*
-			 * Offset variants of time_bucket functions are not
-			 * supported at the moment.
-			 */
-			if (list_length(fe->args) >= 5 ||
-				(list_length(fe->args) == 4 && exprType(lfourth(fe->args)) == INTERVALOID))
+			/* Do we have a bucketing function that is not allowed in the CAgg definition */
+			if (!function_allowed_in_cagg_definition(fe->funcid))
+			{
+				if (IS_DEPRECATED_BUCKET_FUNC(finfo))
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("experimental bucket functions are not supported inside a CAgg "
+									"definition"),
+							 errhint("Use a function from the %s schema instead.",
+									 FUNCTIONS_SCHEMA_NAME)));
+				}
+
 				continue;
+			}
 
 			if (found)
 				ereport(ERROR,
@@ -392,6 +414,15 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 								 "function.")));
 			}
 		}
+	}
+
+	if (tbinfo->bucket_time_offset != NULL &&
+		TIMESTAMP_NOT_FINITE(tbinfo->bucket_time_origin) == false)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("using offset and origin in a time_bucket function at the same time is not "
+						"supported")));
 	}
 
 	if (!time_bucket_info_has_fixed_width(tbinfo))

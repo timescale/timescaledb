@@ -5,6 +5,7 @@ set(TEST_FILES
     alter.sql
     alternate_users.sql
     baserel_cache.sql
+    catalog_corruption.sql
     chunks.sql
     chunk_adaptive.sql
     chunk_utils.sql

@@ -292,7 +292,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.output_attno));
 
 			column.typid = attribute->atttypid;
-			column.value_bytes = get_typlen(column.typid);
+			get_typlenbyval(column.typid, &column.value_bytes, &column.by_value);
 
 			if (list_nth_int(chunk_state->is_segmentby_column, compressed_index))
 				column.type = SEGMENTBY_COLUMN;

@@ -1498,9 +1498,9 @@ decompress_chunk(Oid in_table, Oid out_table)
 	 * We want to prevent other decompressors from decompressing this table,
 	 * and we want to prevent INSERTs or UPDATEs which could mess up our decompression.
 	 * We may as well allow readers to keep reading the compressed data while
-	 * we are compressing, so we only take an ExclusiveLock instead of AccessExclusive.
+	 * we are decompressing, so we only take an ExclusiveLock instead of AccessExclusive.
 	 */
-	Relation out_rel = table_open(out_table, AccessExclusiveLock);
+	Relation out_rel = table_open(out_table, ExclusiveLock);
 	Relation in_rel = table_open(in_table, ExclusiveLock);
 	int64 nrows_processed = 0;
 
@@ -1652,10 +1652,10 @@ decompress_batch(RowDecompressor *decompressor)
 
 		/* Normal compressed column. */
 		Datum compressed_datum = PointerGetDatum(
-			detoaster_detoast_attr((struct varlena *) DatumGetPointer(
-									   decompressor->compressed_datums[input_column]),
-								   &decompressor->detoaster,
-								   CurrentMemoryContext));
+			detoaster_detoast_attr_copy((struct varlena *) DatumGetPointer(
+											decompressor->compressed_datums[input_column]),
+										&decompressor->detoaster,
+										CurrentMemoryContext));
 		CompressedDataHeader *header = get_compressed_data_header(compressed_datum);
 		column_info->iterator =
 			definitions[header->compression_algorithm]
