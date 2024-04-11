@@ -3,7 +3,16 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+
 #pragma once
 
-extern bool apply_vectorized_agg_optimization(PlannerInfo *root, AggPath *aggregation_path,
-											  Path *subpath);
+#include <postgres.h>
+
+#include <nodes/execnodes.h>
+
+typedef struct VectorAggState
+{
+	CustomScanState custom;
+} VectorAggState;
+
+extern Node *vector_agg_state_create(CustomScan *cscan);

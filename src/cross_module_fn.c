@@ -124,11 +124,9 @@ job_execute_default_fn(BgwJob *job)
 	pg_unreachable();
 }
 
-static bool
-push_down_aggregation(PlannerInfo *root, AggPath *aggregation_path, Path *subpath)
+static void
+tsl_postprocess_plan_stub(PlannedStmt *stmt)
 {
-	/* Don't skip adding the agg node on top of the path */
-	return false;
 }
 
 static bool
@@ -322,7 +320,7 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.policies_alter = error_no_default_fn_pg_community,
 	.policies_show = error_no_default_fn_pg_community,
 
-	.push_down_aggregation = push_down_aggregation,
+	.tsl_postprocess_plan = tsl_postprocess_plan_stub,
 
 	.partialize_agg = error_no_default_fn_pg_community,
 	.finalize_agg_sfunc = error_no_default_fn_pg_community,

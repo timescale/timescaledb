@@ -454,7 +454,20 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 	/* Fill validity and indices of the array elements, reshuffling for nulls if needed. */
 	const int validity_bitmap_bytes = sizeof(uint64) * pad_to_multiple(64, n_total) / 64;
 	uint64 *restrict validity_bitmap = MemoryContextAlloc(dest_mctx, validity_bitmap_bytes);
+
+	/*
+	 * First, mark all data as valid, we will fill the nulls later if needed.
+	 * Note that the validity bitmap size is a multiple of 64 bits. We have to
+	 * fill the tail bits with zeros, because the corresponding elements are not
+	 * valid.
+	 *
+	 */
 	memset(validity_bitmap, 0xFF, validity_bitmap_bytes);
+	if (n_total % 64)
+	{
+		const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
+		validity_bitmap[n_total / 64] &= tail_mask;
+	}
 
 	if (header->has_nulls)
 	{
@@ -484,18 +497,6 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		}
 
 		Assert(current_notnull_element == -1);
-	}
-	else
-	{
-		/*
-		 * The validity bitmap size is a multiple of 64 bits. Fill the tail bits
-		 * with zeros, because the corresponding elements are not valid.
-		 */
-		if (n_total % 64)
-		{
-			const uint64 tail_mask = -1ULL >> (64 - n_total % 64);
-			validity_bitmap[n_total / 64] &= tail_mask;
-		}
 	}
 
 	ArrowArray *result = MemoryContextAllocZero(dest_mctx, sizeof(ArrowArray) + sizeof(void *) * 2);
