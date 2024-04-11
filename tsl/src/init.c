@@ -39,7 +39,7 @@
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/skip_scan/skip_scan.h"
 #include "nodes/gapfill/gapfill_functions.h"
-#include "partialize_agg.h"
+#include "nodes/vector_agg/plan.h"
 #include "partialize_finalize.h"
 #include "planner.h"
 #include "process_utility.h"
@@ -118,7 +118,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.policies_show = policies_show,
 
 	/* Vectorized queries */
-	.push_down_aggregation = apply_vectorized_agg_optimization,
+	.tsl_postprocess_plan = tsl_postprocess_plan,
 
 	/* Continuous Aggregates */
 	.partialize_agg = tsl_partialize_agg,
@@ -194,6 +194,7 @@ ts_module_init(PG_FUNCTION_ARGS)
 	_continuous_aggs_cache_inval_init();
 	_decompress_chunk_init();
 	_skip_scan_init();
+	_vector_agg_init();
 	/* Register a cleanup function to be called when the backend exits */
 	if (register_proc_exit)
 		on_proc_exit(ts_module_cleanup_on_pg_exit, 0);

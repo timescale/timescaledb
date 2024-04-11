@@ -349,7 +349,7 @@ value2 AS segment_by_value2,
 value1 AS int_value,
 value1 AS float_value
 FROM
-generate_series('1980-01-01 00:00:00-00', '1980-03-01 00:00:00-00', INTERVAL '1 day') AS g1(time),
+generate_series('1980-01-03 00:00:00-00', '1980-03-04 00:00:00-00', INTERVAL '1 day') AS g1(time),
 generate_series(-10, 25, 1) AS g2(value1),
 generate_series(-30, 20, 1) AS g3(value2)
 ORDER BY time;
@@ -358,6 +358,8 @@ ORDER BY time;
 SELECT sum(segment_by_value1), sum(segment_by_value2) FROM testtable2;
 
 SELECT compress_chunk(ch) FROM show_chunks('testtable2') ch;
+
+ANALYZE testtable2;
 
 :EXPLAIN
 SELECT sum(segment_by_value1) FROM testtable2;
