@@ -592,11 +592,29 @@ tts_arrow_getsysattr(TupleTableSlot *slot, int attnum, bool *isnull)
 static void
 tts_arrow_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 {
+	ArrowTupleTableSlot *asrcslot = (ArrowTupleTableSlot *) srcslot;
 	ArrowTupleTableSlot *adstslot = (ArrowTupleTableSlot *) dstslot;
 	TupleTableSlot *child_dstslot = NULL;
 	TupleTableSlot *child_srcslot = NULL;
 
 	Assert(TTS_IS_ARROWTUPLE(dstslot));
+
+	/*
+	 * If the source and destination slots have the same implementation and
+	 * both child slots are empty, this is used as a virtual tuple and we just
+	 * forward the call to the virtual method and let it deal with the
+	 * copy. This can be the case for COPY FROM since it creates a slot with
+	 * the type of the table being copied to and uses ExecStoreVirtualTuple to
+	 * store the tuple data from the file.
+	 */
+	if (dstslot->tts_ops == srcslot->tts_ops && TTS_EMPTY(asrcslot->noncompressed_slot) &&
+		(asrcslot->compressed_slot == NULL || TTS_EMPTY(asrcslot->compressed_slot)))
+	{
+		Assert(!TTS_EMPTY(srcslot));
+		TTSOpsVirtual.copyslot(dstslot, srcslot);
+		return;
+	}
+
 	ExecClearTuple(dstslot);
 
 	/* Check if copying from another slot implementation */
@@ -639,8 +657,6 @@ tts_arrow_copyslot(TupleTableSlot *dstslot, TupleTableSlot *srcslot)
 
 		/* NOTE: in practice, there might not be a case for copying one arrow
 		 * slot to another, so should consider just throwing en error. */
-		ArrowTupleTableSlot *asrcslot = (ArrowTupleTableSlot *) srcslot;
-
 		if (!TTS_EMPTY(asrcslot->noncompressed_slot))
 		{
 			child_srcslot = asrcslot->noncompressed_slot;
