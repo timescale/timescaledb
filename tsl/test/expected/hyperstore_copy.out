@@ -133,3 +133,44 @@ select * from orig join curr using (created_at) where row(orig) != row(curr);
 ------------+-------------+-----------+------+----------+-------------+-----------+------+----------
 (0 rows)
 
+-- Read data from a file and make sure that it is inserted properly.
+create table copy_test1(
+       metric_id int,
+       created_at timestamptz,
+       device_id int,
+       temp float,
+       humidity float
+);
+select create_hypertable('copy_test1', 'created_at');
+NOTICE:  adding not-null constraint to column "created_at"
+    create_hypertable    
+-------------------------
+ (3,public,copy_test1,t)
+(1 row)
+
+alter table copy_test1 set access method hyperstore;
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "copy_test1" is set to ""
+NOTICE:  default order by for hypertable "copy_test1" is set to "created_at DESC"
+\copy copy_test1 from 'data/magic.csv' with csv header
+select * from copy_test1 order by metric_id;
+ metric_id |          created_at          | device_id |       temp        |      humidity      
+-----------+------------------------------+-----------+-------------------+--------------------
+       164 | Wed Jun 01 00:27:10 2022 PDT |         1 |  22.1571424036187 |   95.7589111064385
+       298 | Wed Jun 01 00:49:30 2022 PDT |         1 |  26.5904140796662 |   25.6517507790162
+       345 | Wed Jun 01 00:57:20 2022 PDT |         1 |  14.2112895008574 |  0.252265718039268
+       353 | Wed Jun 01 00:58:40 2022 PDT |         5 |  5.02598214446964 |   40.2435007149558
+       363 | Wed Jun 01 01:00:20 2022 PDT |        13 |  30.4508743614474 |   56.0536696009606
+       511 | Wed Jun 01 01:25:00 2022 PDT |         1 |  30.5256995663874 |   59.3760333752531
+       655 | Wed Jun 01 01:49:00 2022 PDT |         8 |  29.1506488040468 |   98.2462821993139
+       977 | Wed Jun 01 02:42:40 2022 PDT |         1 | 0.949462224935731 |   62.1551090171878
+      1005 | Wed Jun 01 02:47:20 2022 PDT |         2 |  32.7607481200711 | 0.0814742363326237
+      1096 | Wed Jun 01 03:02:30 2022 PDT |         1 |  16.7951263617964 |   76.8274813106784
+      2298 | Wed Jun 01 06:22:50 2022 PDT |         6 |  25.1019351511395 |   19.2896631866349
+      3246 | Wed Jun 01 09:00:50 2022 PDT |         7 |  39.3508344139115 |   95.1677745558139
+(12 rows)
+
+-- Here I wanted to write a subset of the data to a csv file and then
+-- load it again, but this statement fails.
+--
+-- select * into subset from :hypertable where device_id between 0 and 10;
