@@ -197,6 +197,14 @@ ts_chunk_scan_by_chunk_ids(const Hyperspace *hs, const List *chunk_ids, unsigned
 			Assert(cube->capacity > cube->num_slices);
 			cube->slices[cube->num_slices++] = slice_copy;
 		}
+
+		if (cube->num_slices == 0)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_INTERNAL_ERROR),
+					 errmsg("chunk %s has no dimension slices", get_rel_name(chunk->table_id))));
+		}
+
 		ts_hypercube_slice_sort(cube);
 		chunk->cube = cube;
 	}

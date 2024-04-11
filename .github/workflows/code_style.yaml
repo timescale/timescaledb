@@ -66,7 +66,7 @@ jobs:
       - name: Run codespell
         run: |
           find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.sh" \) \
-            -exec codespell -L "inh,larg,inout" {} \+
+            -exec codespell -I .github/codespell-ignore-words {} \+
 
   cc_checks:
     name: Check code formatting
