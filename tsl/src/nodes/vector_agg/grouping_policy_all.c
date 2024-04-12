@@ -109,12 +109,7 @@ gp_all_add_batch(GroupingPolicy *gp, DecompressBatchState *batch_state)
 static bool
 gp_all_should_emit(GroupingPolicy *gp)
 {
-#ifndef NDEBUG
-	/* To have more code coverage in debug mode. */
-	return true;
-#else
 	return false;
-#endif
 }
 
 static void
