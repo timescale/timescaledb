@@ -41,6 +41,9 @@ def get_referenced_issue(pr_number):
     """Get the number of issue fixed by the given pull request.
     Returns None if no issue is fixed, or more than one issue"""
 
+    # We only need the first issue here. We also request only the first 30 labels,
+    # because GitHub requires some small restriction there that is counted
+    # towards the GraphQL API usage quota.
     ref_result = run_query(
         string.Template(
             """
@@ -48,10 +51,9 @@ def get_referenced_issue(pr_number):
             repository(owner: "timescale", name: "timescaledb") {
               pullRequest(number: $pr_number) {
                 closingIssuesReferences(first: 1) {
-                  edges {
-                    node {
-                      number
-                    }
+                  nodes {
+                      number, title,
+                      labels (first: 30) { nodes { name } }
                   }
                 }
               }
@@ -61,16 +63,26 @@ def get_referenced_issue(pr_number):
         ).substitute({"pr_number": pr_number})
     )
 
-    # The above returns {'data': {'repository': {'pullRequest': {'closingIssuesReferences': {'edges': [{'node': {'number': 4944}}]}}}}}
+    # The above returns:
+    # {'data': {'repository': {'pullRequest': {'closingIssuesReferences': {'nodes': [{'number': 6819,
+    #    'title': '[Bug]: Segfault when `ts_insert_blocker` function is called',
+    #    'labels': {'nodes': [{'name': 'bug'}]}}]}}}}}
+    #
+    # We can have {'nodes': [None]} in case it references an inaccessble repository,
+    # just ignore it.
 
-    ref_edges = ref_result["data"]["repository"]["pullRequest"][
+    ref_nodes = ref_result["data"]["repository"]["pullRequest"][
         "closingIssuesReferences"
-    ]["edges"]
+    ]["nodes"]
 
-    if ref_edges and len(ref_edges) == 1:
-        return ref_edges[0]["node"]["number"]
+    if not ref_nodes or len(ref_nodes) != 1 or not ref_nodes[0]:
+        return None, None, None
 
-    return None
+    number = ref_nodes[0]["number"]
+    title = ref_nodes[0]["title"]
+    labels = {x["name"] for x in ref_nodes[0]["labels"]["nodes"]}
+
+    return number, title, labels
 
 
 def set_auto_merge(pr_number):
@@ -242,26 +254,25 @@ class PRInfo:
         self.issue_number = issue_number_
 
 
-def should_backport_by_labels(pygithub_object):
+def should_backport_by_labels(number, title, labels):
     """Should we backport the given PR/issue, judging by the labels?
     Note that this works in ternary logic:
     True means we must,
     False means we must not (tags to disable backport take precedence),
     and None means weak no (no tags to either request or disable backport)"""
-    labels = {label.name for label in pygithub_object.labels}
     stopper_labels = labels.intersection(
         ["disable-auto-backport", "auto-backport-not-done"]
     )
     if stopper_labels:
         print(
-            f"#{pygithub_object.number} '{pygithub_object.title}' is labeled as '{list(stopper_labels)[0]}' which prevents automated backporting."
+            f"#{number} '{title}' is labeled as '{list(stopper_labels)[0]}' which prevents automated backporting."
         )
         return False
 
     force_labels = labels.intersection(["bug", "force-auto-backport"])
     if force_labels:
         print(
-            f"#{pygithub_object.number} '{pygithub_object.title}' is labeled as '{list(force_labels)[0]}' which requests automated backporting."
+            f"#{number} '{title}' is labeled as '{list(force_labels)[0]}' which requests automated backporting."
         )
         return True
 
@@ -308,7 +319,7 @@ for commit_sha, commit_title in main_commits:
     # labels to request backport like "bug", and labels to prevent backport
     # like "disable-auto-backport", on both issue and the PR. We're going to use
     # the ternary False/None/True logic to combine them properly.
-    issue_number = get_referenced_issue(pull.number)
+    issue_number, issue_title, issue_labels = get_referenced_issue(pull.number)
     if not issue_number:
         should_backport_issue_ternary = None
         print(
@@ -316,12 +327,17 @@ for commit_sha, commit_title in main_commits:
         )
     else:
         issue = source_repo.get_issue(number=issue_number)
-        should_backport_issue_ternary = should_backport_by_labels(issue)
+        should_backport_issue_ternary = should_backport_by_labels(
+            issue_number, issue_title, issue_labels
+        )
         print(
             f"{commit_sha[:9]} belongs to the PR #{pull.number} '{pull.title}' "
             f"that references the issue #{issue.number} '{issue.title}'."
         )
-    should_backport_pr_ternary = should_backport_by_labels(pull)
+    pull_labels = {label.name for label in pull.labels}
+    should_backport_pr_ternary = should_backport_by_labels(
+        pull.number, pull.title, pull_labels
+    )
 
     # We backport if either the PR or the issue labels request the backport, and
     # none of them prevent it. I'm writing it with `is True` because I don't
