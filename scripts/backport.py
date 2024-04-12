@@ -41,6 +41,9 @@ def get_referenced_issue(pr_number):
     """Get the number of issue fixed by the given pull request.
     Returns None if no issue is fixed, or more than one issue"""
 
+    # We only need the first issue here. We also request only the first 30 labels,
+    # because GitHub requires some small restriction there that is counted
+    # towards the GraphQL API usage quota.
     ref_result = run_query(
         string.Template(
             """
