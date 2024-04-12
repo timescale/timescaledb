@@ -41,6 +41,10 @@ select count(*) from dvagg where b > 10;
 
 explain (costs off) select sum(c) from dvagg where b in (0, 1, 3);
 
+select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
+
+explain (costs off) select sum(a), sum(b), sum(c) from dvagg where b in (0, 1, 3);
+
 reset timescaledb.enable_vectorized_aggregation;
 
 

@@ -195,7 +195,6 @@ vector_agg_exec(CustomScanState *node)
 
 	/* Get a reference the the output TupleTableSlot */
 	TupleTableSlot *aggregated_slot = vector_agg_state->custom.ss.ps.ps_ResultTupleSlot;
-	Assert(aggregated_slot->tts_tupleDescriptor->natts == 1);
 	ExecClearTuple(aggregated_slot);
 
 	for (;;)

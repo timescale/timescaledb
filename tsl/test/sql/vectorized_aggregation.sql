@@ -132,7 +132,7 @@ SELECT sum(int_value) FROM testtable;
 
 RESET timescaledb.enable_vectorized_aggregation;
 
--- Vectorized aggregation without bullk decompression only possible for
+-- Vectorized aggregation without bulk decompression only possible for
 -- segmentby columns.
 SET timescaledb.enable_bulk_decompression = OFF;
 
@@ -154,8 +154,10 @@ SELECT sum(int_value), sum(int_value) FROM testtable;
 :EXPLAIN
 SELECT sum(segment_by_value), sum(segment_by_value) FROM testtable;
 
--- Performing a sum on multiple columns is currently not supported by vectorization
+-- Performing a sum on multiple columns is supported.
 :EXPLAIN
+SELECT sum(int_value), sum(segment_by_value) FROM testtable;
+
 SELECT sum(int_value), sum(segment_by_value) FROM testtable;
 
 -- Using the sum function together with another non-vector capable aggregate is not supported

@@ -150,6 +150,104 @@ vector_agg_plan_create(Agg *agg, CustomScan *decompress_chunk)
 	return (Plan *) custom;
 }
 
+static bool
+can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
+{
+	if (aggref->aggfilter != NULL)
+	{
+		/* Filter clause on aggregate is not supported. */
+		return false;
+	}
+
+	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
+	{
+		/*
+		 * We don't have a vectorized implementation for this particular
+		 * aggregate function.
+		 */
+		return false;
+	}
+
+	if (aggref->args == NIL)
+	{
+		/* This must be count(*), we can vectorize it. */
+		return true;
+	}
+
+	/* The function must have one argument, check it. */
+	Assert(list_length(aggref->args) == 1);
+	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
+	if (!IsA(argument->expr, Var))
+	{
+		/* Can aggregate only a bare decompressed column, not an expression. */
+		return false;
+	}
+
+	Var *aggregated_var = castNode(Var, argument->expr);
+
+	/*
+	 * Check if this particular column is a segmentby or has bulk decompression
+	 * enabled. This hook is called after set_plan_refs, and at this stage the
+	 * output targetlist of the aggregation node uses OUTER_VAR references into
+	 * the child scan targetlist, so first we have to translate this.
+	 */
+	Assert(aggregated_var->varno == OUTER_VAR);
+	TargetEntry *decompressed_target_entry =
+		list_nth(custom->scan.plan.targetlist, AttrNumberGetAttrOffset(aggregated_var->varattno));
+
+	if (!IsA(decompressed_target_entry->expr, Var))
+	{
+		/*
+		 * Can only aggregate the plain Vars. Not sure if this is redundant with
+		 * the similar check above.
+		 */
+		return false;
+	}
+	Var *decompressed_var = castNode(Var, decompressed_target_entry->expr);
+
+	/*
+	 * Now, we have to translate the decompressed varno into the compressed
+	 * column index, to check if the column supports bulk decompression.
+	 */
+	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
+	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
+	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
+	int compressed_column_index = 0;
+	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
+	{
+		if (list_nth_int(decompression_map, compressed_column_index) == decompressed_var->varattno)
+		{
+			break;
+		}
+	}
+	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
+	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
+	const bool bulk_decompression_enabled_for_column =
+		list_nth_int(bulk_decompression_column, compressed_column_index);
+
+	/*
+	 * Bulk decompression can be disabled for all columns in the DecompressChunk
+	 * node settings, we can't do vectorized aggregation for compressed columns
+	 * in that case. For segmentby columns it's still possible.
+	 */
+	List *settings = linitial(custom->custom_private);
+	const bool bulk_decompression_enabled_globally =
+		list_nth_int(settings, DCS_EnableBulkDecompression);
+
+	/*
+	 * We support vectorized aggregation either for segmentby columns or for
+	 * columns with bulk decompression enabled.
+	 */
+	if (!list_nth_int(is_segmentby_column, compressed_column_index) &&
+		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
+	{
+		/* Vectorized aggregation not possible for this particular column. */
+		return false;
+	}
+
+	return true;
+}
+
 /*
  * Where possible, replace the partial aggregation plan nodes with our own
  * vectorized aggregation node. The replacement is done in-place.
@@ -226,12 +324,6 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	if (list_length(agg->plan.targetlist) != 1)
-	{
-		/* We currently handle only one agg function per node. */
-		return plan;
-	}
-
 	if (agg->plan.lefttree == NULL)
 	{
 		/*
@@ -264,102 +356,18 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
-	/* Now check the aggregate function itself. */
-	Node *expr_node = (Node *) castNode(TargetEntry, linitial(agg->plan.targetlist))->expr;
-	Assert(IsA(expr_node, Aggref));
-
-	Aggref *aggref = castNode(Aggref, expr_node);
-
-	if (aggref->aggfilter != NULL)
+	/* Now check the aggregate functions themselves. */
+	ListCell *lc;
+	foreach (lc, agg->plan.targetlist)
 	{
-		/* Filter clause on aggregate is not supported. */
-		return plan;
-	}
+		TargetEntry *target_entry = castNode(TargetEntry, lfirst(lc));
+		Assert(IsA(target_entry->expr, Aggref));
 
-	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
-	{
-		/*
-		 * We don't have a vectorized implementation for this particular
-		 * aggregate function.
-		 */
-		return plan;
-	}
-
-	if (aggref->args == NIL)
-	{
-		/* This must be count(*), we can vectorize it. */
-		return vector_agg_plan_create(agg, custom);
-	}
-
-	/* The function must have one argument, check it. */
-	Assert(list_length(aggref->args) == 1);
-	TargetEntry *argument = castNode(TargetEntry, linitial(aggref->args));
-	if (!IsA(argument->expr, Var))
-	{
-		/* Can aggregate only a bare decompressed column, not an expression. */
-		return plan;
-	}
-
-	Var *aggregated_var = castNode(Var, argument->expr);
-
-	/*
-	 * Check if this particular column is a segmentby or has bulk decompression
-	 * enabled. This hook is called after set_plan_refs, and at this stage the
-	 * output targetlist of the aggregation node uses OUTER_VAR references into
-	 * the child scan targetlist, so first we have to translate this.
-	 */
-	Assert(aggregated_var->varno == OUTER_VAR);
-	TargetEntry *decompressed_target_entry =
-		list_nth(custom->scan.plan.targetlist, AttrNumberGetAttrOffset(aggregated_var->varattno));
-
-	if (!IsA(decompressed_target_entry->expr, Var))
-	{
-		/*
-		 * Can only aggregate the plain Vars. Not sure if this is redundant with
-		 * the similar check above.
-		 */
-		return plan;
-	}
-	Var *decompressed_var = castNode(Var, decompressed_target_entry->expr);
-
-	/*
-	 * Now, we have to translate the decompressed varno into the compressed
-	 * column index, to check if the column supports bulk decompression.
-	 */
-	List *decompression_map = list_nth(custom->custom_private, DCP_DecompressionMap);
-	List *is_segmentby_column = list_nth(custom->custom_private, DCP_IsSegmentbyColumn);
-	List *bulk_decompression_column = list_nth(custom->custom_private, DCP_BulkDecompressionColumn);
-	int compressed_column_index = 0;
-	for (; compressed_column_index < list_length(decompression_map); compressed_column_index++)
-	{
-		if (list_nth_int(decompression_map, compressed_column_index) == decompressed_var->varattno)
+		Aggref *aggref = castNode(Aggref, target_entry->expr);
+		if (!can_vectorize_aggref(aggref, custom))
 		{
-			break;
+			return plan;
 		}
-	}
-	Ensure(compressed_column_index < list_length(decompression_map), "compressed column not found");
-	Assert(list_length(decompression_map) == list_length(bulk_decompression_column));
-	const bool bulk_decompression_enabled_for_column =
-		list_nth_int(bulk_decompression_column, compressed_column_index);
-
-	/*
-	 * Bulk decompression can be disabled for all columns in the DecompressChunk
-	 * node settings, we can't do vectorized aggregation for compressed columns
-	 * in that case. For segmentby columns it's still possible.
-	 */
-	List *settings = linitial(custom->custom_private);
-	const bool bulk_decompression_enabled_globally =
-		list_nth_int(settings, DCS_EnableBulkDecompression);
-
-	/*
-	 * We support vectorized aggregation either for segmentby columns or for
-	 * columns with bulk decompression enabled.
-	 */
-	if (!list_nth_int(is_segmentby_column, compressed_column_index) &&
-		!(bulk_decompression_enabled_for_column && bulk_decompression_enabled_globally))
-	{
-		/* Vectorized aggregation not possible for this particular column. */
-		return plan;
 	}
 
 	/*
