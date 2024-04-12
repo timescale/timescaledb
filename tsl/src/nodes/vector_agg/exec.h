@@ -11,6 +11,7 @@
 #include <nodes/execnodes.h>
 
 #include "functions.h"
+#include "grouping_policy.h"
 
 typedef struct
 {
@@ -32,8 +33,7 @@ typedef struct
 	 */
 	bool input_ended;
 
-	/* The following fields are related to the grouping policy. */
-	List *agg_states;
+	GroupingPolicy *grouping;
 } VectorAggState;
 
 extern Node *vector_agg_state_create(CustomScan *cscan);
