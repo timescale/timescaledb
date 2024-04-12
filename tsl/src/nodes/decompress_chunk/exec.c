@@ -219,13 +219,15 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	node->custom_ps = lappend(node->custom_ps, ExecInitNode(compressed_scan, estate, eflags));
 
 	/*
-	 * Determine which columns we are going to decompress. Since in the hottest
-	 * loop we work only with compressed columns, we'll put them in front of the
-	 * array. So first, count how many compressed and not compressed columns
-	 * we have.
+	 * Count the actual data columns we have to decompress, skipping the
+	 * metadata columns. We only need the metadata columns when initializing the
+	 * compressed batch, so they are not saved in the compressed batch itself,
+	 * it tracks only the data columns. We put the metadata columns to the end
+	 * of the array to have the same column indexes in compressed batch state
+	 * and in decompression context.
 	 */
-	int num_compressed = 0;
-	int num_total = 0;
+	int num_data_columns = 0;
+	int num_columns_with_metadata = 0;
 
 	ListCell *dest_cell;
 	ListCell *is_segmentby_cell;
@@ -242,22 +244,22 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			continue;
 		}
 
-		if (output_attno > 0 && !lfirst_int(is_segmentby_cell))
+		if (output_attno > 0)
 		{
 			/*
-			 * Not a metadata column and not a segmentby column, hence a
-			 * compressed one.
+			 * Not a metadata column.
 			 */
-			num_compressed++;
+			num_data_columns++;
 		}
 
-		num_total++;
+		num_columns_with_metadata++;
 	}
 
-	Assert(num_compressed <= num_total);
-	dcontext->num_compressed_columns = num_compressed;
-	dcontext->num_total_columns = num_total;
-	dcontext->template_columns = palloc0(sizeof(CompressionColumnDescription) * num_total);
+	Assert(num_data_columns <= num_columns_with_metadata);
+	dcontext->num_data_columns = num_data_columns;
+	dcontext->num_columns_with_metadata = num_columns_with_metadata;
+	dcontext->compressed_chunk_columns =
+		palloc0(sizeof(CompressionColumnDescription) * num_columns_with_metadata);
 	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
 	dcontext->ps = &node->ss.ps;
 
@@ -268,7 +270,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	 * separate indices for them.
 	 */
 	int current_compressed = 0;
-	int current_not_compressed = num_compressed;
+	int current_not_compressed = num_data_columns;
 	for (int compressed_index = 0; compressed_index < list_length(chunk_state->decompression_map);
 		 compressed_index++)
 	{
@@ -316,20 +318,22 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 			}
 		}
 
-		if (column.type == COMPRESSED_COLUMN)
+		if (column.output_attno > 0)
 		{
-			Assert(current_compressed < num_total);
-			dcontext->template_columns[current_compressed++] = column;
+			/* Data column. */
+			Assert(current_compressed < num_columns_with_metadata);
+			dcontext->compressed_chunk_columns[current_compressed++] = column;
 		}
 		else
 		{
-			Assert(current_not_compressed < num_total);
-			dcontext->template_columns[current_not_compressed++] = column;
+			/* Metadata column. */
+			Assert(current_not_compressed < num_columns_with_metadata);
+			dcontext->compressed_chunk_columns[current_not_compressed++] = column;
 		}
 	}
 
-	Assert(current_compressed == num_compressed);
-	Assert(current_not_compressed == num_total);
+	Assert(current_compressed == num_data_columns);
+	Assert(current_not_compressed == num_columns_with_metadata);
 
 	/*
 	 * Choose which batch queue we are going to use: heap for batch sorted
@@ -338,7 +342,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	if (dcontext->batch_sorted_merge)
 	{
 		chunk_state->batch_queue =
-			batch_queue_heap_create(num_compressed,
+			batch_queue_heap_create(num_data_columns,
 									chunk_state->sortinfo,
 									dcontext->decompressed_slot->tts_tupleDescriptor,
 									&BatchQueueFunctionsHeap);
@@ -347,7 +351,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	else
 	{
 		chunk_state->batch_queue =
-			batch_queue_fifo_create(num_compressed, &BatchQueueFunctionsFifo);
+			batch_queue_fifo_create(num_data_columns, &BatchQueueFunctionsFifo);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_fifo;
 	}
 

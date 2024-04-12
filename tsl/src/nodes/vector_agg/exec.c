@@ -81,9 +81,9 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	DecompressContext *dcontext = &decompress_state->decompress_context;
 
 	CompressionColumnDescription *value_column_description = NULL;
-	for (int i = 0; i < dcontext->num_total_columns; i++)
+	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
-		CompressionColumnDescription *current_column = &dcontext->template_columns[i];
+		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
 		if (current_column->output_attno == var->varattno)
 		{
 			value_column_description = current_column;
@@ -132,7 +132,8 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 		Assert(dcontext->enable_bulk_decompression);
 		Assert(value_column_description->bulk_decompression_supported);
 		CompressedColumnValues *values =
-			&batch_state->compressed_columns[value_column_description - dcontext->template_columns];
+			&batch_state->compressed_columns[value_column_description -
+											 dcontext->compressed_chunk_columns];
 		Assert(values->decompression_type != DT_Invalid);
 		arrow = values->arrow;
 	}
