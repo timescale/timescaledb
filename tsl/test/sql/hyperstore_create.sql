@@ -62,3 +62,8 @@ select relname, amname
   from show_chunks('test2') as chunk
   join pg_class on (pg_class.oid = chunk)
   join pg_am on (relam = pg_am.oid);
+
+-- Show compression settings for hyperstore across catalog and views
+select * from _timescaledb_catalog.compression_settings;
+select * from timescaledb_information.compression_settings;
+select * from timescaledb_information.chunk_compression_settings;

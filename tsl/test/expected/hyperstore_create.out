@@ -77,3 +77,35 @@ select relname, amname
  _hyper_1_11_chunk | hyperstore
 (6 rows)
 
+-- Show compression settings for hyperstore across catalog and views
+select * from _timescaledb_catalog.compression_settings;
+                      relid                      |   segmentby   |        orderby         | orderby_desc | orderby_nullsfirst 
+-------------------------------------------------+---------------+------------------------+--------------+--------------------
+ test2                                           | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal.compress_hyper_3_2_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal.compress_hyper_3_4_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal.compress_hyper_3_6_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal.compress_hyper_3_8_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal.compress_hyper_3_10_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal.compress_hyper_3_12_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+(7 rows)
+
+select * from timescaledb_information.compression_settings;
+ hypertable_schema | hypertable_name |   attname   | segmentby_column_index | orderby_column_index | orderby_asc | orderby_nullsfirst 
+-------------------+-----------------+-------------+------------------------+----------------------+-------------+--------------------
+ public            | test2           | location_id |                      1 |                      |             | 
+ public            | test2           | created_at  |                        |                    1 | f           | t
+ public            | test2           | device_id   |                        |                    2 | t           | f
+(3 rows)
+
+select * from timescaledb_information.chunk_compression_settings;
+ hypertable |                  chunk                  |  segmentby  |          orderby          
+------------+-----------------------------------------+-------------+---------------------------
+ test2      | _timescaledb_internal._hyper_1_1_chunk  | location_id | created_at DESC,device_id
+ test2      | _timescaledb_internal._hyper_1_3_chunk  | location_id | created_at DESC,device_id
+ test2      | _timescaledb_internal._hyper_1_5_chunk  | location_id | created_at DESC,device_id
+ test2      | _timescaledb_internal._hyper_1_7_chunk  | location_id | created_at DESC,device_id
+ test2      | _timescaledb_internal._hyper_1_9_chunk  | location_id | created_at DESC,device_id
+ test2      | _timescaledb_internal._hyper_1_11_chunk | location_id | created_at DESC,device_id
+(6 rows)
+
