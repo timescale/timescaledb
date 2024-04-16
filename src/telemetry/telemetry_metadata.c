@@ -17,17 +17,6 @@
 #include "scan_iterator.h"
 #include "jsonb_utils.h"
 
-#if PG14_LT
-/* Copied from jsonb_util.c */
-static void
-JsonbToJsonbValue(Jsonb *jsonb, JsonbValue *val)
-{
-	val->type = jbvBinary;
-	val->val.binary.data = &jsonb->root;
-	val->val.binary.len = VARSIZE(jsonb) - VARHDRSZ;
-}
-#endif
-
 void
 ts_telemetry_event_truncate(void)
 {

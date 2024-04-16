@@ -344,8 +344,7 @@ CREATE TABLE _timescaledb_internal.bgw_job_stat_history (
   execution_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   execution_finish TIMESTAMPTZ,
   succeeded boolean NOT NULL DEFAULT FALSE,
-  config jsonb,
-  error_data jsonb,
+  data jsonb,
   -- table constraints
   CONSTRAINT bgw_job_stat_history_pkey PRIMARY KEY (id)
 );
@@ -356,13 +355,13 @@ CREATE INDEX bgw_job_stat_history_job_id_idx ON _timescaledb_internal.bgw_job_st
 
 REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;
 
-INSERT INTO _timescaledb_internal.bgw_job_stat_history (job_id, pid, execution_start, execution_finish, error_data)
+INSERT INTO _timescaledb_internal.bgw_job_stat_history (job_id, pid, execution_start, execution_finish, data)
 SELECT
   job_id,
   pid,
   start_time,
   finish_time,
-  error_data
+  jsonb_build_object('error_data', error_data)
 FROM
   _timescaledb_internal.job_errors
 ORDER BY

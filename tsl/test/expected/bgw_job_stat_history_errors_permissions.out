@@ -73,8 +73,8 @@ SELECT pg_sleep(6);
 -- job crashed.
 \set start '2000-01-01 00:00:00+00'
 \set finish '2000-01-01 00:00:10+00'
-INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, error_data) VALUES
-       (11111, 12345, false, :'start'::timestamptz, :'finish'::timestamptz, '{"message": "not an error"}'),
+INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data) VALUES
+       (11111, 12345, false, :'start'::timestamptz, :'finish'::timestamptz, '{"error_data": {"message": "not an error"}}'),
        (22222, 45678, false, :'start'::timestamptz, :'finish'::timestamptz, '{}');
 -- We check the log as different users and should only see what we
 -- have permissions to see. We only bother about jobs at 1000 or

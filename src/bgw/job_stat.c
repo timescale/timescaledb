@@ -680,7 +680,7 @@ ts_bgw_job_stat_mark_end(BgwJob *job, JobResult result, Jsonb *edata)
 }
 
 void
-ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result, Jsonb *edata)
+ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result)
 {
 	if (!bgw_job_stat_scan_job_id(job->fd.id,
 								  bgw_job_stat_tuple_mark_crash_reported,
@@ -693,7 +693,7 @@ ts_bgw_job_stat_mark_crash_reported(BgwJob *job, JobResult result, Jsonb *edata)
 				 errmsg("unable to find job statistics for job %d", job->fd.id)));
 	}
 
-	ts_bgw_job_stat_history_mark_end(job, result, edata);
+	ts_bgw_job_stat_history_mark_end(job, result, NULL);
 
 	pgstat_report_activity(STATE_IDLE, NULL);
 }
@@ -800,21 +800,7 @@ ts_bgw_job_stat_next_start(BgwJobStat *jobstat, BgwJob *job, int32 consecutive_f
 		/* Update the errors table regarding the crash */
 		if (!ts_flags_are_set_32(jobstat->fd.flags, LAST_CRASH_REPORTED))
 		{
-			NameData proc_schema = { .data = { 0 } }, proc_name = { .data = { 0 } };
-			JsonbParseState *parse_state = NULL;
-			JsonbValue *result = NULL;
-
-			/* add the proc_schema, proc_name to the jsonb */
-			namestrcpy(&proc_schema, NameStr(job->fd.proc_schema));
-			namestrcpy(&proc_name, NameStr(job->fd.proc_name));
-
-			/* build jsonb error data field */
-			pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
-			ts_jsonb_add_str(parse_state, "proc_schema", NameStr(proc_schema));
-			ts_jsonb_add_str(parse_state, "proc_name", NameStr(proc_name));
-			result = pushJsonbValue(&parse_state, WJB_END_OBJECT, NULL);
-
-			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE, JsonbValueToJsonb(result));
+			ts_bgw_job_stat_mark_crash_reported(job, JOB_FAILURE);
 		}
 
 		return calculate_next_start_on_crash(jobstat->fd.consecutive_crashes, job);
