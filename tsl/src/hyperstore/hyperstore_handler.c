@@ -83,7 +83,7 @@ switch_to_heapam(Relation rel)
 
 static HyperstoreInfo *
 lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
-								 bool *compressed_relation_created)
+								 bool create_chunk_constraints, bool *compressed_relation_created)
 {
 	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
 
@@ -129,11 +129,15 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 		Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
 		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
 		Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
-		ts_chunk_constraints_create(ht_compressed, c_chunk);
-		ts_trigger_create_all_on_chunk(c_chunk);
-		ts_chunk_set_compressed_chunk(chunk, c_chunk->fd.id);
 
 		caminfo->compressed_relation_id = c_chunk->fd.id;
+		ts_chunk_set_compressed_chunk(chunk, c_chunk->fd.id);
+
+		if (create_chunk_constraints)
+		{
+			ts_chunk_constraints_create(ht_compressed, c_chunk);
+			ts_trigger_create_all_on_chunk(c_chunk);
+		}
 	}
 
 	caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
@@ -198,7 +202,7 @@ HyperstoreInfo *
 RelationGetHyperstoreInfo(Relation rel)
 {
 	if (NULL == rel->rd_amcache)
-		rel->rd_amcache = lazy_build_hyperstore_info_cache(rel, false, NULL);
+		rel->rd_amcache = lazy_build_hyperstore_info_cache(rel, false, true, NULL);
 
 	Assert(rel->rd_amcache && OidIsValid(((HyperstoreInfo *) rel->rd_amcache)->compressed_relid));
 
@@ -1985,7 +1989,7 @@ convert_to_hyperstore(Oid relid)
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	bool compress_chunk_created;
 	HyperstoreInfo *caminfo =
-		lazy_build_hyperstore_info_cache(relation, true, &compress_chunk_created);
+		lazy_build_hyperstore_info_cache(relation, true, false, &compress_chunk_created);
 
 	state->relid = relid;
 
@@ -2166,7 +2170,11 @@ convert_to_hyperstore_finish(Oid relid)
 
 	tuplesort_performsort(conversionstate->tuplesortstate);
 
-	Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
+	/*
+	 * The compressed chunk should have been created in
+	 * convert_to_hyperstore_start() if it didn't already exist.
+	 */
+	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
 	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
 	RowCompressor row_compressor;
@@ -2204,7 +2212,6 @@ convert_to_hyperstore_finish(Oid relid)
 	 */
 	ts_chunk_constraints_create(ht_compressed, c_chunk);
 	ts_trigger_create_all_on_chunk(c_chunk);
-	ts_chunk_set_compressed_chunk(chunk, c_chunk->fd.id);
 
 	table_close(relation, NoLock);
 	table_close(compressed_rel, NoLock);
