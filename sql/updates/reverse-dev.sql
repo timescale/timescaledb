@@ -230,7 +230,7 @@ SELECT
   pid,
   execution_start,
   execution_finish,
-  error_data
+  data->'error_data'
 FROM
   _timescaledb_internal.bgw_job_stat_history
 WHERE

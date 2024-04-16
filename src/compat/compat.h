@@ -6,6 +6,7 @@
 #pragma once
 
 #include <postgres.h>
+
 #include <commands/cluster.h>
 #include <commands/defrem.h>
 #include <commands/explain.h>
@@ -16,6 +17,7 @@
 #include <nodes/nodes.h>
 #include <optimizer/restrictinfo.h>
 #include <pgstat.h>
+#include <utils/jsonb.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
@@ -1036,5 +1038,16 @@ error_severity(int elevel)
 	}
 
 	return prefix;
+}
+#endif
+
+#if PG14_LT
+/* Copied from jsonb_util.c */
+static inline void
+JsonbToJsonbValue(Jsonb *jsonb, JsonbValue *val)
+{
+	val->type = jbvBinary;
+	val->val.binary.data = &jsonb->root;
+	val->val.binary.len = VARSIZE(jsonb) - VARHDRSZ;
 }
 #endif
