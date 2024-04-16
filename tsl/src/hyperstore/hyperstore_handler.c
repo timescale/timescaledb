@@ -88,14 +88,8 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
 
 	HyperstoreInfo *caminfo;
+	CompressionSettings *settings;
 	TupleDesc tupdesc = RelationGetDescr(rel);
-	int32 hyper_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
-	Oid hyper_relid = ts_hypertable_id_to_relid(hyper_id, false);
-	CompressionSettings *settings = ts_compression_settings_get(hyper_relid);
-
-	Ensure(settings,
-		   "no compression settings for relation %s",
-		   get_rel_name(RelationGetRelid(rel)));
 
 	/* Anything put in rel->rd_amcache must be a single memory chunk
 	 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
@@ -104,7 +98,7 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 	caminfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
 	caminfo->compressed_relid = InvalidOid;
 	caminfo->num_columns = tupdesc->natts;
-	caminfo->hypertable_id = hyper_id;
+	caminfo->hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
 
 	/* Only optionally include information about the compressed chunk because
 	 * it might not exist when this cache is built. The information will be
@@ -116,6 +110,7 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 	 * exist. */
 	if (compressed_relation_created)
 		*compressed_relation_created = (caminfo->compressed_relation_id == 0);
+
 	if (caminfo->compressed_relation_id == 0)
 	{
 		/* Consider if we want to make it simpler to create the compressed
@@ -146,6 +141,11 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 
 	Assert(caminfo->compressed_relation_id > 0 && OidIsValid(caminfo->compressed_relid));
 	Assert(caminfo->count_cattno != InvalidAttrNumber);
+	settings = ts_compression_settings_get(caminfo->compressed_relid);
+
+	Ensure(settings,
+		   "no compression settings for relation %s",
+		   get_rel_name(RelationGetRelid(rel)));
 
 	for (int i = 0; i < caminfo->num_columns; i++)
 	{
@@ -2176,7 +2176,7 @@ convert_to_hyperstore_finish(Oid relid)
 	 */
 	Chunk *c_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	Relation compressed_rel = table_open(c_chunk->table_id, RowExclusiveLock);
-	CompressionSettings *settings = ts_compression_settings_get(ht->main_table_relid);
+	CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(compressed_rel));
 	RowCompressor row_compressor;
 
 	row_compressor_init(settings,
