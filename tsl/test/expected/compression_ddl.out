@@ -1415,14 +1415,13 @@ ORDER BY device_id;
    ->  Sort
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
                            ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_110_chunk.device_id
                      ->  Index Only Scan using _hyper_31_110_chunk_compression_insert_device_id_time_idx on _hyper_31_110_chunk
-(12 rows)
+(11 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1500,18 +1499,16 @@ ORDER BY device_id;
    ->  Sort
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
                            ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
                            ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_112_chunk.device_id
                      ->  Index Only Scan using _hyper_31_112_chunk_compression_insert_device_id_time_idx on _hyper_31_112_chunk
-(16 rows)
+(14 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1589,22 +1586,19 @@ ORDER BY device_id;
    ->  Sort
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
                            ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
                            ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_114_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
                            ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_114_chunk.device_id
                      ->  Index Only Scan using _hyper_31_114_chunk_compression_insert_device_id_time_idx on _hyper_31_114_chunk
-(20 rows)
+(17 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1682,26 +1676,22 @@ ORDER BY device_id;
    ->  Sort
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
                            ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
                            ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_114_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
                            ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_116_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
                            ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_117_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_116_chunk.device_id
                      ->  Index Only Scan using _hyper_31_116_chunk_compression_insert_device_id_time_idx on _hyper_31_116_chunk
-(24 rows)
+(20 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
@@ -1779,30 +1769,25 @@ ORDER BY device_id;
    ->  Sort
          Sort Key: _hyper_31_110_chunk.device_id
          ->  Append
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_110_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_110_chunk
                            ->  Index Scan using compress_hyper_32_111_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_111_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_112_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_112_chunk
                            ->  Index Scan using compress_hyper_32_113_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_113_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_114_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_114_chunk
                            ->  Index Scan using compress_hyper_32_115_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_115_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_116_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_116_chunk
                            ->  Index Scan using compress_hyper_32_117_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_117_chunk
-               ->  Partial GroupAggregate
-                     Group Key: _hyper_31_118_chunk.device_id
+               ->  Custom Scan (VectorAgg)
                      ->  Custom Scan (DecompressChunk) on _hyper_31_118_chunk
                            ->  Index Scan using compress_hyper_32_119_chunk_device_id__ts_meta_sequence_num_idx on compress_hyper_32_119_chunk
                ->  Partial GroupAggregate
                      Group Key: _hyper_31_118_chunk.device_id
                      ->  Index Only Scan using _hyper_31_118_chunk_compression_insert_device_id_time_idx on _hyper_31_118_chunk
-(28 rows)
+(23 rows)
 
 SELECT device_id, count(*)
 FROM compression_insert
