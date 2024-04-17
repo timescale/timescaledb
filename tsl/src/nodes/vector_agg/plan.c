@@ -158,6 +158,30 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
 		return false;
 	}
 
+	if (aggref->aggdirectargs != NIL)
+	{
+		/* Can't process ordered-set agregates with direct arguments. */
+		return false;
+	}
+
+	if (aggref->aggorder != NIL)
+	{
+		/* Can't process aggregates with an ORDER BY clause. */
+		return false;
+	}
+
+	if (aggref->aggdistinct != NIL)
+	{
+		/* Can't process aggregates with DISTINCT clause. */
+		return false;
+	}
+
+	if (aggref->aggfilter != NULL)
+	{
+		/* Can't process aggregates with filter clause. */
+		return false;
+	}
+
 	if (get_vector_aggregate(aggref->aggfnoid) == NULL)
 	{
 		/*
