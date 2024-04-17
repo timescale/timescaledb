@@ -59,15 +59,20 @@ SELECT sum(segment_by_value) FROM testtable GROUP BY float_value;
 :EXPLAIN
 SELECT sum(segment_by_value) FROM testtable GROUP BY int_value;
 
+-- FIXME here the partitionwise aggregation plan is not chosen due to costs?
 :EXPLAIN
 SELECT sum(int_value) FROM testtable GROUP BY segment_by_value;
 
--- Vectorization not possible due to two variables and grouping
+-- Vectorization possible with grouping by a segmentby column.
 :EXPLAIN
-SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value;
+SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
+
+SELECT sum(segment_by_value), segment_by_value FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
 
 :EXPLAIN
-SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value;
+SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
+
+SELECT segment_by_value, sum(segment_by_value) FROM testtable GROUP BY segment_by_value ORDER BY 1, 2;
 
 -- Vectorized aggregation possible
 SELECT sum(int_value) FROM testtable;

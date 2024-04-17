@@ -12,7 +12,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
 
-#include "exec.h"
+#include "nodes/vector_agg/exec.h"
 
 #include "compression/arrow_c_data_interface.h"
 #include "functions.h"
@@ -20,6 +20,29 @@
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/vector_agg.h"
+
+static void
+get_input_offset(DecompressChunkState *decompress_state, Var *var, int *input_offset)
+{
+	DecompressContext *dcontext = &decompress_state->decompress_context;
+
+	CompressionColumnDescription *value_column_description = NULL;
+	for (int i = 0; i < dcontext->num_data_columns; i++)
+	{
+		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
+		if (current_column->output_attno == var->varattno)
+		{
+			value_column_description = current_column;
+			break;
+		}
+	}
+	Ensure(value_column_description != NULL, "aggregated compressed column not found");
+
+	Assert(value_column_description->type == COMPRESSED_COLUMN ||
+		   value_column_description->type == SEGMENTBY_COLUMN);
+
+	*input_offset = value_column_description - dcontext->compressed_chunk_columns;
+}
 
 static void
 vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
@@ -50,54 +73,57 @@ vector_agg_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		/* Determine which kind of vectorized aggregation we should perform */
 		TargetEntry *tlentry = (TargetEntry *) list_nth(aggregated_tlist, i);
-		Assert(IsA(tlentry->expr, Aggref));
-		Aggref *aggref = castNode(Aggref, tlentry->expr);
-
-		VectorAggDef *def = palloc0(sizeof(VectorAggDef));
-		VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
-		Assert(func != NULL);
-		def->func = func;
-
-		if (list_length(aggref->args) > 0)
+		if (IsA(tlentry->expr, Aggref))
 		{
-			Assert(list_length(aggref->args) == 1);
+			Aggref *aggref = castNode(Aggref, tlentry->expr);
 
-			/* The aggregate should be a partial aggregate */
-			Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+			VectorAggDef *def = palloc0(sizeof(VectorAggDef));
+			VectorAggFunctions *func = get_vector_aggregate(aggref->aggfnoid);
+			Assert(func != NULL);
+			def->func = func;
 
-			Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
-
-			DecompressContext *dcontext = &decompress_state->decompress_context;
-
-			CompressionColumnDescription *value_column_description = NULL;
-			for (int i = 0; i < dcontext->num_data_columns; i++)
+			if (list_length(aggref->args) > 0)
 			{
-				CompressionColumnDescription *current_column =
-					&dcontext->compressed_chunk_columns[i];
-				if (current_column->output_attno == var->varattno)
-				{
-					value_column_description = current_column;
-					break;
-				}
+				Assert(list_length(aggref->args) == 1);
+
+				/* The aggregate should be a partial aggregate */
+				Assert(aggref->aggsplit == AGGSPLIT_INITIAL_SERIAL);
+
+				Var *var = castNode(Var, castNode(TargetEntry, linitial(aggref->args))->expr);
+				get_input_offset(decompress_state, var, &def->input_offset);
 			}
-			Ensure(value_column_description != NULL, "aggregated compressed column not found");
+			else
+			{
+				def->input_offset = -1;
+			}
 
-			Assert(value_column_description->type == COMPRESSED_COLUMN ||
-				   value_column_description->type == SEGMENTBY_COLUMN);
+			def->output_offset = i;
 
-			def->input_offset = value_column_description - dcontext->compressed_chunk_columns;
+			vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
 		}
 		else
 		{
-			def->input_offset = -1;
+			Assert(IsA(tlentry->expr, Var));
+			Var *var = castNode(Var, tlentry->expr);
+			GroupingColumn *col = palloc0(sizeof(GroupingColumn));
+			col->output_offset = i;
+			get_input_offset(decompress_state, var, &col->input_offset);
+			vector_agg_state->output_grouping_columns =
+				lappend(vector_agg_state->output_grouping_columns, col);
 		}
-
-		def->output_offset = i;
-
-		vector_agg_state->agg_defs = lappend(vector_agg_state->agg_defs, def);
 	}
 
-	vector_agg_state->grouping = create_grouping_policy_all(vector_agg_state->agg_defs);
+	List *grouping_column_offsets = linitial(cscan->custom_private);
+	if (grouping_column_offsets == NIL)
+	{
+		vector_agg_state->grouping = create_grouping_policy_all(vector_agg_state->agg_defs);
+	}
+	else
+	{
+		vector_agg_state->grouping =
+			create_grouping_policy_segmentby(vector_agg_state->agg_defs,
+											 vector_agg_state->output_grouping_columns);
+	}
 }
 
 static void
@@ -146,6 +172,7 @@ vector_agg_exec(CustomScanState *node)
 
 	GroupingPolicy *grouping = vector_agg_state->grouping;
 
+	bool have_tuples_this_loop = false;
 	for (;;)
 	{
 		/*
@@ -172,6 +199,8 @@ vector_agg_exec(CustomScanState *node)
 			break;
 		}
 
+		have_tuples_this_loop = true;
+
 		grouping->gp_add_batch(grouping, batch_state);
 
 		compressed_batch_discard_tuples(batch_state);
@@ -180,6 +209,12 @@ vector_agg_exec(CustomScanState *node)
 		{
 			break;
 		}
+	}
+
+	if (!have_tuples_this_loop)
+	{
+		Assert(vector_agg_state->input_ended);
+		return NULL;
 	}
 
 	grouping->gp_do_emit(grouping, aggregated_slot);

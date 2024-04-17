@@ -22,9 +22,17 @@ typedef struct
 
 typedef struct
 {
+	int input_offset;
+	int output_offset;
+} GroupingColumn;
+
+typedef struct
+{
 	CustomScanState custom;
 
 	List *agg_defs;
+
+	List *output_grouping_columns;
 
 	/*
 	 * We can't call the underlying scan after it has ended, or it will be

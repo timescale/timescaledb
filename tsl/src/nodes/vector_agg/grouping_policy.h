@@ -19,3 +19,5 @@ typedef struct GroupingPolicy
 } GroupingPolicy;
 
 extern GroupingPolicy *create_grouping_policy_all(List *agg_defs);
+
+extern GroupingPolicy *create_grouping_policy_segmentby(List *agg_defs, List *grouping_columns);
