@@ -124,6 +124,7 @@ extern Oid get_watermark_function_oid(void);
 extern Oid cagg_get_boundary_converter_funcoid(Oid typoid);
 
 extern bool time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo);
+extern ContinuousAgg *cagg_get_by_relid_or_fail(const Oid cagg_relid);
 
 static inline int64
 cagg_get_time_min(const ContinuousAgg *cagg)

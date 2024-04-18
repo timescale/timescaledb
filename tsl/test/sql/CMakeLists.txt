@@ -154,6 +154,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_TEMPLATES
     cagg_bgw.sql.in
     cagg_ddl.sql.in
+    cagg_migrate_function.sql.in
     cagg_repair.sql.in
     cagg_usage.sql.in
     compression_errors.sql.in

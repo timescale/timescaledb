@@ -37,6 +37,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.cagg_migrate_execute_refresh_new_cagg(_timescaledb_catalog.continuous_agg,_timescaledb_catalog.continuous_agg_migrate_plan_step)
  _timescaledb_functions.cagg_migrate_plan_exists(integer)
  _timescaledb_functions.cagg_migrate_pre_validation(text,text,text)
+ _timescaledb_functions.cagg_migrate_to_time_bucket(regclass)
  _timescaledb_functions.cagg_validate_query(text)
  _timescaledb_functions.cagg_watermark(integer)
  _timescaledb_functions.cagg_watermark_materialized(integer)

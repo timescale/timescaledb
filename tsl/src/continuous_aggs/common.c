@@ -94,7 +94,7 @@ function_allowed_in_cagg_definition(Oid funcid)
 
 	/* Allow creation of CAggs with deprecated bucket function in debug builds for testing purposes
 	 */
-	if (ts_guc_debug_allow_cagg_with_deprecated_funcs && IS_DEPRECATED_BUCKET_FUNC(finfo))
+	if (ts_guc_debug_allow_cagg_with_deprecated_funcs && IS_DEPRECATED_TIME_BUCKET_NG_FUNC(finfo))
 		return true;
 
 	return false;
@@ -264,7 +264,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			 * deprecated time_bucket_ng function). */
 			if (!function_allowed_in_cagg_definition(fe->funcid))
 			{
-				if (IS_DEPRECATED_BUCKET_FUNC(finfo))
+				if (IS_DEPRECATED_TIME_BUCKET_NG_FUNC(finfo))
 				{
 					if (is_cagg_create)
 					{
@@ -1568,4 +1568,32 @@ time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo)
 		 * treated as fixed. */
 		return tbinfo->bucket_time_width->month == 0 && tbinfo->bucket_time_timezone == NULL;
 	}
+}
+
+ContinuousAgg *
+cagg_get_by_relid_or_fail(const Oid cagg_relid)
+{
+	ContinuousAgg *cagg;
+
+	if (!OidIsValid(cagg_relid))
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid continuous aggregate")));
+
+	cagg = ts_continuous_agg_find_by_relid(cagg_relid);
+
+	if (NULL == cagg)
+	{
+		const char *relname = get_rel_name(cagg_relid);
+
+		if (relname == NULL)
+			ereport(ERROR,
+					(errcode(ERRCODE_UNDEFINED_TABLE),
+					 (errmsg("continuous aggregate does not exist"))));
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+					 (errmsg("relation \"%s\" is not a continuous aggregate", relname))));
+	}
+
+	return cagg;
 }

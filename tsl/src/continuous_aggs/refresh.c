@@ -73,7 +73,6 @@ static void continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 											   int32 chunk_id, const bool do_merged_refresh,
 											   const InternalTimeRange merged_refresh_window,
 											   const CaggRefreshCallContext callctx);
-static ContinuousAgg *get_cagg_by_relid(const Oid cagg_relid);
 static void emit_up_to_date_notice(const ContinuousAgg *cagg, const CaggRefreshCallContext callctx);
 static bool process_cagg_invalidations_and_refresh(const ContinuousAgg *cagg,
 												   const InternalTimeRange *refresh_window,
@@ -621,33 +620,6 @@ continuous_agg_refresh_with_window(const ContinuousAgg *cagg,
 	}
 }
 
-static ContinuousAgg *
-get_cagg_by_relid(const Oid cagg_relid)
-{
-	ContinuousAgg *cagg;
-
-	if (!OidIsValid(cagg_relid))
-		ereport(ERROR,
-				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("invalid continuous aggregate")));
-
-	cagg = ts_continuous_agg_find_by_relid(cagg_relid);
-
-	if (NULL == cagg)
-	{
-		const char *relname = get_rel_name(cagg_relid);
-
-		if (relname == NULL)
-			ereport(ERROR,
-					(errcode(ERRCODE_UNDEFINED_TABLE),
-					 (errmsg("continuous aggregate does not exist"))));
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 (errmsg("relation \"%s\" is not a continuous aggregate", relname))));
-	}
-	return cagg;
-}
-
 #define REFRESH_FUNCTION_NAME "refresh_continuous_aggregate()"
 /*
  * Refresh a continuous aggregate across the given window.
@@ -663,7 +635,7 @@ continuous_agg_refresh(PG_FUNCTION_ARGS)
 
 	ts_feature_flag_check(FEATURE_CAGG);
 
-	cagg = get_cagg_by_relid(cagg_relid);
+	cagg = cagg_get_by_relid_or_fail(cagg_relid);
 	refresh_window.type = cagg->partition_type;
 
 	if (!PG_ARGISNULL(1))
