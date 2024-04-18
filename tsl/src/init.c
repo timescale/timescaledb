@@ -133,6 +133,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.continuous_agg_update_options = continuous_agg_update_options,
 	.continuous_agg_validate_query = continuous_agg_validate_query,
 	.continuous_agg_get_bucket_function = continuous_agg_get_bucket_function,
+	.continuous_agg_migrate_to_time_bucket = continuous_agg_migrate_to_time_bucket,
 	.cagg_try_repair = tsl_cagg_try_repair,
 
 	/* Compression */

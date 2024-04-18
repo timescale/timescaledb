@@ -16,3 +16,4 @@
 #include "compat/compat.h"
 
 extern Datum continuous_agg_validate_query(PG_FUNCTION_ARGS);
+extern Datum continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS);
