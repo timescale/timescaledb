@@ -163,5 +163,9 @@ WITH NO DATA;
 SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1;
 
+-- Try to toggle realtime feature on existing CAgg using timescaledb_experimental.time_bucket_ng
+ALTER MATERIALIZED VIEW conditions_summary_monthly SET (timescaledb.materialized_only=false);
+ALTER MATERIALIZED VIEW conditions_summary_monthly SET (timescaledb.materialized_only=true);
+
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE test WITH (FORCE);

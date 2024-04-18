@@ -256,20 +256,31 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				continue;
 			}
 
-			/* Do we have a bucketing function that is not allowed in the CAgg definition */
+			/* Do we have a bucketing function that is not allowed in the CAgg definition?
+			 *
+			 * This is only validated upon creation. If an older TSDB version has allowed us to use
+			 * the function and it's now removed from the list of allowed functions, we should not
+			 * error out (e.g., materialized_only setting is changed on a CAgg that uses the
+			 * deprecated time_bucket_ng function). */
 			if (!function_allowed_in_cagg_definition(fe->funcid))
 			{
 				if (IS_DEPRECATED_BUCKET_FUNC(finfo))
 				{
-					ereport(ERROR,
-							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-							 errmsg("experimental bucket functions are not supported inside a CAgg "
-									"definition"),
-							 errhint("Use a function from the %s schema instead.",
-									 FUNCTIONS_SCHEMA_NAME)));
+					if (is_cagg_create)
+					{
+						ereport(ERROR,
+								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+								 errmsg("experimental bucket functions are not supported inside a "
+										"CAgg "
+										"definition"),
+								 errhint("Use a function from the %s schema instead.",
+										 FUNCTIONS_SCHEMA_NAME)));
+					}
 				}
-
-				continue;
+				else
+				{
+					continue;
+				}
 			}
 
 			if (found)
