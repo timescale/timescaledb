@@ -63,7 +63,7 @@ endif()
 # This variable is set differently in CI. We use it to save the logs outside the
 # tmp instance, because it is deleted by pg_regress on successful test
 # completion, and we want to run some additional checks on the logs in any case.
-option(TEST_PG_LOG_DIRECTORY "Log directory for regression tests" "log")
+set(TEST_PG_LOG_DIRECTORY "log" CACHE STRING "Log directory for regression tests")
 
 if(USE_TELEMETRY)
   set(TELEMETRY_DEFAULT_SETTING "timescaledb.telemetry_level=off")

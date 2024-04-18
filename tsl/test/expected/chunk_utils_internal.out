@@ -580,6 +580,13 @@ SELECT * FROM ht_try ORDER BY 1;
  Thu May 05 01:00:00 2022 PDT |    222 |   222
 (2 rows)
 
+-- Check that the direct select from OSM chunk doesn't lead to bad effects.
+SELECT * FROM child_fdw_table;
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+(1 row)
+
 SELECT relname, relowner::regrole FROM pg_class
 WHERE relname in ( select chunk_name FROM chunk_view
                    WHERE hypertable_name = 'ht_try' )
@@ -801,6 +808,14 @@ BEGIN
 	WHERE acq_id = 10 AND timec > now() - '15 years'::interval INTO r;
 END
 $$ LANGUAGE plpgsql;
+-- Check that the direct select from OSM chunk doesn't lead to bad effects in
+-- presence of compression.
+SELECT * FROM child_fdw_table;
+            timec             | acq_id | value 
+------------------------------+--------+-------
+ Wed Jan 01 01:00:00 2020 PST |    100 |  1000
+(1 row)
+
 --TEST insert into a OSM chunk fails. actually any insert will fail. But we just need
 -- to mock the hook and make sure the timescaledb code works correctly.
 SELECT ts_setup_osm_hook();
