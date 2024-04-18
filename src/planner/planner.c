@@ -717,6 +717,16 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 
+	if (rte->relkind == RELKIND_FOREIGN_TABLE)
+	{
+		/*
+		 * OSM chunk or other foreign chunk. We can't even access the
+		 * fdw_private for it, because it's a foreign chunk managed by a
+		 * different extension. Try to ignore it as much as possible.
+		 */
+		return TS_REL_OTHER;
+	}
+
 	if (!OidIsValid(rte->relid))
 	{
 		return TS_REL_OTHER;
@@ -797,16 +807,6 @@ ts_classify_relation(const PlannerInfo *root, const RelOptInfo *rel, Hypertable 
 	*ht = entry->ht;
 	if (*ht)
 	{
-		if (rte->relkind == RELKIND_FOREIGN_TABLE)
-		{
-			/*
-			 * OSM chunk or other foreign chunk. We can't even access the
-			 * fdw_private for it, because it's a foreign chunk managed by a
-			 * different extension. Try to ignore it as much as possible.
-			 */
-			return TS_REL_OTHER;
-		}
-
 		return TS_REL_CHUNK_CHILD;
 	}
 
