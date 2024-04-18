@@ -118,7 +118,11 @@ extract_scan_keys(const HyperstoreInfo *caminfo, Scan *scan, int *num_keys, List
 					opno = get_commutator(opno);
 				}
 				else
+				{
+					/* If neither right nor left argument is a variable, we
+					 * don't use it as scan key */
 					break;
+				}
 
 				if (!OidIsValid(opno) || !op_strict(opno))
 					break;
