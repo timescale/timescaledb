@@ -24,12 +24,12 @@ DROP EVENT TRIGGER IF EXISTS timescaledb_ddl_sql_drop;
 -- may either be in _timescaledb_internal or in _timescaledb_functions
 -- depending on the version we are upgrading from and we can't make
 -- the move in this location as the new schema might not have been set up.
-CREATE FUNCTION _timescaledb_internal._tmp_restart_background_workers()
+CREATE FUNCTION _timescaledb_functions._tmp_restart_background_workers()
 RETURNS BOOL
 AS '@LOADER_PATHNAME@', 'ts_bgw_db_workers_restart'
 LANGUAGE C VOLATILE;
-SELECT _timescaledb_internal._tmp_restart_background_workers();
-DROP FUNCTION _timescaledb_internal._tmp_restart_background_workers();
+SELECT _timescaledb_functions._tmp_restart_background_workers();
+DROP FUNCTION _timescaledb_functions._tmp_restart_background_workers();
 
 -- Table for ACL and initprivs of tables.
 CREATE TABLE _timescaledb_internal.saved_privs(
