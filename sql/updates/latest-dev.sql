@@ -357,15 +357,16 @@ REVOKE ALL ON _timescaledb_internal.bgw_job_stat_history FROM PUBLIC;
 
 INSERT INTO _timescaledb_internal.bgw_job_stat_history (job_id, pid, execution_start, execution_finish, data)
 SELECT
-  job_id,
-  pid,
-  start_time,
-  finish_time,
-  jsonb_build_object('error_data', error_data)
+  job_errors.job_id,
+  job_errors.pid,
+  job_errors.start_time,
+  job_errors.finish_time,
+  jsonb_build_object('job', to_jsonb(bgw_job.*)) || jsonb_build_object('error_data', job_errors.error_data)
 FROM
   _timescaledb_internal.job_errors
+  LEFT JOIN _timescaledb_config.bgw_job ON bgw_job.id = job_errors.job_id
 ORDER BY
-  job_id, start_time;
+  job_errors.job_id, job_errors.start_time;
 
 ALTER EXTENSION timescaledb
     DROP TABLE _timescaledb_internal.job_errors;
