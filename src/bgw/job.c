@@ -404,13 +404,19 @@ ts_bgw_job_get_scheduled(size_t alloc_size, MemoryContext mctx)
 		 * would have to be freed separately when freeing a job. */
 		job->fd.config = NULL;
 
+		old_ctx = MemoryContextSwitchTo(mctx);
+
 		timezone = slot_getattr(ti->slot, Anum_bgw_job_timezone, &timezone_isnull);
 		if (!timezone_isnull)
-			job->fd.timezone = DatumGetTextPP(timezone);
+		{
+			/* We use DatumGetTextPCopy to move the detoasted value into our memory context */
+			job->fd.timezone = DatumGetTextPCopy(timezone);
+		}
 		else
+		{
 			job->fd.timezone = NULL;
+		}
 
-		old_ctx = MemoryContextSwitchTo(mctx);
 		jobs = lappend(jobs, job);
 		MemoryContextSwitchTo(old_ctx);
 	}
