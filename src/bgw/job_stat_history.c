@@ -101,7 +101,7 @@ ts_bgw_job_stat_history_insert(BgwJobStatHistoryContext *context)
 	CatalogSecurityContext sec_ctx;
 
 	ts_datum_set_int32(Anum_bgw_job_stat_history_job_id, values, context->job->fd.id, false);
-	ts_datum_set_int32(Anum_bgw_job_stat_history_pid, values, 0, true);
+	ts_datum_set_int32(Anum_bgw_job_stat_history_pid, values, MyProcPid, false);
 	ts_datum_set_timestamptz(Anum_bgw_job_stat_history_execution_start,
 							 values,
 							 context->job->job_history.execution_start,
