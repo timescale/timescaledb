@@ -151,14 +151,14 @@ VALUES (2000, 'User-Defined Action [2000]', interval '3 days', interval '1 hour'
 (2005, 'User-Defined Action [2005]', interval '3 days', interval '1 hour', 5, interval '5 min', '_timescaledb_functions', 'policy_refresh_continuous_aggregate');
 -- create some errors for them
 INSERT INTO
-_timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, error_data)
-values (2000, 12345, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"public", "proc_name": "custom_action_1"}'),
-(2000, 23456, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"ABCDE", "proc_schema": "public", "proc_name": "custom_action_1"}'),
-(2001, 54321, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"public", "proc_name": "custom_action_2"}'),
-(2002, 23443, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"JF009", "proc_schema":"_timescaledb_functions", "proc_name": "policy_compression"}'),
-(2003, 14567, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_functions", "proc_name": "policy_retention"}'),
-(2004, 78907, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_functions", "proc_name": "policy_refresh_continuous_aggregate"}'),
-(2005, 45757, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"sqlerrcode":"P0001", "proc_schema":"_timescaledb_functions", "proc_name": "policy_refresh_continuous_aggregate"}');
+_timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
+values (2000, 12345, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"error_data": {"sqlerrcode":"P0001"}, "job": {"proc_schema":"public", "proc_name": "custom_action_1"}}'),
+(2000, 23456, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"error_data": {"sqlerrcode":"ABCDE"}, "job": {"proc_schema": "public", "proc_name": "custom_action_1"}}'),
+(2001, 54321, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"error_data": {"sqlerrcode":"P0001"}, "job": {"proc_schema": "public", "proc_name": "custom_action_2"}}'),
+(2002, 23443, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"error_data": {"sqlerrcode":"JF009"}, "job": {"proc_schema": "_timescaledb_functions", "proc_name": "policy_compression"}}'),
+(2003, 14567, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"error_data": {"sqlerrcode":"P0001"}, "job": {"proc_schema": "_timescaledb_functions", "proc_name": "policy_retention"}}'),
+(2004, 78907, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"error_data": {"sqlerrcode":"P0001"}, "job": {"proc_schema": "_timescaledb_functions", "proc_name": "policy_refresh_continuous_aggregate"}}'),
+(2005, 45757, false, '2040-01-01 00:00:00+00'::timestamptz, '2040-01-01 00:00:01+00'::timestamptz, '{"error_data": {"sqlerrcode":"P0001"}, "job": {"proc_schema": "_timescaledb_functions", "proc_name": "policy_refresh_continuous_aggregate"}}');
 
 -- we have 3 error records for user-defined actions, and three for policies, so we expect 4 types of jobs
 SELECT jsonb_pretty(get_telemetry_report() -> 'errors_by_sqlerrcode');

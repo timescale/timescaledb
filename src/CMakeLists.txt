@@ -45,7 +45,8 @@ set(SOURCES
     trigger.c
     utils.c
     version.c
-    with_clause_parser.c)
+    with_clause_parser.c
+    tss_callbacks.c)
 
 # Add test source code in Debug builds
 if(CMAKE_BUILD_TYPE MATCHES Debug)

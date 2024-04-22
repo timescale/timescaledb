@@ -403,59 +403,95 @@ hypertable_scan_limit_internal(ScanKeyData *scankey, int num_scankeys, int index
 	return ts_scanner_scan(&scanctx);
 }
 
-static ScanTupleResult
-hypertable_tuple_update(TupleInfo *ti, void *data)
+/* update the tuple at this tid. The assumption is that we already hold a
+ * tuple exclusive lock and no other transaction can modify this tuple
+ * The sequence of operations for any update is:
+ * lock the tuple using lock_hypertable_tuple.
+ * then update the required fields
+ * call hypertable_update_catalog_tuple to complete the update.
+ * This ensures correct tuple locking and tuple updates in the presence of
+ * concurrent transactions. Failure to follow this results in catalog corruption
+ */
+static void
+hypertable_update_catalog_tuple(ItemPointer tid, FormData_hypertable *update)
 {
-	Hypertable *ht = data;
 	HeapTuple new_tuple;
 	CatalogSecurityContext sec_ctx;
+	Catalog *catalog = ts_catalog_get();
+	Oid table = catalog_get_table_id(catalog, HYPERTABLE);
+	Relation hypertable_rel = relation_open(table, RowExclusiveLock);
 
-	if (OidIsValid(ht->chunk_sizing_func))
-	{
-		const Dimension *dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
-		ChunkSizingInfo info = {
-			.table_relid = ht->main_table_relid,
-			.colname = dim == NULL ? NULL : NameStr(dim->fd.column_name),
-			.func = ht->chunk_sizing_func,
-		};
-
-		ts_chunk_adaptive_sizing_info_validate(&info);
-
-		namestrcpy(&ht->fd.chunk_sizing_func_schema, NameStr(info.func_schema));
-		namestrcpy(&ht->fd.chunk_sizing_func_name, NameStr(info.func_name));
-	}
-	else
-		elog(ERROR, "chunk sizing function cannot be NULL");
-
-	new_tuple = hypertable_formdata_make_tuple(&ht->fd, ts_scanner_get_tupledesc(ti));
+	new_tuple = hypertable_formdata_make_tuple(update, hypertable_rel->rd_att);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_update_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti), new_tuple);
+	ts_catalog_update_tid(hypertable_rel, tid, new_tuple);
 	ts_catalog_restore_user(&sec_ctx);
 	heap_freetuple(new_tuple);
-	return SCAN_DONE;
+	relation_close(hypertable_rel, NoLock);
 }
 
-int
-ts_hypertable_update(Hypertable *ht)
+static bool
+lock_hypertable_tuple(int32 htid, ItemPointer tid, FormData_hypertable *form)
 {
-	ScanKeyData scankey[1];
+	bool success = false;
+	ScanTupLock scantuplock = {
+		.waitpolicy = LockWaitBlock,
+		.lockmode = LockTupleExclusive,
+	};
+	ScanIterator iterator = ts_scan_iterator_create(HYPERTABLE, RowShareLock, CurrentMemoryContext);
+	iterator.ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_ID_INDEX);
+	iterator.ctx.tuplock = &scantuplock;
+	/* Keeping the lock since we presumably want to update the tuple */
+	iterator.ctx.flags = SCANNER_F_KEEPLOCK;
 
-	ScanKeyInit(&scankey[0],
-				Anum_hypertable_pkey_idx_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(ht->fd.id));
+	/* see table_tuple_lock for details about flags that are set in TupleExclusive mode */
+	scantuplock.lockflags = TUPLE_LOCK_FLAG_LOCK_UPDATE_IN_PROGRESS;
+	if (!IsolationUsesXactSnapshot())
+	{
+		/* in read committed mode, we follow all updates to this tuple */
+		scantuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
+	}
 
-	return hypertable_scan_limit_internal(scankey,
-										  1,
-										  HYPERTABLE_ID_INDEX,
-										  hypertable_tuple_update,
-										  ht,
-										  1,
-										  RowExclusiveLock,
-										  CurrentMemoryContext,
-										  NULL);
+	ts_scan_iterator_scan_key_init(&iterator,
+								   Anum_hypertable_pkey_idx_id,
+								   BTEqualStrategyNumber,
+								   F_INT4EQ,
+								   Int32GetDatum(htid));
+
+	ts_scanner_foreach(&iterator)
+	{
+		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
+		if (ti->lockresult != TM_Ok)
+		{
+			if (IsolationUsesXactSnapshot())
+			{
+				/* For Repeatable Read and Serializable isolation level report error
+				 * if we cannot lock the tuple
+				 */
+				ereport(ERROR,
+						(errcode(ERRCODE_T_R_SERIALIZATION_FAILURE),
+						 errmsg("could not serialize access due to concurrent update")));
+			}
+			else
+			{
+				ereport(ERROR,
+						(errcode(ERRCODE_INTERNAL_ERROR),
+						 errmsg("unable to lock hypertable catalog tuple, lock result is %d for "
+								"hypertable "
+								"ID (%d)",
+								ti->lockresult,
+								htid)));
+			}
+		}
+		ts_hypertable_formdata_fill(form, ti);
+		ItemPointer result_tid = ts_scanner_get_tuple_tid(ti);
+		tid->ip_blkid = result_tid->ip_blkid;
+		tid->ip_posid = result_tid->ip_posid;
+		success = true;
+		break;
+	}
+	ts_scan_iterator_close(&iterator);
+	return success;
 }
 
 int
@@ -754,25 +790,44 @@ ts_hypertable_reset_associated_schema_name(const char *associated_schema)
 int
 ts_hypertable_set_name(Hypertable *ht, const char *newname)
 {
-	namestrcpy(&ht->fd.table_name, newname);
+	FormData_hypertable form;
+	ItemPointerData tid;
+	/* lock the tuple entry in the catalog table */
+	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
-	return ts_hypertable_update(ht);
+	namestrcpy(&form.table_name, newname);
+	hypertable_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 int
 ts_hypertable_set_schema(Hypertable *ht, const char *newname)
 {
-	namestrcpy(&ht->fd.schema_name, newname);
+	FormData_hypertable form;
+	ItemPointerData tid;
+	/* lock the tuple entry in the catalog table */
+	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
-	return ts_hypertable_update(ht);
+	namestrcpy(&form.schema_name, newname);
+	hypertable_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 int
 ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions)
 {
+	FormData_hypertable form;
+	ItemPointerData tid;
+	/* lock the tuple entry in the catalog table */
+	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	Ensure(found, "hypertable id %d not found", ht->fd.id);
+
 	Assert(num_dimensions > 0);
-	ht->fd.num_dimensions = num_dimensions;
-	return ts_hypertable_update(ht);
+	form.num_dimensions = num_dimensions;
+	hypertable_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 #define DEFAULT_ASSOCIATED_TABLE_PREFIX_FORMAT "_hyper_%d"
@@ -2217,13 +2272,17 @@ ts_hypertable_set_integer_now_func(PG_FUNCTION_ARGS)
 bool
 ts_hypertable_set_compressed(Hypertable *ht, int32 compressed_hypertable_id)
 {
+	FormData_hypertable form;
+	ItemPointerData tid;
+	/* lock the tuple entry in the catalog table */
+	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	Ensure(found, "hypertable id %d not found", ht->fd.id);
+
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
-	ht->fd.compression_state = HypertableCompressionEnabled;
-	/* distr. hypertables do not have a internal compression table
-	 * on the access node
-	 */
-	ht->fd.compressed_hypertable_id = compressed_hypertable_id;
-	return ts_hypertable_update(ht) > 0;
+	form.compression_state = HypertableCompressionEnabled;
+	form.compressed_hypertable_id = compressed_hypertable_id;
+	hypertable_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 /* set compression_state as disabled and remove any
@@ -2232,10 +2291,17 @@ ts_hypertable_set_compressed(Hypertable *ht, int32 compressed_hypertable_id)
 bool
 ts_hypertable_unset_compressed(Hypertable *ht)
 {
+	FormData_hypertable form;
+	ItemPointerData tid;
+	/* lock the tuple entry in the catalog table */
+	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	Ensure(found, "hypertable id %d not found", ht->fd.id);
+
 	Assert(!TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht));
-	ht->fd.compression_state = HypertableCompressionOff;
-	ht->fd.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
-	return ts_hypertable_update(ht) > 0;
+	form.compression_state = HypertableCompressionOff;
+	form.compressed_hypertable_id = INVALID_HYPERTABLE_ID;
+	hypertable_update_catalog_tuple(&tid, &form);
+	return true;
 }
 
 bool
@@ -2400,42 +2466,56 @@ ts_hypertable_has_compression_table(const Hypertable *ht)
  * 1. RowShareLock to SELECT for UPDATE
  * 2. UPDATE status using RowExclusiveLock
  */
-static bool
-hypertable_update_status_osm(Hypertable *ht)
+bool
+ts_hypertable_update_status_osm(Hypertable *ht)
 {
-	bool success = false;
-	ScanTupLock scantuplock = {
-		.waitpolicy = LockWaitBlock,
-		.lockmode = LockTupleExclusive,
-	};
-	ScanIterator iterator = ts_scan_iterator_create(HYPERTABLE, RowShareLock, CurrentMemoryContext);
-	iterator.ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_ID_INDEX);
-	iterator.ctx.tuplock = &scantuplock;
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_hypertable_pkey_idx_id,
-								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(ht->fd.id));
+	FormData_hypertable form;
+	ItemPointerData tid;
+	/* lock the tuple entry in the catalog table */
+	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	Ensure(found, "hypertable id %d not found", ht->fd.id);
 
-	ts_scanner_foreach(&iterator)
+	if (form.status != ht->fd.status)
 	{
-		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
-		int status;
-		bool status_isnull;
-
-		status = DatumGetInt32(slot_getattr(ti->slot, Anum_hypertable_status, &status_isnull));
-		Assert(!status_isnull);
-		if (status != ht->fd.status)
-		{
-			success = ts_hypertable_update(ht); // get RowExclusiveLock and update here
-		}
+		form.status = ht->fd.status;
+		hypertable_update_catalog_tuple(&tid, &form);
 	}
-	ts_scan_iterator_close(&iterator);
-	return success;
+	return true;
 }
 
-static DimensionSlice *
-ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
+bool
+ts_hypertable_update_chunk_sizing(Hypertable *ht)
+{
+	FormData_hypertable form;
+	ItemPointerData tid;
+	/* lock the tuple entry in the catalog table */
+	bool found = lock_hypertable_tuple(ht->fd.id, &tid, &form);
+	Ensure(found, "hypertable id %d not found", ht->fd.id);
+
+	if (OidIsValid(ht->chunk_sizing_func))
+	{
+		const Dimension *dim = ts_hyperspace_get_dimension(ht->space, DIMENSION_TYPE_OPEN, 0);
+		ChunkSizingInfo info = {
+			.table_relid = ht->main_table_relid,
+			.colname = dim == NULL ? NULL : NameStr(dim->fd.column_name),
+			.func = ht->chunk_sizing_func,
+		};
+
+		ts_chunk_adaptive_sizing_info_validate(&info);
+
+		namestrcpy(&form.chunk_sizing_func_schema, NameStr(info.func_schema));
+		namestrcpy(&form.chunk_sizing_func_name, NameStr(info.func_name));
+	}
+	else
+		elog(ERROR, "chunk sizing function cannot be NULL");
+	form.chunk_target_size = ht->fd.chunk_target_size;
+	hypertable_update_catalog_tuple(&tid, &form);
+	return true;
+}
+
+DimensionSlice *
+ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTupleMode tuplockmode,
+								LOCKMODE tablelockmode)
 {
 	ChunkConstraints *constraints =
 		ts_chunk_constraint_scan_by_chunk_id(osm_chunk_id, 1, CurrentMemoryContext);
@@ -2446,7 +2526,7 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
 		if (is_dimension_constraint(cc))
 		{
 			ScanTupLock tuplock = {
-				.lockmode = LockTupleExclusive,
+				.lockmode = tuplockmode,
 				.waitpolicy = LockWaitBlock,
 			};
 			if (!IsolationUsesXactSnapshot())
@@ -2458,7 +2538,7 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id)
 				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
 													   &tuplock,
 													   CurrentMemoryContext,
-													   RowShareLock);
+													   tablelockmode);
 			if (dimslice->fd.dimension_id == time_dim_id)
 				return dimslice;
 		}
@@ -2547,7 +2627,11 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	bool overlap = false, range_invalid = false;
 
-	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id, time_dim->fd.id);
+	/* Lock tuple FOR UPDATE */
+	DimensionSlice *slice = ts_chunk_get_osm_slice_and_lock(osm_chunk_id,
+															time_dim->fd.id,
+															LockTupleExclusive,
+															RowShareLock);
 
 	if (!slice)
 		ereport(ERROR, errmsg("could not find time dimension slice for chunk %d", osm_chunk_id));
@@ -2587,7 +2671,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 	else
 		ht->fd.status = ts_clear_flags_32(ht->fd.status, HYPERTABLE_STATUS_OSM_CHUNK_NONCONTIGUOUS);
 
-	hypertable_update_status_osm(ht);
+	ts_hypertable_update_status_osm(ht);
 	ts_cache_release(hcache);
 
 	slice->fd.range_start = range_start_internal;

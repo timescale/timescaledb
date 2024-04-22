@@ -83,6 +83,8 @@ TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 static char *ts_guc_default_segmentby_fn = NULL;
 static char *ts_guc_default_orderby_fn = NULL;
 TSDLLEXPORT bool ts_guc_enable_job_execution_logging = false;
+bool ts_guc_enable_tss_callbacks = true;
+
 /* default value of ts_guc_max_open_chunks_per_insert and ts_guc_max_cached_chunks_per_hypertable
  * will be set as their respective boot-value when the GUC mechanism starts up */
 int ts_guc_max_open_chunks_per_insert;
@@ -655,6 +657,17 @@ _guc_init(void)
 							 &ts_guc_enable_job_execution_logging,
 							 false,
 							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_tss_callbacks"),
+							 "Enable ts_stat_statements callbacks",
+							 "Enable ts_stat_statements callbacks",
+							 &ts_guc_enable_tss_callbacks,
+							 true,
+							 PGC_SUSET,
 							 0,
 							 NULL,
 							 NULL,

@@ -25,8 +25,8 @@ SHOW timescaledb.enable_job_execution_logging;
 SELECT _timescaledb_functions.start_background_workers();
 SELECT pg_sleep(6);
 
-SELECT add_job('custom_job_ok', '1h', initial_start := now()) AS job_id_1 \gset
-SELECT add_job('custom_job_error', '1h', initial_start := now()) AS job_id_2 \gset
+SELECT add_job('custom_job_ok', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_1 \gset
+SELECT add_job('custom_job_error', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_2 \gset
 
 SELECT test.wait_for_job_to_run(:job_id_1, 1);
 SELECT test.wait_for_job_to_run(:job_id_2, 1);
@@ -134,8 +134,30 @@ FROM timescaledb_information.job_history
 WHERE job_id = :job_id_1
 ORDER BY id;
 
+-- Alter other information about the job
+CREATE PROCEDURE custom_job_alter(job_id int, config jsonb) LANGUAGE PLPGSQL AS
+$$
+BEGIN
+  RAISE LOG 'custom_job_alter';
+END
+$$;
+
+SELECT add_job('custom_job_alter', schedule_interval => interval '1 hour', initial_start := now()) AS job_id_3 \gset
+SELECT test.wait_for_job_to_run(:job_id_3, 1);
+
+SELECT timezone, fixed_schedule, config, schedule_interval
+FROM alter_job(:job_id_3, timezone => 'America/Sao_Paulo', fixed_schedule => false, config => '{"key": "value"}'::jsonb, schedule_interval => interval '10 min', next_start => now());
+SELECT test.wait_for_job_to_run(:job_id_3, 2);
+
+-- Should return two executions, the second will show the changed values
+SELECT job_id, succeeded, data->'job'->>'timezone' AS timezone, data->'job'->>'fixed_schedule' AS fixed_schedule, data->'job'->>'schedule_interval' AS schedule_interval, data->'job'->'config' AS config
+FROM _timescaledb_internal.bgw_job_stat_history
+WHERE job_id = :job_id_3
+ORDER BY id;
+
 SELECT delete_job(:job_id_1);
 SELECT delete_job(:job_id_2);
+SELECT delete_job(:job_id_3);
 
 ALTER SYSTEM RESET timescaledb.enable_job_execution_logging;
 SELECT pg_reload_conf();

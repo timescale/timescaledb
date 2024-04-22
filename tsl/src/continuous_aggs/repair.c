@@ -130,7 +130,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 							finalized,
 							NameStr(agg->data.user_view_schema),
 							NameStr(agg->data.user_view_name),
-							true);
+							false);
 
 	mattablecolumninfo_init(&mattblinfo, copyObject(direct_query->groupClause));
 	fqi.finalized = finalized;

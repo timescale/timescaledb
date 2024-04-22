@@ -53,14 +53,14 @@ select add_job('custom_proc2', '2 min', initial_start => now() + interval '5 sec
 SELECT _timescaledb_functions.start_background_workers();
 -- enough time to for job_fail to fail
 select pg_sleep(10);
-select job_id, error_data->'proc_name' as proc_name, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode
+select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history where job_id = :jobf_id and succeeded is false;
 
 select delete_job(:jobf_id);
 
 select pg_sleep(20);
 -- exclude the retention policy
-select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode
+select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history WHERE job_id != 2 and succeeded is false;
 
 ALTER SYSTEM RESET DEFAULT_TRANSACTION_ISOLATION;
@@ -69,13 +69,13 @@ SELECT pg_reload_conf();
 -- test the retention job
 SELECT next_start FROM alter_job(2, next_start => '2060-01-01 00:00:00+00'::timestamptz);
 TRUNCATE TABLE _timescaledb_internal.bgw_job_stat_history;
-INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, error_data)
+INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES (123, 12345, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 00:00:10+00'::timestamptz, '{}'),
 (456, 45678, false, '2000-01-01 00:00:20+00'::timestamptz, '2000-01-01 00:00:40+00'::timestamptz, '{}'),
 -- not older than a month
 (123, 23456, false, '2050-01-01 00:00:00+00'::timestamptz, '2050-01-01 00:00:10+00'::timestamptz, '{}');
 -- 3 rows in the table before policy runs
-SELECT job_id, pid, succeeded, execution_start, execution_finish, error_data
+SELECT job_id, pid, succeeded, execution_start, execution_finish, data
 FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
 -- drop all job_stats for the retention job
@@ -83,7 +83,7 @@ DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id = 2;
 SELECT  next_start FROM alter_job(2, next_start => now() + interval '2 seconds') \gset
 SELECT test.wait_for_job_to_run(2, 1);
 -- only the last row remains
-SELECT job_id, pid, succeeded, execution_start, execution_finish, error_data
+SELECT job_id, pid, succeeded, execution_start, execution_finish, data
 FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
 

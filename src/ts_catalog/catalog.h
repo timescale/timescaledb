@@ -688,8 +688,7 @@ enum Anum_bgw_job_stat_history
 	Anum_bgw_job_stat_history_execution_start,
 	Anum_bgw_job_stat_history_execution_finish,
 	Anum_bgw_job_stat_history_succeeded,
-	Anum_bgw_job_stat_history_config,
-	Anum_bgw_job_stat_history_error_data,
+	Anum_bgw_job_stat_history_data,
 	_Anum_bgw_job_stat_history_max,
 };
 
@@ -703,8 +702,7 @@ typedef struct FormData_bgw_job_stat_history
 	TimestampTz execution_start;
 	TimestampTz execution_finish;
 	bool succeeded;
-	Jsonb *config;
-	Jsonb *error_data;
+	Jsonb *data;
 } FormData_bgw_job_stat_history;
 
 typedef FormData_bgw_job_stat_history *Form_bgw_job_stat_history;

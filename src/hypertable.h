@@ -111,7 +111,8 @@ extern Hypertable *ts_resolve_hypertable_from_table_or_cagg(Cache *hcache, Oid r
 extern int ts_hypertable_scan_with_memory_context(const char *schema, const char *table,
 												  tuple_found_func tuple_found, void *data,
 												  LOCKMODE lockmode, MemoryContext mctx);
-extern TSDLLEXPORT int ts_hypertable_update(Hypertable *ht);
+extern bool ts_hypertable_update_status_osm(Hypertable *ht);
+extern bool ts_hypertable_update_chunk_sizing(Hypertable *ht);
 extern int ts_hypertable_set_name(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_schema(Hypertable *ht, const char *newname);
 extern int ts_hypertable_set_num_dimensions(Hypertable *ht, int16 num_dimensions);

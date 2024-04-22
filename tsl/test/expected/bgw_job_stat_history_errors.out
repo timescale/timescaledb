@@ -68,11 +68,11 @@ select pg_sleep(10);
  
 (1 row)
 
-select job_id, error_data->'proc_name' as proc_name, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode
+select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history where job_id = :jobf_id and succeeded is false;
- job_id | proc_name  |     err_message      | sqlerrcode 
---------+------------+----------------------+------------
-   1000 | "job_fail" | raising an exception | P0001
+ job_id | proc_name |     err_message      | sqlerrcode 
+--------+-----------+----------------------+------------
+   1000 | job_fail  | raising an exception | P0001
 (1 row)
 
 select delete_job(:jobf_id);
@@ -88,12 +88,12 @@ select pg_sleep(20);
 (1 row)
 
 -- exclude the retention policy
-select job_id, error_data->>'message' as err_message, error_data->>'sqlerrcode' as sqlerrcode
+select job_id, data->'job'->>'proc_name' as proc_name, data->'error_data'->>'message' as err_message, data->'error_data'->>'sqlerrcode' as sqlerrcode
 from _timescaledb_internal.bgw_job_stat_history WHERE job_id != 2 and succeeded is false;
- job_id |                     err_message                     | sqlerrcode 
---------+-----------------------------------------------------+------------
-   1000 | raising an exception                                | P0001
-   1002 | could not serialize access due to concurrent update | 40001
+ job_id |  proc_name   |                     err_message                     | sqlerrcode 
+--------+--------------+-----------------------------------------------------+------------
+   1000 | job_fail     | raising an exception                                | P0001
+   1002 | custom_proc2 | could not serialize access due to concurrent update | 40001
 (2 rows)
 
 ALTER SYSTEM RESET DEFAULT_TRANSACTION_ISOLATION;
@@ -111,17 +111,17 @@ SELECT next_start FROM alter_job(2, next_start => '2060-01-01 00:00:00+00'::time
 (1 row)
 
 TRUNCATE TABLE _timescaledb_internal.bgw_job_stat_history;
-INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, error_data)
+INSERT INTO _timescaledb_internal.bgw_job_stat_history(job_id, pid, succeeded, execution_start, execution_finish, data)
 VALUES (123, 12345, false, '2000-01-01 00:00:00+00'::timestamptz, '2000-01-01 00:00:10+00'::timestamptz, '{}'),
 (456, 45678, false, '2000-01-01 00:00:20+00'::timestamptz, '2000-01-01 00:00:40+00'::timestamptz, '{}'),
 -- not older than a month
 (123, 23456, false, '2050-01-01 00:00:00+00'::timestamptz, '2050-01-01 00:00:10+00'::timestamptz, '{}');
 -- 3 rows in the table before policy runs
-SELECT job_id, pid, succeeded, execution_start, execution_finish, error_data
+SELECT job_id, pid, succeeded, execution_start, execution_finish, data
 FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
- job_id |  pid  | succeeded |       execution_start        |       execution_finish       | error_data 
---------+-------+-----------+------------------------------+------------------------------+------------
+ job_id |  pid  | succeeded |       execution_start        |       execution_finish       | data 
+--------+-------+-----------+------------------------------+------------------------------+------
     123 | 12345 | f         | Fri Dec 31 16:00:00 1999 PST | Fri Dec 31 16:00:10 1999 PST | {}
     456 | 45678 | f         | Fri Dec 31 16:00:20 1999 PST | Fri Dec 31 16:00:40 1999 PST | {}
     123 | 23456 | f         | Fri Dec 31 16:00:00 2049 PST | Fri Dec 31 16:00:10 2049 PST | {}
@@ -137,11 +137,11 @@ SELECT test.wait_for_job_to_run(2, 1);
 (1 row)
 
 -- only the last row remains
-SELECT job_id, pid, succeeded, execution_start, execution_finish, error_data
+SELECT job_id, pid, succeeded, execution_start, execution_finish, data
 FROM _timescaledb_internal.bgw_job_stat_history
 WHERE succeeded IS FALSE;
- job_id |  pid  | succeeded |       execution_start        |       execution_finish       | error_data 
---------+-------+-----------+------------------------------+------------------------------+------------
+ job_id |  pid  | succeeded |       execution_start        |       execution_finish       | data 
+--------+-------+-----------+------------------------------+------------------------------+------
     123 | 23456 | f         | Fri Dec 31 16:00:00 2049 PST | Fri Dec 31 16:00:10 2049 PST | {}
 (1 row)
 

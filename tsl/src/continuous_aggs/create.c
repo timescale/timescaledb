@@ -1026,7 +1026,7 @@ cagg_flip_realtime_view_definition(ContinuousAgg *agg, Hypertable *mat_ht)
 							agg->data.finalized,
 							NameStr(agg->data.user_view_schema),
 							NameStr(agg->data.user_view_name),
-							true);
+							false);
 
 	/* Flip */
 	agg->data.materialized_only = !agg->data.materialized_only;
