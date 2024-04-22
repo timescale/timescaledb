@@ -39,6 +39,7 @@ set(TEST_FILES
     transparent_decompression_join_index.sql
     vector_agg_default.sql
     vector_agg_param.sql
+    vector_agg_segmentby.sql
     vectorized_aggregation.sql)
 
 if(USE_TELEMETRY)

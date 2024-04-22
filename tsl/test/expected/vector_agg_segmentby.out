@@ -1,0 +1,126 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set CHUNKS 2::int
+\set CHUNK_ROWS 100000::int
+\set GROUPING_CARDINALITY 10::int
+create table svagg(t int, f int, s int);
+select create_hypertable('svagg', 's', chunk_time_interval => :GROUPING_CARDINALITY / :CHUNKS);
+NOTICE:  adding not-null constraint to column "s"
+ create_hypertable  
+--------------------
+ (1,public,svagg,t)
+(1 row)
+
+insert into svagg select s * 10000::int + t, (s + t) % 7::int, s from
+    generate_series(1::int, :CHUNK_ROWS * :CHUNKS / :GROUPING_CARDINALITY) t,
+    -- (values (1), (10)) s(s)
+    generate_series(0::int, :GROUPING_CARDINALITY - 1::int) s(s)
+;
+alter table svagg set (timescaledb.compress, timescaledb.compress_orderby = 't',
+    timescaledb.compress_segmentby = 's');
+select count(compress_chunk(x)) from show_chunks('svagg') x;
+ count 
+-------
+     2
+(1 row)
+
+analyze svagg;
+set max_parallel_workers_per_gather = 0;
+explain (costs off)
+select s, sum(t), count(*) from svagg group by s order by s;
+                                                        QUERY PLAN                                                         
+---------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate
+   Group Key: svagg.s
+   ->  Custom Scan (ChunkAppend) on svagg
+         Order: svagg.s
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Custom Scan (VectorAgg)
+               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
+                     ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk
+(10 rows)
+
+select s, sum(t), count(*) from svagg where f >= 0         group by s order by s;
+ s |    sum     | count 
+---+------------+-------
+ 0 |  200010000 | 20000
+ 1 |  400010000 | 20000
+ 2 |  600010000 | 20000
+ 3 |  800010000 | 20000
+ 4 | 1000010000 | 20000
+ 5 | 1200010000 | 20000
+ 6 | 1400010000 | 20000
+ 7 | 1600010000 | 20000
+ 8 | 1800010000 | 20000
+ 9 | 2000010000 | 20000
+(10 rows)
+
+select s, sum(t), count(*) from svagg where f = 0          group by s order by s;
+ s |    sum    | count 
+---+-----------+-------
+ 0 |  28578571 |  2857
+ 1 |  57145714 |  2857
+ 2 |  85712857 |  2857
+ 3 | 114280000 |  2857
+ 4 | 142847143 |  2857
+ 5 | 171414286 |  2857
+ 6 | 200061429 |  2858
+ 7 | 228568571 |  2857
+ 8 | 257135714 |  2857
+ 9 | 285702857 |  2857
+(10 rows)
+
+select s, sum(t), count(*) from svagg where f in (0, 1)    group by s order by s;
+ s |    sum    | count 
+---+-----------+-------
+ 0 |  57160000 |  5715
+ 1 | 114294285 |  5714
+ 2 | 171428571 |  5714
+ 3 | 228562857 |  5714
+ 4 | 285697143 |  5714
+ 5 | 342831429 |  5714
+ 6 | 400045715 |  5715
+ 7 | 457210000 |  5715
+ 8 | 514274285 |  5714
+ 9 | 571408571 |  5714
+(10 rows)
+
+select s, sum(t), count(*) from svagg where f in (0, 1, 3) group by s order by s;
+ s |    sum    | count 
+---+-----------+-------
+ 0 |  85727143 |  8572
+ 1 | 171428571 |  8571
+ 2 | 257170000 |  8572
+ 3 | 342851428 |  8571
+ 4 | 428552857 |  8571
+ 5 | 514254286 |  8571
+ 6 | 600035715 |  8572
+ 7 | 685767143 |  8572
+ 8 | 771398571 |  8571
+ 9 | 857210000 |  8572
+(10 rows)
+
+select s, sum(t), count(*) from svagg where f > 10         group by s order by s;
+ s | sum | count 
+---+-----+-------
+(0 rows)
+
+-- this should be vectorized as well but isn't because of the projection.
+explain (costs off)
+select sum(t), s, count(*) from svagg group by s order by s;
+                                                     QUERY PLAN                                                      
+---------------------------------------------------------------------------------------------------------------------
+ GroupAggregate
+   Group Key: svagg.s
+   ->  Custom Scan (ChunkAppend) on svagg
+         Order: svagg.s
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+               ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
+         ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
+               ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk
+(8 rows)
+
+drop table svagg;
