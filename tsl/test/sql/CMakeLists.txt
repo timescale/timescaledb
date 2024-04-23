@@ -37,9 +37,7 @@ set(TEST_FILES
     size_utils_tsl.sql
     skip_scan.sql
     transparent_decompression_join_index.sql
-    vector_agg_default.sql
     vector_agg_param.sql
-    vector_agg_segmentby.sql
     vectorized_aggregation.sql)
 
 if(USE_TELEMETRY)
@@ -51,23 +49,11 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     APPEND
     TEST_FILES
     bgw_db_scheduler.sql
+    bgw_db_scheduler_fixed.sql
     bgw_job_stat_history.sql
     bgw_job_stat_history_errors.sql
     bgw_job_stat_history_errors_permissions.sql
-    bgw_db_scheduler_fixed.sql
     bgw_reorder_drop_chunks.sql
-    scheduler_fixed.sql
-    compress_bgw_reorder_drop_chunks.sql
-    chunk_api.sql
-    chunk_merge.sql
-    chunk_utils_compression.sql
-    compression_algos.sql
-    compression_ddl.sql
-    compression_hypertable.sql
-    compression_merge.sql
-    compression_indexscan.sql
-    compression_segment_meta.sql
-    compression_sorted_merge_filter.sql
     cagg_bgw_drop_chunks.sql
     cagg_drop_chunks.sql
     cagg_dump.sql
@@ -76,25 +62,38 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     cagg_multi.sql
     cagg_on_cagg.sql
     cagg_on_cagg_joins.sql
-    cagg_tableam.sql
     cagg_policy_run.sql
+    cagg_tableam.sql
+    chunk_api.sql
+    chunk_merge.sql
+    chunk_utils_compression.sql
+    compress_bgw_reorder_drop_chunks.sql
+    compression_algos.sql
+    compression_ddl.sql
+    compression_hypertable.sql
+    compression_indexscan.sql
+    compression_merge.sql
+    compression_segment_meta.sql
+    compression_sorted_merge_filter.sql
     decompress_memory.sql
     decompress_vector_qual.sql
     exp_cagg_monthly.sql
     exp_cagg_next_gen.sql
     exp_cagg_origin.sql
     exp_cagg_timezone.sql
+    feature_flags.sql
+    fixed_schedules.sql
     hypertable_generalization.sql
-    insert_memory_usage.sql
     information_view_chunk_count.sql
+    insert_memory_usage.sql
+    license_tsl.sql
     read_only.sql
+    recompress_chunk_segmentwise.sql
+    scheduler_fixed.sql
     transparent_decompression_queries.sql
     tsl_tables.sql
-    license_tsl.sql
-    fixed_schedules.sql
-    recompress_chunk_segmentwise.sql
-    feature_flags.sql)
-
+    vector_agg_default.sql
+    vector_agg_segmentby.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))

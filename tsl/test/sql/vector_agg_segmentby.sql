@@ -24,8 +24,37 @@ analyze svagg;
 
 set max_parallel_workers_per_gather = 0;
 
-explain (costs off)
-select s, sum(t), count(*) from svagg group by s order by s;
+
+-- Check that the debug GUC actually works.
+\set ON_ERROR_STOP 0
+
+set timescaledb.debug_require_vector_agg = 'require';
+set timescaledb.enable_vectorized_aggregation to off;
+select sum(t) from svagg;
+
+set timescaledb.debug_require_vector_agg = 'forbid';
+set timescaledb.enable_vectorized_aggregation to off;
+select sum(t) from svagg;
+
+set timescaledb.debug_require_vector_agg = 'forbid';
+set timescaledb.enable_vectorized_aggregation to on;
+select sum(t) from svagg;
+
+set timescaledb.debug_require_vector_agg = 'require';
+set timescaledb.enable_vectorized_aggregation to on;
+select sum(t) from svagg;
+
+set timescaledb.debug_require_vector_agg = 'allow';
+set timescaledb.enable_vectorized_aggregation to on;
+select sum(t) from svagg;
+
+\set ON_ERROR_STOP 1
+
+
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid';
+--set timescaledb.enable_vectorized_aggregation to off;
 
 select s, sum(t), count(*) from svagg where f >= 0         group by s order by s;
 select s, sum(t), count(*) from svagg where f = 0          group by s order by s;
@@ -35,6 +64,7 @@ select s, sum(t), count(*) from svagg where f > 10         group by s order by s
 
 
 -- this should be vectorized as well but isn't because of the projection.
+set timescaledb.debug_require_vector_agg to 'forbid';
 explain (costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
 

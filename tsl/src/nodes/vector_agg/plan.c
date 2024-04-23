@@ -328,6 +328,64 @@ can_vectorize_grouping(Agg *agg, CustomScan *custom)
 }
 
 /*
+ * Check if we have a vectorized aggregation node in the plan tree. This is used
+ * for testing.
+ */
+bool
+has_vector_agg_node(Plan *plan)
+{
+	if (plan->lefttree && has_vector_agg_node(plan->lefttree))
+	{
+		return true;
+	}
+
+	if (plan->righttree && has_vector_agg_node(plan->righttree))
+	{
+		return true;
+	}
+
+	CustomScan *custom = NULL;
+	List *append_plans = NIL;
+	if (IsA(plan, Append))
+	{
+		append_plans = castNode(Append, plan)->appendplans;
+	}
+	else if (IsA(plan, CustomScan))
+	{
+		custom = castNode(CustomScan, plan);
+		if (strcmp("ChunkAppend", custom->methods->CustomName) == 0)
+		{
+			append_plans = custom->custom_plans;
+		}
+	}
+
+	if (append_plans)
+	{
+		ListCell *lc;
+		foreach (lc, append_plans)
+		{
+			if (has_vector_agg_node(lfirst(lc)))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	if (custom == NULL)
+	{
+		return false;
+	}
+
+	if (strcmp(VECTOR_AGG_NODE_NAME, custom->methods->CustomName) == 0)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+/*
  * Where possible, replace the partial aggregation plan nodes with our own
  * vectorized aggregation node. The replacement is done in-place.
  */

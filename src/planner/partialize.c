@@ -446,7 +446,7 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 						   PathTarget *partial_grouping_target, bool can_sort, bool can_hash,
 						   double d_num_groups, GroupPathExtraData *extra_data)
 {
-//	mybt();
+	//	mybt();
 
 	/* Get subpaths */
 	List *subpaths = get_subpaths_from_append_path(cheapest_total_path, false);
@@ -454,8 +454,8 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 	/* No subpaths available or unsupported append node */
 	if (subpaths == NIL)
 	{
-//		fprintf(stderr, "no subpaths in append path:\n");
-//		my_print(cheapest_total_path);
+		//		fprintf(stderr, "no subpaths in append path:\n");
+		//		my_print(cheapest_total_path);
 		return;
 	}
 
@@ -545,23 +545,22 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 	if (sorted_subpaths != NIL)
 	{
 		Path *sorted = copy_append_like_path(root,
-									   cheapest_total_path,
-									   sorted_subpaths,
-									   partial_grouping_target);
-//		fprintf(stderr, "sorted!!!\n");
-//		my_print(sorted);
+											 cheapest_total_path,
+											 sorted_subpaths,
+											 partial_grouping_target);
+		//		fprintf(stderr, "sorted!!!\n");
+		//		my_print(sorted);
 		add_path(partially_grouped_rel, sorted);
 	}
 
 	if (hashed_subpaths != NIL)
 	{
-		Path *hashed =
-				 copy_append_like_path(root,
-									   cheapest_total_path,
-									   hashed_subpaths,
-									   partial_grouping_target);
-//		fprintf(stderr, "hashed!!!\n");
-//		my_print(hashed);
+		Path *hashed = copy_append_like_path(root,
+											 cheapest_total_path,
+											 hashed_subpaths,
+											 partial_grouping_target);
+		//		fprintf(stderr, "hashed!!!\n");
+		//		my_print(hashed);
 		add_path(partially_grouped_rel, hashed);
 	}
 }

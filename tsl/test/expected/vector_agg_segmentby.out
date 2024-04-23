@@ -27,22 +27,45 @@ select count(compress_chunk(x)) from show_chunks('svagg') x;
 
 analyze svagg;
 set max_parallel_workers_per_gather = 0;
-explain (costs off)
-select s, sum(t), count(*) from svagg group by s order by s;
-                                                        QUERY PLAN                                                         
----------------------------------------------------------------------------------------------------------------------------
- Finalize GroupAggregate
-   Group Key: svagg.s
-   ->  Custom Scan (ChunkAppend) on svagg
-         Order: svagg.s
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                     ->  Index Scan using compress_hyper_2_3_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_3_chunk
-         ->  Custom Scan (VectorAgg)
-               ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk
-                     ->  Index Scan using compress_hyper_2_4_chunk_s__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk
-(10 rows)
+-- Check that the debug GUC actually works.
+\set ON_ERROR_STOP 0
+set timescaledb.debug_require_vector_agg = 'require';
+set timescaledb.enable_vectorized_aggregation to off;
+select sum(t) from svagg;
+ERROR:  vector aggregation inconsistent with debug_require_vector_agg GUC
+set timescaledb.debug_require_vector_agg = 'forbid';
+set timescaledb.enable_vectorized_aggregation to off;
+select sum(t) from svagg;
+     sum     
+-------------
+ 11000100000
+(1 row)
 
+set timescaledb.debug_require_vector_agg = 'forbid';
+set timescaledb.enable_vectorized_aggregation to on;
+select sum(t) from svagg;
+ERROR:  vector aggregation inconsistent with debug_require_vector_agg GUC
+set timescaledb.debug_require_vector_agg = 'require';
+set timescaledb.enable_vectorized_aggregation to on;
+select sum(t) from svagg;
+     sum     
+-------------
+ 11000100000
+(1 row)
+
+set timescaledb.debug_require_vector_agg = 'allow';
+set timescaledb.enable_vectorized_aggregation to on;
+select sum(t) from svagg;
+     sum     
+-------------
+ 11000100000
+(1 row)
+
+\set ON_ERROR_STOP 1
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid';
+--set timescaledb.enable_vectorized_aggregation to off;
 select s, sum(t), count(*) from svagg where f >= 0         group by s order by s;
  s |    sum     | count 
 ---+------------+-------
@@ -109,6 +132,7 @@ select s, sum(t), count(*) from svagg where f > 10         group by s order by s
 (0 rows)
 
 -- this should be vectorized as well but isn't because of the projection.
+set timescaledb.debug_require_vector_agg to 'forbid';
 explain (costs off)
 select sum(t), s, count(*) from svagg group by s order by s;
                                                      QUERY PLAN                                                      

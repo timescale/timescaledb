@@ -87,6 +87,15 @@ extern TSDLLEXPORT bool ts_guc_debug_require_batch_sorted_merge;
 
 extern TSDLLEXPORT bool ts_guc_debug_allow_cagg_with_deprecated_funcs;
 
+typedef enum DebugRequireVectorAgg
+{
+	RVA_Allow = 0,
+	RVA_Forbid,
+	RVA_Require,
+} DebugRequireVectorAgg;
+
+extern TSDLLEXPORT DebugRequireVectorAgg ts_guc_debug_require_vector_agg;
+
 void _guc_init(void);
 
 typedef enum

@@ -55,7 +55,9 @@ select sum(c) from dvagg;
  17982
 (1 row)
 
----- Uncomment to generate reference.
+set timescaledb.debug_require_vector_agg = 'require';
+---- Uncomment to generate reference
+--set timescaledb.debug_require_vector_agg = 'forbid';
 --set timescaledb.enable_vectorized_aggregation to off;
 -- Vectorized aggregation should work with vectorized filters.
 select sum(c) from dvagg where b >= 0;
@@ -172,7 +174,16 @@ explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
                      ->  Seq Scan on compress_hyper_2_2_chunk
 (7 rows)
 
+-- The case with HAVING can still be vectorized because it is applied after
+-- final aggregation.
+select sum(c) from dvagg having sum(c) > 0;
+  sum  
+-------
+ 17982
+(1 row)
+
 -- Some negative cases.
+set timescaledb.debug_require_vector_agg to 'forbid';
 explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
@@ -189,22 +200,6 @@ explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
                      Sort Key: compress_hyper_2_4_chunk._ts_meta_sequence_num DESC
                      ->  Seq Scan on compress_hyper_2_4_chunk
 (12 rows)
-
-explain (costs off) select sum(c) from dvagg having sum(c) > 0;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Finalize Aggregate
-   Filter: (sum(_hyper_1_1_chunk.c) > 0)
-   ->  Gather
-         Workers Planned: 2
-         ->  Parallel Append
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-                           ->  Parallel Seq Scan on compress_hyper_2_2_chunk
-               ->  Custom Scan (VectorAgg)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
-                           ->  Parallel Seq Scan on compress_hyper_2_4_chunk
-(11 rows)
 
 -- As a reference, the result on decompressed table.
 select decompress_chunk(show_chunks('dvagg'));

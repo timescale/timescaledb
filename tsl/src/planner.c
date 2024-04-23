@@ -214,4 +214,14 @@ tsl_postprocess_plan(PlannedStmt *stmt)
 	{
 		stmt->planTree = try_insert_vector_agg_node(stmt->planTree);
 	}
+
+	if (ts_guc_debug_require_vector_agg != RVA_Allow)
+	{
+		const bool has_vector_agg = has_vector_agg_node(stmt->planTree);
+		const bool should_have_vector_agg = (ts_guc_debug_require_vector_agg == RVA_Require);
+		if (has_vector_agg != should_have_vector_agg)
+		{
+			elog(ERROR, "vector aggregation inconsistent with debug_require_vector_agg GUC");
+		}
+	}
 }
