@@ -914,7 +914,7 @@ bgw_job_tuple_update_by_id(TupleInfo *ti, void *const data)
 	else
 		isnull[AttrNumberGetAttrOffset(Anum_bgw_job_config)] = true;
 
-	if (updated_job->fd.hypertable_id != 0)
+	if (updated_job->fd.hypertable_id != INVALID_HYPERTABLE_ID)
 	{
 		values[AttrNumberGetAttrOffset(Anum_bgw_job_hypertable_id)] =
 			Int32GetDatum(updated_job->fd.hypertable_id);
@@ -1144,7 +1144,7 @@ ts_bgw_job_entrypoint(PG_FUNCTION_ARGS)
 	instr_time duration;
 
 	memcpy(&params, MyBgworkerEntry->bgw_extra, sizeof(BgwParams));
-	Ensure(params.user_oid != 0 && params.job_id != 0,
+	Ensure(OidIsValid(params.user_oid) && params.job_id != 0,
 		   "job id or user oid was zero - job_id: %d, user_oid: %d",
 		   params.job_id,
 		   params.user_oid);
