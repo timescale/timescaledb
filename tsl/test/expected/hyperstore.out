@@ -333,10 +333,9 @@ SELECT * FROM :chunk WHERE device < 4 AND location = 2 LIMIT 5;
          Scankey: (device < 4)
          Vectorized Filter: (location = 2)
          Rows Removed by Filter: 27
- Decompression Cache Hits: 1
- Decompression Cache Misses: 1
- Decompress Count: 2
-(8 rows)
+ Arrays read from cache: 1
+ Arrays decompressed: 2
+(7 rows)
 
 -- Test vectorized filters on compressed column. Use a filter that
 -- filters all rows in order to test that the scan does not decompress
@@ -351,10 +350,9 @@ SELECT count(*) FROM :chunk WHERE humidity > 110;
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=0 loops=1)
          Vectorized Filter: (humidity > '110'::double precision)
          Rows Removed by Filter: 12240
- Decompression Cache Hits: 0
- Decompression Cache Misses: 30
- Decompress Count: 30
-(7 rows)
+ Arrays read from cache: 0
+ Arrays decompressed: 30
+(6 rows)
 
 SELECT count(*) FROM :chunk WHERE humidity > 110;
  count 

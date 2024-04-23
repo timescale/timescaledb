@@ -52,10 +52,9 @@ select * from :chunk where ctid = :'ctid';
 ------------------------------------------------------
  Tid Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
    TID Cond: (ctid = '(2147483651,163)'::tid)
- Decompression Cache Hits: 0
- Decompression Cache Misses: 0
- Decompress Count: 0
-(5 rows)
+ Arrays read from cache: 0
+ Arrays decompressed: 0
+(4 rows)
 
 select * from :chunk where ctid = :'ctid';
              time             | location | device |       temp       |     humidity     
@@ -72,10 +71,9 @@ select * from :chunk where ctid = :'ctid';
 ------------------------------------------------------
  Tid Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
    TID Cond: (ctid = '(0,1)'::tid)
- Decompression Cache Hits: 0
- Decompression Cache Misses: 0
- Decompress Count: 0
-(5 rows)
+ Arrays read from cache: 0
+ Arrays decompressed: 0
+(4 rows)
 
 select * from :chunk where ctid = :'ctid';
              time             | location | device | temp | humidity 
@@ -119,10 +117,9 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                Index Cond: ((device >= 5) AND (device <= 10))
                Filter: (humidity > '5'::double precision)
                Rows Removed by Filter: 223
- Decompression Cache Hits: 2453
- Decompression Cache Misses: 6
- Decompress Count: 18
-(29 rows)
+ Arrays read from cache: 7359
+ Arrays decompressed: 18
+(28 rows)
 
 -- Check the explain cache information output.
 --
@@ -158,10 +155,9 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                Index Cond: ((device >= 5) AND (device <= 10))
                Filter: (humidity > '5'::double precision)
                Rows Removed by Filter: 223
- Decompression Cache Hits: 2453
- Decompression Cache Misses: 6
- Decompress Count: 18
-(29 rows)
+ Arrays read from cache: 7359
+ Arrays decompressed: 18
+(28 rows)
 
 -- Check the explain cache information output. Query 1 and 3 should
 -- show the same explain plan, and the plan in the middle should not
@@ -172,10 +168,9 @@ select * from :chunk where device between 5 and 10;
 ------------------------------------------------------------------------------------------------------
  Index Scan using _hyper_1_1_chunk_readings_device_idx on _hyper_1_1_chunk (actual rows=2459 loops=1)
    Index Cond: ((device >= 5) AND (device <= 10))
- Decompression Cache Hits: 0
- Decompression Cache Misses: 0
- Decompress Count: 0
-(5 rows)
+ Arrays read from cache: 0
+ Arrays decompressed: 0
+(4 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select * from :chunk where device between 5 and 10;
@@ -183,10 +178,9 @@ select * from :chunk where device between 5 and 10;
 ------------------------------------------------------------------------------------------------------
  Index Scan using _hyper_1_1_chunk_readings_device_idx on _hyper_1_1_chunk (actual rows=2459 loops=1)
    Index Cond: ((device >= 5) AND (device <= 10))
- Decompression Cache Hits: 0
- Decompression Cache Misses: 0
- Decompress Count: 0
-(5 rows)
+ Arrays read from cache: 0
+ Arrays decompressed: 0
+(4 rows)
 
 -- Queries that will select just a few columns
 set max_parallel_workers_per_gather to 0;
@@ -207,10 +201,9 @@ select device, humidity from readings where device between 5 and 10;
          Index Cond: ((device >= 5) AND (device <= 10))
    ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (actual rows=4410 loops=1)
          Index Cond: ((device >= 5) AND (device <= 10))
- Decompression Cache Hits: 2453
- Decompression Cache Misses: 6
- Decompress Count: 6
-(16 rows)
+ Arrays read from cache: 2453
+ Arrays decompressed: 6
+(15 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select device, avg(humidity) from readings where device between 5 and 10
@@ -247,10 +240,9 @@ group by device;
                      Group Key: _hyper_1_6_chunk.device
                      ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (actual rows=4410 loops=1)
                            Index Cond: ((device >= 5) AND (device <= 10))
- Decompression Cache Hits: 2453
- Decompression Cache Misses: 6
- Decompress Count: 6
-(33 rows)
+ Arrays read from cache: 2453
+ Arrays decompressed: 6
+(32 rows)
 
 -- Test on conflict: insert the same data as before, but throw away
 -- the updates.
@@ -270,10 +262,9 @@ on conflict (location, device, time) do nothing;
          ->  Custom Scan (ChunkDispatch) (actual rows=518401 loops=1)
                ->  Subquery Scan on "*SELECT*" (actual rows=518401 loops=1)
                      ->  Function Scan on generate_series t (actual rows=518401 loops=1)
- Decompression Cache Hits: 0
- Decompression Cache Misses: 44
- Decompress Count: 88
-(12 rows)
+ Arrays read from cache: 0
+ Arrays decompressed: 88
+(11 rows)
 
 -- This should show values for all columns
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
@@ -302,10 +293,9 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
                ->  Index Scan using _hyper_1_6_chunk_readings_device_idx on _hyper_1_6_chunk (never executed)
                      Index Cond: ((device >= 5) AND (device <= 10))
                      Filter: (humidity > '5'::double precision)
- Decompression Cache Hits: 0
- Decompression Cache Misses: 0
- Decompress Count: 0
-(25 rows)
+ Arrays read from cache: 0
+ Arrays decompressed: 0
+(24 rows)
 
 select time, temp + humidity from readings where device between 5 and 10 and humidity > 5 limit 5;
              time             |     ?column?     
