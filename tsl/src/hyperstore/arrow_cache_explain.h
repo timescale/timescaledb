@@ -16,7 +16,6 @@ void _arrow_cache_explain_init(void);
 extern bool decompress_cache_print;
 extern size_t decompress_cache_hits;
 extern size_t decompress_cache_misses;
-extern size_t decompress_cache_decompress_count;
 
 extern bool tsl_process_explain_def(DefElem *opt);
 
