@@ -163,17 +163,28 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 	 * decompression columns are not set up at all and in these cases we
 	 * should read all columns up to the attribute number.
 	 */
-	if (entry->arrow_arrays[attoff] == NULL && is_compressed_col(compressed_tupdesc, cattno) &&
+	if (is_compressed_col(compressed_tupdesc, cattno) &&
 		(!aslot->referenced_attrs || bms_is_member(attno, aslot->referenced_attrs)))
 	{
-		bool isnull;
-		Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
-
-		if (!isnull)
+		if (entry->arrow_arrays[attoff] == NULL)
 		{
-			const Form_pg_attribute attr = TupleDescAttr(tupdesc, attoff);
-			entry->arrow_arrays[attoff] =
-				arrow_column_cache_decompress(acache, attr->atttypid, value);
+			bool isnull;
+			Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
+
+			/* Can this ever be NULL? */
+			if (!isnull)
+			{
+				const Form_pg_attribute attr = TupleDescAttr(tupdesc, attoff);
+				entry->arrow_arrays[attoff] =
+					arrow_column_cache_decompress(acache, attr->atttypid, value);
+				if (decompress_cache_print)
+					decompress_cache_misses++;
+			}
+		}
+		else
+		{
+			if (decompress_cache_print)
+				decompress_cache_hits++;
 		}
 	}
 }
@@ -262,15 +273,11 @@ arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
 		entry->num_arrays = tupdesc->natts;
 		entry->arrow_arrays =
 			MemoryContextAllocZero(acache->mcxt, sizeof(ArrowArray *) * entry->num_arrays);
-		if (decompress_cache_print)
-			decompress_cache_misses++;
 	}
 	else
 	{
 		/* Move the entry found to the front of the LRU list */
 		dlist_move_tail(&acache->arrow_column_cache_lru, &entry->node);
-		if (decompress_cache_print)
-			decompress_cache_hits++;
 	}
 
 	return entry;
@@ -345,8 +352,6 @@ arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum d
 		   header->compression_algorithm);
 	MemoryContext oldcxt = MemoryContextSwitchTo(acache->decompression_mcxt);
 	ArrowArray *arrow_column = decompress_all(PointerGetDatum(header), typid, acache->mcxt);
-	if (decompress_cache_print)
-		decompress_cache_decompress_count++;
 
 	/*
 	 * Not sure how necessary this reset is, but keeping it for now.

@@ -17,7 +17,6 @@
 bool decompress_cache_print;
 size_t decompress_cache_hits;
 size_t decompress_cache_misses;
-size_t decompress_cache_decompress_count;
 
 static ExplainOneQuery_hook_type prev_ExplainOneQuery_hook = NULL;
 
@@ -66,29 +65,24 @@ standard_ExplainOneQuery(Query *query, int cursorOptions, IntoClause *into, Expl
 
 static struct
 {
-	const char *hits_text;	/* Number of TID cache hits */
-	const char *miss_text;	/* Number of TID cache misses */
-	const char *count_text; /* Number of compressed rows decompressed */
+	const char *hits_text; /* Number of arrays read from cache */
+	const char *miss_text; /* Number of arrays decompressed */
 } format_texts[] = {
 	[EXPLAIN_FORMAT_TEXT] = {
-		.hits_text = "Decompression Cache Hits",
-		.miss_text = "Decompression Cache Misses",
-		.count_text = "Decompress Count",
+		.hits_text = "Arrays read from cache",
+		.miss_text = "Arrays decompressed",
 	},
 	[EXPLAIN_FORMAT_XML]= {
-		.hits_text = "Cache Hits",
-		.miss_text = "Cache Misses",
-		.count_text = "Decompress Count",
+		.hits_text = "read from cache",
+		.miss_text = "decompressed",
 	},
 	[EXPLAIN_FORMAT_JSON] = {
-		.hits_text = "Cache Hits",
-		.miss_text = "Cache Misses",
-		.count_text = "Decompress Count",
+		.hits_text = "read from cache",
+		.miss_text = "decompressed",
 	},
 	[EXPLAIN_FORMAT_YAML] = {
-		.hits_text = "Cache Hits",
-		.miss_text = "Cache Misses",
-		.count_text = "Decompress Count",
+		.hits_text = "read from cache",
+		.miss_text = "decompressed",
 	},
 };
 
@@ -101,22 +95,17 @@ explain_decompression(Query *query, int cursorOptions, IntoClause *into, Explain
 	{
 		Assert(es->format < sizeof(format_texts) / sizeof(*format_texts));
 
-		ExplainOpenGroup("Decompression", NULL, true, es);
+		ExplainOpenGroup("Array cache", NULL, true, es);
 		ExplainPropertyInteger(format_texts[es->format].hits_text, NULL, decompress_cache_hits, es);
 		ExplainPropertyInteger(format_texts[es->format].miss_text,
 							   NULL,
 							   decompress_cache_misses,
 							   es);
-		ExplainPropertyInteger(format_texts[es->format].count_text,
-							   NULL,
-							   decompress_cache_decompress_count,
-							   es);
-		ExplainCloseGroup("Decompression", NULL, true, es);
+		ExplainCloseGroup("Array cache", NULL, true, es);
 
 		decompress_cache_print = false;
 		decompress_cache_hits = 0;
 		decompress_cache_misses = 0;
-		decompress_cache_decompress_count = 0;
 	}
 }
 
