@@ -1480,3 +1480,16 @@ SELECT compress_chunk(show_chunks('test_partials'));
 -- fully compressed
 EXPLAIN (costs off) SELECT * FROM test_partials ORDER BY time;
 DROP TABLE test_partials;
+
+CREATE TABLE test_meta_filters(time timestamptz NOT NULL, device text, metric text, v1 float, v2 float);
+CREATE INDEX ON test_meta_filters(device, metric, v1);
+SELECT create_hypertable('test_meta_filters', 'time');
+
+ALTER  TABLE test_meta_filters SET (timescaledb.compress, timescaledb.compress_segmentby='device', timescaledb.compress_orderby='metric,time');
+
+INSERT INTO test_meta_filters SELECT '2020-01-01'::timestamptz,'d1','m' || metric::text,v1,v2 FROM generate_series(1,3,1) metric, generate_series(1,1000,1) v1, generate_series(1,10,1) v2 ORDER BY 1,2,3,4,5;
+
+SELECT compress_chunk(show_chunks('test_meta_filters'));
+
+EXPLAIN (analyze, timing off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
+

@@ -2607,17 +2607,31 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 																	  false)); /* is_null */
 						}
 					}
+					continue;
 				}
-				else if (ts_array_is_member(settings->fd.orderby, column_name))
+
+				int min_attno = compressed_column_metadata_attno(settings,
+																 ch->table_id,
+																 var->varattno,
+																 settings->fd.relid,
+																 "min");
+				int max_attno = compressed_column_metadata_attno(settings,
+																 ch->table_id,
+																 var->varattno,
+																 settings->fd.relid,
+																 "max");
+
+				if (min_attno != InvalidAttrNumber && max_attno != InvalidAttrNumber)
 				{
-					int16 index = ts_array_position(settings->fd.orderby, column_name);
 					switch (op_strategy)
 					{
 						case BTEqualStrategyNumber:
 						{
 							/* orderby col = value implies min <= value and max >= value */
 							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(column_segment_min_name(index),
+													make_batchfilter(get_attname(settings->fd.relid,
+																				 min_attno,
+																				 false),
 																	 BTLessEqualStrategyNumber,
 																	 collation,
 																	 opcode,
@@ -2625,7 +2639,9 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 																	 false,	  /* is_null_check */
 																	 false)); /* is_null */
 							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(column_segment_max_name(index),
+													make_batchfilter(get_attname(settings->fd.relid,
+																				 max_attno,
+																				 false),
 																	 BTGreaterEqualStrategyNumber,
 																	 collation,
 																	 opcode,
@@ -2639,7 +2655,9 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 						{
 							/* orderby col <[=] value implies min <[=] value */
 							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(column_segment_min_name(index),
+													make_batchfilter(get_attname(settings->fd.relid,
+																				 min_attno,
+																				 false),
 																	 op_strategy,
 																	 collation,
 																	 opcode,
@@ -2653,7 +2671,9 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 						{
 							/* orderby col >[=] value implies max >[=] value */
 							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(column_segment_max_name(index),
+													make_batchfilter(get_attname(settings->fd.relid,
+																				 max_attno,
+																				 false),
 																	 op_strategy,
 																	 collation,
 																	 opcode,
