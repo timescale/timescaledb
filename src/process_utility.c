@@ -2626,7 +2626,10 @@ process_index_start(ProcessUtilityArgs *args)
 						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 						 errmsg("operation not supported on continuous aggregates that are not "
 								"finalized"),
-						 errhint("Recreate the continuous aggregate to allow index creation.")));
+						 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
+								 "format.",
+								 NameStr(cagg->data.user_view_schema),
+								 NameStr(cagg->data.user_view_name))));
 			}
 		}
 
