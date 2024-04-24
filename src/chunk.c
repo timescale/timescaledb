@@ -4517,15 +4517,6 @@ ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode)
 	return true;
 }
 
-int
-ts_chunk_oid_cmp(const void *p1, const void *p2)
-{
-	const Chunk *c1 = *((const Chunk **) p1);
-	const Chunk *c2 = *((const Chunk **) p2);
-
-	return oid_cmp(&c1->table_id, &c2->table_id);
-}
-
 ScanIterator
 ts_chunk_scan_iterator_create(MemoryContext result_mcxt)
 {
