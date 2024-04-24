@@ -64,6 +64,22 @@ check_for_system_columns(Bitmapset *attrs_used)
 	}
 }
 
+typedef struct
+{
+	bool bulk_decompression_possible;
+	int output_attno;
+	int input_attno;
+	bool is_segmentby;
+} UncompressedColumnInfo;
+
+typedef struct
+{
+	/* Can be negative if it's a metadata column, zero if not decompressed. */
+	int uncompressed_chunk_attno;
+	bool bulk_decompression_possible;
+	bool is_segmentby;
+} CompressedColumnInfo;
+
 /*
  * Scratch space for mapping out the decompressed columns.
  */
@@ -103,7 +119,9 @@ typedef struct
 	 * info. This lives only during planning so that we can understand on which
 	 * columns we can apply vectorized quals.
 	 */
-	DecompressChunkColumnCompression *uncompressed_chunk_attno_to_compression_info;
+	UncompressedColumnInfo *uncompressed_chunk_attno_to_compression_info;
+
+	CompressedColumnInfo *compressed_attno_info;
 } DecompressionMapContext;
 
 /*
@@ -165,14 +183,19 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 		palloc0(sizeof(*context->uncompressed_chunk_attno_to_compression_info) *
 				(path->info->chunk_rel->max_attr + 1));
 
+	context->compressed_attno_info = palloc0(sizeof(*context->compressed_attno_info) *
+											 (path->info->compressed_rel->max_attr + 1));
+
 	/*
 	 * Go over the scan targetlist and determine to which output column each
 	 * scan column goes, saving other additional info as we do that.
 	 */
 	context->have_bulk_decompression_columns = false;
 	context->decompression_map = NIL;
+	int current_input_attno = 0;
 	foreach (lc, compressed_scan_tlist)
 	{
+		current_input_attno++;
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		if (!IsA(target->expr, Var))
 		{
@@ -254,10 +277,7 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 			}
 		}
 
-		bool is_segment = ts_array_is_member(path->info->settings->fd.segmentby, column_name);
-
-		context->decompression_map = lappend_int(context->decompression_map, destination_attno);
-		context->is_segmentby_column = lappend_int(context->is_segmentby_column, is_segment);
+		const bool is_segment = ts_array_is_member(path->info->settings->fd.segmentby, column_name);
 
 		/*
 		 * Determine if we can use bulk decompression for this column.
@@ -268,19 +288,27 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
 				NULL;
 		context->have_bulk_decompression_columns |= bulk_decompression_possible;
-		context->bulk_decompression_column =
-			lappend_int(context->bulk_decompression_column, bulk_decompression_possible);
 
 		/*
 		 * Save information about decompressed columns in uncompressed chunk
 		 * for planning of vectorized filters.
 		 */
-		if (destination_attno > 0)
+		if (uncompressed_attno != InvalidAttrNumber)
 		{
-			context->uncompressed_chunk_attno_to_compression_info[destination_attno] =
-				(DecompressChunkColumnCompression){ .bulk_decompression_possible =
-														bulk_decompression_possible };
+			context->uncompressed_chunk_attno_to_compression_info[uncompressed_attno] =
+				(UncompressedColumnInfo){
+					.bulk_decompression_possible = bulk_decompression_possible,
+					.output_attno = destination_attno,
+					.input_attno = current_input_attno,
+					.is_segmentby = is_segment,
+				};
 		}
+
+		context->compressed_attno_info[compressed_attno] = (CompressedColumnInfo){
+			.bulk_decompression_possible = bulk_decompression_possible,
+			.uncompressed_chunk_attno = destination_attno,
+			.is_segmentby = is_segment,
+		};
 	}
 
 	/*
@@ -310,6 +338,29 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 	if (missing_sequence)
 	{
 		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
+	}
+
+	/*
+	 * Finally, we have to build the decompression map that follow the compressed
+	 * path output targetlist. Walk over the targetlist again and build the maps
+	 * using the compressed column info array we built earlier.
+	 */
+	foreach (lc, compressed_scan_tlist)
+	{
+		TargetEntry *target = (TargetEntry *) lfirst(lc);
+		Var *var = castNode(Var, target->expr);
+		Assert((Index) var->varno == path->info->compressed_rel->relid);
+		const AttrNumber compressed_attno = var->varattno;
+		Assert(compressed_attno != InvalidAttrNumber);
+		CompressedColumnInfo *compression = &context->compressed_attno_info[compressed_attno];
+
+		(void) *compression;
+		context->decompression_map =
+			lappend_int(context->decompression_map, compression->uncompressed_chunk_attno);
+		context->is_segmentby_column =
+			lappend_int(context->is_segmentby_column, compression->is_segmentby);
+		context->bulk_decompression_column = lappend_int(context->bulk_decompression_column,
+														 compression->bulk_decompression_possible);
 	}
 }
 
