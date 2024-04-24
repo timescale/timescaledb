@@ -1526,7 +1526,6 @@ create_hypertable_datum(FunctionCallInfo fcinfo, const Hypertable *ht, bool crea
 }
 
 TS_FUNCTION_INFO_V1(ts_hypertable_create);
-TS_FUNCTION_INFO_V1(ts_hypertable_distributed_create);
 TS_FUNCTION_INFO_V1(ts_hypertable_create_general);
 
 /*
@@ -1703,23 +1702,6 @@ Datum
 ts_hypertable_create(PG_FUNCTION_ARGS)
 {
 	return ts_hypertable_create_time_prev(fcinfo, false);
-}
-
-Datum
-ts_hypertable_distributed_create(PG_FUNCTION_ARGS)
-{
-#if PG16_GE
-	ereport(ERROR,
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("distributed hypertable is not supported"),
-			 errdetail("Multi-node is not supported anymore on PostgreSQL >= 16.")));
-#else
-	ereport(WARNING,
-			(errcode(ERRCODE_WARNING_DEPRECATED_FEATURE),
-			 errmsg("distributed hypertable is deprecated"),
-			 errdetail("Multi-node is deprecated and will be removed in future releases.")));
-#endif
-	return ts_hypertable_create_time_prev(fcinfo, true);
 }
 
 static Oid
