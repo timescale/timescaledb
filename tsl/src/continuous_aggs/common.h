@@ -114,7 +114,6 @@ extern CAggTimebucketInfo cagg_validate_query(const Query *query, const bool fin
 											  const char *cagg_schema, const char *cagg_name,
 											  const bool is_cagg_create);
 extern Query *destroy_union_query(Query *q);
-extern Oid relation_oid(Name schema, Name name);
 extern void RemoveRangeTableEntries(Query *query);
 extern Query *build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query *q2,
 								int materialize_htid);
