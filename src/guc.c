@@ -178,8 +178,8 @@ ts_feature_flag_check(FeatureFlagType type)
 		return;
 	ereport(ERROR,
 			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-			 errmsg("this feature is disabled"),
-			 errdetail("Feature flag \"%s\" is off", flag->name)));
+			 errmsg("You are using a Dynamic PostgreSQL service. This feature is only available on "
+					"Time-series services. https://tsdb.co/dynamic-postgresql")));
 }
 
 /*
