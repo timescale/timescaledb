@@ -126,6 +126,7 @@ CREATE TABLE _timescaledb_catalog.dimension_slice (
   -- table constraints
   CONSTRAINT dimension_slice_pkey PRIMARY KEY (id),
   CONSTRAINT dimension_slice_dimension_id_range_start_range_end_key UNIQUE (dimension_id, range_start, range_end),
+  CONSTRAINT dimension_slice_dimension_id_exclude EXCLUDE USING gist(int4range(dimension_id, dimension_id, '[]') WITH =, int8range(range_start, range_end, '[]') WITH &&),
   CONSTRAINT dimension_slice_check CHECK (range_start <= range_end),
   CONSTRAINT dimension_slice_dimension_id_fkey FOREIGN KEY (dimension_id) REFERENCES _timescaledb_catalog.dimension (id) ON DELETE CASCADE
 );

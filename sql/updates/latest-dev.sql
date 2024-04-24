@@ -392,3 +392,16 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_error_retention_check(
 --
 -- END bgw_job_stat_history
 --
+
+--
+-- START add exclusion constraint to dimension_slice
+--
+ALTER TABLE _timescaledb_catalog.dimension_slice
+    ADD CONSTRAINT dimension_slice_dimension_id_exclude
+    EXCLUDE USING gist(
+        int4range(dimension_id, dimension_id, '[]') WITH =,
+        int8range(range_start, range_end, '[]') WITH &&
+    );
+--
+-- END add exclusion constraint to dimension_slice
+--

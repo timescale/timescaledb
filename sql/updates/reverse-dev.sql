@@ -294,3 +294,6 @@ SET
   check_name = 'policy_job_error_retention_check'
 WHERE
   id = 2;
+
+ALTER TABLE _timescaledb_catalog.dimension_slice
+  DROP CONSTRAINT dimension_slice_dimension_id_exclude;
