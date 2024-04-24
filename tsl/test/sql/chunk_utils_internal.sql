@@ -783,6 +783,40 @@ INSERT INTO osm_slice_update VALUES (1);
 INSERT INTO osm_slice_update VALUES (1);
 \set ON_ERROR_STOP 1
 
+-- test the drop_osm_table_chunk function
+-- should not appear in timescale catalogs, or PG catalogs, or in the inheritance tree
+\c :TEST_DBNAME :ROLE_4;
+\d+ test_chunkapp
+select id as htid from _timescaledb_catalog.hypertable where table_name = 'test_chunkapp' \gset
+select status from _timescaledb_catalog.hypertable where table_name = 'test_chunkapp'; -- status should be 1
+SELECT FROM _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'test_chunkapp' and ht.id = ch.hypertable_id AND ch.osm_chunk IS TRUE; -- expect 1 entry
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+-- it is empty so let's drop it
+select * from test_chunkapp_fdw_child;
+\set ON_ERROR_STOP 0
+begin;
+select _timescaledb_functions.drop_osm_table_chunk('osm_int2', 'test_chunkapp_fdw_child');
+rollback;
+\set ON_ERROR_STOP 1
+
+select _timescaledb_functions.drop_osm_table_chunk('test_chunkapp', 'test_chunkapp_fdw_child');
+-- foreign chunk no longer appears in the inheritance hierarchy
+\d+ test_chunkapp
+-- hypertable status is reset
+select status from _timescaledb_catalog.hypertable where table_name = 'test_chunkapp'; -- status 0
+SELECT FROM _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'test_chunkapp' and ht.id = ch.hypertable_id AND ch.osm_chunk IS TRUE; -- expect 0 entries
+
+-- chunk constraint and dimension slice should have been cleaned up as well
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+-- test selects work as expected
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_chunkapp;
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db WITH (FORCE);

@@ -1,4 +1,4 @@
-Parsed test spec with 8 sessions
+Parsed test spec with 10 sessions
 
 starting permutation: LockDimSliceTuple UR1b UR1u UR2b UR2u UnlockDimSliceTuple UR1c UR2c
 step LockDimSliceTuple: 
@@ -204,3 +204,32 @@ f
 (1 row)
 
 step UR1c: COMMIT;
+
+starting permutation: DR1b DR2b DR1drop DR2drop DR1c DR2c
+step DR1b: BEGIN;
+step DR2b: BEGIN;
+step DR1drop: 
+  SELECT _timescaledb_functions.drop_osm_table_chunk('test_drop', chunk_table::regclass)
+  FROM (
+    SELECT format('%I.%I', c.schema_name, c.table_name) as chunk_table
+    FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+    WHERE ht.id = c.hypertable_id AND ht.table_name = 'test_drop' AND c.osm_chunk IS TRUE
+  ) sq;
+
+drop_osm_table_chunk
+--------------------
+t                   
+(1 row)
+
+step DR2drop: 
+  SELECT _timescaledb_functions.drop_osm_table_chunk('test_drop', chunk_table::regclass)
+  FROM (
+    SELECT format('%I.%I', c.schema_name, c.table_name) as chunk_table
+    FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.hypertable ht
+    WHERE ht.id = c.hypertable_id AND ht.table_name = 'test_drop' AND c.osm_chunk IS TRUE
+  ) sq;
+ <waiting ...>
+step DR1c: COMMIT;
+step DR2drop: <... completed>
+ERROR:  chunk deleted by other transaction
+step DR2c: COMMIT;

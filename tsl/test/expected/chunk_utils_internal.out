@@ -1511,6 +1511,112 @@ ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attem
 INSERT INTO osm_slice_update VALUES (1);
 ERROR:  Cannot insert into tiered chunk range of public.osm_slice_update - attempt to create new chunk with range  [0 10] failed
 \set ON_ERROR_STOP 1
+-- test the drop_osm_table_chunk function
+-- should not appear in timescale catalogs, or PG catalogs, or in the inheritance tree
+\c :TEST_DBNAME :ROLE_4;
+\d+ test_chunkapp
+                                       Table "public.test_chunkapp"
+ Column |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+--------------------------+-----------+----------+---------+---------+--------------+-------------
+ time   | timestamp with time zone |           | not null |         | plain   |              | 
+ a      | integer                  |           |          |         | plain   |              | 
+Indexes:
+    "test_chunkapp_time_idx" btree ("time" DESC)
+Check constraints:
+    "test_chunkapp_a_check" CHECK (a > 0)
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON test_chunkapp FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
+Child tables: _timescaledb_internal._hyper_16_26_chunk,
+              _timescaledb_internal._hyper_16_27_chunk,
+              test_chunkapp_fdw_child
+
+select id as htid from _timescaledb_catalog.hypertable where table_name = 'test_chunkapp' \gset
+select status from _timescaledb_catalog.hypertable where table_name = 'test_chunkapp'; -- status should be 1
+ status 
+--------
+      1
+(1 row)
+
+SELECT FROM _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'test_chunkapp' and ht.id = ch.hypertable_id AND ch.osm_chunk IS TRUE; -- expect 1 entry
+--
+(1 row)
+
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+ chunk_id |       table_name        | status | osm_chunk | dimension_slice_id |     range_start     |      range_end      
+----------+-------------------------+--------+-----------+--------------------+---------------------+---------------------
+       26 | _hyper_16_26_chunk      |      0 | f         |                 23 |    1577836800000000 |    1577923200000000
+       27 | _hyper_16_27_chunk      |      0 | f         |                 24 |    1577923200000000 |    1578009600000000
+       28 | test_chunkapp_fdw_child |      0 | t         |                 25 | 9223372036854775806 | 9223372036854775807
+(3 rows)
+
+-- it is empty so let's drop it
+select * from test_chunkapp_fdw_child;
+ time | a 
+------+---
+(0 rows)
+
+\set ON_ERROR_STOP 0
+begin;
+select _timescaledb_functions.drop_osm_table_chunk('osm_int2', 'test_chunkapp_fdw_child');
+ERROR:  OSM chunk public.test_chunkapp_fdw_child does not correspond to hypertable public.osm_int2
+rollback;
+\set ON_ERROR_STOP 1
+select _timescaledb_functions.drop_osm_table_chunk('test_chunkapp', 'test_chunkapp_fdw_child');
+ drop_osm_table_chunk 
+----------------------
+ t
+(1 row)
+
+-- foreign chunk no longer appears in the inheritance hierarchy
+\d+ test_chunkapp
+                                       Table "public.test_chunkapp"
+ Column |           Type           | Collation | Nullable | Default | Storage | Stats target | Description 
+--------+--------------------------+-----------+----------+---------+---------+--------------+-------------
+ time   | timestamp with time zone |           | not null |         | plain   |              | 
+ a      | integer                  |           |          |         | plain   |              | 
+Indexes:
+    "test_chunkapp_time_idx" btree ("time" DESC)
+Check constraints:
+    "test_chunkapp_a_check" CHECK (a > 0)
+Triggers:
+    ts_insert_blocker BEFORE INSERT ON test_chunkapp FOR EACH ROW EXECUTE FUNCTION _timescaledb_functions.insert_blocker()
+Child tables: _timescaledb_internal._hyper_16_26_chunk,
+              _timescaledb_internal._hyper_16_27_chunk
+
+-- hypertable status is reset
+select status from _timescaledb_catalog.hypertable where table_name = 'test_chunkapp'; -- status 0
+ status 
+--------
+      0
+(1 row)
+
+SELECT FROM _timescaledb_catalog.chunk ch, _timescaledb_catalog.hypertable ht
+WHERE ht.table_name = 'test_chunkapp' and ht.id = ch.hypertable_id AND ch.osm_chunk IS TRUE; -- expect 0 entries
+--
+(0 rows)
+
+-- chunk constraint and dimension slice should have been cleaned up as well
+SELECT cc.chunk_id, c.table_name, c.status, c.osm_chunk, cc.dimension_slice_id, ds.range_start, ds.range_end
+FROM _timescaledb_catalog.chunk c, _timescaledb_catalog.chunk_constraint cc, _timescaledb_catalog.dimension_slice ds
+WHERE c.hypertable_id = :htid AND cc.chunk_id = c.id AND ds.id = cc.dimension_slice_id ORDER BY cc.chunk_id;
+ chunk_id |     table_name     | status | osm_chunk | dimension_slice_id |   range_start    |    range_end     
+----------+--------------------+--------+-----------+--------------------+------------------+------------------
+       26 | _hyper_16_26_chunk |      0 | f         |                 23 | 1577836800000000 | 1577923200000000
+       27 | _hyper_16_27_chunk |      0 | f         |                 24 | 1577923200000000 | 1578009600000000
+(2 rows)
+
+-- test selects work as expected
+EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF, SUMMARY OFF) SELECT * FROM test_chunkapp;
+                          QUERY PLAN                          
+--------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Seq Scan on _hyper_16_26_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_16_27_chunk (actual rows=1 loops=1)
+(3 rows)
+
 -- clean up databases created
 \c :TEST_DBNAME :ROLE_SUPERUSER
 DROP DATABASE postgres_fdw_db WITH (FORCE);

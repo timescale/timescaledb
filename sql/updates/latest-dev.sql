@@ -392,3 +392,8 @@ DROP FUNCTION IF EXISTS _timescaledb_functions.policy_job_error_retention_check(
 --
 -- END bgw_job_stat_history
 --
+
+CREATE FUNCTION _timescaledb_functions.drop_osm_table_chunk(
+   hypertable REGCLASS,
+   chunk REGCLASS)
+RETURNS BOOL AS '@MODULE_PATHNAME@', 'ts_chunk_drop_osm_table_chunk' LANGUAGE C VOLATILE;

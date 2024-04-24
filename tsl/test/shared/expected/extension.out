@@ -60,6 +60,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.dimension_info_in(cstring)
  _timescaledb_functions.dimension_info_out(_timescaledb_internal.dimension_info)
  _timescaledb_functions.drop_chunk(regclass)
+ _timescaledb_functions.drop_osm_table_chunk(regclass,regclass)
  _timescaledb_functions.finalize_agg(text,name,name,name[],bytea,anyelement)
  _timescaledb_functions.finalize_agg_ffunc(internal,text,name,name,name[],bytea,anyelement)
  _timescaledb_functions.finalize_agg_sfunc(internal,text,name,name,name[],bytea,anyelement)

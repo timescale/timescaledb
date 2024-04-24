@@ -294,3 +294,5 @@ SET
   check_name = 'policy_job_error_retention_check'
 WHERE
   id = 2;
+
+DROP FUNCTION IF EXISTS _timescaledb_functions.drop_osm_table_chunk(REGCLASS, REGCLASS);
