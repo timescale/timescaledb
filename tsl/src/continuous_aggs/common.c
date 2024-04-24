@@ -101,15 +101,6 @@ function_allowed_in_cagg_definition(Oid funcid)
 }
 
 /*
- * Return Oid for a schema-qualified relation.
- */
-Oid
-relation_oid(Name schema, Name name)
-{
-	return get_relname_relid(NameStr(*name), get_namespace_oid(NameStr(*schema), false));
-}
-
-/*
  * When a view is created (StoreViewQuery), 2 dummy rtable entries corresponding to "old" and
  * "new" are prepended to the rtable list. We remove these and adjust the varnos to recreate
  * the user or direct view query.
