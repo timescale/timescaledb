@@ -251,7 +251,7 @@ can_vectorize_aggref(Aggref *aggref, CustomScan *custom)
 
 	if (aggref->aggdirectargs != NIL)
 	{
-		/* Can't process ordered-set agregates with direct arguments. */
+		/* Can't process ordered-set aggregates with direct arguments. */
 		return false;
 	}
 
