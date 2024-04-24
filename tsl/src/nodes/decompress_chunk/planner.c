@@ -352,15 +352,34 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 		Assert((Index) var->varno == path->info->compressed_rel->relid);
 		const AttrNumber compressed_attno = var->varattno;
 		Assert(compressed_attno != InvalidAttrNumber);
-		CompressedColumnInfo *compression = &context->compressed_attno_info[compressed_attno];
+		CompressedColumnInfo *compressed_info = &context->compressed_attno_info[compressed_attno];
 
-		(void) *compression;
+		/*
+		 * Note that the decompressed scan targetlist might follow neither its
+		 * output targetlist (when we need more columns for filters) nor the
+		 * uncompressed chunk tuple. So here we have to do this additional
+		 * conversion.
+		 */
+		int decompressed_scan_attno;
+		if (compressed_info->uncompressed_chunk_attno <= 0)
+		{
+			decompressed_scan_attno = compressed_info->uncompressed_chunk_attno;
+		}
+		else
+		{
+			UncompressedColumnInfo *uncompressed_info =
+				&context->uncompressed_chunk_attno_to_compression_info
+					 [compressed_info->uncompressed_chunk_attno];
+			decompressed_scan_attno = uncompressed_info->output_attno;
+		}
+
 		context->decompression_map =
-			lappend_int(context->decompression_map, compression->uncompressed_chunk_attno);
+			lappend_int(context->decompression_map, decompressed_scan_attno);
 		context->is_segmentby_column =
-			lappend_int(context->is_segmentby_column, compression->is_segmentby);
-		context->bulk_decompression_column = lappend_int(context->bulk_decompression_column,
-														 compression->bulk_decompression_possible);
+			lappend_int(context->is_segmentby_column, compressed_info->is_segmentby);
+		context->bulk_decompression_column =
+			lappend_int(context->bulk_decompression_column,
+						compressed_info->bulk_decompression_possible);
 	}
 }
 
