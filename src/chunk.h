@@ -239,7 +239,6 @@ extern Chunk *ts_chunk_build_from_tuple_and_stub(Chunk **chunkptr, TupleInfo *ti
 extern ScanIterator ts_chunk_scan_iterator_create(MemoryContext result_mcxt);
 extern void ts_chunk_scan_iterator_set_chunk_id(ScanIterator *it, int32 chunk_id);
 extern bool ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode);
-extern int ts_chunk_oid_cmp(const void *p1, const void *p2);
 int ts_chunk_get_osm_chunk_id(int hypertable_id);
 extern TSDLLEXPORT void ts_chunk_merge_on_dimension(const Hypertable *ht, Chunk *chunk,
 													const Chunk *merge_chunk, int32 dimension_id);

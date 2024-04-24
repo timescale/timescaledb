@@ -1318,7 +1318,7 @@ Chunk *
 ts_chunk_find_for_point(const Hypertable *ht, const Point *p)
 {
 	int chunk_id = chunk_point_find_chunk_id(ht, p);
-	if (chunk_id == 0)
+	if (chunk_id == INVALID_CHUNK_ID)
 	{
 		return NULL;
 	}
@@ -1351,7 +1351,7 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 	 * aren't removed.
 	 */
 	int chunk_id = chunk_point_find_chunk_id(ht, p);
-	if (chunk_id != 0)
+	if (chunk_id != INVALID_CHUNK_ID)
 	{
 		/* The chunk might be dropped, so we don't fail if we haven't found it. */
 		Chunk *chunk = ts_chunk_get_by_id(chunk_id, /* fail_if_not_found = */ false);
@@ -1368,7 +1368,7 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 		}
 
 		/*
-		 * If we managed to find some metadata for the chunk (chunk_id != 0),
+		 * If we managed to find some metadata for the chunk (chunk_id != INVALID_CHUNK_ID),
 		 * but it is marked as dropped, try to resurrect it.
 		 * Not sure if this ever worked for distributed hypertables.
 		 */
@@ -1432,7 +1432,7 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 				Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
 				Assert(!isnull);
 				int32 current_chunk_id = DatumGetInt32(datum);
-				Assert(current_chunk_id != 0);
+				Assert(current_chunk_id != INVALID_CHUNK_ID);
 
 				bool found = false;
 				ChunkScanEntry *entry =
@@ -1820,7 +1820,7 @@ chunk_resurrect(const Hypertable *ht, int chunk_id)
 	Chunk *chunk = NULL;
 	PG_USED_FOR_ASSERTS_ONLY int count = 0;
 
-	Assert(chunk_id != 0);
+	Assert(chunk_id != INVALID_CHUNK_ID);
 
 	iterator = ts_scan_iterator_create(CHUNK, RowExclusiveLock, CurrentMemoryContext);
 	ts_chunk_scan_iterator_set_chunk_id(&iterator, chunk_id);
@@ -1929,7 +1929,7 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 			Datum datum = slot_getattr(ti->slot, Anum_chunk_constraint_chunk_id, &isnull);
 			Assert(!isnull);
 			int32 current_chunk_id = DatumGetInt32(datum);
-			Assert(current_chunk_id != 0);
+			Assert(current_chunk_id != INVALID_CHUNK_ID);
 
 			bool found = false;
 			ChunkScanEntry *entry = hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
@@ -1959,7 +1959,7 @@ chunk_point_find_chunk_id(const Hypertable *ht, const Point *p)
 			}
 		}
 
-		if (matching_chunk_id != 0)
+		if (matching_chunk_id != INVALID_CHUNK_ID)
 		{
 			break;
 		}
@@ -4515,15 +4515,6 @@ ts_chunk_lock_if_exists(Oid chunk_oid, LOCKMODE chunk_lockmode)
 	}
 
 	return true;
-}
-
-int
-ts_chunk_oid_cmp(const void *p1, const void *p2)
-{
-	const Chunk *c1 = *((const Chunk **) p1);
-	const Chunk *c2 = *((const Chunk **) p2);
-
-	return oid_cmp(&c1->table_id, &c2->table_id);
 }
 
 ScanIterator

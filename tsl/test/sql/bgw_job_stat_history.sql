@@ -77,10 +77,10 @@ SELECT test.wait_for_job_to_run(:job_id_1, 3);
 SELECT test.wait_for_job_to_run(:job_id_2, 3);
 
 -- Check job execution history
-SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+SELECT job_id, pid IS NOT NULL AS pid, proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
 FROM timescaledb_information.job_history
 WHERE job_id >= 1000
-ORDER BY id;
+ORDER BY id, job_id;
 
 -- Changing the config of one job
 SELECT scheduled FROM alter_job(:job_id_1, config => '{"foo": 2, "bar": 1}'::jsonb);
@@ -88,7 +88,7 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT test.wait_for_job_to_run(:job_id_1, 4);
 
 -- Check job execution history
-SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+SELECT job_id, pid IS NOT NULL AS pid, proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
 FROM timescaledb_information.job_history
 WHERE job_id = :job_id_1
 ORDER BY id;
@@ -107,7 +107,7 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT test.wait_for_job_to_run(:job_id_1, 5);
 
 -- Check job execution history
-SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+SELECT job_id, pid IS NOT NULL AS pid, proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
 FROM timescaledb_information.job_history
 WHERE job_id = :job_id_1
 ORDER BY id;
@@ -129,7 +129,7 @@ SELECT scheduled FROM alter_job(:job_id_1, next_start => now());
 SELECT test.wait_for_job_to_run(:job_id_1, 6);
 
 -- Check job execution history
-SELECT proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
+SELECT job_id, pid IS NOT NULL AS pid, proc_schema, proc_name, succeeded, config, sqlerrcode, err_message
 FROM timescaledb_information.job_history
 WHERE job_id = :job_id_1
 ORDER BY id;
