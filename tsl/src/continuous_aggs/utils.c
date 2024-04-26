@@ -693,7 +693,8 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 	replace_time_bucket_function_in_catalog(cagg);
 
 	/* Fetch new CAgg definition from catalog */
-	ContinuousAgg *new_cagg_definition = cagg_get_by_relid_or_fail(cagg_relid);
+	ContinuousAgg PG_USED_FOR_ASSERTS_ONLY *new_cagg_definition =
+		cagg_get_by_relid_or_fail(cagg_relid);
 	Assert(new_cagg_definition->bucket_function->bucket_function == new_bucket_function);
 	Assert(cagg->bucket_function->bucket_time_origin ==
 		   new_cagg_definition->bucket_function->bucket_time_origin);
