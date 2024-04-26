@@ -2025,3 +2025,52 @@ SELECT * FROM conditions_daily ORDER BY bucket, avg;
  NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
 (6 rows)
 
+-- Test TRUNCATE over a Realtime CAgg
+DROP MATERIALIZED VIEW conditions_daily;
+NOTICE:  drop cascades to 2 other objects
+CREATE MATERIALIZED VIEW conditions_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+SELECT location,
+       time_bucket(INTERVAL '1 day', time) AS bucket,
+       AVG(temperature)
+  FROM conditions
+GROUP BY location, bucket
+WITH NO DATA;
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'conditions_daily' \gset
+-- Check the current watermark for an empty CAgg
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_empty_cagg;
+       watermak_empty_cagg       
+---------------------------------
+ Sun Nov 23 16:00:00 4714 PST BC
+(1 row)
+
+-- Refresh the CAGG
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+-- Check the watermark after the refresh and before truncate the CAgg
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_before;
+       watermak_before        
+------------------------------
+ Fri Nov 02 17:00:00 2018 PDT
+(1 row)
+
+-- Truncate the given CAgg, it should reset the watermark to the empty state
+TRUNCATE conditions_daily;
+-- Watermark should be reseted
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_after;
+         watermak_after          
+---------------------------------
+ Sun Nov 23 16:00:00 4714 PST BC
+(1 row)
+
+-- Should return ROWS because the watermark was reseted by the TRUNCATE
+SELECT * FROM conditions_daily ORDER BY bucket, avg;
+ location |            bucket            | avg 
+----------+------------------------------+-----
+ SFO      | Sun Dec 31 16:00:00 2017 PST |  55
+ SFO      | Mon Jan 01 16:00:00 2018 PST |  65
+ NYC      | Mon Jan 01 16:00:00 2018 PST |  65
+ por      | Mon Jan 01 16:00:00 2018 PST | 100
+ NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
+ NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
+(6 rows)
+

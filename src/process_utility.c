@@ -69,6 +69,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 #include "tss_callbacks.h"
 #include "utils.h"
 #include "with_clause_parser.h"
@@ -889,7 +890,7 @@ process_truncate(ProcessUtilityArgs *args)
 	TruncateStmt *stmt = (TruncateStmt *) args->parsetree;
 	Cache *hcache = ts_hypertable_cache_pin();
 	ListCell *cell;
-	List *hypertables = NIL;
+	List *hypertables = NIL, *mat_hypertables = NIL;
 	List *relations = NIL;
 	bool list_changed = false;
 	MemoryContext oldctx, parsetreectx = GetMemoryChunkContext(args->parsetree);
@@ -966,6 +967,9 @@ process_truncate(ProcessUtilityArgs *args)
 
 						/* mark list as changed because we'll add the materialization hypertable */
 						list_changed = true;
+
+						/* list of materialization hypertables to reset the watermark */
+						mat_hypertables = lappend(mat_hypertables, mat_ht);
 					}
 
 					list_append = true;
@@ -1101,6 +1105,19 @@ process_truncate(ProcessUtilityArgs *args)
 
 			handle_truncate_hypertable(args, stmt, compressed_ht);
 		}
+	}
+
+	/* For all materialization hypertables, reset the watermark */
+	foreach (cell, mat_hypertables)
+	{
+		Hypertable *mat_ht = lfirst(cell);
+
+		Assert(mat_ht != NULL);
+
+		/* Force update the watermark */
+		bool isnull;
+		int64 watermark = ts_hypertable_get_open_dim_max_value(mat_ht, 0, &isnull);
+		ts_cagg_watermark_update(mat_ht, watermark, isnull, true);
 	}
 
 	ts_cache_release(hcache);
