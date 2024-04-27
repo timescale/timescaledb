@@ -38,6 +38,7 @@
 #include "time_bucket.h"
 #include "time_utils.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
 #include "utils.h"
@@ -1017,6 +1018,7 @@ drop_continuous_agg(FormData_continuous_agg *cadata, bool drop_user_view)
 	if (OidIsValid(mat_hypertable.objectId))
 	{
 		performDeletion(&mat_hypertable, DROP_CASCADE, 0);
+		ts_compression_settings_delete(mat_hypertable.objectId);
 		ts_hypertable_delete_by_id(cadata->mat_hypertable_id);
 	}
 
