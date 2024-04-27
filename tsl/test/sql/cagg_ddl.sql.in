@@ -1320,3 +1320,14 @@ SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark
 
 -- Should return ROWS because the watermark was reseted by the TRUNCATE
 SELECT * FROM conditions_daily ORDER BY bucket, avg;
+
+-- check compression settings are cleaned up when deleting a cagg with compression
+CREATE TABLE cagg_cleanup(time timestamptz not null);
+SELECT table_name FROM create_hypertable('cagg_cleanup','time');
+INSERT INTO cagg_cleanup SELECT '2020-01-01';
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1h',time) FROM cagg_cleanup GROUP BY 1;
+ALTER MATERIALIZED VIEW cagg1 SET (timescaledb.compress);
+SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
+DROP MATERIALIZED VIEW cagg1;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+
