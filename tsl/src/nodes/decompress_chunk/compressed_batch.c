@@ -162,7 +162,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
+	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->decompressed_scan_attno);
 	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[attr];
 	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
 	const int value_bytes = get_typlen(column_description->typid);
@@ -179,9 +179,13 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 */
 		column_values->decompression_type = DT_Scalar;
 
+		/*
+		 * FIXME a targetlist-based tdesc has no default values, so this should
+		 * always use the uncompressed chunk tdesc.
+		 */
 		*column_values->output_value =
 			getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
-						   column_description->output_attno,
+						   column_description->decompressed_scan_attno,
 						   column_values->output_isnull);
 		return;
 	}
@@ -399,7 +403,8 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	for (; column_index < dcontext->num_data_columns; column_index++)
 	{
 		column_description = &dcontext->compressed_chunk_columns[column_index];
-		if (column_description->output_attno == var->varattno)
+		Assert(var->varno == INDEX_VAR);
+		if (column_description->decompressed_scan_attno == var->varattno)
 		{
 			break;
 		}
@@ -734,7 +739,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
 	Assert(batch_state->per_batch_context != NULL);
 
-	/* Get a reference to the output TupleTableSlot */
+	/* Get a reference to the decompressed scan TupleTableSlot */
 	TupleTableSlot *decompressed_slot = dcontext->decompressed_slot;
 
 	/*
@@ -832,7 +837,8 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				Assert(i < dcontext->num_data_columns);
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->decompression_type = DT_Scalar;
-				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
+				AttrNumber attr =
+					AttrNumberGetAttrOffset(column_description->decompressed_scan_attno);
 				Datum *output_value = &decompressed_tuple->tts_values[attr];
 				bool *output_isnull = &decompressed_tuple->tts_isnull[attr];
 				column_values->output_value = output_value;

@@ -84,7 +84,7 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
 		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
-		if (current_column->output_attno == var->varattno)
+		if (current_column->uncompressed_chunk_attno == var->varattno)
 		{
 			value_column_description = current_column;
 			break;
@@ -156,7 +156,7 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 			Assert(n > 0);
 		}
 
-		int offs = AttrNumberGetAttrOffset(value_column_description->output_attno);
+		int offs = AttrNumberGetAttrOffset(value_column_description->decompressed_scan_attno);
 		agg->agg_const(batch_state->decompressed_scan_slot_data.base.tts_values[offs],
 					   batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
 					   n,

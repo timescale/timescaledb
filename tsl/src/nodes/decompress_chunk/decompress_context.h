@@ -31,12 +31,18 @@ typedef struct CompressionColumnDescription
 	bool by_value;
 
 	/*
-	 * Attno of the decompressed column in the output of DecompressChunk node.
+	 * Attno of the decompressed column in the scan tuple of DecompressChunk node.
 	 * Negative values are special columns that do not have a representation in
 	 * the decompressed chunk, but are still used for decompression. They should
 	 * have the respective `type` field.
 	 */
-	AttrNumber output_attno;
+	AttrNumber decompressed_scan_attno;
+
+	/*
+	 * Attno of this column in the uncompressed chunks, which we use to match
+	 * the vector quals to the column data.
+	 */
+	AttrNumber uncompressed_chunk_attno;
 
 	/*
 	 * Attno of the compressed column in the input compressed chunk scan.
