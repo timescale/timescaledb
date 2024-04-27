@@ -403,7 +403,7 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	for (; column_index < dcontext->num_data_columns; column_index++)
 	{
 		column_description = &dcontext->compressed_chunk_columns[column_index];
-		Assert(var->varno == INDEX_VAR);
+		// Assert(var->varno == INDEX_VAR);
 		if (column_description->decompressed_scan_attno == var->varattno)
 		{
 			break;

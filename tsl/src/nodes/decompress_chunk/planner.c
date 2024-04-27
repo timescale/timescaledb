@@ -86,6 +86,12 @@ typedef struct
  */
 typedef struct
 {
+	PlannerInfo *root;
+
+	DecompressChunkPath *decompress_path;
+
+	Bitmapset *uncompressed_attrs_needed;
+
 	/*
 	 * decompression_map maps targetlist entries of the compressed scan to tuple
 	 * attribute number of the uncompressed chunk. Negative values are special
@@ -127,6 +133,132 @@ typedef struct
 	List *custom_scan_targetlist;
 } DecompressionMapContext;
 
+static void
+follow_uncompressed_output_tlist(DecompressionMapContext *context)
+{
+	/*
+	 * Try to make the scan targetlist follow the order of the path target.
+	 */
+	CompressionInfo *info = context->decompress_path->info;
+	PathTarget *pathtarget = context->decompress_path->custom_path.path.pathtarget;
+	fprintf(stderr, "pathtarget is:\n");
+	my_print(pathtarget->exprs);
+	int next_decompressed_scan_attno = 1;
+	for (int i = 0; i < list_length(pathtarget->exprs); i++)
+	{
+		Expr *expr = list_nth(pathtarget->exprs, i);
+		if (!IsA(expr, Var))
+		{
+			/*
+			 * The pathtarget has some non-var expressions, so we won't be able
+			 * to build a matching decompressed scan targetlist.
+			 */
+			break;
+		}
+
+		Var *var = castNode(Var, expr);
+
+		/* This should produce uncompressed chunk columns. */
+		Assert((Index) var->varno == info->chunk_rel->relid);
+
+		const int uncompressed_chunk_attno = var->varattno;
+		if (uncompressed_chunk_attno <= 0)
+		{
+			/*
+			 * The pathtarget has some special vars so we won't be able to
+			 * build a matching decompressed scan targetlist.
+			 */
+			break;
+		}
+
+		UncompressedColumnInfo *uncompressed_info =
+			&context->uncompressed_chunk_attno_to_compression_info[uncompressed_chunk_attno];
+		uncompressed_info->decompressed_scan_attno = next_decompressed_scan_attno++;
+
+		char *attname = get_attname(info->chunk_rte->relid,
+									uncompressed_chunk_attno,
+									/* missing_ok = */ false);
+
+		TargetEntry *target_entry =
+			makeTargetEntry((Expr *) copyObject(var),
+							/* resno = */ uncompressed_info->decompressed_scan_attno,
+							/* resname = */ attname,
+							/* resjunk = */ false);
+		target_entry->ressortgroupref =
+			pathtarget->sortgrouprefs ? pathtarget->sortgrouprefs[i] : 0;
+		context->custom_scan_targetlist = lappend(context->custom_scan_targetlist, target_entry);
+
+		fprintf(stderr, "added tentry (1):\n");
+		my_print(target_entry);
+	}
+
+	/*
+	 * Add the columns to the custom scan targetlist that are not in the
+	 * pathtarget but still are decompressed (e.g. for quals, or if we broke the
+	 * above loop early).
+	 */
+	for (int i = 1; i <= info->chunk_rel->max_attr; i++)
+	{
+		UncompressedColumnInfo *uncompressed_info =
+			&context->uncompressed_chunk_attno_to_compression_info[i];
+
+		if (uncompressed_info->input_attno == InvalidAttrNumber ||
+			uncompressed_info->decompressed_scan_attno != InvalidAttrNumber)
+		{
+			continue;
+		}
+
+		uncompressed_info->decompressed_scan_attno = next_decompressed_scan_attno++;
+
+		Oid vartype;
+		int32 vartypmod;
+		Oid varcollid;
+		get_atttypetypmodcoll(info->chunk_rte->relid, i, &vartype, &vartypmod, &varcollid);
+
+		Var *var = makeVar(info->chunk_rel->relid,
+						   i,
+						   vartype,
+						   vartypmod,
+						   varcollid,
+						   /* varlevelsup = */ 0);
+
+		/*
+		 * Have to set proper attnames so that the decompressed scan tuple whole
+		 * row type can be converted to hypertable whole row type (this is
+		 * matched by names).
+		 */
+		char *attname = get_attname(info->chunk_rte->relid,
+									i,
+									/* missing_ok = */ false);
+
+		TargetEntry *target_entry =
+			makeTargetEntry((Expr *) var,
+							/* resno = */ uncompressed_info->decompressed_scan_attno,
+							/* resname = */ attname,
+							/* resjunk = */ false);
+
+		context->custom_scan_targetlist = lappend(context->custom_scan_targetlist, target_entry);
+
+		fprintf(stderr, "added tentry (2):\n");
+		my_print(target_entry);
+	}
+
+	Assert(
+		!bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, context->uncompressed_attrs_needed));
+
+	//	foreach (lc, context->custom_scan_targetlist)
+	//	{
+	//		TargetEntry *entry = castNode(TargetEntry, lfirst(lc));
+	//		Var *var = castNode(Var, entry->expr);
+	//	}
+
+	//	for(int i = bms_next_member(context->uncompressed_attrs_needed, -1);
+	//		i >= 0; i = bms_next_member(context->uncompressed_attrs_needed, i))
+	//	{
+	//		const int uncompressed_chunk_attno = i + FirstLowInvalidHeapAttributeNumber;
+	//	}
+}
+
 /*
  * Given the scan targetlist and the bitmapset of the needed columns, determine
  * which scan columns become which decompressed columns (fill decompression_map).
@@ -137,10 +269,10 @@ typedef struct
  * attnos.
  */
 static void
-build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
-						DecompressChunkPath *path, List *compressed_scan_tlist,
-						Bitmapset *uncompressed_attrs_needed)
+build_decompression_map(DecompressionMapContext *context, List *compressed_scan_tlist)
 {
+	DecompressChunkPath *path = context->decompress_path;
+	CompressionInfo *info = path->info;
 	/*
 	 * Track which normal and metadata columns we were able to find in the
 	 * targetlist.
@@ -151,12 +283,12 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 	Bitmapset *selectedCols = NULL;
 
 #if PG16_LT
-	selectedCols = path->info->ht_rte->selectedCols;
+	selectedCols = info->ht_rte->selectedCols;
 #else
-	if (path->info->ht_rte->perminfoindex > 0)
+	if (info->ht_rte->perminfoindex > 0)
 	{
 		RTEPermissionInfo *perminfo =
-			getRTEPermissionInfo(root->parse->rteperminfos, path->info->ht_rte);
+			getRTEPermissionInfo(context->root->parse->rteperminfos, info->ht_rte);
 		selectedCols = perminfo->selectedCols;
 	}
 #endif
@@ -173,7 +305,7 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 	 * be added at decompression time. Always mark it as found.
 	 */
 	if (bms_is_member(TableOidAttributeNumber - FirstLowInvalidHeapAttributeNumber,
-					  uncompressed_attrs_needed))
+					  context->uncompressed_attrs_needed))
 	{
 		uncompressed_attrs_found =
 			bms_add_member(uncompressed_attrs_found,
@@ -184,10 +316,10 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 
 	context->uncompressed_chunk_attno_to_compression_info =
 		palloc0(sizeof(*context->uncompressed_chunk_attno_to_compression_info) *
-				(path->info->chunk_rel->max_attr + 1));
+				(info->chunk_rel->max_attr + 1));
 
-	context->compressed_attno_info = palloc0(sizeof(*context->compressed_attno_info) *
-											 (path->info->compressed_rel->max_attr + 1));
+	context->compressed_attno_info =
+		palloc0(sizeof(*context->compressed_attno_info) * (info->compressed_rel->max_attr + 1));
 
 	/*
 	 * Go over the scan targetlist and determine to which output column each
@@ -206,7 +338,7 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 		}
 
 		Var *var = castNode(Var, target->expr);
-		Assert((Index) var->varno == path->info->compressed_rel->relid);
+		Assert((Index) var->varno == info->compressed_rel->relid);
 		AttrNumber compressed_attno = var->varattno;
 
 		if (compressed_attno == InvalidAttrNumber)
@@ -220,10 +352,10 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 			elog(ERROR, "compressed scan targetlist must not have whole-row vars");
 		}
 
-		const char *column_name = get_attname(path->info->compressed_rte->relid,
+		const char *column_name = get_attname(info->compressed_rte->relid,
 											  compressed_attno,
 											  /* missing_ok = */ false);
-		AttrNumber uncompressed_attno = get_attnum(path->info->chunk_rte->relid, column_name);
+		AttrNumber uncompressed_attno = get_attnum(info->chunk_rte->relid, column_name);
 
 		AttrNumber destination_attno = 0;
 		if (uncompressed_attno != InvalidAttrNumber)
@@ -233,7 +365,8 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 			 */
 			Assert(uncompressed_attno != InvalidAttrNumber);
 
-			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, uncompressed_attrs_needed))
+			if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber,
+							  context->uncompressed_attrs_needed))
 			{
 				/*
 				 * attno = 0 means whole-row var. Output all the columns.
@@ -244,7 +377,7 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 								   uncompressed_attno - FirstLowInvalidHeapAttributeNumber);
 			}
 			else if (bms_is_member(uncompressed_attno - FirstLowInvalidHeapAttributeNumber,
-								   uncompressed_attrs_needed))
+								   context->uncompressed_attrs_needed))
 			{
 				destination_attno = uncompressed_attno;
 				uncompressed_attrs_found =
@@ -280,12 +413,12 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 			}
 		}
 
-		const bool is_segment = ts_array_is_member(path->info->settings->fd.segmentby, column_name);
+		const bool is_segment = ts_array_is_member(info->settings->fd.segmentby, column_name);
 
 		/*
 		 * Determine if we can use bulk decompression for this column.
 		 */
-		Oid typoid = get_atttype(path->info->chunk_rte->relid, uncompressed_attno);
+		Oid typoid = get_atttype(info->chunk_rte->relid, uncompressed_attno);
 		const bool bulk_decompression_possible =
 			!is_segment && destination_attno > 0 &&
 			tsl_get_decompress_all_function(compression_get_default_algorithm(typoid), typoid) !=
@@ -321,17 +454,17 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 	 * skip attno 0 in this check.
 	 */
 	Bitmapset *attrs_not_found =
-		bms_difference(uncompressed_attrs_needed, uncompressed_attrs_found);
+		bms_difference(context->uncompressed_attrs_needed, uncompressed_attrs_found);
 	int bit = bms_next_member(attrs_not_found, 0 - FirstLowInvalidHeapAttributeNumber);
 	if (bit >= 0)
 	{
 		elog(ERROR,
 			 "column '%s' (%d) not found in the targetlist for compressed chunk '%s'",
-			 get_attname(path->info->chunk_rte->relid,
+			 get_attname(info->chunk_rte->relid,
 						 bit + FirstLowInvalidHeapAttributeNumber,
 						 /* missing_ok = */ true),
 			 bit + FirstLowInvalidHeapAttributeNumber,
-			 get_rel_name(path->info->compressed_rte->relid));
+			 get_rel_name(info->compressed_rte->relid));
 	}
 
 	if (missing_count)
@@ -344,130 +477,18 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
 	}
 
-	/*
-	 * Try to make the scan targetlist follow the order of the path target.
-	 */
-	fprintf(stderr, "pathtarget is:\n");
-	my_print(path->custom_path.path.pathtarget->exprs);
-	int next_decompressed_scan_attno = 1;
-	for (int i = 0; i < list_length(path->custom_path.path.pathtarget->exprs); i++)
+	if (!bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, context->uncompressed_attrs_needed))
 	{
-		Expr *expr = list_nth(path->custom_path.path.pathtarget->exprs, i);
-		if (!IsA(expr, Var))
-		{
-			/*
-			 * The pathtarget has some non-var expressions, so we won't be able
-			 * to build a matching decompressed scan targetlist.
-			 */
-			break;
-		}
-
-		Var *var = castNode(Var, expr);
-
-		/* This should produce uncompressed chunk columns. */
-		Assert((Index) var->varno == path->info->chunk_rel->relid);
-
-		const int uncompressed_chunk_attno = var->varattno;
-		if (uncompressed_chunk_attno <= 0)
-		{
-			/*
-			 * The pathtarget has some special vars so we won't be able to
-			 * build a matching decompressed scan targetlist.
-			 */
-			break;
-		}
-
-		UncompressedColumnInfo *uncompressed_info =
-			&context->uncompressed_chunk_attno_to_compression_info[uncompressed_chunk_attno];
-		uncompressed_info->decompressed_scan_attno = next_decompressed_scan_attno++;
-		uncompressed_info->sortgroupref = path->custom_path.path.pathtarget->sortgrouprefs ?
-											  path->custom_path.path.pathtarget->sortgrouprefs[i] :
-											  0;
-
-		char *attname = get_attname(path->info->chunk_rte->relid,
-									uncompressed_chunk_attno,
-									/* missing_ok = */ false);
-
-		TargetEntry *target_entry =
-			makeTargetEntry((Expr *) copyObject(var),
-							/* resno = */ uncompressed_info->decompressed_scan_attno,
-							/* resname = */ attname,
-							/* resjunk = */ false);
-		target_entry->ressortgroupref = uncompressed_info->sortgroupref;
-		context->custom_scan_targetlist = lappend(context->custom_scan_targetlist, target_entry);
-
-		fprintf(stderr, "added tentry (1):\n");
-		my_print(target_entry);
+		follow_uncompressed_output_tlist(context);
 	}
-
-	/*
-	 * Add the columns to the custom scan targetlist that are not in the
-	 * pathtarget but still are decompressed (e.g. for quals, or if we broke the
-	 * above loop early).
-	 */
-	for (int i = 1; i < path->info->chunk_rel->max_attr; i++)
+	else
 	{
-		UncompressedColumnInfo *uncompressed_info =
-			&context->uncompressed_chunk_attno_to_compression_info[i];
-
-		if (uncompressed_info->input_attno == InvalidAttrNumber ||
-			uncompressed_info->decompressed_scan_attno != InvalidAttrNumber)
+		for (int i = 1; i <= info->chunk_rel->max_attr; i++)
 		{
-			continue;
+			UncompressedColumnInfo *uncompressed_info =
+				&context->uncompressed_chunk_attno_to_compression_info[i];
+			uncompressed_info->decompressed_scan_attno = i;
 		}
-
-		uncompressed_info->decompressed_scan_attno = next_decompressed_scan_attno++;
-
-		Oid vartype;
-		int32 vartypmod;
-		Oid varcollid;
-		get_atttypetypmodcoll(path->info->chunk_rte->relid, i, &vartype, &vartypmod, &varcollid);
-
-		Var *var = makeVar(path->info->chunk_rel->relid,
-						   i,
-						   vartype,
-						   vartypmod,
-						   varcollid,
-						   /* varlevelsup = */ 0);
-
-		/*
-		 * Have to set proper attnames so that the decompressed scan tuple whole
-		 * row type can be converted to hypertable whole row type (this is
-		 * matched by names).
-		 */
-		char *attname = get_attname(path->info->chunk_rte->relid,
-									i,
-									/* missing_ok = */ false);
-
-		TargetEntry *target_entry =
-			makeTargetEntry((Expr *) var,
-							/* resno = */ uncompressed_info->decompressed_scan_attno,
-							/* resname = */ attname,
-							/* resjunk = */ false);
-
-		context->custom_scan_targetlist = lappend(context->custom_scan_targetlist, target_entry);
-
-		fprintf(stderr, "added tentry (2):\n");
-		my_print(target_entry);
-	}
-
-	if (bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, uncompressed_attrs_needed))
-	{
-		/*
-		 * Also add the whole-row var.
-		 */
-		Var *var = makeWholeRowVar(path->info->chunk_rte,
-								   path->info->chunk_rel->relid,
-								   /* varlevelsup = */ 0,
-								   /* allowScalar = */ false);
-		TargetEntry *target_entry = makeTargetEntry((Expr *) var,
-													/* resno = */ 0,
-													/* resname = */ NULL,
-													/* resjunk = */ false);
-		context->custom_scan_targetlist = lappend(context->custom_scan_targetlist, target_entry);
-
-		fprintf(stderr, "added tentry (3):\n");
-		my_print(target_entry);
 	}
 
 	/*
@@ -479,7 +500,7 @@ build_decompression_map(PlannerInfo *root, DecompressionMapContext *context,
 	{
 		TargetEntry *target = (TargetEntry *) lfirst(lc);
 		Var *var = castNode(Var, target->expr);
-		Assert((Index) var->varno == path->info->compressed_rel->relid);
+		Assert((Index) var->varno == info->compressed_rel->relid);
 		const AttrNumber compressed_attno = var->varattno;
 		Assert(compressed_attno != InvalidAttrNumber);
 		CompressedColumnInfo *compressed_info = &context->compressed_attno_info[compressed_attno];
@@ -1063,12 +1084,10 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * Determine which compressed column goes to which output column.
 	 */
-	DecompressionMapContext context = { 0 };
-	build_decompression_map(root,
-							&context,
-							dcpath,
-							compressed_scan->plan.targetlist,
-							uncompressed_attrs_needed);
+	DecompressionMapContext context = { .root = root,
+										.decompress_path = dcpath,
+										.uncompressed_attrs_needed = uncompressed_attrs_needed };
+	build_decompression_map(&context, compressed_scan->plan.targetlist);
 
 	/* Build heap sort info for sorted_merge_append */
 	List *sort_options = NIL;
@@ -1332,8 +1351,14 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	/* output target list */
 	// decompress_plan->scan.plan.targetlist = NIL;
-	// decompress_plan->scan.plan.targetlist = output_targetlist;
-	decompress_plan->scan.plan.targetlist = decompress_plan->custom_scan_tlist;
+
+	/*
+	 * Note that we cannot decide here that we require a projection! It is decided
+	 * at Path stage, now we must produce the requested targetlist.
+	 */
+	decompress_plan->scan.plan.targetlist = output_targetlist;
+
+	// decompress_plan->scan.plan.targetlist = decompress_plan->custom_scan_tlist;
 
 	fprintf(stderr, "at plan time, custom scan tlist is:\n");
 	my_print(decompress_plan->custom_scan_tlist);
