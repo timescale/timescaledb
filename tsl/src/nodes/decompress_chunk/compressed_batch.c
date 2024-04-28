@@ -180,13 +180,13 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		column_values->decompression_type = DT_Scalar;
 
 		/*
-		 * FIXME a targetlist-based tdesc has no default values, so this should
-		 * always use the uncompressed chunk tdesc.
+		 * We might use a custom targetlist-based scan tuple which has no
+		 * default values, so the default values are fetched from the
+		 * uncompressed chunk tuple descriptor.
 		 */
-		*column_values->output_value =
-			getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
-						   column_description->decompressed_scan_attno,
-						   column_values->output_isnull);
+		*column_values->output_value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
+													  column_description->uncompressed_chunk_attno,
+													  column_values->output_isnull);
 		return;
 	}
 
@@ -740,7 +740,7 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	Assert(batch_state->per_batch_context != NULL);
 
 	/* Get a reference to the decompressed scan TupleTableSlot */
-	TupleTableSlot *decompressed_slot = dcontext->decompressed_slot;
+	TupleTableSlot *decompressed_slot = dcontext->custom_scan_slot;
 
 	/*
 	 * This code follows Postgres' MakeTupleTableSlot().

@@ -260,10 +260,11 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	dcontext->num_columns_with_metadata = num_columns_with_metadata;
 	dcontext->compressed_chunk_columns =
 		palloc0(sizeof(CompressionColumnDescription) * num_columns_with_metadata);
-	dcontext->decompressed_slot = node->ss.ss_ScanTupleSlot;
+	dcontext->custom_scan_slot = node->ss.ss_ScanTupleSlot;
+	dcontext->uncompressed_chunk_tdesc = RelationGetDescr(node->ss.ss_currentRelation);
 	dcontext->ps = &node->ss.ps;
 
-	TupleDesc desc = dcontext->decompressed_slot->tts_tupleDescriptor;
+	TupleDesc desc = dcontext->custom_scan_slot->tts_tupleDescriptor;
 
 	//	fprintf(stderr, "at exec time, the custom scan tlist is:\n");
 	//	my_print(cscan->custom_scan_tlist);
@@ -364,7 +365,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 		chunk_state->batch_queue =
 			batch_queue_heap_create(num_data_columns,
 									chunk_state->sortinfo,
-									dcontext->decompressed_slot->tts_tupleDescriptor,
+									dcontext->custom_scan_slot->tts_tupleDescriptor,
 									&BatchQueueFunctionsHeap);
 		chunk_state->exec_methods.ExecCustomScan = decompress_chunk_exec_heap;
 	}
