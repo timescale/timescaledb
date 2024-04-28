@@ -15,27 +15,32 @@ name: Assign PR to author and reviewers
     types: [ opened, reopened, ready_for_review ]
 
 jobs:
+
   assign-pr:
     name: Assign PR to author
-    permissions:
-      contents: write
+#    permissions: write-all
+#      contents: read  # for kentaro-m/auto-assign-action to fetch config file
+#      pull-requests: write  # for kentaro-m/auto-assign-action to assign PR reviewers
     runs-on: ubuntu-latest
     steps:
-      - uses: toshimaru/auto-author-assign@v2.1.0
+#      - uses: kentaro-m/auto-assign-action@v2.0.0
+      - uses: delivery-much/actions-assigner@v1
+        with:
+          token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
-  ask-review:
-    name: Run pull-review
-    runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run pull-review with docker
-        env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            OWNER: ${{ github.repository_owner }}
-            REPO: ${{ github.event.repository.name }}
-            PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          PR_URL="https://github.com/${OWNER}/${REPO}/pull/${PULL_REQUEST_NUMBER}"
-          docker run ghcr.io/imsky/pull-review "$PR_URL" --github-token "${GITHUB_TOKEN}"
+#  ask-review:
+#    name: Run pull-review
+#    runs-on: ubuntu-latest
+#    if: ${{ !github.event.pull_request.draft }}
+#    steps:
+#      - uses: actions/checkout@v4
+#      - name: Run pull-review with docker
+#        env:
+#            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#            OWNER: ${{ github.repository_owner }}
+#            REPO: ${{ github.event.repository.name }}
+#            PULL_REQUEST_NUMBER : ${{ github.event.pull_request.number }}
+#        shell: bash
+#        run: |
+#          PR_URL="https://github.com/${OWNER}/${REPO}/pull/${PULL_REQUEST_NUMBER}"
+#          docker run ghcr.io/imsky/pull-review "$PR_URL" --github-token "${GITHUB_TOKEN}"
