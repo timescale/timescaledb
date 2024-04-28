@@ -1493,3 +1493,21 @@ SELECT compress_chunk(show_chunks('test_meta_filters'));
 
 EXPLAIN (analyze, timing off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
 
+-- test commutator handling in compressed dml constraints
+CREATE TABLE test_commutator(time timestamptz NOT NULL, device text);
+SELECT table_name FROM create_hypertable('test_commutator', 'time');
+INSERT INTO test_commutator SELECT '2020-01-01', 'a';
+INSERT INTO test_commutator SELECT '2020-01-01', 'b';
+INSERT INTO test_commutator SELECT '2020-01-01', 'c';
+
+ALTER TABLE test_commutator SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(show_chunks('test_commutator'));
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'a' = device; ROLLBACK;
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE device < 'c' ; ROLLBACK;
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'c' > device; ROLLBACK;
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'c' >= device; ROLLBACK;
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE device > 'b'; ROLLBACK;
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'b' < device; ROLLBACK;
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'b' <= device; ROLLBACK;
+

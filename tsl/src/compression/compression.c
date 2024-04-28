@@ -2553,6 +2553,7 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 			case T_OpExpr:
 			{
 				OpExpr *opexpr = (OpExpr *) node;
+				Oid opno = opexpr->opno;
 				RegProcedure opcode = opexpr->opfuncid;
 				Oid collation = opexpr->inputcollid;
 				Expr *leftop, *rightop;
@@ -2575,6 +2576,12 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 				{
 					var = (Var *) rightop;
 					arg_value = (Const *) leftop;
+					opno = get_commutator(opno);
+					if (!OidIsValid(opno))
+						continue;
+					opcode = get_opcode(opno);
+					if (!OidIsValid(opcode))
+						continue;
 				}
 				else
 					continue;
@@ -2584,7 +2591,7 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 					continue;
 				column_name = get_attname(ch->table_id, var->varattno, false);
 				TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
-				int op_strategy = get_op_opfamily_strategy(opexpr->opno, tce->btree_opf);
+				int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
 				if (ts_array_is_member(settings->fd.segmentby, column_name))
 				{
 					switch (op_strategy)

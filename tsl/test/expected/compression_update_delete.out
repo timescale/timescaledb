@@ -2944,3 +2944,106 @@ EXPLAIN (analyze, timing off, costs off, summary off) DELETE FROM test_meta_filt
                Rows Removed by Filter: 10
 (8 rows)
 
+-- test commutator handling in compressed dml constraints
+CREATE TABLE test_commutator(time timestamptz NOT NULL, device text);
+SELECT table_name FROM create_hypertable('test_commutator', 'time');
+   table_name    
+-----------------
+ test_commutator
+(1 row)
+
+INSERT INTO test_commutator SELECT '2020-01-01', 'a';
+INSERT INTO test_commutator SELECT '2020-01-01', 'b';
+INSERT INTO test_commutator SELECT '2020-01-01', 'c';
+ALTER TABLE test_commutator SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "test_commutator" is set to ""time" DESC"
+SELECT compress_chunk(show_chunks('test_commutator'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_39_79_chunk
+(1 row)
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'a' = device; ROLLBACK;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Delete on test_commutator (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_commutator_1
+         ->  Seq Scan on _hyper_39_79_chunk test_commutator_1 (actual rows=1 loops=1)
+               Filter: ('a'::text = device)
+(7 rows)
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE device < 'c' ; ROLLBACK;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 2
+   ->  Delete on test_commutator (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_commutator_1
+         ->  Seq Scan on _hyper_39_79_chunk test_commutator_1 (actual rows=2 loops=1)
+               Filter: (device < 'c'::text)
+(7 rows)
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'c' > device; ROLLBACK;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 2
+   ->  Delete on test_commutator (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_commutator_1
+         ->  Seq Scan on _hyper_39_79_chunk test_commutator_1 (actual rows=2 loops=1)
+               Filter: ('c'::text > device)
+(7 rows)
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'c' >= device; ROLLBACK;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 3
+   Tuples decompressed: 3
+   ->  Delete on test_commutator (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_commutator_1
+         ->  Seq Scan on _hyper_39_79_chunk test_commutator_1 (actual rows=3 loops=1)
+               Filter: ('c'::text >= device)
+(7 rows)
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE device > 'b'; ROLLBACK;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Delete on test_commutator (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_commutator_1
+         ->  Seq Scan on _hyper_39_79_chunk test_commutator_1 (actual rows=1 loops=1)
+               Filter: (device > 'b'::text)
+(7 rows)
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'b' < device; ROLLBACK;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Delete on test_commutator (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_commutator_1
+         ->  Seq Scan on _hyper_39_79_chunk test_commutator_1 (actual rows=1 loops=1)
+               Filter: ('b'::text < device)
+(7 rows)
+
+BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'b' <= device; ROLLBACK;
+                                      QUERY PLAN                                      
+--------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 2
+   Tuples decompressed: 2
+   ->  Delete on test_commutator (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_commutator_1
+         ->  Seq Scan on _hyper_39_79_chunk test_commutator_1 (actual rows=2 loops=1)
+               Filter: ('b'::text <= device)
+(7 rows)
+
