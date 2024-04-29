@@ -1,0 +1,20 @@
+## {{ release_current }} ({{ release_date }})
+
+This release contains performance improvements and bug fixes since 
+the {{ release_previous }} release. We recommend that you upgrade at the next
+available opportunity.
+
+In addition, it includes these noteworthy features:
+* Support `time_bucket` with `origin` and/or `offset` on Continuous Aggregate
+* Compression improvements:
+  - Improve expression pushdown
+  - Add minmax sparse indexes when compressing columns with btree indexes
+  - Make compression use the defaults functions
+  - Vectorize filters in WHERE clause that contain text equality operators and LIKE expressions
+
+**Deprecation warning**
+* Starting on this release will not be possible to create Continuous Aggregate using `time_bucket_ng` anymore and it will be completely removed on the upcoming releases.
+* Recommend users to [migrate their old Continuous Aggregate format to the new one](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/migrate/) because it support will be completely removed in next releases prevent them to migrate.
+* This is the last release supporting PostgreSQL 13.
+
+**For on-premise users and this release only**, you will need to run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql) after running `ALTER EXTENSION`. More details can be found in the pull request [#6786](https://github.com/timescale/timescaledb/pull/6797).
