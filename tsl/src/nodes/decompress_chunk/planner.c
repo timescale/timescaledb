@@ -477,7 +477,9 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 		elog(ERROR, "the sequence column was not found in the compressed scan targetlist");
 	}
 
-	if (!bms_is_member(0 - FirstLowInvalidHeapAttributeNumber, context->uncompressed_attrs_needed))
+	if (bms_next_member(context->uncompressed_attrs_needed, -1) +
+			FirstLowInvalidHeapAttributeNumber >
+		0)
 	{
 		follow_uncompressed_output_tlist(context);
 	}
