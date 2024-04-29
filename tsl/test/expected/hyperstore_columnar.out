@@ -1,0 +1,271 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO queries
+create or replace function twist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method hyperstore', chunk);
+    return chunk;
+end
+$$;
+create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method heap', chunk);
+    return chunk;
+end
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
+        return next ln;
+    end loop;
+end;
+$$;
+create table readings(
+       metric_id serial,
+       time timestamptz unique,
+       location int,
+       device int,
+       temp numeric(4,1),
+       humidity float
+);
+select create_hypertable('readings', 'time');
+NOTICE:  adding not-null constraint to column "time"
+   create_hypertable   
+-----------------------
+ (1,public,readings,t)
+(1 row)
+
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into readings (time, location, device, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
+alter table readings SET (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'time',
+	  timescaledb.compress_segmentby = 'device'
+);
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ limit 1 
+alter table _timescaledb_internal._hyper_1_1_chunk set access method hyperstore;
+select explain_anonymize(format($$
+       select * from %s where device < 4 and location = 2 limit 5
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                              explain_anonymize                               
+------------------------------------------------------------------------------
+ Limit (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Scankey: (device < 4)
+         Vectorized Filter: (location = 2)
+         Rows Removed by Filter: 27
+ Arrays read from cache: N
+ Arrays decompressed: 3
+(7 rows)
+
+create table saved as select * from _timescaledb_internal._hyper_1_1_chunk;
+with
+  lhs as (select * from _timescaledb_internal._hyper_1_1_chunk),
+  rhs as (select * from saved)
+select lhs.*, rhs.*
+from lhs full join rhs using (metric_id)
+where lhs.metric_id is null or rhs.metric_id is null;
+ metric_id | time | location | device | temp | humidity | metric_id | time | location | device | temp | humidity 
+-----------+------+----------+--------+------+----------+-----------+------+----------+--------+------+----------
+(0 rows)
+
+select explain_anonymize(format($$
+       select count(*) from %s where humidity > 110
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                              explain_anonymize                               
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Vectorized Filter: (humidity > '110'::double precision)
+         Rows Removed by Filter: 12240
+ Arrays read from cache: N
+ Arrays decompressed: 30
+(6 rows)
+
+select count(*) from _timescaledb_internal._hyper_1_1_chunk where humidity > 110;
+ count 
+-------
+     0
+(1 row)
+
+select explain_anonymize(format($$
+       select count(*) from %s where humidity > 50
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                              explain_anonymize                               
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Vectorized Filter: (humidity > '50'::double precision)
+         Rows Removed by Filter: 6081
+ Arrays read from cache: N
+ Arrays decompressed: 30
+(6 rows)
+
+select lhs.count, rhs.count
+from (select count(*) from _timescaledb_internal._hyper_1_1_chunk where humidity > 50) lhs,
+     (select count(*) from saved where humidity > 50) rhs;
+ count | count 
+-------+-------
+  6159 |  6159
+(1 row)
+
+with
+  lhs as (select * from _timescaledb_internal._hyper_1_1_chunk where humidity > 50),
+  rhs as (select * from saved where humidity > 50)
+select lhs.*, rhs.*
+from lhs full join rhs using (metric_id)
+where lhs.metric_id is null or rhs.metric_id is null;
+ metric_id | time | location | device | temp | humidity | metric_id | time | location | device | temp | humidity 
+-----------+------+----------+--------+------+----------+-----------+------+----------+--------+------+----------
+(0 rows)
+
+select explain_anonymize(format($$
+       select count(*) from %s where temp > 50
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                              explain_anonymize                               
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Filter: (temp > '50'::numeric)
+         Rows Removed by Filter: 12240
+ Arrays read from cache: N
+ Arrays decompressed: 30
+(6 rows)
+
+select count(*) from _timescaledb_internal._hyper_1_1_chunk where temp > 50;
+ count 
+-------
+     0
+(1 row)
+
+select explain_anonymize(format($$
+       select count(*) from %s where temp > 20
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                              explain_anonymize                               
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Filter: (temp > '20'::numeric)
+         Rows Removed by Filter: 6119
+ Arrays read from cache: N
+ Arrays decompressed: 30
+(6 rows)
+
+select lhs.count, rhs.count
+from (select count(*) from _timescaledb_internal._hyper_1_1_chunk where temp > 20) lhs,
+     (select count(*) from saved where temp > 20) rhs;
+ count | count 
+-------+-------
+  6121 |  6121
+(1 row)
+
+with
+  lhs as (select * from _timescaledb_internal._hyper_1_1_chunk where temp > 20),
+  rhs as (select * from saved where temp > 20)
+select lhs.*, rhs.*
+from lhs full join rhs using (metric_id)
+where lhs.metric_id is null or rhs.metric_id is null;
+ metric_id | time | location | device | temp | humidity | metric_id | time | location | device | temp | humidity 
+-----------+------+----------+--------+------+----------+-----------+------+----------+--------+------+----------
+(0 rows)
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select count(*) from _timescaledb_internal._hyper_1_1_chunk where humidity > 40 and temp > 20;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Aggregate (actual rows=1 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3684 loops=1)
+         Filter: (temp > '20'::numeric)
+         Rows Removed by Filter: 8556
+         Vectorized Filter: (humidity > '40'::double precision)
+ Arrays read from cache: 7289
+ Arrays decompressed: 60
+(7 rows)
+
+select count(*) from _timescaledb_internal._hyper_1_1_chunk where humidity > 40 and temp > 20;
+ count 
+-------
+  3684
+(1 row)
+
+select lhs.count, rhs.count
+from (select count(*) from _timescaledb_internal._hyper_1_1_chunk where humidity > 40 and temp > 20) lhs,
+     (select count(*) from saved where humidity > 40 and temp > 20) rhs;
+ count | count 
+-------+-------
+  3684 |  3684
+(1 row)
+
+select explain_anonymize(format($$
+       select count(*) from %s where humidity > 40 and temp > 20 and device = 3
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                              explain_anonymize                               
+------------------------------------------------------------------------------
+ Aggregate (actual rows=N loops=N)
+   ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
+         Filter: (temp > '20'::numeric)
+         Rows Removed by Filter: 289
+         Scankey: (device = 3)
+         Vectorized Filter: (humidity > '40'::double precision)
+ Arrays read from cache: N
+ Arrays decompressed: 2
+(8 rows)
+
+select count(*) from _timescaledb_internal._hyper_1_1_chunk where humidity > 40 and temp > 20 and device = 3;
+ count 
+-------
+   135
+(1 row)
+
+select lhs.count, rhs.count from
+  (select count(*) from _timescaledb_internal._hyper_1_1_chunk where humidity > 40 and temp > 20 and device = 3) as lhs,
+  (select count(*) from saved where humidity > 40 and temp > 20 and device = 3) as rhs;
+ count | count 
+-------+-------
+   135 |   135
+(1 row)
+
+set timescaledb.enable_columnarscan = false;
+select explain_anonymize(format($$
+       select * from %s where device < 4 order by device asc limit 5
+$$, '_timescaledb_internal._hyper_1_1_chunk'));
+                        explain_anonymize                         
+------------------------------------------------------------------
+ Limit (actual rows=N loops=N)
+   ->  Sort (actual rows=N loops=N)
+         Sort Key: device
+         Sort Method: top-N heapsort 
+         ->  Seq Scan on _hyper_I_N_chunk (actual rows=N loops=N)
+               Filter: (device < 4)
+               Rows Removed by Filter: 10991
+ Arrays read from cache: N
+ Arrays decompressed: 96
+(9 rows)
+
+drop table readings;
+drop table saved;
