@@ -62,15 +62,20 @@ match_relvar(Expr *expr, Index relid)
 	return false;
 }
 
+/*
+ * Extract clauses that can be used as scan keys from the scan qualifiers.
+ *
+ * Remaining qualifiers will be used as filters for the ColumnarScan.
+ */
 static ScanKey
-build_scan_keys(const HyperstoreInfo *caminfo, Index relid, List *clauses, int *num_keys,
-				List **scankey_quals)
+extract_scan_keys(const HyperstoreInfo *caminfo, Scan *scan, int *num_keys, List **scankey_quals)
 {
 	ListCell *lc;
-	ScanKey scankeys = palloc0(sizeof(ScanKeyData) * list_length(clauses));
+	ScanKey scankeys = palloc0(sizeof(ScanKeyData) * list_length(scan->plan.qual));
 	int nkeys = 0;
+	const Index relid = scan->scanrelid;
 
-	foreach (lc, clauses)
+	foreach (lc, scan->plan.qual)
 	{
 		Expr *qual = lfirst(lc);
 
@@ -158,8 +163,10 @@ build_scan_keys(const HyperstoreInfo *caminfo, Index relid, List *clauses, int *
 											   opexpr->opfuncid,	/* reg proc to use */
 											   scanvalue);			/* constant */
 
-						/* Append to quals list for explain */
+						/* Append to quals list for explain and delete it from
+						 * the list of qualifiers. */
 						*scankey_quals = lappend(*scankey_quals, qual);
+						scan->plan.qual = foreach_delete_current(scan->plan.qual, lc);
 					}
 				}
 				break;
@@ -598,16 +605,6 @@ columnar_scan_exec(CustomScanState *state)
 								   cstate->nscankeys,
 								   cstate->scankeys);
 		state->ss.ss_currentScanDesc = scandesc;
-
-		/* Remove filter execution if all quals are used as scankeys on the
-		 * compressed relation */
-		if (scandesc->rs_nkeys == list_length(state->ss.ps.plan->qual))
-		{
-			/* Reset expression state for executing quals */
-			state->ss.ps.qual = NULL;
-			/* Need to reset qual expression too to remove "Filter:" from EXPLAIN */
-			state->ss.ps.plan->qual = NIL;
-		}
 	}
 
 	/*
@@ -689,6 +686,16 @@ columnar_scan_exec(CustomScanState *state)
 	}
 }
 
+static List *
+get_args_from(Node *node)
+{
+	if (IsA(node, OpExpr))
+		return castNode(OpExpr, node)->args;
+	if (IsA(node, ScalarArrayOpExpr))
+		return castNode(ScalarArrayOpExpr, node)->args;
+	return NIL;
+}
+
 static void
 columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 {
@@ -715,11 +722,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	ExecInitResultTypeTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 	state->ss.ps.qual = ExecInitQual(scan->plan.qual, (PlanState *) state);
-	cstate->scankeys = build_scan_keys(caminfo,
-									   scan->scanrelid,
-									   scan->plan.qual,
-									   &cstate->nscankeys,
-									   &cstate->scankey_quals);
+	cstate->scankeys = extract_scan_keys(caminfo, scan, &cstate->nscankeys, &cstate->scankey_quals);
 
 	/* Constify stable expressions in vectorized predicates. */
 	cstate->have_constant_false_vectorized_qual = false;
@@ -760,16 +763,8 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 			}
 		}
 
-		List *args;
-		if (IsA(constified, OpExpr))
-		{
-			args = castNode(OpExpr, constified)->args;
-		}
-		else
-		{
-			args = castNode(ScalarArrayOpExpr, constified)->args;
-		}
-		Ensure(IsA(lsecond(args), Const),
+		List *args = get_args_from(constified);
+		Ensure(args && IsA(lsecond(args), Const),
 			   "failed to evaluate runtime constant in vectorized filter");
 		cstate->vexprstate.vectorized_quals_constified =
 			lappend(cstate->vexprstate.vectorized_quals_constified, constified);

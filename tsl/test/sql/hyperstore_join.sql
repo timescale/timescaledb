@@ -5,7 +5,6 @@
 \set ECHO queries
 
 \ir include/setup_hyperstore.sql
-\ir include/hyperstore_helpers.sql
 
 -- We disable columnar scan for these tests since we have a dedicated
 -- test for this.
