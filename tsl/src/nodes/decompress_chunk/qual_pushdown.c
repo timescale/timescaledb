@@ -328,6 +328,7 @@ modify_expression(Node *node, QualPushdownContext *context)
 			/* opexpr will still be checked for segment by columns */
 			break;
 		}
+		case T_BoolExpr:
 		case T_CoerceViaIO:
 		case T_RelabelType:
 		case T_ScalarArrayOpExpr:
