@@ -2,10 +2,9 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\ir include/setup_hyperstore.sql
-\ir include/hyperstore_helpers.sql
-
 \set ECHO queries
+
+\ir include/setup_hyperstore.sql
 
 -- Redefine the indexes to include one value field in the index and
 -- check that index-only scans work also for included attributes.
@@ -100,8 +99,7 @@ select explain_anonymize(format('select * from %s where owner_id = 3', :'hyperta
 
 -- TODO(timescale/timescaledb-private#1117): the Decompress Count here
 -- is not correct, but the result shows correctly.
-explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
-select * from :chunk1 where owner_id = 3;
+select explain_anonymize(format('select * from %s where owner_id = 3', :'chunk1'));
 reset enable_indexscan;
 
 -- Test index scan on non-segmentby column

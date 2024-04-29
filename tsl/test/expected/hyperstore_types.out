@@ -1,0 +1,162 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO queries
+create or replace function twist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method hyperstore', chunk);
+    return chunk;
+end
+$$;
+create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
+as $$
+begin
+    execute format('alter table %s set access method heap', chunk);
+    return chunk;
+end
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
+        return next ln;
+    end loop;
+end;
+$$;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+create table test_float(created_at timestamptz not null unique, value float);
+select create_hypertable('test_float', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+alter table test_float set (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = '',
+      timescaledb.compress_orderby = 'created_at'
+);
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into test_float(created_at, value)
+select t, ceil(random()*10)
+from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
+create table test_float_saved as select * from test_float;
+select twist_chunk(show_chunks('test_float'));
+              twist_chunk               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+(3 rows)
+
+select lhs.*, rhs.*
+from (select sum(value) as "sum(value)" from test_float where (value>0.5)) lhs,
+     (select sum(value) as "sum(value)" from test_float_saved where (value>0.5)) rhs;
+ sum(value) | sum(value) 
+------------+------------
+      71669 |      71669
+(1 row)
+
+drop table test_float;
+drop table test_float_saved;
+create table test_numeric(created_at timestamptz not null unique, value numeric(5,2));
+select create_hypertable('test_numeric', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (3,t)
+(1 row)
+
+alter table test_numeric set (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = '',
+      timescaledb.compress_orderby = 'created_at'
+);
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into test_numeric(created_at, value)
+select t, ceil(random()*10)
+from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
+create table test_numeric_saved as select * from test_numeric;
+select twist_chunk(show_chunks('test_numeric'));
+              twist_chunk               
+----------------------------------------
+ _timescaledb_internal._hyper_3_7_chunk
+ _timescaledb_internal._hyper_3_8_chunk
+ _timescaledb_internal._hyper_3_9_chunk
+(3 rows)
+
+select lhs.*, rhs.*
+from (select sum(value) as "sum(value)" from test_numeric where (value>0.5)) lhs,
+     (select sum(value) as "sum(value)" from test_numeric_saved where (value>0.5)) rhs;
+ sum(value) | sum(value) 
+------------+------------
+   71669.00 |   71669.00
+(1 row)
+
+drop table test_numeric;
+drop table test_numeric_saved;
+create table test_bool(created_at timestamptz not null unique, value boolean);
+select create_hypertable('test_bool', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (5,t)
+(1 row)
+
+alter table test_bool set (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = '',
+      timescaledb.compress_orderby = 'created_at'
+);
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into test_bool(created_at, value)
+select t, (random()>0.5)
+from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
+create table test_bool_saved as select * from test_bool;
+select twist_chunk(show_chunks('test_bool'));
+               twist_chunk               
+-----------------------------------------
+ _timescaledb_internal._hyper_5_13_chunk
+ _timescaledb_internal._hyper_5_14_chunk
+ _timescaledb_internal._hyper_5_15_chunk
+(3 rows)
+
+select lhs.*, rhs.*
+from (select count(value) as "count(value)" from test_bool where (value=true)) lhs,
+     (select count(value) as "count(value)" from test_bool_saved where (value=true)) rhs;
+ count(value) | count(value) 
+--------------+--------------
+         6552 |         6552
+(1 row)
+
+drop table test_bool;
+drop table test_bool_saved;

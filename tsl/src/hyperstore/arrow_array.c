@@ -30,7 +30,7 @@
 /*
  * Release buffer memory.
  */
-static void
+void
 arrow_release_buffers(ArrowArray *array)
 {
 	/*
@@ -162,11 +162,40 @@ arrow_from_iterator_fixlen(MemoryContext mcxt, DecompressionIterator *iterator, 
 		if (result.is_null)
 			++null_count;
 		else if (typbyval)
-			/* This only works for little-endian architectures. Should probably have a
-			 * look at it later. */
-			memcpy(&data_buffer[typlen * array_length], &result.val, typlen);
+		{
+			/*
+			 * We use unsigned integers to avoid conversions between signed
+			 * and unsigned values (which in theory could change the value)
+			 * when converting to datum (which is an unsigned value).
+			 *
+			 * Conversions between unsigned values is well-defined in the C
+			 * standard and will work here.
+			 */
+			switch (typlen)
+			{
+				case sizeof(uint8):
+					data_buffer[array_length] = DatumGetUInt8(result.val);
+					break;
+				case sizeof(uint16):
+					((uint16 *) data_buffer)[array_length] = DatumGetUInt16(result.val);
+					break;
+				case sizeof(uint32):
+					((uint32 *) data_buffer)[array_length] = DatumGetUInt32(result.val);
+					break;
+				case sizeof(uint64):
+					/* This branch is not called for by-reference 64-bit values */
+					((uint64 *) data_buffer)[array_length] = DatumGetUInt64(result.val);
+					break;
+				default:
+					ereport(ERROR,
+							errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							errmsg("not supporting writing by value length %d", typlen));
+			}
+		}
 		else
+		{
 			memcpy(&data_buffer[typlen * array_length], DatumGetPointer(result.val), typlen);
+		}
 	}
 
 	ArrowArray *array = arrow_create_with_buffers(mcxt, 2);
@@ -255,16 +284,34 @@ arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int64 index)
 
 	/*
 	 * We read the bytes into an integer variable and then transform it to a
-	 * datum. For 32-bit systems, Int64GetDatum will allocate room for the
+	 * datum. For 32-bit systems, UInt64GetDatum will allocate room for the
 	 * integer using palloc(), so make sure that the current memory context
 	 * outlives the need for the value.
 	 *
-	 * This only works on little-endian machines, so we might want to look it
-	 * over.
+	 * Also note that we use unsigned integers to avoid conversions between
+	 * signed and unsigned values when converting to datum (which is an
+	 * unsigned value).
 	 */
-	uint64 value = 0;
-	memcpy(&value, &values[typlen * index], typlen);
-	Datum datum = Int64GetDatum(value);
+	Datum datum;
+	switch (typlen)
+	{
+		case sizeof(uint8):
+			datum = UInt8GetDatum(((uint8 *) values)[index]);
+			break;
+		case sizeof(uint16):
+			datum = UInt16GetDatum(((uint16 *) values)[index]);
+			break;
+		case sizeof(uint32):
+			datum = UInt32GetDatum(((uint32 *) values)[index]);
+			break;
+		case sizeof(uint64):
+			datum = UInt64GetDatum(((uint64 *) values)[index]);
+			break;
+		default:
+			ereport(ERROR,
+					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					errmsg("not supporting reading fixed-length values of length %d", typlen));
+	}
 
 	TS_DEBUG_LOG("retrieved fixlen value %s row " INT64_FORMAT " from offset " INT64_FORMAT
 				 " in memory context %s",

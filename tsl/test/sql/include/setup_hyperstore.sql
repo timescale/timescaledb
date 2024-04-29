@@ -4,23 +4,7 @@
 
 \set hypertable readings
 
--- Alternative function to compress_chunk that uses the table access
--- method to compress a chunk.
-create function twist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method hyperstore', chunk);
-    return chunk;
-end
-$$;
-
-create function untwist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method heap', chunk);
-    return chunk;
-end
-$$;
+\ir hyperstore_helpers.sql
 
 create table :hypertable(
        metric_id serial,

@@ -1,83 +1,21 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\ir include/setup_hyperstore.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
-\set hypertable readings
--- Alternative function to compress_chunk that uses the table access
--- method to compress a chunk.
-create function twist_chunk(chunk regclass) returns regclass language plpgsql
+\set ECHO queries
+create or replace function twist_chunk(chunk regclass) returns regclass language plpgsql
 as $$
 begin
     execute format('alter table %s set access method hyperstore', chunk);
     return chunk;
 end
 $$;
-create function untwist_chunk(chunk regclass) returns regclass language plpgsql
+create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
 as $$
 begin
     execute format('alter table %s set access method heap', chunk);
     return chunk;
 end
 $$;
-create table :hypertable(
-       metric_id serial,
-       created_at timestamptz not null unique,
-       location_id int,		--segmentby attribute with index
-       owner_id int,		--segmentby attribute without index
-       device_id int,		--non-segmentby attribute
-       temp float,
-       humidity float
-);
-create index hypertable_location_id_idx on :hypertable (location_id);
-create index hypertable_device_id_idx on :hypertable (device_id);
-select create_hypertable(:'hypertable', by_range('created_at'));
- create_hypertable 
--------------------
- (1,t)
-(1 row)
-
--- Disable incremental sort to make tests stable
-set enable_incremental_sort = false;
-select setseed(1);
- setseed 
----------
- 
-(1 row)
-
--- Insert rows into the tables.
---
--- The timestamps for the original rows will have timestamps every 10
--- seconds. Any other timestamps are inserted as part of the test.
-insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
-select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
-alter table :hypertable set (
-	  timescaledb.compress,
-	  timescaledb.compress_orderby = 'created_at',
-	  timescaledb.compress_segmentby = 'location_id, owner_id'
-);
--- Get some test chunks as global variables (first and last chunk here)
-select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
-  from timescaledb_information.chunks
- where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
- order by chunk1 asc
- limit 1 \gset
-select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
-  from timescaledb_information.chunks
- where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
- order by chunk2 asc
- limit 1 offset 1 \gset
-\ir include/hyperstore_helpers.sql
--- This file and its contents are licensed under the Timescale License.
--- Please see the included NOTICE for copyright information and
--- LICENSE-TIMESCALE for a copy of the license.
--- Function to run an explain analyze with and do replacements on the
--- emitted plan. This is intended to be used when the structure of the
--- plan is important, but not the specific chunks scanned nor the
--- number of heap fetches, rows, loops, etc.
 create function explain_anonymize(text) returns setof text
 language plpgsql as
 $$
@@ -91,13 +29,53 @@ begin
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-        ln := regexp_replace(ln, 'Rows Removed by Filter: \d+', 'Rows Removed by Filter: N');
 	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
         return next ln;
     end loop;
 end;
 $$;
-\set ECHO queries
+create table readings(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id int,		--segmentby attribute with index
+       owner_id int,		--segmentby attribute without index
+       device_id int,		--non-segmentby attribute
+       temp float,
+       humidity float
+);
+create index hypertable_location_id_idx on readings (location_id);
+create index hypertable_device_id_idx on readings (device_id);
+select create_hypertable('readings', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+insert into readings (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+alter table readings set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ order by chunk1 asc
+ limit 1 
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = 'readings'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 
 drop index hypertable_location_id_idx;
 drop index hypertable_device_id_idx;
 create index hypertable_location_id_idx on readings (location_id) include (humidity);
@@ -325,17 +303,16 @@ select explain_anonymize(format('select * from %s where owner_id = 3', 'readings
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: (owner_id = 3)
  Arrays read from cache: N
- Arrays decompressed: 12
+ Arrays decompressed: 200
 (15 rows)
 
-explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
-select * from _timescaledb_internal._hyper_1_1_chunk where owner_id = 3;
-                                QUERY PLAN                                 
----------------------------------------------------------------------------
- Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=1187 loops=1)
+select explain_anonymize(format('select * from %s where owner_id = 3', '_timescaledb_internal._hyper_1_1_chunk'));
+                           explain_anonymize                            
+------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: (owner_id = 3)
- Arrays read from cache: 0
- Arrays decompressed: 2
+ Arrays read from cache: N
+ Arrays decompressed: 20
 (4 rows)
 
 reset enable_indexscan;
