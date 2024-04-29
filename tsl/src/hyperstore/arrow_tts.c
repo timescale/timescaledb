@@ -11,6 +11,7 @@
 #include <executor/tuptable.h>
 #include <storage/itemptr.h>
 
+#include "arrow_array.h"
 #include "arrow_cache.h"
 #include "arrow_tts.h"
 #include "compression/compression.h"
@@ -466,31 +467,12 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 	}
 	else
 	{
-		const char *restrict values = arrow_arrays[attoff]->buffers[1];
-		const uint64 *restrict validity = arrow_arrays[attoff]->buffers[0];
-		int16 value_bytes = get_typlen(TupleDescAttr(slot->tts_tupleDescriptor, attoff)->atttypid);
-		int16 value_index = aslot->tuple_index - 1;
-
-		/*
-		 * The conversion of Datum to more narrow types will truncate
-		 * the higher bytes, so we don't care if we read some garbage
-		 * into them, and can always read 8 bytes. These are unaligned
-		 * reads, so technically we have to do memcpy.
-		 */
-		uint64 value;
-		memcpy(&value, &values[value_bytes * value_index], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-		Datum datum = Int64GetDatum(value);
-#else
-		/*
-		 * On 32-bit systems, the data larger than 4 bytes go by
-		 * reference, so we have to jump through these hoops.
-		 */
-		Datum datum = (value_bytes <= 4) ? Int32GetDatum((uint32) value) : Int64GetDatum(value);
-#endif
-		slot->tts_values[attoff] = datum;
-		slot->tts_isnull[attoff] = !arrow_row_is_valid(validity, value_index);
+		/* Value is compressed, so get it from the decompressed arrow array. */
+		const Oid typid = TupleDescAttr(slot->tts_tupleDescriptor, attoff)->atttypid;
+		const NullableDatum datum =
+			arrow_get_datum(arrow_arrays[attoff], typid, aslot->tuple_index - 1);
+		slot->tts_values[attoff] = datum.value;
+		slot->tts_isnull[attoff] = datum.isnull;
 	}
 
 	TS_WITH_MEMORY_CONTEXT(slot->tts_mcxt,

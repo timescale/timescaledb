@@ -273,8 +273,8 @@ ExecIncrArrowTuple(TupleTableSlot *slot, uint16 increment)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
-	Assert(slot != NULL);
-	Assert(slot->tts_tupleDescriptor != NULL);
+	Assert(increment > 0);
+	Assert(slot != NULL && slot->tts_tupleDescriptor != NULL);
 
 	if (unlikely(!TTS_IS_ARROWTUPLE(slot)))
 		elog(ERROR, "trying to store an on-disk arrow tuple into wrong type of slot");
