@@ -28,7 +28,7 @@ select created_at, updated_at, o.device_id, i.humidity, o.height
   into :outer
   from :chunk1 i left join the_hyperstore o
     on i.created_at = o.updated_at and i.device_id = o.device_id;
-$$, ':chunk1'));
+$$, :'chunk1'));
 
 \x on
 select * from :outer r full join expected_left e on row(r) = row(e)
