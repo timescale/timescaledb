@@ -1089,7 +1089,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 										.uncompressed_attrs_needed = uncompressed_attrs_needed };
 	build_decompression_map(&context, compressed_scan->plan.targetlist);
 
-	/* Build heap sort info for sorted_merge_append */
+	/* Build heap sort info for batch sorted merge. */
 	List *sort_options = NIL;
 
 	if (dcpath->batch_sorted_merge)
@@ -1148,12 +1148,17 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 				/*
 				 * We found a Var equivalence member that belongs to the
-				 * decompressed relation. We can use its varattno directly for
-				 * the comparison operator, because it operates on the
-				 * decompressed scan tuple.
+				 * decompressed relation. We have to convert its varattno which
+				 * is the varattno of the uncompressed chunk tuple, to the
+				 * decompressed scan tuple varattno.
 				 */
 				Var *var = castNode(Var, em->em_expr);
 				Assert((Index) var->varno == (Index) em_relid);
+
+				const int decompressed_scan_attno =
+					context.uncompressed_chunk_attno_to_compression_info[var->varattno]
+						.decompressed_scan_attno;
+				Assert(decompressed_scan_attno > 0);
 
 				/*
 				 * Look up the correct sort operator from the PathKey's slightly
@@ -1171,7 +1176,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 						 var->vartype,
 						 pk->pk_opfamily);
 
-				sort_col_idx = lappend_oid(sort_col_idx, var->varattno);
+				sort_col_idx = lappend_oid(sort_col_idx, decompressed_scan_attno);
 				sort_collations = lappend_oid(sort_collations, var->varcollid);
 				sort_nulls = lappend_oid(sort_nulls, pk->pk_nulls_first);
 				sort_ops = lappend_oid(sort_ops, sortop);
