@@ -351,7 +351,7 @@ EXPLAIN (costs off) SELECT '1' FROM deleteme_with_bytea WHERE bdata::text = '123
 DROP table deleteme;
 DROP table deleteme_with_bytea;
 -- test sqlvaluefunction pushdown
-CREATE TABLE svf_pushdown(time timestamptz, c_date date, c_time time, c_timetz timetz, c_timestamp timestamptz, c_name text);
+CREATE TABLE svf_pushdown(time timestamptz, c_date date, c_time time, c_timetz timetz, c_timestamp timestamptz, c_name text, c_bool bool);
 SELECT table_name FROM create_hypertable('svf_pushdown', 'time');
 NOTICE:  adding not-null constraint to column "time"
   table_name  
@@ -359,7 +359,7 @@ NOTICE:  adding not-null constraint to column "time"
  svf_pushdown
 (1 row)
 
-ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentby='c_date,c_time, c_timetz,c_timestamp,c_name');
+ALTER TABLE svf_pushdown SET (timescaledb.compress,timescaledb.compress_segmentby='c_date,c_time, c_timetz,c_timestamp,c_name,c_bool');
 NOTICE:  default order by for hypertable "svf_pushdown" is set to ""time" DESC"
 INSERT INTO svf_pushdown SELECT '2020-01-01';
 SELECT compress_chunk(show_chunks('svf_pushdown'));
@@ -489,6 +489,16 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = SESSION_USER;
                Filter: (c_name = SESSION_USER)
 (5 rows)
 
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER OR c_name = SESSION_USER;
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
+ Custom Scan (ChunkAppend) on svf_pushdown
+   Chunks excluded during startup: 0
+   ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
+         ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: ((c_name = CURRENT_USER) OR (c_name = SESSION_USER))
+(5 rows)
+
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_CATALOG;
                         QUERY PLAN                         
 -----------------------------------------------------------
@@ -508,6 +518,38 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_SCHEMA;
          ->  Seq Scan on compress_hyper_12_13_chunk
                Filter: (c_name = CURRENT_SCHEMA)
 (5 rows)
+
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_11_12_chunk
+   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
+         Index Cond: (c_bool = true)
+(3 rows)
+
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = true;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_11_12_chunk
+   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
+         Index Cond: (c_bool = true)
+(3 rows)
+
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_bool = false;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_11_12_chunk
+   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
+         Index Cond: (c_bool = false)
+(3 rows)
+
+EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Custom Scan (DecompressChunk) on _hyper_11_12_chunk
+   ->  Index Scan using compress_hyper_12_13_chunk_c_date_c_time_c_timetz_c_timesta_idx on compress_hyper_12_13_chunk
+         Index Cond: (c_bool = false)
+(3 rows)
 
 -- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = current_query();
