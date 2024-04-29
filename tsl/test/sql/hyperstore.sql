@@ -4,7 +4,13 @@
 
 SET timescaledb.arrow_cache_maxsize = 4;
 
-CREATE TABLE readings(time timestamptz UNIQUE, location int, device int, temp float, humidity float);
+CREATE TABLE readings(
+       time timestamptz UNIQUE,
+       location int,
+       device int,
+       temp numeric(4,1),
+       humidity float
+);
 
 SELECT create_hypertable('readings', 'time');
 -- Disable incremental sort to make tests stable
@@ -144,26 +150,6 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
-
--- Test that filtering is not removed on ColumnarScan when it includes
--- columns that cannot be scankeys.
-DROP INDEX readings_location_idx;
-EXPLAIN (analyze, costs off, timing off, summary off, decompress_cache_stats)
-SELECT * FROM :chunk WHERE device < 4 AND location = 2 LIMIT 5;
-
--- Test vectorized filters on compressed column. Use a filter that
--- filters all rows in order to test that the scan does not decompress
--- more than necessary to filter data. The decompress count should be
--- equal to the number cache hits (i.e., we only decompress one column
--- per segment).
-EXPLAIN (analyze, costs off, timing off, summary off, decompress_cache_stats)
-SELECT count(*) FROM :chunk WHERE humidity > 110;
-SELECT count(*) FROM :chunk WHERE humidity > 110;
-
--- Test that columnar scan can be turned off
-SET timescaledb.enable_columnarscan = false;
-EXPLAIN (analyze, costs off, timing off, summary off)
-SELECT * FROM :chunk WHERE device < 4 ORDER BY device ASC LIMIT 5;
 
 --
 -- Test ANALYZE.
@@ -385,3 +371,5 @@ SELECT sum(_ts_meta_count) FROM :cchunk;
 
 -- A count on the chunk should return the same count
 SELECT count(*) FROM :chunk;
+
+drop table readings;

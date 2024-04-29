@@ -146,6 +146,19 @@ collect_refs_and_targets(ScanState *state, struct CaptureAttributesContext *cont
 
 	collect_references(state->ps.plan->qual, context);
 	collect_targets(state->ps.plan->targetlist, context);
+
+	/* For custom scan nodes, qualifiers are removed and stored into
+	 * custom_exprs when setting up the custom scan node, so we include any
+	 * qualifiers or expressions when extracting referenced attributes. For
+	 * ColumnarScan nodes, these qualifiers are the vectorized qualifiers, but
+	 * the concept applies generically to all custom scan nodes. */
+	if (IsA(state->ps.plan, CustomScan))
+	{
+		CustomScan *cscan = castNode(CustomScan, state->ps.plan);
+		if (cscan->custom_exprs)
+			collect_references(cscan->custom_exprs, context);
+	}
+
 	arrow_slot_set_referenced_attrs(state->ss_ScanTupleSlot, context->atts);
 
 	/* Just a precaution */

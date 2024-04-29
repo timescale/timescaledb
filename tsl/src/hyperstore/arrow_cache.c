@@ -16,11 +16,11 @@
 #include <utils/palloc.h>
 #include <utils/syscache.h>
 
+#include "arrow_array.h"
 #include "arrow_cache.h"
 #include "arrow_cache_explain.h"
 #include "arrow_tts.h"
 #include "compression/compression.h"
-#include "debug_assert.h"
 
 #define ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES 100
 
@@ -350,9 +350,15 @@ static const char *compression_algorithm_name[] = {
 #endif
 
 /*
- * Decompress a column and add it to the arrow tuple cache.
+ * Decompress an attribute batch and add it to the arrow tuple cache.
  *
- * Returns a pointer to the cached entry.
+ * Returns a pointer to the cached entry as an arrow array. The arrow array
+ * either has a fully decompressed batch using the batch decompress, or store
+ * an iterator to decompress the column in the private_data field.
+ *
+ * We are storing the iterator in the private_data field because otherwise we
+ * would need to create an extra structure to wrap the ArrowArray. This is
+ * something that we might want to consider later anyway.
  */
 static ArrowArray *
 arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum datum)
@@ -363,11 +369,19 @@ arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum d
 	TS_DEBUG_LOG("decompressing column with type %s using decompression algorithm %s",
 				 format_type_be(typid),
 				 compression_algorithm_name[header->compression_algorithm]);
-	Ensure(decompress_all != NULL,
-		   "missing decompression function %d",
-		   header->compression_algorithm);
+
+	if (decompress_all == NULL)
+		decompress_all = default_decompress_all;
+
 	MemoryContext oldcxt = MemoryContextSwitchTo(acache->decompression_mcxt);
 	ArrowArray *arrow_column = decompress_all(PointerGetDatum(header), typid, acache->mcxt);
+
+	/*
+	 * If the release function is not set, it is the old-style decompress_all
+	 * and then buffers should be deleted by default.
+	 */
+	if (arrow_column->release == NULL)
+		arrow_column->release = arrow_release_buffers;
 
 	/*
 	 * Not sure how necessary this reset is, but keeping it for now.
