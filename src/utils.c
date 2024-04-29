@@ -234,8 +234,7 @@ ts_integer_to_internal(Datum time_val, Oid type_oid)
 }
 
 int64
-ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
-									  TimevalInfinity *is_infinite_out)
+ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid)
 {
 	switch (type_oid)
 	{
@@ -246,14 +245,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (TIMESTAMP_IS_NOBEGIN(ts))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
@@ -267,14 +262,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (TIMESTAMP_IS_NOBEGIN(ts))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
@@ -288,14 +279,10 @@ ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
 			{
 				if (DATE_IS_NOBEGIN(d))
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalNegInfinity;
 					return PG_INT64_MIN;
 				}
 				else
 				{
-					if (is_infinite_out != NULL)
-						*is_infinite_out = TimevalPosInfinity;
 					return PG_INT64_MAX;
 				}
 			}
