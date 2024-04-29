@@ -40,8 +40,9 @@
 			SetUserIdAndSecContext(saved_uid, saved_secctx);                                       \
 	} while (0);
 
-/* Does the function belong to a bucket function that is no longer allowed in CAgg definitions? */
-#define IS_DEPRECATED_BUCKET_FUNC(funcinfo)                                                        \
+/* Does the function belong to a time_bucket_ng function that is no longer allowed
+ * in CAgg definitions? */
+#define IS_DEPRECATED_TIME_BUCKET_NG_FUNC(funcinfo)                                                \
 	((funcinfo->origin == ORIGIN_TIMESCALE_EXPERIMENTAL) &&                                        \
 	 (strcmp("time_bucket_ng", funcinfo->funcname) == 0))
 

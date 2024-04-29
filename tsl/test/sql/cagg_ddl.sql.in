@@ -1288,3 +1288,46 @@ ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=true
 \d+ conditions_daily
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 SELECT * FROM conditions_daily ORDER BY bucket, avg;
+
+-- Test TRUNCATE over a Realtime CAgg
+DROP MATERIALIZED VIEW conditions_daily;
+
+CREATE MATERIALIZED VIEW conditions_daily
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
+SELECT location,
+       time_bucket(INTERVAL '1 day', time) AS bucket,
+       AVG(temperature)
+  FROM conditions
+GROUP BY location, bucket
+WITH NO DATA;
+
+SELECT mat_hypertable_id FROM _timescaledb_catalog.continuous_agg WHERE user_view_name = 'conditions_daily' \gset
+
+-- Check the current watermark for an empty CAgg
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_empty_cagg;
+
+-- Refresh the CAGG
+CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
+
+-- Check the watermark after the refresh and before truncate the CAgg
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_before;
+
+-- Truncate the given CAgg, it should reset the watermark to the empty state
+TRUNCATE conditions_daily;
+
+-- Watermark should be reseted
+SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_after;
+
+-- Should return ROWS because the watermark was reseted by the TRUNCATE
+SELECT * FROM conditions_daily ORDER BY bucket, avg;
+
+-- check compression settings are cleaned up when deleting a cagg with compression
+CREATE TABLE cagg_cleanup(time timestamptz not null);
+SELECT table_name FROM create_hypertable('cagg_cleanup','time');
+INSERT INTO cagg_cleanup SELECT '2020-01-01';
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous) AS SELECT time_bucket('1h',time) FROM cagg_cleanup GROUP BY 1;
+ALTER MATERIALIZED VIEW cagg1 SET (timescaledb.compress);
+SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
+DROP MATERIALIZED VIEW cagg1;
+SELECT * FROM _timescaledb_catalog.compression_settings;
+

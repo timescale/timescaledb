@@ -42,7 +42,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	}
 
 	/* Cagg view created by the user. */
-	Oid user_view_oid = relation_oid(&agg->data.user_view_schema, &agg->data.user_view_name);
+	Oid user_view_oid = ts_get_relation_relid(NameStr(agg->data.user_view_schema),
+											  NameStr(agg->data.user_view_name),
+											  false);
 	Relation user_view_rel = relation_open(user_view_oid, AccessShareLock);
 	Query *user_query = get_view_query(user_view_rel);
 
@@ -77,7 +79,9 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 		.objectId = mat_ht->main_table_relid,
 	};
 
-	Oid direct_view_oid = relation_oid(&agg->data.direct_view_schema, &agg->data.direct_view_name);
+	Oid direct_view_oid = ts_get_relation_relid(NameStr(agg->data.direct_view_schema),
+												NameStr(agg->data.direct_view_name),
+												false);
 	Relation direct_view_rel = relation_open(direct_view_oid, AccessShareLock);
 	Query *direct_query = copyObject(get_view_query(direct_view_rel));
 	RemoveRangeTableEntries(direct_query);

@@ -596,3 +596,8 @@ BEGIN
     WHERE mat_hypertable_id OPERATOR(pg_catalog.=) _cagg_data.mat_hypertable_id;
 END;
 $BODY$;
+
+-- Migrate a CAgg which is using the experimental time_bucket_ng function
+-- into a CAgg using the regular time_bucket function
+CREATE OR REPLACE PROCEDURE _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS)
+   AS '@MODULE_PATHNAME@', 'ts_continuous_agg_migrate_to_time_bucket' LANGUAGE C;

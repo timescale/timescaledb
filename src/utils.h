@@ -46,13 +46,6 @@
 
 extern TSDLLEXPORT bool ts_type_is_int8_binary_compatible(Oid sourcetype);
 
-typedef enum TimevalInfinity
-{
-	TimevalFinite = 0,
-	TimevalNegInfinity = -1,
-	TimevalPosInfinity = 1,
-} TimevalInfinity;
-
 typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
 
 /*
@@ -63,8 +56,7 @@ typedef bool (*proc_filter)(Form_pg_proc form, void *arg);
  * Will throw an error for that, or other conversion issues.
  */
 extern TSDLLEXPORT int64 ts_time_value_to_internal(Datum time_val, Oid type);
-extern int64 ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid,
-												   TimevalInfinity *is_infinite_out);
+extern int64 ts_time_value_to_internal_or_infinite(Datum time_val, Oid type_oid);
 
 extern TSDLLEXPORT int64 ts_interval_value_to_internal(Datum time_val, Oid type_oid);
 
