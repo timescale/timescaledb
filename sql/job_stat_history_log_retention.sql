@@ -64,7 +64,7 @@ VALUES
     INTERVAL '1h',
     '_timescaledb_functions',
     'policy_job_stat_history_retention',
-    pg_catalog.quote_ident(current_role)::regrole,
+    pg_catalog.quote_ident(session_user)::regrole,
     true,
     '{"drop_after":"1 month"}',
     '_timescaledb_functions',
