@@ -141,8 +141,8 @@ follow_uncompressed_output_tlist(DecompressionMapContext *context)
 	 */
 	CompressionInfo *info = context->decompress_path->info;
 	PathTarget *pathtarget = context->decompress_path->custom_path.path.pathtarget;
-	fprintf(stderr, "pathtarget is:\n");
-	my_print(pathtarget->exprs);
+//	fprintf(stderr, "pathtarget is:\n");
+//	my_print(pathtarget->exprs);
 	int next_decompressed_scan_attno = 1;
 	for (int i = 0; i < list_length(pathtarget->exprs); i++)
 	{
@@ -188,8 +188,8 @@ follow_uncompressed_output_tlist(DecompressionMapContext *context)
 			pathtarget->sortgrouprefs ? pathtarget->sortgrouprefs[i] : 0;
 		context->custom_scan_targetlist = lappend(context->custom_scan_targetlist, target_entry);
 
-		fprintf(stderr, "added tentry (1):\n");
-		my_print(target_entry);
+//		fprintf(stderr, "added tentry (1):\n");
+//		my_print(target_entry);
 	}
 
 	/*
@@ -239,8 +239,8 @@ follow_uncompressed_output_tlist(DecompressionMapContext *context)
 
 		context->custom_scan_targetlist = lappend(context->custom_scan_targetlist, target_entry);
 
-		fprintf(stderr, "added tentry (2):\n");
-		my_print(target_entry);
+//		fprintf(stderr, "added tentry (2):\n");
+//		my_print(target_entry);
 	}
 
 	Assert(
@@ -1367,10 +1367,10 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	// decompress_plan->scan.plan.targetlist = decompress_plan->custom_scan_tlist;
 
-	fprintf(stderr, "at plan time, custom scan tlist is:\n");
-	my_print(decompress_plan->custom_scan_tlist);
-	fprintf(stderr, "requested output targetlist is:\n");
-	my_print(output_targetlist);
+//	fprintf(stderr, "at plan time, custom scan tlist is:\n");
+//	my_print(decompress_plan->custom_scan_tlist);
+//	fprintf(stderr, "requested output targetlist is:\n");
+//	my_print(output_targetlist);
 
 	return &decompress_plan->scan.plan;
 }
