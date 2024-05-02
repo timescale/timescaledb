@@ -20,6 +20,7 @@ set(SOURCES
     event_trigger.c
     extension.c
     extension_constants.c
+    expression_utils.c
     gapfill.c
     guc.c
     histogram.c
