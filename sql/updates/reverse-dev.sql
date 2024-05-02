@@ -284,16 +284,7 @@ BEGIN
 END;
 $BODY$ SET search_path TO pg_catalog, pg_temp;
 
-UPDATE
-  _timescaledb_config.bgw_job
-SET
-  application_name = 'Error Log Retention Policy [2]',
-  proc_schema = '_timescaledb_functions',
-  proc_name = 'policy_job_error_retention',
-  check_schema = '_timescaledb_functions',
-  check_name = 'policy_job_error_retention_check'
-WHERE
-  id = 2;
-
+UPDATE _timescaledb_config.bgw_job SET scheduled = true WHERE id = 2;
+DELETE FROM _timescaledb_config.bgw_job WHERE id = 3;
 
 DROP PROCEDURE IF EXISTS _timescaledb_functions.cagg_migrate_to_time_bucket(cagg REGCLASS);

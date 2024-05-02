@@ -326,11 +326,10 @@ select remove_retention_policy('test_table');
 select add_retention_policy('test_strict', drop_after => NULL);
 \set ON_ERROR_STOP 1
 
--- Check the number of non-telemetry policies. We check for telemetry
--- policy in telemetry_community.sql
+-- Check the number of non-internal policies
 SELECT proc_name, count(*)
 FROM _timescaledb_config.bgw_job
-WHERE proc_name NOT LIKE '%telemetry%'
+WHERE id >= 1000
 GROUP BY proc_name;
 
 
