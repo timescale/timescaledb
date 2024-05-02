@@ -158,7 +158,7 @@ def macos_config(overrides):
             "ignored_tests": default_ignored_tests.union(macos_ignored_tests),
             "os": "macos-13",
             "pg_extra_args": "--enable-debug --with-libraries=/usr/local/opt/openssl@3/lib --with-includes=/usr/local/opt/openssl@3/include --without-icu",
-            "pg_extensions": "postgres_fdw test_decoding",
+            "pg_extensions": "postgres_fdw test_decoding pageinspect pgstattuple",
             "pginstallcheck": True,
             "tsdb_build_args": "-DASSERTIONS=ON -DREQUIRE_ALL_TESTS=ON -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl@3",
         }
