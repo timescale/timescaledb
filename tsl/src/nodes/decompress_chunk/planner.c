@@ -68,7 +68,6 @@ typedef struct
 {
 	bool bulk_decompression_possible;
 	int custom_scan_attno;
-	int sortgroupref;
 } UncompressedColumnInfo;
 
 typedef struct
@@ -146,19 +145,21 @@ typedef struct
 
 } DecompressionMapContext;
 
+/*
+ * Try to make the custom scan targetlist that follows the order of the
+ * pathtarget. This would allow us to avoid a projection from scan tuple to
+ * output tuple.
+ * Returns NIL if it's not possible, e.g. if there are whole-row variables or
+ * variables that are used for quals but not for output.
+ */
 static List *
 follow_uncompressed_output_tlist(const DecompressionMapContext *context)
 {
 	List *result = NIL;
 	Bitmapset *uncompressed_attrs_found = NULL;
-	/*
-	 * Try to make the scan targetlist follow the order of the path target.
-	 */
 	const CompressionInfo *info = context->decompress_path->info;
 	const PathTarget *pathtarget = context->decompress_path->custom_path.path.pathtarget;
-	//	fprintf(stderr, "pathtarget is:\n");
-	//	my_print(pathtarget->exprs);
-	int next_custom_scan_attno = 1;
+	int custom_scan_attno = 1;
 	for (int i = 0; i < list_length(pathtarget->exprs); i++)
 	{
 		Expr *expr = list_nth(pathtarget->exprs, i);
@@ -191,7 +192,7 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
 									/* missing_ok = */ false);
 
 		TargetEntry *target_entry = makeTargetEntry((Expr *) copyObject(var),
-													/* resno = */ next_custom_scan_attno,
+													/* resno = */ custom_scan_attno,
 													/* resname = */ attname,
 													/* resjunk = */ false);
 		target_entry->ressortgroupref =
@@ -202,14 +203,18 @@ follow_uncompressed_output_tlist(const DecompressionMapContext *context)
 			bms_add_member(uncompressed_attrs_found,
 						   uncompressed_chunk_attno - FirstLowInvalidHeapAttributeNumber);
 
-		//		fprintf(stderr, "added tentry (1):\n");
-		//		my_print(target_entry);
-
-		next_custom_scan_attno++;
+		custom_scan_attno++;
 	}
 
 	if (!bms_equal(uncompressed_attrs_found, context->uncompressed_attrs_needed))
 	{
+		/*
+		 * There are some variables that are not in the pathtarget that are used
+		 * for quals. We still have to have them in the scan tuple in this case.
+		 * Note that while we could possibly relax this at execution time for
+		 * vectorized quals, the requirement that the qual var be found in the
+		 * scan targetlist is a Postgres one.
+		 */
 		return NIL;
 	}
 
@@ -1331,16 +1336,6 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	 * decided at Path stage, now we must produce the requested targetlist.
 	 */
 	decompress_plan->scan.plan.targetlist = output_targetlist;
-
-	// decompress_plan->scan.plan.targetlist = decompress_plan->custom_scan_tlist;
-
-	//	fprintf(stderr, "at plan time, custom scan tlist is:\n");
-	//	my_print(decompress_plan->custom_scan_tlist);
-	//	fprintf(stderr, "requested output targetlist is:\n");
-	//	my_print(output_targetlist);
-
-	// fprintf(stderr, "at plan time:\n");
-	// my_print(decompress_plan);
 
 	return &decompress_plan->scan.plan;
 }

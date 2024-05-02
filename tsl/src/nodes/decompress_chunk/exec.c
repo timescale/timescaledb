@@ -266,11 +266,6 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	TupleDesc desc = dcontext->custom_scan_slot->tts_tupleDescriptor;
 
-	//	fprintf(stderr, "at exec time, the custom scan tlist is:\n");
-	//	my_print(cscan->custom_scan_tlist);
-	// fprintf(stderr, "at exec time:\n");
-	// my_print(cscan);
-
 	/*
 	 * Compressed columns go in front, and the rest go to the back, so we have
 	 * separate indices for them.
