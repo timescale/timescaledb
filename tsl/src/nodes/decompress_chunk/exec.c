@@ -268,7 +268,8 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	//	fprintf(stderr, "at exec time, the custom scan tlist is:\n");
 	//	my_print(cscan->custom_scan_tlist);
-	//	my_print(cscan);
+	// fprintf(stderr, "at exec time:\n");
+	// my_print(cscan);
 
 	/*
 	 * Compressed columns go in front, and the rest go to the back, so we have
@@ -281,23 +282,22 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 	{
 		CompressionColumnDescription column = {
 			.compressed_scan_attno = AttrOffsetGetAttrNumber(compressed_index),
-			.decompressed_scan_attno =
-				list_nth_int(chunk_state->decompression_map, compressed_index),
+			.custom_scan_attno = list_nth_int(chunk_state->decompression_map, compressed_index),
 			.bulk_decompression_supported =
 				list_nth_int(chunk_state->bulk_decompression_column, compressed_index)
 		};
 
-		if (column.decompressed_scan_attno == 0)
+		if (column.custom_scan_attno == 0)
 		{
 			/* We are asked not to decompress this column, skip it. */
 			continue;
 		}
 
-		if (column.decompressed_scan_attno > 0)
+		if (column.custom_scan_attno > 0)
 		{
 			/* normal column that is also present in decompressed chunk */
 			Form_pg_attribute attribute =
-				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.decompressed_scan_attno));
+				TupleDescAttr(desc, AttrNumberGetAttrOffset(column.custom_scan_attno));
 
 			column.typid = attribute->atttypid;
 			get_typlenbyval(column.typid, &column.value_bytes, &column.by_value);
@@ -309,23 +309,23 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 			if (cscan->custom_scan_tlist == NIL)
 			{
-				column.uncompressed_chunk_attno = column.decompressed_scan_attno;
+				column.uncompressed_chunk_attno = column.custom_scan_attno;
 			}
 			else
 			{
-				Var *var = castNode(Var,
-									castNode(TargetEntry,
-											 list_nth(cscan->custom_scan_tlist,
-													  AttrNumberGetAttrOffset(
-														  column.decompressed_scan_attno)))
-										->expr);
+				Var *var =
+					castNode(Var,
+							 castNode(TargetEntry,
+									  list_nth(cscan->custom_scan_tlist,
+											   AttrNumberGetAttrOffset(column.custom_scan_attno)))
+								 ->expr);
 				column.uncompressed_chunk_attno = var->varattno;
 			}
 		}
 		else
 		{
 			/* metadata columns */
-			switch (column.decompressed_scan_attno)
+			switch (column.custom_scan_attno)
 			{
 				case DECOMPRESS_CHUNK_COUNT_ID:
 					column.type = COUNT_COLUMN;
@@ -334,12 +334,12 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 					column.type = SEQUENCE_NUM_COLUMN;
 					break;
 				default:
-					elog(ERROR, "Invalid column attno \"%d\"", column.decompressed_scan_attno);
+					elog(ERROR, "Invalid column attno \"%d\"", column.custom_scan_attno);
 					break;
 			}
 		}
 
-		if (column.decompressed_scan_attno > 0)
+		if (column.custom_scan_attno > 0)
 		{
 			/* Data column. */
 			Assert(current_compressed < num_data_columns);

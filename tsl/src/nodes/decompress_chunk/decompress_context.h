@@ -36,7 +36,7 @@ typedef struct CompressionColumnDescription
 	 * the decompressed chunk, but are still used for decompression. The `type`
 	 * field is set accordingly for these columns.
 	 */
-	AttrNumber decompressed_scan_attno;
+	AttrNumber custom_scan_attno;
 
 	/*
 	 * Attno of this column in the uncompressed chunks. We use it to fetch the

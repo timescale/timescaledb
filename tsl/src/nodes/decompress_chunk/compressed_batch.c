@@ -162,7 +162,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->decompressed_scan_attno);
+	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->custom_scan_attno);
 	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[attr];
 	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
 	const int value_bytes = get_typlen(column_description->typid);
@@ -403,10 +403,33 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	for (; column_index < dcontext->num_data_columns; column_index++)
 	{
 		column_description = &dcontext->compressed_chunk_columns[column_index];
-		// Assert(var->varno == INDEX_VAR);
-		if (column_description->decompressed_scan_attno == var->varattno)
+		if (var->varno == INDEX_VAR)
 		{
-			break;
+			/*
+			 * Reference into custom scan tlist, happens when we are using a
+			 * non-default custom scan tuple.
+			 */
+			if (column_description->custom_scan_attno == var->varattno)
+			{
+				break;
+			}
+		}
+		else
+		{
+			/*
+			 * Reference into uncompressed chunk tuple.
+			 *
+			 * Note that this is somewhat redundant, because this branch is
+			 * taken when we do not use a custom scan tuple, and in this case
+			 * the custom scan attno is the same as the uncompressed chunk attno,
+			 * so the above branch would do as well. This difference might
+			 * become relevant in the future, if we stop outputting the
+			 * columns that are needed only for the vectorized quals.
+			 */
+			if (column_description->uncompressed_chunk_attno == var->varattno)
+			{
+				break;
+			}
 		}
 	}
 	Ensure(column_index < dcontext->num_data_columns,
@@ -837,8 +860,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				Assert(i < dcontext->num_data_columns);
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->decompression_type = DT_Scalar;
-				AttrNumber attr =
-					AttrNumberGetAttrOffset(column_description->decompressed_scan_attno);
+				AttrNumber attr = AttrNumberGetAttrOffset(column_description->custom_scan_attno);
 				Datum *output_value = &decompressed_tuple->tts_values[attr];
 				bool *output_isnull = &decompressed_tuple->tts_isnull[attr];
 				column_values->output_value = output_value;

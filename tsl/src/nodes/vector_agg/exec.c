@@ -156,7 +156,7 @@ vector_agg_exec(CustomScanState *vector_agg_state)
 			Assert(n > 0);
 		}
 
-		int offs = AttrNumberGetAttrOffset(value_column_description->decompressed_scan_attno);
+		int offs = AttrNumberGetAttrOffset(value_column_description->custom_scan_attno);
 		agg->agg_const(batch_state->decompressed_scan_slot_data.base.tts_values[offs],
 					   batch_state->decompressed_scan_slot_data.base.tts_isnull[offs],
 					   n,

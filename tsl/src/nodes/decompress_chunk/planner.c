@@ -467,7 +467,7 @@ build_decompression_map(DecompressionMapContext *context, List *compressed_scan_
 
 	/*
 	 * Finally, we have to convert the decompression information we've build
-	 * into serveral lists so that it can be passed through the custom path
+	 * into several lists so that it can be passed through the custom path
 	 * settings.
 	 */
 	foreach (lc, compressed_scan_tlist)
@@ -1338,6 +1338,9 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	//	my_print(decompress_plan->custom_scan_tlist);
 	//	fprintf(stderr, "requested output targetlist is:\n");
 	//	my_print(output_targetlist);
+
+	// fprintf(stderr, "at plan time:\n");
+	// my_print(decompress_plan);
 
 	return &decompress_plan->scan.plan;
 }
