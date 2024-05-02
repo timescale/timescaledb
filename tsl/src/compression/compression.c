@@ -53,6 +53,7 @@
 #include "debug_point.h"
 #include "deltadelta.h"
 #include "dictionary.h"
+#include "expression_utils.h"
 #include "gorilla.h"
 #include "guc.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
@@ -2538,8 +2539,8 @@ find_matching_index(Relation comp_chunk_rel, List **index_filters, List **heap_f
  * be used to build scan keys later.
  */
 static void
-fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicates,
-					   List **heap_filters, List **index_filters, List **is_null)
+process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, List **heap_filters,
+				   List **index_filters, List **is_null)
 {
 	ListCell *lc;
 	foreach (lc, predicates)
@@ -2548,43 +2549,25 @@ fill_predicate_context(Chunk *ch, CompressionSettings *settings, List *predicate
 
 		Var *var;
 		char *column_name;
+
 		switch (nodeTag(node))
 		{
 			case T_OpExpr:
 			{
-				OpExpr *opexpr = (OpExpr *) node;
-				Oid opno = opexpr->opno;
-				RegProcedure opcode = opexpr->opfuncid;
+				OpExpr *opexpr = castNode(OpExpr, node);
+				Oid opno;
+				RegProcedure opcode;
 				Oid collation = opexpr->inputcollid;
-				Expr *leftop, *rightop;
+				Expr *expr;
 				Const *arg_value;
 
-				leftop = linitial(opexpr->args);
-				rightop = lsecond(opexpr->args);
-
-				if (IsA(leftop, RelabelType))
-					leftop = ((RelabelType *) leftop)->arg;
-				if (IsA(rightop, RelabelType))
-					rightop = ((RelabelType *) rightop)->arg;
-
-				if (IsA(leftop, Var) && IsA(rightop, Const))
-				{
-					var = (Var *) leftop;
-					arg_value = (Const *) rightop;
-				}
-				else if (IsA(rightop, Var) && IsA(leftop, Const))
-				{
-					var = (Var *) rightop;
-					arg_value = (Const *) leftop;
-					opno = get_commutator(opno);
-					if (!OidIsValid(opno))
-						continue;
-					opcode = get_opcode(opno);
-					if (!OidIsValid(opcode))
-						continue;
-				}
-				else
+				if (!ts_extract_expr_args(&opexpr->xpr, &var, &expr, &opno, &opcode))
 					continue;
+
+				if (!IsA(expr, Const))
+					continue;
+
+				arg_value = castNode(Const, expr);
 
 				/* ignore system-defined attributes */
 				if (var->varattno <= 0)
@@ -3124,7 +3107,7 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	CompressionSettings *settings = ts_compression_settings_get(comp_chunk->table_id);
 
-	fill_predicate_context(chunk, settings, predicates, &heap_filters, &index_filters, &is_null);
+	process_predicates(chunk, settings, predicates, &heap_filters, &index_filters, &is_null);
 
 	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
 	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
