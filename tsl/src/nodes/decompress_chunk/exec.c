@@ -268,7 +268,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 
 	//	fprintf(stderr, "at exec time, the custom scan tlist is:\n");
 	//	my_print(cscan->custom_scan_tlist);
-//	my_print(cscan);
+	//	my_print(cscan);
 
 	/*
 	 * Compressed columns go in front, and the rest go to the back, so we have
