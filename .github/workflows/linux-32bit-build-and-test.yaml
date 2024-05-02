@@ -46,7 +46,7 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
         IGNORES: "append-* transparent_decompression-* transparent_decompress_chunk-* pg_dump telemetry bgw_db_scheduler*"
         SKIPS: chunk_adaptive histogram_test-*
-        EXTENSIONS: "postgres_fdw test_decoding"
+        EXTENSIONS: "postgres_fdw test_decoding pageinspect pgstattuple"
     strategy:
       fail-fast: false
       matrix:
