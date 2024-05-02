@@ -373,16 +373,42 @@ ALTER EXTENSION timescaledb
 
 DROP TABLE _timescaledb_internal.job_errors;
 
-UPDATE
-  _timescaledb_config.bgw_job
-SET
-  application_name = 'Job History Log Retention Policy [2]',
-  proc_schema = '_timescaledb_functions',
-  proc_name = 'policy_job_stat_history_retention',
-  check_schema = '_timescaledb_functions',
-  check_name = 'policy_job_stat_history_retention_check'
-WHERE
-  id = 2;
+UPDATE _timescaledb_config.bgw_job SET scheduled = false WHERE id = 2;
+INSERT INTO _timescaledb_config.bgw_job (
+    id,
+    application_name,
+    schedule_interval,
+    max_runtime,
+    max_retries,
+    retry_period,
+    proc_schema,
+    proc_name,
+    owner,
+    scheduled,
+    config,
+    check_schema,
+    check_name,
+    fixed_schedule,
+    initial_start
+)
+VALUES
+(
+    3,
+    'Job History Log Retention Policy [3]',
+    INTERVAL '1 month',
+    INTERVAL '1 hour',
+    -1,
+    INTERVAL '1h',
+    '_timescaledb_functions',
+    'policy_job_stat_history_retention',
+    pg_catalog.quote_ident(current_role)::regrole,
+    true,
+    '{"drop_after":"1 month"}',
+    '_timescaledb_functions',
+    'policy_job_stat_history_retention_check',
+    true,
+    '2000-01-01 00:00:00+00'::timestamptz
+) ON CONFLICT (id) DO NOTHING;
 
 DROP FUNCTION IF EXISTS _timescaledb_internal.policy_job_error_retention(job_id integer,config jsonb);
 DROP FUNCTION IF EXISTS _timescaledb_internal.policy_job_error_retention_check(config jsonb);
