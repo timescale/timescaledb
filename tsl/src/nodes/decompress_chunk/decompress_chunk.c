@@ -1006,7 +1006,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	 * if it's planned */
 	compressed_rel->pathlist = NIL;
 	/* create parallel paths */
-	if (compressed_rel->consider_parallel)
+	if (compressed_rel->consider_parallel && root->limit_tuples <= 0)
 	{
 		foreach (lc, compressed_rel->partial_pathlist)
 		{
