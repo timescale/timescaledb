@@ -858,35 +858,48 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				continue;
 		}
 
-		Path *unsorted_chunk_path =
+		Path *chunk_path_no_sort =
 			(Path *) decompress_chunk_path_create(root, compression_info, 0, compressed_path);
 
 		Path *batch_merge_path = NULL;
 
-		Path *chunk_path_with_sort_pushdown = NULL;
+		Path *chunk_path_with_compressed_sort = NULL;
 
-		/* If we can push down the sort below the DecompressChunk node, we set the pathkeys of
+		/*
+		 * If we can push down the sort below the DecompressChunk node, we set the pathkeys of
 		 * the decompress node to the query pathkeys, while remembering the compressed_pathkeys
 		 * corresponding to those query_pathkeys. We will determine whether to put a sort
-		 * between the decompression node and the scan during plan creation */
+		 * between the decompression node and the scan during plan creation.
+		 */
 		if (sort_info.can_pushdown_sort)
 		{
-			DecompressChunkPath *path_copy =
-				copy_decompress_chunk_path((DecompressChunkPath *) unsorted_chunk_path);
-			path_copy->reverse = sort_info.reverse;
-			path_copy->needs_sequence_num = sort_info.needs_sequence_num;
-			path_copy->required_compressed_pathkeys = sort_info.required_compressed_pathkeys;
-			path_copy->custom_path.path.pathkeys = root->query_pathkeys;
-
-			/*
-			 * Add costing for a sort. The standard Postgres pattern is to add the cost during
-			 * path creation, but not add the sort path itself, that's done during plan
-			 * creation. Examples of this in: create_merge_append_path &
-			 * create_merge_append_plan
-			 */
-			if (!pathkeys_contained_in(sort_info.required_compressed_pathkeys,
-									   compressed_path->pathkeys))
+			if (pathkeys_contained_in(sort_info.required_compressed_pathkeys,
+									  compressed_path->pathkeys))
 			{
+				/*
+				 * The decompressed path already has the required ordering.
+				 */
+				chunk_path_no_sort->pathkeys = root->query_pathkeys;
+			}
+			else
+			{
+				/*
+				 * We must sort the underlying compressed path to get the
+				 * required ordering.
+				 */
+				DecompressChunkPath *path_copy =
+					copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
+				path_copy->reverse = sort_info.reverse;
+				path_copy->needs_sequence_num = sort_info.needs_sequence_num;
+				path_copy->required_compressed_pathkeys = sort_info.required_compressed_pathkeys;
+				path_copy->custom_path.path.pathkeys = root->query_pathkeys;
+
+				/*
+				 * Add costing for a sort. The standard Postgres pattern is to add the cost during
+				 * path creation, but not add the sort path itself, that's done during plan
+				 * creation. Examples of this in: create_merge_append_path &
+				 * create_merge_append_plan
+				 */
 				Path sort_path; /* dummy for result of cost_sort */
 
 				cost_sort(&sort_path,
@@ -900,9 +913,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 						  -1);
 
 				cost_decompress_chunk(root, &path_copy->custom_path.path, &sort_path);
-			}
 
-			chunk_path_with_sort_pushdown = (Path *) path_copy;
+				chunk_path_with_compressed_sort = (Path *) path_copy;
+			}
 		}
 		else if (ts_guc_enable_decompression_sorted_merge)
 		{
@@ -919,7 +932,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			if (merge_result != MERGE_NOT_POSSIBLE)
 			{
 				DecompressChunkPath *path_copy =
-					copy_decompress_chunk_path((DecompressChunkPath *) unsorted_chunk_path);
+					copy_decompress_chunk_path((DecompressChunkPath *) chunk_path_no_sort);
 
 				path_copy->reverse = (merge_result != SCAN_FORWARD);
 				path_copy->batch_sorted_merge = true;
@@ -941,7 +954,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 */
 		if (add_uncompressed_part)
 		{
-			Bitmapset *req_outer = PATH_REQ_OUTER(unsorted_chunk_path);
+			Bitmapset *req_outer = PATH_REQ_OUTER(chunk_path_no_sort);
 			Path *uncompressed_path =
 				get_cheapest_path_for_pathkeys(initial_pathlist, NIL, req_outer, TOTAL_COST, false);
 
@@ -970,12 +983,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 															 chunk_rel,
 															 list_make2(batch_merge_path,
 																		uncompressed_path),
-															 root->query_pathkeys,
+															 batch_merge_path->pathkeys,
 															 req_outer,
 															 NIL);
 			}
 
-			if (chunk_path_with_sort_pushdown != NULL)
+			if (chunk_path_with_compressed_sort != NULL)
 			{
 				/*
 				 * Ideally, we would like for this to be a MergeAppend path.
@@ -983,32 +996,32 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * and directly add its children, so we have to combine the children
 				 * into a MergeAppend node later, at the chunk append level.
 				 */
-				chunk_path_with_sort_pushdown =
+				chunk_path_with_compressed_sort =
 					(Path *) create_append_path_compat(root,
 													   chunk_rel,
-													   list_make2(chunk_path_with_sort_pushdown,
+													   list_make2(chunk_path_with_compressed_sort,
 																  uncompressed_path),
 													   NIL /* partial paths */,
-													   root->query_pathkeys /* pathkeys */,
+													   chunk_path_with_compressed_sort->pathkeys,
 													   req_outer,
 													   0,
 													   false,
 													   false,
-													   chunk_path_with_sort_pushdown->rows +
+													   chunk_path_with_compressed_sort->rows +
 														   uncompressed_path->rows);
 			}
 
-			unsorted_chunk_path = (Path *)
+			chunk_path_no_sort = (Path *)
 				create_append_path_compat(root,
 										  chunk_rel,
-										  list_make2(unsorted_chunk_path, uncompressed_path),
+										  list_make2(chunk_path_no_sort, uncompressed_path),
 										  NIL /* partial paths */,
-										  NIL /* pathkeys */,
+										  chunk_path_no_sort->pathkeys,
 										  req_outer,
 										  0,
 										  false,
 										  false,
-										  unsorted_chunk_path->rows + uncompressed_path->rows);
+										  chunk_path_no_sort->rows + uncompressed_path->rows);
 		}
 
 		if (batch_merge_path != NULL)
@@ -1016,12 +1029,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			add_path(chunk_rel, (Path *) batch_merge_path);
 		}
 
-		if (chunk_path_with_sort_pushdown != NULL)
+		if (chunk_path_with_compressed_sort != NULL)
 		{
-			add_path(chunk_rel, (Path *) chunk_path_with_sort_pushdown);
+			add_path(chunk_rel, (Path *) chunk_path_with_compressed_sort);
 		}
 
-		if (chunk_path_with_sort_pushdown == NULL && batch_merge_path == NULL)
+		if (chunk_path_with_compressed_sort == NULL && batch_merge_path == NULL)
 		{
 			/*
 			 * Add useful sorted versions of the decompress path, if we couldn't
@@ -1031,7 +1044,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 								   chunk_rel,
 								   ht,
 								   ht_relid,
-								   unsorted_chunk_path,
+								   chunk_path_no_sort,
 								   compressed_path);
 		}
 
@@ -1039,7 +1052,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 		 * This has to go after the path is copied for the ordered path since
 		 * path can get freed in add_path().
 		 */
-		add_path(chunk_rel, unsorted_chunk_path);
+		add_path(chunk_rel, chunk_path_no_sort);
 	}
 
 	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be freed
