@@ -375,3 +375,4 @@ spi_insert_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 		}
 	}
 }
+
