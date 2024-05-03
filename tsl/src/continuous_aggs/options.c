@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <access/xact.h>
 #include <catalog/namespace.h>
 #include <commands/view.h>
@@ -16,6 +17,7 @@
 #include "cache.h"
 #include "compression/create.h"
 #include "compression_with_clause.h"
+#include "continuous_aggs/common.h"
 #include "continuous_aggs/create.h"
 #include "errors.h"
 #include "hypertable_cache.h"
@@ -24,7 +26,6 @@
 #include "ts_catalog/continuous_agg.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
-static List *cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht);
 static List *cagg_get_compression_params(ContinuousAgg *agg, Hypertable *mat_ht);
 static void cagg_alter_compression(ContinuousAgg *agg, Hypertable *mat_ht, List *compress_defelems);
 
@@ -69,95 +70,6 @@ cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only)
 		break;
 	}
 	ts_scan_iterator_close(&iterator);
-}
-
-/*
- * This function is responsible to return a list of column names used in
- * GROUP BY clause of the cagg query. It behaves a bit different depending
- * of the type of the Continuous Aggregate.
- *
- * 1) Partials form (finalized=false)
- *
- *    Retrieve the "user view query" and find the GROUP BY clause and
- *    "time_bucket" clause. Map them to the column names (of mat.hypertable)
- *
- *    Note that the "user view query" has 2 forms:
- *    - with UNION
- *    - without UNION
- *
- *    We have to extract the part of the query that has "finalize_agg" on
- *    the materialized hypertable to find the GROUP BY clauses.
- *    (see continuous_aggs/create.c for more info on the query structure)
- *
- * 2) Finals form (finalized=true) (>= 2.7)
- *
- *    Retrieve the "direct view query" and find the GROUP BY clause and
- *    "time_bucket" clause. We use the "direct view query" because in the
- *    "user view query" we removed the re-aggregation in the part that query
- *    the materialization hypertable so we don't have a GROUP BY clause
- *    anymore.
- *
- *    Get the column name from the GROUP BY clause because all the column
- *    names are the same in all underlying objects (user view, direct view,
- *    partial view and materialization hypertable).
- */
-static List *
-cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht)
-{
-	List *retlist = NIL;
-	ListCell *lc;
-	Query *cagg_view_query = ts_continuous_agg_get_query(agg);
-	Oid mat_relid = mat_ht->main_table_relid;
-	Query *finalize_query;
-
-#if PG16_LT
-	/* The view rule has dummy old and new range table entries as the 1st and 2nd entries */
-	Assert(list_length(cagg_view_query->rtable) >= 2);
-#endif
-
-	if (cagg_view_query->setOperations)
-	{
-		/*
-		 * This corresponds to the union view.
-		 *   PG16_LT the 3rd RTE entry has the SELECT 1 query from the union view.
-		 *   PG16_GE the 1st RTE entry has the SELECT 1 query from the union view
-		 */
-#if PG16_LT
-		RangeTblEntry *finalize_query_rte = lthird(cagg_view_query->rtable);
-#else
-		RangeTblEntry *finalize_query_rte = linitial(cagg_view_query->rtable);
-#endif
-		if (finalize_query_rte->rtekind != RTE_SUBQUERY)
-			ereport(ERROR,
-					(errcode(ERRCODE_TS_UNEXPECTED),
-					 errmsg("unexpected rte type for view %d", finalize_query_rte->rtekind)));
-
-		finalize_query = finalize_query_rte->subquery;
-	}
-	else
-	{
-		finalize_query = cagg_view_query;
-	}
-
-	foreach (lc, finalize_query->groupClause)
-	{
-		SortGroupClause *cagg_gc = (SortGroupClause *) lfirst(lc);
-		TargetEntry *cagg_tle = get_sortgroupclause_tle(cagg_gc, finalize_query->targetList);
-
-		if (ContinuousAggIsFinalized(agg))
-		{
-			/* "resname" is the same as "mat column names" in the finalized version */
-			if (!cagg_tle->resjunk && cagg_tle->resname)
-				retlist = lappend(retlist, get_attname(mat_relid, cagg_tle->resno, false));
-		}
-		else
-		{
-			/* groupby clauses are columns from the mat hypertable */
-			Var *mat_var = castNode(Var, cagg_tle->expr);
-			retlist = lappend(retlist, get_attname(mat_relid, mat_var->varattno, false));
-		}
-	}
-	return retlist;
 }
 
 /* get the compression parameters for cagg. The parameters are
