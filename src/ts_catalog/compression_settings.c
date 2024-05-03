@@ -8,7 +8,6 @@
 
 #include "chunk.h"
 #include "hypertable.h"
-#include "hypertable_cache.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/compression_settings.h"
@@ -94,7 +93,7 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 
 	MemoryContext old = MemoryContextSwitchTo(ti->mctx);
 
-	fd->relid = DatumGetInt32(values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)]);
+	fd->relid = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)]);
 
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)])
 		fd->segmentby = NULL;
@@ -137,8 +136,8 @@ ts_compression_settings_get(Oid relid)
 	ts_scan_iterator_scan_key_init(&iterator,
 								   Anum_compression_settings_pkey_relid,
 								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(relid));
+								   F_OIDEQ,
+								   ObjectIdGetDatum(relid));
 
 	ts_scanner_start_scan(&iterator.ctx);
 	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
@@ -166,8 +165,8 @@ ts_compression_settings_delete(Oid relid)
 	ts_scan_iterator_scan_key_init(&iterator,
 								   Anum_compression_settings_pkey_relid,
 								   BTEqualStrategyNumber,
-								   F_INT4EQ,
-								   Int32GetDatum(relid));
+								   F_OIDEQ,
+								   ObjectIdGetDatum(relid));
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -246,8 +245,8 @@ ts_compression_settings_update(CompressionSettings *settings)
 	ScanKeyInit(&scankey[0],
 				Anum_compression_settings_pkey_relid,
 				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(fd->relid));
+				F_OIDEQ,
+				ObjectIdGetDatum(fd->relid));
 
 	ScannerCtx scanctx = {
 		.table = catalog_get_table_id(catalog, COMPRESSION_SETTINGS),
@@ -266,9 +265,9 @@ static HeapTuple
 compression_settings_formdata_make_tuple(const FormData_compression_settings *fd, TupleDesc desc)
 {
 	Datum values[Natts_compression_settings] = { 0 };
-	bool nulls[Natts_hypertable] = { false };
+	bool nulls[Natts_compression_settings] = { false };
 
-	values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)] = Int32GetDatum(fd->relid);
+	values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)] = ObjectIdGetDatum(fd->relid);
 
 	if (fd->segmentby)
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)] =
