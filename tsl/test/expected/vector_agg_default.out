@@ -118,21 +118,17 @@ explain (costs off) select sum(c) from dvagg where a < stable_abs(1000);
 
 -- Some negative cases.
 explain (costs off) select sum(c) from dvagg group by grouping sets ((), (a));
-                                    QUERY PLAN                                     
------------------------------------------------------------------------------------
+                          QUERY PLAN                           
+---------------------------------------------------------------
  MixedAggregate
    Hash Key: _hyper_1_1_chunk.a
    Group Key: ()
    ->  Append
          ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_2_2_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_2_2_chunk
+               ->  Seq Scan on compress_hyper_2_2_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk
-               ->  Sort
-                     Sort Key: compress_hyper_2_4_chunk._ts_meta_sequence_num DESC
-                     ->  Seq Scan on compress_hyper_2_4_chunk
-(12 rows)
+               ->  Seq Scan on compress_hyper_2_4_chunk
+(8 rows)
 
 explain (costs off) select sum(c) from dvagg having sum(c) > 0;
                                  QUERY PLAN                                  
