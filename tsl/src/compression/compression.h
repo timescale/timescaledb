@@ -286,6 +286,7 @@ typedef struct BatchFilter
 	/* IS NULL or IS NOT NULL */
 	bool is_null_check;
 	bool is_null;
+	bool is_array_op;
 } BatchFilter;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);

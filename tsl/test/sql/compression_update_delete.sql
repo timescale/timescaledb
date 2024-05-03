@@ -1508,6 +1508,7 @@ INSERT INTO devices VALUES ('a'), ('b'), ('c');
 ALTER TABLE test_pushdown SET (timescaledb.compress, timescaledb.compress_segmentby='device');
 SELECT compress_chunk(show_chunks('test_pushdown'));
 
+-- 3 batch decompressions means pushdown is not working so we expect less than 3 for all these queries
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device < 'c' ; ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' > device; ROLLBACK;
@@ -1532,5 +1533,14 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.dev
 PREPARE q1(text) AS DELETE FROM test_pushdown WHERE device = $1;
 BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
 
+-- test arrayop pushdown less than 3 decompressions are expected for successful pushdown
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a','d'); ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = ANY('{a,d}'); ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',CURRENT_USER); ROLLBACK;
+-- arroyop pushdown only works for segmentby columns atm so 3 decompressions are expected for now
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-02'); ROLLBACK;
 
+-- no pushdown for volatile functions
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query()); ROLLBACK;
 
