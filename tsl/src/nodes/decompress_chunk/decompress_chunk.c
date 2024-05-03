@@ -879,7 +879,11 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				/*
 				 * The decompressed path already has the required ordering.
 				 */
-				chunk_path_no_sort->pathkeys = root->query_pathkeys;
+				DecompressChunkPath *path = (DecompressChunkPath *) chunk_path_no_sort;
+				path->reverse = sort_info.reverse;
+				path->needs_sequence_num = sort_info.needs_sequence_num;
+				path->required_compressed_pathkeys = sort_info.required_compressed_pathkeys;
+				path->custom_path.path.pathkeys = root->query_pathkeys;
 			}
 			else
 			{
