@@ -2966,6 +2966,7 @@ SELECT compress_chunk(show_chunks('test_pushdown'));
  _timescaledb_internal._hyper_39_79_chunk
 (1 row)
 
+-- 3 batch decompressions means pushdown is not working so we expect less than 3 for all these queries
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
@@ -3156,4 +3157,88 @@ BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
          ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=1 loops=1)
                Filter: (device = 'a'::text)
 (7 rows)
+
+-- test arrayop pushdown less than 3 decompressions are expected for successful pushdown
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a','d'); ROLLBACK;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=1 loops=1)
+               Filter: (device = ANY ('{a,d}'::text[]))
+(7 rows)
+
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = ANY('{a,d}'); ROLLBACK;
+                                     QUERY PLAN                                     
+------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=1 loops=1)
+               Filter: (device = ANY ('{a,d}'::text[]))
+(7 rows)
+
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',CURRENT_USER); ROLLBACK;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Custom Scan (ChunkAppend) on test_pushdown (actual rows=1 loops=1)
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=1 loops=1)
+                     Filter: (device = ANY (ARRAY['a'::text, (CURRENT_USER)::text]))
+(9 rows)
+
+-- arroyop pushdown only works for segmentby columns atm so 3 decompressions are expected for now
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-02'); ROLLBACK;
+                                                              QUERY PLAN                                                              
+--------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 3
+   Tuples decompressed: 3
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=2 loops=1)
+               Filter: ("time" = ANY ('{"Wed Jan 01 00:00:00 2020 PST","Thu Jan 02 00:00:00 2020 PST"}'::timestamp with time zone[]))
+               Rows Removed by Filter: 1
+(8 rows)
+
+-- no pushdown for volatile functions
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBACK;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 3
+   Tuples decompressed: 3
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Custom Scan (ChunkAppend) on test_pushdown (actual rows=0 loops=1)
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=0 loops=1)
+                     Filter: (device = current_query())
+                     Rows Removed by Filter: 3
+(10 rows)
+
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query()); ROLLBACK;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 3
+   Tuples decompressed: 3
+   ->  Delete on test_pushdown (actual rows=0 loops=1)
+         Delete on _hyper_39_79_chunk test_pushdown_1
+         ->  Custom Scan (ChunkAppend) on test_pushdown (actual rows=1 loops=1)
+               Chunks excluded during startup: 0
+               ->  Seq Scan on _hyper_39_79_chunk test_pushdown_1 (actual rows=1 loops=1)
+                     Filter: (device = ANY (ARRAY['a'::text, current_query()]))
+                     Rows Removed by Filter: 2
+(10 rows)
 
