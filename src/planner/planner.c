@@ -270,9 +270,6 @@ ts_rte_is_hypertable(const RangeTblEntry *rte)
 	return ht != NULL;
 }
 
-#define IS_UPDL_CMD(parse)                                                                         \
-	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
-
 typedef struct
 {
 	Query *rootquery;
