@@ -1509,6 +1509,7 @@ ALTER TABLE test_pushdown SET (timescaledb.compress, timescaledb.compress_segmen
 SELECT compress_chunk(show_chunks('test_pushdown'));
 
 -- 3 batch decompressions means pushdown is not working so we expect less than 3 for all these queries
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device < 'c' ; ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' > device; ROLLBACK;
@@ -1517,6 +1518,7 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device > 'b'; ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = CURRENT_USER; ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' < device; ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' <= device; ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
 
 -- cant pushdown OR atm
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = 'a' OR device = 'b'; ROLLBACK;
@@ -1525,13 +1527,26 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = 'a' OR device = 'b'; RO
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time = timestamptz('2020-01-01 05:00'); ROLLBACK;
 -- test sqlvaluefunction
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,length(CURRENT_USER)+1) || 'c'; ROLLBACK;
+
+-- JOIN tests
 -- no filtering in decompression
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device; ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device; ROLLBACK;
 -- can filter in decompression even before executing join
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b' ; ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b' ; ROLLBACK;
+
 -- test prepared statement
 PREPARE q1(text) AS DELETE FROM test_pushdown WHERE device = $1;
+SET timescaledb.enable_compressed_direct_batch_delete TO false;
 BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
+RESET timescaledb.enable_compressed_direct_batch_delete;
+BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
+BEGIN; :EXPLAIN EXECUTE q1('not here'); ROLLBACK;
 
 -- test arrayop pushdown less than 3 decompressions are expected for successful pushdown
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a','d'); ROLLBACK;

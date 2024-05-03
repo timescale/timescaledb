@@ -138,6 +138,8 @@ typedef struct RowDecompressor
 	CommandId mycid;
 	BulkInsertState bistate;
 
+	bool delete_only;
+
 	Datum *compressed_datums;
 	bool *compressed_is_nulls;
 
@@ -147,6 +149,7 @@ typedef struct RowDecompressor
 	MemoryContext per_compressed_row_ctx;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+	int64 batches_deleted;
 
 	TupleTableSlot **decompressed_slots;
 	int unprocessed_tuples;
@@ -412,6 +415,7 @@ const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm 
 
 struct decompress_batches_stats
 {
+	int64 batches_deleted;
 	int64 batches_filtered;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;

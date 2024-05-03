@@ -188,3 +188,66 @@ RESET timescaledb.enable_dml_decompression_tuple_filtering;
 
 DROP TABLE lazy_decompress;
 
+CREATE FUNCTION trigger_function() RETURNS TRIGGER LANGUAGE PLPGSQL
+AS $$
+BEGIN
+  RAISE WARNING 'Trigger fired';
+  RETURN NEW;
+END;
+$$;
+
+-- test direct delete on compressed hypertable
+CREATE TABLE direct_delete(time timestamptz not null, device text, reading text, value float);
+SELECT table_name FROM create_hypertable('direct_delete', 'time');
+
+ALTER TABLE direct_delete SET (timescaledb.compress, timescaledb.compress_segmentby = 'device, reading');
+INSERT INTO direct_delete VALUES
+('2021-01-01', 'd1', 'r1', 1.0),
+('2021-01-01', 'd1', 'r2', 1.0),
+('2021-01-01', 'd1', 'r3', 1.0),
+('2021-01-01', 'd2', 'r1', 1.0),
+('2021-01-01', 'd2', 'r2', 1.0),
+('2021-01-01', 'd2', 'r3', 1.0);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('direct_delete') c;
+
+BEGIN;
+-- should be 3 batches directly deleted
+:ANALYZE DELETE FROM direct_delete WHERE device='d1';
+-- double check its actually deleted
+SELECT count(*) FROM direct_delete WHERE device='d1';
+ROLLBACK;
+
+BEGIN;
+-- should be 2 batches directly deleted
+:ANALYZE DELETE FROM direct_delete WHERE reading='r2';
+-- double check its actually deleted
+SELECT count(*) FROM direct_delete WHERE reading='r2';
+ROLLBACK;
+
+-- combining constraints on segmentby columns should work
+BEGIN;
+-- should be 1 batches directly deleted
+:ANALYZE DELETE FROM direct_delete WHERE device='d1' AND reading='r2';
+-- double check its actually deleted
+SELECT count(*) FROM direct_delete WHERE device='d1' AND reading='r2';
+ROLLBACK;
+
+-- constraints involving non-segmentby columns should not directly delete
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE value = '1.0'; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1' AND value = '1.0'; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE reading = 'r1' AND value = '1.0'; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd2' AND reading = 'r3' AND value = '1.0'; ROLLBACK;
+
+-- presence of trigger should prevent direct delete
+CREATE TRIGGER direct_delete_trigger BEFORE DELETE ON direct_delete FOR EACH ROW EXECUTE FUNCTION trigger_function();
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1'; ROLLBACK;
+DROP TRIGGER direct_delete_trigger ON direct_delete;
+
+CREATE TRIGGER direct_delete_trigger AFTER DELETE ON direct_delete FOR EACH ROW EXECUTE FUNCTION trigger_function();
+BEGIN; :ANALYZE DELETE FROM direct_delete WHERE device = 'd1'; ROLLBACK;
+DROP TRIGGER direct_delete_trigger ON direct_delete;
+
+
+DROP TABLE direct_delete;
+
