@@ -443,7 +443,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 		 * 2. Buckets with timezones
 		 * 3. Cases 1 and 2 at the same time
 		 *
-		 * For months we simply take 31 days as the worst case scenario and
+		 * For months we simply take 30 days like on interval_to_int64 and
 		 * multiply this number by the number of months in the bucket. This
 		 * reduces the task to days/hours/minutes scenario.
 		 *
@@ -459,7 +459,7 @@ validate_window_size(const ContinuousAgg *cagg, const CaggPolicyConfig *config)
 
 		/* Make a temporary copy of bucket_width */
 		Interval interval = *cagg->bucket_function->bucket_time_width;
-		interval.day += 31 * interval.month;
+		interval.day += 30 * interval.month;
 		interval.month = 0;
 		bucket_width = ts_interval_value_to_internal(IntervalPGetDatum(&interval), INTERVALOID);
 	}

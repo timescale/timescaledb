@@ -544,4 +544,25 @@ SELECT add_continuous_aggregate_policy('conditions_summary_policy',
 SELECT add_continuous_aggregate_policy('conditions_summary_policy',
     start_offset => INTERVAL '65 days',
     end_offset => INTERVAL '1 day',
+    schedule_interval => INTERVAL '1 hour') AS job_id \gset
+
+SELECT delete_job(:job_id);
+
+SELECT add_continuous_aggregate_policy('conditions_summary_policy',
+    start_offset => INTERVAL '2 months',
+    end_offset => INTERVAL '0 months',
+    schedule_interval => INTERVAL '1 hour') AS job_id \gset
+
+SELECT delete_job(:job_id);
+
+\set ON_ERROR_STOP 0
+SELECT add_continuous_aggregate_policy('conditions_summary_policy',
+    start_offset => INTERVAL '2 months',
+    end_offset => INTERVAL '1 months',
+    schedule_interval => INTERVAL '1 hour');
+\set ON_ERROR_STOP 1
+
+SELECT add_continuous_aggregate_policy('conditions_summary_policy',
+    start_offset => INTERVAL '3 months',
+    end_offset => INTERVAL '1 months',
     schedule_interval => INTERVAL '1 hour');
