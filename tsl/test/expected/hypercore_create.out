@@ -188,15 +188,15 @@ where relparent='test2'::regclass;
 
 -- Show compression settings for hypercore across catalog and views
 select * from _timescaledb_catalog.compression_settings;
-                      relid                      |   segmentby   |        orderby         | orderby_desc | orderby_nullsfirst 
--------------------------------------------------+---------------+------------------------+--------------+--------------------
- test2                                           | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_2_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_4_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_6_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_8_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_10_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
- _timescaledb_internal.compress_hyper_3_12_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+                  relid                  |                 compress_relid                  |   segmentby   |        orderby         | orderby_desc | orderby_nullsfirst 
+-----------------------------------------+-------------------------------------------------+---------------+------------------------+--------------+--------------------
+ test2                                   |                                                 | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_1_chunk  | _timescaledb_internal.compress_hyper_3_2_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_3_chunk  | _timescaledb_internal.compress_hyper_3_4_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_5_chunk  | _timescaledb_internal.compress_hyper_3_6_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_7_chunk  | _timescaledb_internal.compress_hyper_3_8_chunk  | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_9_chunk  | _timescaledb_internal.compress_hyper_3_10_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
+ _timescaledb_internal._hyper_1_11_chunk | _timescaledb_internal.compress_hyper_3_12_chunk | {location_id} | {created_at,device_id} | {t,f}        | {t,f}
 (7 rows)
 
 select * from timescaledb_information.compression_settings;
