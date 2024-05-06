@@ -333,6 +333,7 @@ initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 		pgstat_count_compression_scan(scan->rs_base.rs_rd);
 }
 
+#ifdef TS_DEBUG
 static const char *
 get_scan_type(uint32 flags)
 {
@@ -352,6 +353,7 @@ get_scan_type(uint32 flags)
 		return "sequence";
 	return "unknown";
 }
+#endif
 
 static TableScanDesc
 hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
@@ -363,16 +365,10 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 
 	RelationIncrementReferenceCount(relation);
 
-	elog(DEBUG2,
-		 "%d starting %s scan of relation %s parallel_scan=%p",
-#if PG17_GE
-		 MyProcNumber,
-#else
-		 MyBackendId,
-#endif
-		 get_scan_type(flags),
-		 RelationGetRelationName(relation),
-		 parallel_scan);
+	TS_DEBUG_LOG("starting %s scan of relation %s parallel_scan=%p",
+				 get_scan_type(flags),
+				 RelationGetRelationName(relation),
+				 parallel_scan);
 
 	scan = palloc0(sizeof(CompressionScanDescData));
 	scan->rs_base.rs_rd = relation;
@@ -463,13 +459,12 @@ hyperstore_endscan(TableScanDesc sscan)
 	relation->rd_tableam->scan_end(scan->uscan_desc);
 	relation->rd_tableam = oldtam;
 
-	elog(DEBUG2,
-		 "scanned " INT64_FORMAT " tuples (" INT64_FORMAT " compressed, " INT64_FORMAT
-		 " noncompressed) in rel %s",
-		 scan->returned_compressed_count + scan->returned_noncompressed_count,
-		 scan->returned_compressed_count,
-		 scan->returned_noncompressed_count,
-		 RelationGetRelationName(sscan->rs_rd));
+	TS_DEBUG_LOG("scanned " INT64_FORMAT " tuples (" INT64_FORMAT " compressed, " INT64_FORMAT
+				 " noncompressed) in rel %s",
+				 scan->returned_compressed_count + scan->returned_noncompressed_count,
+				 scan->returned_compressed_count,
+				 scan->returned_noncompressed_count,
+				 RelationGetRelationName(sscan->rs_rd));
 
 	if (scan->rs_base.rs_key)
 		pfree(scan->rs_base.rs_key);
@@ -482,6 +477,12 @@ hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableS
 {
 	CompressionScanDesc scan = (CompressionScanDesc) sscan;
 	TupleTableSlot *child_slot;
+
+	TS_DEBUG_LOG("relid: %d, relation: %s, reset: %s, compressed_read_done: %s",
+				 sscan->rs_rd->rd_id,
+				 get_rel_name(sscan->rs_rd->rd_id),
+				 yes_no(scan->reset),
+				 yes_no(scan->compressed_read_done));
 
 	if (scan->compressed_read_done)
 	{
