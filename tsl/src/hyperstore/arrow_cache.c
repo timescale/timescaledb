@@ -3,7 +3,6 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/tupdesc.h>
@@ -14,13 +13,14 @@
 #include <utils/guc.h>
 #include <utils/hsearch.h>
 #include <utils/memutils.h>
+#include <utils/palloc.h>
+#include <utils/syscache.h>
 
 #include "arrow_cache.h"
 #include "arrow_cache_explain.h"
 #include "arrow_tts.h"
 #include "compression/compression.h"
 #include "debug_assert.h"
-#include <utils/palloc.h>
 
 #define ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES 100
 
@@ -191,6 +191,28 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 	}
 }
 
+static void
+arrow_cache_clear_entry(ArrowColumnCacheEntry *restrict entry)
+{
+	for (int i = 0; i < entry->num_arrays; ++i)
+	{
+		if (entry->arrow_arrays[i])
+		{
+			ArrowArray *array = entry->arrow_arrays[i];
+
+			if (array->release)
+			{
+				array->release(array);
+				array->release = NULL;
+			}
+			pfree(array);
+			entry->arrow_arrays[i] = NULL;
+		}
+	}
+	pfree(entry->arrow_arrays);
+	entry->arrow_arrays = NULL;
+}
+
 /*
  * Lookup the Arrow cache entry for the tuple.
  *
@@ -222,33 +244,13 @@ arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
 				elog(ERROR, "LRU cache for compressed rows corrupt");
 			--acache->arrow_column_cache_lru_count;
 
-			/* Free allocated memory in the entry. The entry itself is managed
-			 * by the hash table and might be recycled so should not be freed
-			 * here. */
-			for (int i = 0; i < entry->num_arrays; ++i)
-			{
-				if (entry->arrow_arrays[i])
-				{
-					/* TODO: instead of all these pfrees the entry should
-					 * either use its own MemoryContext or implement the
-					 * release function in the ArrowArray. That's the only way
-					 * to know for sure which buffers are actually separately
-					 * palloc'd. */
-					ArrowArray *arr = entry->arrow_arrays[i];
-
-					for (int64 j = 0; j < arr->n_buffers; j++)
-					{
-						/* Validity bitmap might be NULL even if it is counted
-						 * in n_buffers, so need to check for NULL values. */
-						if (arr->buffers[j])
-							pfree((void *) arr->buffers[j]);
-					}
-					pfree(entry->arrow_arrays[i]);
-					entry->arrow_arrays[i] = NULL;
-				}
-			}
-			pfree(entry->arrow_arrays);
-			entry->arrow_arrays = NULL;
+			/*
+			 * Free allocated memory in the entry.
+			 *
+			 * The entry itself is managed by the hash table and might be
+			 * recycled so should not be freed here.
+			 */
+			arrow_cache_clear_entry(entry);
 		}
 
 		/* Allocate a new entry in the hash table. */
