@@ -322,8 +322,9 @@ initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 
 				if (column->is_segmentby && key->sk_attno == column->attnum)
 				{
-					/* TODO: translate attribute number to compressed rel */
-					scan->rs_base.rs_key[nvalidkeys++] = *key;
+					scan->rs_base.rs_key[nvalidkeys] = *key;
+					scan->rs_base.rs_key[nvalidkeys].sk_attno = column->cattnum;
+					nvalidkeys++;
 					break;
 				}
 			}
