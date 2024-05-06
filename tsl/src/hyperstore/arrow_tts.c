@@ -431,6 +431,13 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 	const int16 cattoff = attrs_offset_map[attoff]; /* offset in compressed tuple */
 	const AttrNumber cattnum = AttrOffsetGetAttrNumber(cattoff);
 
+	TS_DEBUG_LOG("attnum: %d, cattnum: %d, valid: %s, segmentby: %s, array: %s",
+				 attnum,
+				 cattnum,
+				 yes_no(bms_is_member(attnum, aslot->valid_attrs)),
+				 yes_no(bms_is_member(attnum, aslot->segmentby_attrs)),
+				 yes_no(arrow_arrays[attoff]));
+
 	/* Nothing to do for dropped attribute */
 	if (attrs_offset_map[attoff] == -1)
 	{
@@ -735,6 +742,8 @@ arrow_slot_get_array(TupleTableSlot *slot, AttrNumber attno)
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 	int attoff = AttrNumberGetAttrOffset(attno);
 	ArrowArray **arrow_arrays;
+
+	TS_DEBUG_LOG("attno: %d, tuple_index: %d", attno, aslot->tuple_index);
 
 	Assert(TTS_IS_ARROWTUPLE(slot));
 

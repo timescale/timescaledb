@@ -93,8 +93,6 @@ get_cache_maxsize(void)
 		maxsizel > UINT16_MAX)
 		elog(ERROR, "invalid arrow_cache_maxsize value");
 
-	elog(DEBUG2, "arrow cache maxsize is %ld", maxsizel);
-
 	return maxsizel & 0xFFFF;
 #else
 	return ARROW_DECOMPRESSION_CACHE_LRU_ENTRIES;
@@ -120,8 +118,6 @@ arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt)
 													   /* initBlockSize = */ 64 * 1024,
 													   /* maxBlockSize = */ 64 * 1024);
 	acache->maxsize = get_cache_maxsize();
-
-	elog(DEBUG2, "arrow decompression cache is under memory context '%s'", mcxt->name);
 
 	ctl.keysize = sizeof(ArrowColumnKey);
 	ctl.entrysize = sizeof(ArrowColumnCacheEntry);
@@ -154,6 +150,12 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 	Assert(namestrcmp(&TupleDescAttr(tupdesc, attoff)->attname,
 					  NameStr(TupleDescAttr(compressed_tupdesc, AttrNumberGetAttrOffset(cattno))
 								  ->attname)) == 0);
+
+	TS_DEBUG_LOG("name: %s, attno: %d, cattno: %d, referenced: %s",
+				 NameStr(TupleDescAttr(tupdesc, attoff)->attname),
+				 attno,
+				 cattno,
+				 yes_no(!aslot->referenced_attrs || bms_is_member(attno, aslot->referenced_attrs)));
 
 	/*
 	 * Only decompress columns that are actually needed, but only if the
@@ -338,6 +340,14 @@ arrow_column_cache_read_one(ArrowTupleTableSlot *aslot, AttrNumber attno)
 	return entry->arrow_arrays;
 }
 
+#ifdef TS_DEBUG
+static const char *compression_algorithm_name[] = {
+	[_INVALID_COMPRESSION_ALGORITHM] = "INVALID",	   [COMPRESSION_ALGORITHM_ARRAY] = "ARRAY",
+	[COMPRESSION_ALGORITHM_DICTIONARY] = "DICTIONARY", [COMPRESSION_ALGORITHM_GORILLA] = "GORILLA",
+	[COMPRESSION_ALGORITHM_DELTADELTA] = "DELTADELTA",
+};
+#endif
+
 /*
  * Decompress a column and add it to the arrow tuple cache.
  *
@@ -349,6 +359,9 @@ arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum d
 	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(datum);
 	DecompressAllFunction decompress_all =
 		tsl_get_decompress_all_function(header->compression_algorithm, typid);
+	TS_DEBUG_LOG("decompressing column with type %s using decompression algorithm %s",
+				 format_type_be(typid),
+				 compression_algorithm_name[header->compression_algorithm]);
 	Ensure(decompress_all != NULL,
 		   "missing decompression function %d",
 		   header->compression_algorithm);
