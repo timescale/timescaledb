@@ -585,6 +585,8 @@ columnar_scan_exec(CustomScanState *state)
 	direction = estate->es_direction;
 	slot = state->ss.ss_ScanTupleSlot;
 
+	TS_DEBUG_LOG("relation: %s", RelationGetRelationName(state->ss.ss_currentRelation));
+
 	if (scandesc == NULL)
 	{
 		/*
@@ -652,6 +654,8 @@ columnar_scan_exec(CustomScanState *state)
 			if (nfiltered > 0)
 			{
 				const uint16 total_nrows = arrow_slot_total_row_count(slot);
+
+				TS_DEBUG_LOG("vectorized filtering of %d rows", nfiltered);
 
 				/* Skip ahead with the amount filtered */
 				ExecIncrArrowTuple(slot, nfiltered);
@@ -1110,9 +1114,15 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 		Node *vectorized_qual = make_vectorized_qual(source_qual, caminfo);
 
 		if (vectorized_qual)
+		{
+			TS_DEBUG_LOG("qual identified as vectorizable: %s", nodeToString(vectorized_qual));
 			vectorized_quals = lappend(vectorized_quals, vectorized_qual);
+		}
 		else
+		{
+			TS_DEBUG_LOG("qual identified as non-vectorized qual: %s", nodeToString(source_qual));
 			nonvectorized_quals = lappend(nonvectorized_quals, source_qual);
+		}
 	}
 
 	RelationClose(relation);
