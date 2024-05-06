@@ -1916,7 +1916,9 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 	 * we don't do anything. */
 	if (ht)
 	{
-		ts_compression_settings_rename_column_hypertable(ht, stmt->subname, stmt->newname);
+		ts_compression_settings_rename_column_recurse(ht->main_table_relid,
+													  stmt->subname,
+													  stmt->newname);
 		add_hypertable_to_process_args(args, ht);
 		dim = ts_hyperspace_get_mutable_dimension_by_name(ht->space,
 														  DIMENSION_TYPE_ANY,
@@ -4276,8 +4278,8 @@ process_drop_table(EventTriggerDropObject *obj)
 
 	Assert(obj->type == EVENT_TRIGGER_DROP_TABLE || obj->type == EVENT_TRIGGER_DROP_FOREIGN_TABLE);
 	ts_hypertable_delete_by_name(table->schema, table->name);
-	ts_chunk_delete_by_name(table->schema, table->name, DROP_RESTRICT);
 	ts_compression_settings_delete(table->relid);
+	ts_chunk_delete_by_name(table->schema, table->name, DROP_RESTRICT);
 }
 
 static void

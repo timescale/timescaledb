@@ -274,9 +274,7 @@ build_compressioninfo(PlannerInfo *root, Hypertable *ht, Chunk *chunk, RelOptInf
 
 	info->chunk_rel = chunk_rel;
 	info->chunk_rte = planner_rt_fetch(chunk_rel->relid, root);
-
-	Oid relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, true);
-	info->settings = ts_compression_settings_get(relid);
+	info->settings = ts_compression_settings_get(chunk->table_id);
 
 	if (chunk_rel->reloptkind == RELOPT_OTHER_MEMBER_REL)
 	{

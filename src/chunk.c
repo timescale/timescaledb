@@ -2865,13 +2865,13 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 	{
 		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
 
-		/* The chunk may have been delete by a CASCADE */
+		/* The chunk may have been deleted by a CASCADE */
 		if (compressed_chunk != NULL)
 		{
 			/* Plain drop without preserving catalog row because this is the compressed
 			 * chunk */
-			ts_compression_settings_delete(compressed_chunk->table_id);
 			ts_chunk_drop(compressed_chunk, behavior, DEBUG1);
+			ts_compression_settings_delete_by_compress_relid(compressed_chunk->table_id);
 		}
 	}
 

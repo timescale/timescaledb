@@ -18,6 +18,7 @@
 #include <utils/timestamp.h>
 
 #include "compat/compat.h"
+#include "chunk.h"
 #include "cross_module_fn.h"
 #include "debug_point.h"
 #include "dimension.h"

@@ -431,7 +431,8 @@ CREATE TABLE _timescaledb_catalog.compression_algorithm (
 );
 
 CREATE TABLE _timescaledb_catalog.compression_settings (
-	relid regclass NOT NULL,
+  relid regclass NOT NULL,
+  compress_relid regclass NULL,
   segmentby text[],
   orderby text[],
   orderby_desc bool[],
@@ -443,6 +444,7 @@ CREATE TABLE _timescaledb_catalog.compression_settings (
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.compression_settings', '');
+CREATE INDEX compression_settings_compress_relid_idx ON _timescaledb_catalog.compression_settings (compress_relid);
 
 CREATE TABLE _timescaledb_catalog.compression_chunk_size (
   chunk_id integer NOT NULL,

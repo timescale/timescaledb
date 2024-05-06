@@ -10,6 +10,7 @@
 #include <nodes/parsenodes.h>
 
 #include "chunk.h"
+#include "hypertable.h"
 #include "ts_catalog/catalog.h"
 
 #include "compat/compat.h"

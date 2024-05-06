@@ -41,18 +41,18 @@ ALTER TABLE metrics SET (timescaledb.compress = true);
 NOTICE:  default segment by for hypertable "metrics" is set to "device_id"
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
----------+-------------+---------+--------------+--------------------
- metrics | {device_id} | {time}  | {t}          | {t}
+  relid  | compress_relid |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-------------+---------+--------------+--------------------
+ metrics |                | {device_id} | {time}  | {t}          | {t}
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
 ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_segmentby = 'device_id');
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
----------+-------------+---------+--------------+--------------------
- metrics | {device_id} | {time}  | {t}          | {t}
+  relid  | compress_relid |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-------------+---------+--------------+--------------------
+ metrics |                | {device_id} | {time}  | {t}          | {t}
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
@@ -62,9 +62,9 @@ SET timescaledb.compression_orderby_default_function = '';
 ALTER TABLE metrics SET (timescaledb.compress = true);
 WARNING:  column "device_id" should be used for segmenting or ordering
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+-----------+---------+--------------+--------------------
- metrics |           | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+---------+--------------+--------------------
+ metrics |                |           | {time}  | {t}          | {t}
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
@@ -73,9 +73,9 @@ RESET timescaledb.compression_orderby_default_function;
 ALTER TABLE metrics SET (timescaledb.compress = true);
 NOTICE:  default order by for hypertable "metrics" is set to "device_id, "time" DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  | segmentby |     orderby      | orderby_desc | orderby_nullsfirst 
----------+-----------+------------------+--------------+--------------------
- metrics |           | {device_id,time} | {f,t}        | {f,t}
+  relid  | compress_relid | segmentby |     orderby      | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+------------------+--------------+--------------------
+ metrics |                |           | {device_id,time} | {f,t}        | {f,t}
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
@@ -84,9 +84,9 @@ SET timescaledb.compression_orderby_default_function = '';
 ALTER TABLE metrics SET (timescaledb.compress = true);
 NOTICE:  default segment by for hypertable "metrics" is set to "device_id"
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
----------+-------------+---------+--------------+--------------------
- metrics | {device_id} | {time}  | {t}          | {t}
+  relid  | compress_relid |  segmentby  | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-------------+---------+--------------+--------------------
+ metrics |                | {device_id} | {time}  | {t}          | {t}
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
@@ -203,9 +203,9 @@ WARNING:  there was some uncertainty picking the default segment by for the hype
 NOTICE:  default segment by for hypertable "metrics" is set to ""
 NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
 SELECT * FROM _timescaledb_catalog.compression_settings;
-  relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
----------+-----------+---------+--------------+--------------------
- metrics |           | {time}  | {t}          | {t}
+  relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+---------+----------------+-----------+---------+--------------+--------------------
+ metrics |                |           | {time}  | {t}          | {t}
 (1 row)
 
 ALTER TABLE metrics SET (timescaledb.compress = false);
@@ -376,9 +376,9 @@ SELECT _timescaledb_functions.get_orderby_defaults('table1', ARRAY['col1']::text
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 NOTICE:  default order by for hypertable "table1" is set to ""
 SELECT * FROM _timescaledb_catalog.compression_settings;
- relid  | segmentby | orderby | orderby_desc | orderby_nullsfirst 
---------+-----------+---------+--------------+--------------------
- table1 | {col1}    |         |              | 
+ relid  | compress_relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
+--------+----------------+-----------+---------+--------------+--------------------
+ table1 |                | {col1}    |         |              | 
 (1 row)
 
 ALTER TABLE table1 SET (timescaledb.compress = false);

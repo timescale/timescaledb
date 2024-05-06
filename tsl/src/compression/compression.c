@@ -236,7 +236,7 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	HeapTuple in_table_tp = NULL, index_tp = NULL;
 	Form_pg_attribute in_table_attr_tp, index_attr_tp;
 	CompressionStats cstat;
-	CompressionSettings *settings = ts_compression_settings_get(out_table);
+	CompressionSettings *settings = ts_compression_settings_get_by_compress_relid(out_table);
 	int64 report_reltuples;
 
 	/* We want to prevent other compressors from compressing this table,
@@ -585,7 +585,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 }
 
 void
-compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
+compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings, Oid table,
 											 const char *attname, AttrNumber *att_nums,
 											 Oid *sort_operator, Oid *collation, bool *nulls_first)
 {
@@ -637,7 +637,7 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
  * we are trying to roll up chunks while compressing
  */
 Oid
-get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings)
+get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettings *settings)
 {
 	int num_segmentby_columns = ts_array_length(settings->fd.segmentby);
 
@@ -830,7 +830,7 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
 }
 
 static void
-build_column_map(CompressionSettings *settings, Relation uncompressed_table,
+build_column_map(const CompressionSettings *settings, Relation uncompressed_table,
 				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
 {
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
@@ -924,7 +924,7 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
  ** row_compressor **
  ********************/
 void
-row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 					Relation uncompressed_table, Relation compressed_table,
 					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
 					int insert_options)
@@ -2004,14 +2004,12 @@ compression_get_default_algorithm(Oid typeoid)
  * columns of the uncompressed chunk.
  */
 static ScanKeyData *
-build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
-			   Bitmapset *key_columns, Bitmapset **null_columns, TupleTableSlot *slot,
-			   int *num_scankeys)
+build_scankeys(Oid hypertable_relid, const CompressionSettings *settings,
+			   RowDecompressor *decompressor, Bitmapset *key_columns, Bitmapset **null_columns,
+			   TupleTableSlot *slot, int *num_scankeys)
 {
 	int key_index = 0;
 	ScanKeyData *scankeys = NULL;
-
-	CompressionSettings *settings = ts_compression_settings_get(out_rel);
 	Assert(settings);
 
 	if (!bms_is_empty(key_columns))
@@ -2272,8 +2270,9 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	Bitmapset *null_columns = NULL;
 
 	int num_scankeys;
+	const CompressionSettings *settings = ts_compression_settings_get(RelationGetRelid(cis->rel));
 	ScanKeyData *scankeys = build_scankeys(cis->hypertable_relid,
-										   in_rel->rd_id,
+										   settings,
 										   &decompressor,
 										   key_columns,
 										   &null_columns,
@@ -2592,15 +2591,18 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, L
 					continue;
 				}
 
+				Assert(OidIsValid(settings->fd.compress_relid));
+				Assert(ch->table_id == settings->fd.relid);
+
 				int min_attno = compressed_column_metadata_attno(settings,
 																 ch->table_id,
 																 var->varattno,
-																 settings->fd.relid,
+																 settings->fd.compress_relid,
 																 "min");
 				int max_attno = compressed_column_metadata_attno(settings,
 																 ch->table_id,
 																 var->varattno,
-																 settings->fd.relid,
+																 settings->fd.compress_relid,
 																 "max");
 
 				if (min_attno != InvalidAttrNumber && max_attno != InvalidAttrNumber)
@@ -2610,66 +2612,70 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, L
 						case BTEqualStrategyNumber:
 						{
 							/* orderby col = value implies min <= value and max >= value */
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 min_attno,
-																				 false),
-																	 BTLessEqualStrategyNumber,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 max_attno,
-																				 false),
-																	 BTGreaterEqualStrategyNumber,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
+							*heap_filters =
+								lappend(*heap_filters,
+										make_batchfilter(get_attname(settings->fd.compress_relid,
+																	 min_attno,
+																	 false),
+														 BTLessEqualStrategyNumber,
+														 collation,
+														 opcode,
+														 arg_value,
+														 false, /* is_null_check */
+														 false, /* is_null */
+														 false	/* is_array_op */
+														 ));
+							*heap_filters =
+								lappend(*heap_filters,
+										make_batchfilter(get_attname(settings->fd.compress_relid,
+																	 max_attno,
+																	 false),
+														 BTGreaterEqualStrategyNumber,
+														 collation,
+														 opcode,
+														 arg_value,
+														 false, /* is_null_check */
+														 false, /* is_null */
+														 false	/* is_array_op */
+														 ));
 						}
 						break;
 						case BTLessStrategyNumber:
 						case BTLessEqualStrategyNumber:
 						{
 							/* orderby col <[=] value implies min <[=] value */
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 min_attno,
-																				 false),
-																	 op_strategy,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
+							*heap_filters =
+								lappend(*heap_filters,
+										make_batchfilter(get_attname(settings->fd.compress_relid,
+																	 min_attno,
+																	 false),
+														 op_strategy,
+														 collation,
+														 opcode,
+														 arg_value,
+														 false, /* is_null_check */
+														 false, /* is_null */
+														 false	/* is_array_op */
+														 ));
 						}
 						break;
 						case BTGreaterStrategyNumber:
 						case BTGreaterEqualStrategyNumber:
 						{
 							/* orderby col >[=] value implies max >[=] value */
-							*heap_filters = lappend(*heap_filters,
-													make_batchfilter(get_attname(settings->fd.relid,
-																				 max_attno,
-																				 false),
-																	 op_strategy,
-																	 collation,
-																	 opcode,
-																	 arg_value,
-																	 false, /* is_null_check */
-																	 false, /* is_null */
-																	 false	/* is_array_op */
-																	 ));
+							*heap_filters =
+								lappend(*heap_filters,
+										make_batchfilter(get_attname(settings->fd.compress_relid,
+																	 max_attno,
+																	 false),
+														 op_strategy,
+														 collation,
+														 opcode,
+														 arg_value,
+														 false, /* is_null_check */
+														 false, /* is_null */
+														 false	/* is_array_op */
+														 ));
 						}
 					}
 				}
@@ -3185,12 +3191,12 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	ScanKeyData *index_scankeys = NULL;
 	int num_index_scankeys = 0;
 
-	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
-	CompressionSettings *settings = ts_compression_settings_get(comp_chunk->table_id);
+	CompressionSettings *settings = ts_compression_settings_get(chunk->table_id);
 
 	process_predicates(chunk, settings, predicates, &heap_filters, &index_filters, &is_null);
 
 	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
+	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
 	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
 
