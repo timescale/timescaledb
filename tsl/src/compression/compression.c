@@ -56,8 +56,8 @@ compressor_for_type(Oid type)
 	return definitions[algorithm].compressor_for_type(type);
 }
 
-DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm,
-															 bool reverse))(Datum, Oid)
+DecompressionInitializer
+tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);

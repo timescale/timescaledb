@@ -166,13 +166,14 @@ typedef enum
 	TOAST_STORAGE_EXTENDED
 } CompressionStorage;
 
+typedef DecompressionIterator *(*DecompressionInitializer)(Datum, Oid);
 typedef ArrowArray *(*DecompressAllFunction)(Datum compressed, Oid element_type,
 											 MemoryContext dest_mctx);
 
 typedef struct CompressionAlgorithmDefinition
 {
-	DecompressionIterator *(*iterator_init_forward)(Datum, Oid element_type);
-	DecompressionIterator *(*iterator_init_reverse)(Datum, Oid element_type);
+	DecompressionInitializer iterator_init_forward;
+	DecompressionInitializer iterator_init_reverse;
 	DecompressAllFunction decompress_all;
 	void (*compressed_data_send)(CompressedDataHeader *, StringInfo);
 	Datum (*compressed_data_recv)(StringInfo);
