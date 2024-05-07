@@ -217,6 +217,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 				lfirst(lc_plan) = ((Plan *) lfirst(lc_plan))->lefttree;
 			}
 
+			/* Add Sort node if needed. */
 			lfirst(lc_plan) = adjust_childscan(root,
 											   lfirst(lc_plan),
 											   lfirst(lc_path),
