@@ -873,9 +873,8 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 							compressed_scan->plan.targetlist,
 							uncompressed_attrs_needed);
 
-	/* Build heap sort info for sorted_merge_append */
+	/* Build heap sort info for batch sorted merge. */
 	List *sort_options = NIL;
-
 	if (dcpath->batch_sorted_merge)
 	{
 		/*

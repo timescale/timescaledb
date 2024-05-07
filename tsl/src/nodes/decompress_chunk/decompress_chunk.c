@@ -964,6 +964,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			}
 		}
 
+		(void) make_chunk_sorted_path;
 		/*
 		 * Add useful sorted versions of the decompress path, if we couldn't
 		 * push down the sort.
@@ -974,6 +975,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 														ht_relid,
 														chunk_path_no_sort,
 														compressed_path);
+		(void) sort_above_chunk;
 		if (sort_above_chunk != NULL)
 		{
 			chunk_paths = lappend(chunk_paths, sort_above_chunk);
@@ -1038,7 +1040,7 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 														  chunk_rel,
 														  list_make2(path, uncompressed_path),
 														  NIL /* partial paths */,
-														  path->pathkeys,
+														  NIL, // path->pathkeys,
 														  req_outer,
 														  0,
 														  false,

@@ -67,7 +67,7 @@ typedef struct DecompressContext
 
 	List *vectorized_quals_constified;
 	bool reverse;
-	bool batch_sorted_merge; /* Merge append optimization enabled */
+	bool batch_sorted_merge; /* Batch sorted merge optimization enabled. */
 	bool enable_bulk_decompression;
 
 	/*

@@ -210,7 +210,7 @@ decompress_chunk_begin(CustomScanState *node, EState *estate, int eflags)
 										node->ss.ss_ScanTupleSlot->tts_tupleDescriptor);
 		}
 	}
-	/* Sort keys should only be present when sorted_merge_append is used */
+	/* Sort keys should only be present when batch sorted merge is used. */
 	Assert(dcontext->batch_sorted_merge == true || list_length(chunk_state->sortinfo) == 0);
 
 	/*

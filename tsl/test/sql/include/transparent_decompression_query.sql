@@ -30,6 +30,11 @@ WHERE device_id IN (1, 2)
 ORDER BY time,
     device_id;
 
+select :'TEST_TABLE' = 'metrics_space' and :'PREFIX' != '' as result \gset
+\if :result
+select * from no_such_table;
+\endif
+
 -- test empty targetlist
 :PREFIX
 SELECT

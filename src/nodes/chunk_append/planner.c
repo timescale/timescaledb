@@ -88,6 +88,12 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 										 &collations,
 										 &nullsFirst);
 
+	fprintf(stderr, "required pathkeys:\n");
+	my_print(pathkeys);
+
+	fprintf(stderr, "child scan pathkeys:\n");
+	my_print(path->pathkeys);
+
 	/* inject sort node if child sort order does not match desired order */
 	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
 	{
@@ -158,6 +164,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			}
 			else
 			{
+				Assert(false);
 				child_plan->targetlist = tlist;
 			}
 		}
@@ -371,6 +378,10 @@ make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperator
 	node->sortOperators = sortOperators;
 	node->collations = collations;
 	node->nullsFirst = nullsFirst;
+
+	fprintf(stderr, "make sort chunk append\n");
+	mybt();
+	my_print(node);
 
 	return node;
 }
