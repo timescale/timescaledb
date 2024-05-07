@@ -157,6 +157,8 @@ SELECT compress_chunk ('_timescaledb_internal._hyper_1_1_chunk');
 
 SELECT compress_chunk ('_timescaledb_internal._hyper_1_3_chunk');
 
+ANALYZE metrics;
+
 -- compress some chunks on space partitioned hypertable
 -- we compress all chunks of first time slice, none of second, and 2 of the last time slice
 
