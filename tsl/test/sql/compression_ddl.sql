@@ -34,6 +34,16 @@ ALTER TABLE test1 SET (fillfactor=100);
 ALTER TABLE test1 RESET (fillfactor);
 ALTER TABLE test1 ALTER COLUMN b SET STATISTICS 10;
 
+-- ensure that REPLICA IDENTITY works
+SELECT relreplident, count(*) FROM show_chunks('test1') ch INNER JOIN pg_class c ON (ch = c.oid) GROUP BY 1 ORDER BY 1;
+SELECT relreplident FROM pg_class c WHERE c.relname = 'test1';
+ALTER TABLE test1 REPLICA IDENTITY FULL;
+SELECT relname, relreplident FROM pg_class WHERE relname = 'test1' ORDER BY relname;
+-- the chunk's setting should also change to FULL
+SELECT relreplident, count(*) FROM show_chunks('test1') ch INNER JOIN pg_class c ON (ch = c.oid) GROUP BY 1 ORDER BY 1;
+SELECT relreplident FROM pg_class c WHERE c.relname = 'test1';
+ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
+
 -- make sure we cannot create constraints or unique indexes on compressed hypertables
 \set ON_ERROR_STOP 0
 ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE(time,i);
