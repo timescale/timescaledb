@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\set EXPLAIN 'EXPLAIN (costs off, timing off, summary off, analyze)'
+
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS
 SELECT
    h.schema_name AS hypertable_schema,
@@ -1493,21 +1495,42 @@ SELECT compress_chunk(show_chunks('test_meta_filters'));
 
 EXPLAIN (analyze, timing off, costs off, summary off) DELETE FROM test_meta_filters WHERE device = 'd1' AND metric = 'm1' AND v1 < 100;
 
--- test commutator handling in compressed dml constraints
-CREATE TABLE test_commutator(time timestamptz NOT NULL, device text);
-SELECT table_name FROM create_hypertable('test_commutator', 'time');
-INSERT INTO test_commutator SELECT '2020-01-01', 'a';
-INSERT INTO test_commutator SELECT '2020-01-01', 'b';
-INSERT INTO test_commutator SELECT '2020-01-01', 'c';
+-- test expression pushdown in compressed dml constraints
+CREATE TABLE test_pushdown(time timestamptz NOT NULL, device text);
+SELECT table_name FROM create_hypertable('test_pushdown', 'time');
+INSERT INTO test_pushdown SELECT '2020-01-01', 'a';
+INSERT INTO test_pushdown SELECT '2020-01-01', 'b';
+INSERT INTO test_pushdown SELECT '2020-01-01 05:00', 'c';
 
-ALTER TABLE test_commutator SET (timescaledb.compress, timescaledb.compress_segmentby='device');
-SELECT compress_chunk(show_chunks('test_commutator'));
+CREATE TABLE devices(device text);
+INSERT INTO devices VALUES ('a'), ('b'), ('c');
 
-BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'a' = device; ROLLBACK;
-BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE device < 'c' ; ROLLBACK;
-BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'c' > device; ROLLBACK;
-BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'c' >= device; ROLLBACK;
-BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE device > 'b'; ROLLBACK;
-BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'b' < device; ROLLBACK;
-BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_commutator WHERE 'b' <= device; ROLLBACK;
+ALTER TABLE test_pushdown SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(show_chunks('test_pushdown'));
+
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'a' = device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device < 'c' ; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' > device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'c' >= device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device > 'b'; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = CURRENT_USER; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' < device; ROLLBACK;
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE 'b' <= device; ROLLBACK;
+
+-- cant pushdown OR atm
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = 'a' OR device = 'b'; ROLLBACK;
+
+-- test stable function
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time = timestamptz('2020-01-01 05:00'); ROLLBACK;
+-- test sqlvaluefunction
+BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = substring(CURRENT_USER,length(CURRENT_USER)+1) || 'c'; ROLLBACK;
+-- no filtering in decompression
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device; ROLLBACK;
+-- can filter in decompression even before executing join
+BEGIN; :EXPLAIN DELETE FROM test_pushdown p USING devices d WHERE p.device=d.device AND d.device ='b' ; ROLLBACK;
+-- test prepared statement
+PREPARE q1(text) AS DELETE FROM test_pushdown WHERE device = $1;
+BEGIN; :EXPLAIN EXECUTE q1('a'); ROLLBACK;
+
+
 

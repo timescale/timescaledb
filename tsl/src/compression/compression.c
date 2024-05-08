@@ -24,6 +24,7 @@
 #include <nodes/execnodes.h>
 #include <nodes/pg_list.h>
 #include <nodes/print.h>
+#include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
 #include <parser/parse_coerce.h>
 #include <storage/lmgr.h>
@@ -2531,18 +2532,27 @@ find_matching_index(Relation comp_chunk_rel, List **index_filters, List **heap_f
 
 /*
  * This method will evaluate the predicates, extract
- * left and right operands, check if one of the operands is
- * a simple Var type. If its Var type extract its corresponding
- * column name from hypertable_compression catalog table.
- * If extracted column is a SEGMENT BY column then save column
- * name, value specified in the predicate. This information will
- * be used to build scan keys later.
+ * left and right operands, check if any of the operands
+ * can be used for batch filtering and if so, it will
+ * create a BatchFilter object and add it to the corresponding
+ * list.
+ * Any segmentby filter is put into index_filters list other
+ * filters are put into heap_filters list.
  */
 static void
 process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, List **heap_filters,
 				   List **index_filters, List **is_null)
 {
 	ListCell *lc;
+	/*
+	 * We dont want to forward boundParams from the execution state here
+	 * as we dont want to constify join params in the predicates.
+	 * Constifying JOIN params would not be safe as we don't redo
+	 * this part in rescan.
+	 */
+	PlannerGlobal glob = { .boundParams = NULL };
+	PlannerInfo root = { .glob = &glob };
+
 	foreach (lc, predicates)
 	{
 		Node *node = copyObject(lfirst(lc));
@@ -2565,7 +2575,11 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, L
 					continue;
 
 				if (!IsA(expr, Const))
-					continue;
+				{
+					expr = (Expr *) estimate_expression_value(&root, (Node *) expr);
+					if (!IsA(expr, Const))
+						continue;
+				}
 
 				arg_value = castNode(Const, expr);
 
