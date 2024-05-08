@@ -66,11 +66,15 @@ static Plan *
 adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List *tlist,
 				 AttrNumber *sortColIdx)
 {
+	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, path->parent->relid, false);
 	int childSortCols;
 	Oid *sortOperators;
 	Oid *collations;
 	bool *nullsFirst;
 	AttrNumber *childColIdx;
+
+	/* push down targetlist to children */
+	plan->targetlist = castNode(List, adjust_appendrel_attrs(root, (Node *) tlist, 1, &appinfo));
 
 	/* Compute sort column info, and adjust subplan's tlist as needed */
 	plan = ts_prepare_sort_from_pathkeys(plan,
@@ -134,32 +138,35 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 	cscan->scan.plan.targetlist = tlist;
 
-	ListCell *lc_plan, *lc_path;
-	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
+	if (path->path.pathkeys == NIL)
 	{
-		Plan *child_plan = lfirst(lc_plan);
-		Path *child_path = lfirst(lc_path);
-
-		/* push down targetlist to children */
-		/* if this is an append child we need to adjust targetlist references */
-		if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
+		ListCell *lc_plan, *lc_path;
+		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 		{
-			AppendRelInfo *appinfo = ts_get_appendrelinfo(root, child_path->parent->relid, false);
+			Plan *child_plan = lfirst(lc_plan);
+			Path *child_path = lfirst(lc_path);
 
-			child_plan->targetlist =
-				castNode(List, adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
-		}
-		else
-		{
-			/*
-			 * This can also be a MergeAppend path building the entire
-			 * hypertable, in case we have a single partial chunk.
-			 */
-			child_plan->targetlist = tlist;
+			/* push down targetlist to children */
+			if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
+			{
+				/* if this is an append child we need to adjust targetlist references */
+				AppendRelInfo *appinfo =
+					ts_get_appendrelinfo(root, child_path->parent->relid, false);
+
+				child_plan->targetlist =
+					castNode(List, adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
+			}
+			else
+			{
+				/*
+				 * This can also be a MergeAppend path building the entire
+				 * hypertable, in case we have a single partial chunk.
+				 */
+				child_plan->targetlist = tlist;
+			}
 		}
 	}
-
-	if (path->path.pathkeys != NIL)
+	else
 	{
 		/*
 		 * If this is an ordered append node we need to ensure the columns
@@ -167,6 +174,7 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		 * return sorted output. Children not returning sorted output will be
 		 * wrapped in a sort node.
 		 */
+		ListCell *lc_plan, *lc_path;
 		int numCols;
 		AttrNumber *sortColIdx;
 		Oid *sortOperators;
@@ -213,17 +221,51 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 			 */
 			if (IsA(lfirst(lc_plan), Result) &&
 				castNode(Result, lfirst(lc_plan))->resconstantqual == NULL)
-			{
 				lfirst(lc_plan) = ((Plan *) lfirst(lc_plan))->lefttree;
-			}
 
-			/* Add Sort node if needed. */
-			lfirst(lc_plan) = adjust_childscan(root,
-											   lfirst(lc_plan),
-											   lfirst(lc_path),
-											   path->path.pathkeys,
-											   orig_tlist,
-											   sortColIdx);
+			/*
+			 * This could be a MergeAppend due to space partitioning, or
+			 * due to partially compressed chunks. In the second case, there is
+			 * no need to inject sort nodes
+			 */
+			if (IsA(lfirst(lc_plan), MergeAppend))
+			{
+				ListCell *lc_childpath, *lc_childplan;
+				MergeAppend *merge_plan = castNode(MergeAppend, lfirst(lc_plan));
+				MergeAppendPath *merge_path = castNode(MergeAppendPath, lfirst(lc_path));
+
+				/*
+				 * Since for space partitioning the MergeAppend below ChunkAppend
+				 * still has the hypertable as rel we can copy sort properties and
+				 * target list from toplevel ChunkAppend.
+				 */
+				merge_plan->plan.targetlist = cscan->scan.plan.targetlist;
+				merge_plan->sortColIdx = sortColIdx;
+				merge_plan->sortOperators = sortOperators;
+				merge_plan->collations = collations;
+				merge_plan->nullsFirst = nullsFirst;
+
+				forboth (lc_childpath, merge_path->subpaths, lc_childplan, merge_plan->mergeplans)
+				{
+					/* push down targetlist to children */
+					Path *childpath = (Path *) lfirst(lc_childpath);
+					Plan *childplan = (Plan *) lfirst(lc_childplan);
+					AppendRelInfo *appinfo =
+						ts_get_appendrelinfo(root, childpath->parent->relid, false);
+					childplan->targetlist =
+						castNode(List,
+								 adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
+				}
+			}
+			else
+			{
+				lfirst(lc_plan) = adjust_childscan(root,
+												   lfirst(lc_plan),
+												   lfirst(lc_path),
+												   path->path.pathkeys,
+												   orig_tlist,
+												   sortColIdx);
+			}
 		}
 	}
 
