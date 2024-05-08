@@ -108,12 +108,14 @@ jobs:
         make -j $MAKE_JOBS
         make -j $MAKE_JOBS -C src/test/isolation
         make -j $MAKE_JOBS -C contrib/postgres_fdw
+        make -j $MAKE_JOBS -C contrib/test_decoding
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
         useradd postgres
         make -C ~/$PG_SRC_DIR install
         make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        make -C ~/$PG_SRC_DIR/contrib/test_decoding install
         chown -R postgres:postgres $HOME/$PG_INSTALL_DIR
         sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen
         locale-gen
