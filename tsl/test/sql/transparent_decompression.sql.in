@@ -33,7 +33,7 @@ SELECT create_hypertable ('metrics', 'time');
 ALTER TABLE metrics
     DROP COLUMN filler_1;
 
-\set INTERVAL 10m
+\set INTERVAL 5m
 
 INSERT INTO metrics (time, device_id, device_id_peer, v0, v1, v2, v3)
 SELECT time,
