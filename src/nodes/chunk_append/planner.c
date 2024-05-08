@@ -89,7 +89,7 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 										 &nullsFirst);
 
 	/* inject sort node if child sort order does not match desired order */
-	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
+	if (!pathkeys_contained_in(pathkeys, path->pathkeys) && !IsA(plan, Sort))
 	{
 		plan = (Plan *)
 			make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
@@ -233,6 +233,8 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 				ListCell *lc_childpath, *lc_childplan;
 				MergeAppend *merge_plan = castNode(MergeAppend, lfirst(lc_plan));
 				MergeAppendPath *merge_path = castNode(MergeAppendPath, lfirst(lc_path));
+				Index current_group_relid =
+					((Path *) linitial(merge_path->subpaths))->parent->relid;
 
 				/*
 				 * Since for space partitioning the MergeAppend below ChunkAppend
@@ -244,17 +246,30 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 				merge_plan->sortOperators = sortOperators;
 				merge_plan->collations = collations;
 				merge_plan->nullsFirst = nullsFirst;
+				bool partial_chunks = true;
+
+				/* children will have same parent relid if we have partial chunks */
+				foreach (lc_childpath, merge_path->subpaths)
+				{
+					Path *child = lfirst(lc_childpath);
+					if (child->parent->relid != current_group_relid)
+						partial_chunks = false;
+				}
 
 				forboth (lc_childpath, merge_path->subpaths, lc_childplan, merge_plan->mergeplans)
 				{
-					/* push down targetlist to children */
-					Path *childpath = (Path *) lfirst(lc_childpath);
-					Plan *childplan = (Plan *) lfirst(lc_childplan);
-					AppendRelInfo *appinfo =
-						ts_get_appendrelinfo(root, childpath->parent->relid, false);
-					childplan->targetlist =
-						castNode(List,
-								 adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
+					/*
+					 * Skip this invocation in the existence of partial chunks because it
+					 * will add an unnecessary sort node, create_merge_append_plan has already
+					 * adjusted the childscan with a sort node if required
+					 */
+					if (!partial_chunks)
+						lfirst(lc_childplan) = adjust_childscan(root,
+																lfirst(lc_childplan),
+																lfirst(lc_childpath),
+																pathkeys,
+																orig_tlist,
+																sortColIdx);
 				}
 			}
 			else
