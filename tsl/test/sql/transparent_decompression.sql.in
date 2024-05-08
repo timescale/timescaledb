@@ -132,7 +132,7 @@ SELECT time,
 FROM generate_series('2000-01-13 0:00:00+0'::timestamptz, '2000-01-19 23:55:00+0', '20m') gtime (time),
     generate_series(1, 5, 1) gdevice (device_id);
 
-ANALYZE metrics_space;
+VACUUM ANALYZE metrics_space;
 
 -- run queries on uncompressed hypertable and store result
 \set PREFIX ''
@@ -156,6 +156,8 @@ ALTER TABLE metrics SET (timescaledb.compress, timescaledb.compress_orderby = 'v
 SELECT compress_chunk ('_timescaledb_internal._hyper_1_1_chunk');
 
 SELECT compress_chunk ('_timescaledb_internal._hyper_1_3_chunk');
+
+VACUUM ANALYZE metrics;
 
 -- compress some chunks on space partitioned hypertable
 -- we compress all chunks of first time slice, none of second, and 2 of the last time slice
@@ -194,7 +196,7 @@ CREATE INDEX ON metrics_space (device_id, device_id_peer DESC, v0, v1 DESC, time
 
 CREATE INDEX ON metrics_space (device_id DESC, device_id_peer DESC, v0, v1 DESC, time);
 
-ANALYZE metrics_space;
+VACUUM ANALYZE metrics_space;
 
 -- run queries on compressed hypertable and store result
 \set PREFIX ''

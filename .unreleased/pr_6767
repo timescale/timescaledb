@@ -1,2 +1,0 @@
-Implements: #6767 Add metadata table `_timestaledb_internal.bgw_job_stat_history` for tracking job execution history
-Thanks: @mahipv For starting working on the job history PR

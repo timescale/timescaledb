@@ -1,2 +1,0 @@
-Fixes: #6726 Fix constify cagg_watermark using window function when querying a CAgg
-Thanks: @rovo89 For reporting constify cagg_watermark not working using window function when querying a CAgg
