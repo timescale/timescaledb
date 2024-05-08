@@ -114,6 +114,7 @@ endif()
 set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
+    bgw_custom-${PG_VERSION_MAJOR}
     bgw_scheduler_control
     bgw_db_scheduler
     bgw_job_stat_history_errors_permissions
