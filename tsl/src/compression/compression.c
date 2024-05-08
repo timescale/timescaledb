@@ -27,7 +27,6 @@
 #include <optimizer/optimizer.h>
 #include <parser/parse_coerce.h>
 #include <parser/parsetree.h>
-#include <replication/message.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
@@ -65,6 +64,7 @@
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
+#include "wal_utils.h"
 
 StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
 				 "max row numbers must be harmonized");
@@ -77,33 +77,6 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_GORILLA] = GORILLA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
-
-/* The prefix of a logical replication message which is inserted into the
- * replication stream right before decompression inserts are happening
- */
-#define DECOMPRESSION_MARKER_START "::timescaledb-decompression-start"
-/* The prefix of a logical replication message which is inserted into the
- * replication stream right after all decompression inserts have finished
- */
-#define DECOMPRESSION_MARKER_END "::timescaledb-decompression-end"
-
-static inline void
-write_logical_replication_msg_decompression_start()
-{
-	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
-	{
-		LogLogicalMessage(DECOMPRESSION_MARKER_START, "", 0, true);
-	}
-}
-
-static inline void
-write_logical_replication_msg_decompression_end()
-{
-	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
-	{
-		LogLogicalMessage(DECOMPRESSION_MARKER_END, "", 0, true);
-	}
-}
 
 static Compressor *
 compressor_for_type(Oid type)
@@ -2354,7 +2327,6 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 
 		write_logical_replication_msg_decompression_start();
 		row_decompressor_decompress_row_to_table(&decompressor);
-		write_logical_replication_msg_decompression_end();
 
 		TM_FailureData tmfd;
 		TM_Result result pg_attribute_unused();
@@ -2366,6 +2338,9 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 									true,
 									&tmfd,
 									false);
+
+		write_logical_replication_msg_decompression_end();
+
 		Assert(result == TM_Ok);
 
 		Assert(cis->cds != NULL);
@@ -3255,7 +3230,6 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 											   is_null,
 											   &chunk_status_changed);
 	}
-	write_logical_replication_msg_decompression_end();
 
 	/*
 	 * tuples from compressed chunk has been decompressed and moved
@@ -3263,6 +3237,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	 */
 	if (chunk_status_changed == true)
 		ts_chunk_set_partial(chunk);
+
+	write_logical_replication_msg_decompression_end();
 
 	row_decompressor_close(&decompressor);
 
