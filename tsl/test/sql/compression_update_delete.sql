@@ -1544,3 +1544,56 @@ BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE time IN ('2020-01-01','2020-01-0
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device = current_query(); ROLLBACK;
 BEGIN; :EXPLAIN DELETE FROM test_pushdown WHERE device IN ('a',current_query()); ROLLBACK;
 
+-- github issue #6858
+-- check update triggers work correctly both on uncompressed and compressed chunks
+CREATE TABLE update_trigger_test (
+    "entity_id" "uuid" NOT NULL,
+    "effective_date_time" timestamp with time zone NOT NULL,
+    "measurement" numeric NOT NULL,
+    "modified_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+SELECT create_hypertable('update_trigger_test', 'effective_date_time');
+
+CREATE OR REPLACE FUNCTION update_modified_at_test()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL AS $$
+BEGIN
+    NEW.modified_at = NOW();
+    RETURN NEW;
+END; $$;
+
+CREATE TRIGGER update_trigger_test__before_update_sync_modified_at
+BEFORE UPDATE ON update_trigger_test
+FOR EACH ROW
+EXECUTE PROCEDURE update_modified_at_test();
+
+INSERT INTO update_trigger_test
+SELECT 'f2ca7073-1395-5770-8378-7d0339804580', '2024-04-16 04:50:00+02',
+1100.00, '2024-04-23 11:56:38.494095+02' FROM generate_series(1,2500,1) c;
+
+VACUUM FULL update_trigger_test;
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
+
+-- try with default compression
+ALTER TABLE update_trigger_test SET (timescaledb.compress);
+SELECT compress_chunk(show_chunks('update_trigger_test'));
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
+
+-- lets try with segmentby
+SELECT decompress_chunk(show_chunks('update_trigger_test'));
+ALTER TABLE update_trigger_test SET (timescaledb.compress, timescaledb.compress_segmentby='entity_id');
+SELECT compress_chunk(show_chunks('update_trigger_test'));
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
