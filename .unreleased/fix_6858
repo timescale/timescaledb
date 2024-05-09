@@ -1,0 +1,2 @@
+Fixes: #6858 Before update trigger not working correctly
+Thanks: @edgarzamora for reporting issue with update triggers

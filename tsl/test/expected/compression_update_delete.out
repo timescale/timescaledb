@@ -3047,3 +3047,69 @@ BEGIN; EXPLAIN (costs off, timing off, summary off, analyze) DELETE FROM test_co
                Filter: ('b'::text <= device)
 (7 rows)
 
+-- github issue #6858
+-- check update triggers work correctly both on uncompressed and compressed chunks
+CREATE TABLE update_trigger_test (
+    "entity_id" "uuid" NOT NULL,
+    "effective_date_time" timestamp with time zone NOT NULL,
+    "measurement" numeric NOT NULL,
+    "modified_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+SELECT create_hypertable('update_trigger_test', 'effective_date_time');
+         create_hypertable         
+-----------------------------------
+ (41,public,update_trigger_test,t)
+(1 row)
+
+CREATE OR REPLACE FUNCTION update_modified_at_test()
+RETURNS TRIGGER
+LANGUAGE PLPGSQL AS $$
+BEGIN
+    NEW.modified_at = NOW();
+    RETURN NEW;
+END; $$;
+CREATE TRIGGER update_trigger_test__before_update_sync_modified_at
+BEFORE UPDATE ON update_trigger_test
+FOR EACH ROW
+EXECUTE PROCEDURE update_modified_at_test();
+INSERT INTO update_trigger_test
+SELECT 'f2ca7073-1395-5770-8378-7d0339804580', '2024-04-16 04:50:00+02',
+1100.00, '2024-04-23 11:56:38.494095+02' FROM generate_series(1,2500,1) c;
+VACUUM FULL update_trigger_test;
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
+-- try with default compression
+ALTER TABLE update_trigger_test SET (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "update_trigger_test" is set to ""
+NOTICE:  default order by for hypertable "update_trigger_test" is set to "effective_date_time DESC"
+SELECT compress_chunk(show_chunks('update_trigger_test'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_41_81_chunk
+(1 row)
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
+-- lets try with segmentby
+SELECT decompress_chunk(show_chunks('update_trigger_test'));
+             decompress_chunk             
+------------------------------------------
+ _timescaledb_internal._hyper_41_81_chunk
+(1 row)
+
+ALTER TABLE update_trigger_test SET (timescaledb.compress, timescaledb.compress_segmentby='entity_id');
+SELECT compress_chunk(show_chunks('update_trigger_test'));
+              compress_chunk              
+------------------------------------------
+ _timescaledb_internal._hyper_41_81_chunk
+(1 row)
+
+BEGIN;
+UPDATE update_trigger_test SET measurement = measurement + 2
+WHERE update_trigger_test.effective_date_time >= '2020-01-01T00:00:00'::timestamp AT TIME ZONE 'UTC';
+ROLLBACK;
