@@ -526,14 +526,24 @@ SELECT jsonb_pretty(get_telemetry_report() -> 'stats_by_job_type');
          "max_consecutive_failures": 1         +
      },                                        +
      "user_defined_action": {                  +
-         "total_runs": 3,                      +
-         "total_crashes": 1,                   +
+         "total_runs": 2,                      +
+         "total_crashes": 0,                   +
          "total_duration": "@ 0",              +
          "total_failures": 2,                  +
          "total_successes": 0,                 +
-         "max_consecutive_crashes": 1,         +
+         "max_consecutive_crashes": 0,         +
          "total_duration_failures": "@ 4 secs",+
          "max_consecutive_failures": 1         +
+     },                                        +
+     "policy_job_stat_history_retention": {    +
+         "total_runs": 1,                      +
+         "total_crashes": 1,                   +
+         "total_duration": "@ 0",              +
+         "total_failures": 0,                  +
+         "total_successes": 0,                 +
+         "max_consecutive_crashes": 1,         +
+         "total_duration_failures": "@ 0",     +
+         "max_consecutive_failures": 0         +
      },                                        +
      "policy_refresh_continuous_aggregate": {  +
          "total_runs": 2,                      +
