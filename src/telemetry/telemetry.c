@@ -438,8 +438,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"SELECT ("
 		"	CASE "
 		"		WHEN j.proc_schema = \'_timescaledb_functions\' AND j.proc_name ~ "
-		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_error_"
-		"retention)$\' "
+		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_stat_"
+		"history_retention)$\' "
 		"		THEN j.proc_name::TEXT "
 		"		ELSE \'user_defined_action\' "
 		"	END"
@@ -455,8 +455,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"FROM "
 		"	_timescaledb_internal.bgw_job_stat s "
 		"	JOIN _timescaledb_config.bgw_job j on j.id = s.job_id "
-		"GROUP BY "
-		"job_type";
+		"GROUP BY job_type "
+		"ORDER BY job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
