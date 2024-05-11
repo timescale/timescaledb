@@ -3466,3 +3466,30 @@ ORDER BY 1 DESC;
 (10 rows)
 
 DROP TABLE stocks_real_time;
+SET timezone TO 'Europe/Berlin';
+-- check dst switching is handled correctly #6788
+SELECT time_bucket_gapfill('1h', time, 'Europe/Berlin', '2024-03-31T0:00Z', '2024-03-31T02:00Z')
+FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
+      time_bucket_gapfill      
+ Sun Mar 31 01:00:00 2024 CET
+ Sun Mar 31 03:00:00 2024 CEST
+(2 rows)
+
+SELECT time_bucket_gapfill('30 minutes', time, 'Europe/Berlin', '2024-03-31T0:00Z', '2024-03-31T02:00Z')
+FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
+      time_bucket_gapfill      
+ Sun Mar 31 01:00:00 2024 CET
+ Sun Mar 31 01:30:00 2024 CET
+ Sun Mar 31 03:00:00 2024 CEST
+ Sun Mar 31 03:30:00 2024 CEST
+(4 rows)
+
+SELECT time_bucket_gapfill('1h', time, 'Europe/Berlin', '2024-10-26T23:00Z', '2024-10-27T02:00Z')
+FROM (SELECT NULL::timestamptz AS time LIMIT 0) s GROUP BY 1;
+      time_bucket_gapfill      
+ Sun Oct 27 01:00:00 2024 CEST
+ Sun Oct 27 02:00:00 2024 CEST
+ Sun Oct 27 02:00:00 2024 CET
+(3 rows)
+
+RESET timezone;
