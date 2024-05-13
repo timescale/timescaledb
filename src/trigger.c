@@ -112,11 +112,6 @@ create_trigger_handler(const Trigger *trigger, void *arg)
 {
 	const Chunk *chunk = arg;
 
-	if (TRIGGER_USES_TRANSITION_TABLE(trigger->tgnewtable) ||
-		TRIGGER_USES_TRANSITION_TABLE(trigger->tgoldtable))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("hypertables do not support transition tables in triggers")));
 
 	if (trigger_is_chunk_trigger(trigger))
 		ts_trigger_create_on_chunk(trigger->tgoid,

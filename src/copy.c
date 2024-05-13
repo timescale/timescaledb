@@ -415,7 +415,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 								 resultRelInfo,
 								 slots[i],
 								 recheckIndexes,
-								 NULL /* transition capture */);
+								 NULL);
 			list_free(recheckIndexes);
 		}
 
@@ -431,7 +431,7 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 								 resultRelInfo,
 								 slots[i],
 								 NIL,
-								 NULL /* transition capture */);
+								 NULL);
 		}
 
 		ExecClearTuple(slots[i]);
@@ -730,6 +730,8 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		.callback = callback,
 		.arg = arg,
 	};
+
+
 	CommandId mycid = GetCurrentCommandId(true);
 	CopyInsertMethod insertMethod;				   /* The insert method for the table */
 	CopyInsertMethod currentTupleInsertMethod;	   /* The insert method of the current tuple */
@@ -739,6 +741,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	uint64 processed = 0;
 	bool has_before_insert_row_trig;
 	bool has_instead_insert_row_trig;
+	bool has_after_insert_statement_trig;
 	ExprState *qualexpr = NULL;
 	ChunkDispatch *dispatch = ccstate->dispatch;
 
@@ -858,6 +861,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	ExecInitRangeTable(estate, estate->es_range_table);
 #endif
 
+
 	if (!dispatch->hypertable_result_rel_info)
 		dispatch->hypertable_result_rel_info = resultRelInfo;
 
@@ -865,6 +869,16 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	/* Prepare to catch AFTER triggers. */
 	AfterTriggerBeginQuery();
+	
+	/*
+	 * If there are any triggers with transition tables on the named relation,
+	 * we need to be prepared to capture transition tuples.
+	 *
+	 */
+	ccstate->cstate->transition_capture =
+		MakeTransitionCaptureState(ccstate->rel->trigdesc,
+								   RelationGetRelid(ccstate->rel),
+								   CMD_INSERT);
 
 	if (ccstate->where_clause)
 		qualexpr = ExecInitQual(castNode(List, ccstate->where_clause), NULL);
@@ -906,8 +920,12 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	has_instead_insert_row_trig =
 		(resultRelInfo->ri_TrigDesc && resultRelInfo->ri_TrigDesc->trig_insert_instead_row);
 
+	has_after_insert_statement_trig = (resultRelInfo->ri_TrigDesc && 
+			 resultRelInfo->ri_TrigDesc->trig_insert_new_table);
+
+	
 	/* Depending on the configured trigger, enable or disable the multi-insert buffers */
-	if (has_before_insert_row_trig || has_instead_insert_row_trig)
+	if ( has_after_insert_statement_trig || has_before_insert_row_trig || has_instead_insert_row_trig)
 	{
 		insertMethod = CIM_SINGLE;
 		ereport(DEBUG1,
@@ -1055,6 +1073,19 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		/* Set the right relation for triggers */
 		ts_tuptableslot_set_table_oid(myslot, RelationGetRelid(resultRelInfo->ri_RelationDesc));
 
+/*
+			 * If we're capturing transition tuples, we might need to convert
+			 * from the partition rowtype to root rowtype. But if there are no
+			 * BEFORE triggers on the partition that could change the tuple,
+			 * we can just remember the original unconverted tuple to avoid a
+			 * needless round trip conversion.
+			 */
+/*
+			if (ccstate->cstate->transition_capture != NULL)
+				ccstate->cstate->transition_capture->tcs_original_insert_tuple =
+					!has_before_insert_row_trig ? myslot : NULL;
+*/
+
 		skip_tuple = false;
 
 		/* BEFORE ROW INSERT Triggers */
@@ -1108,7 +1139,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 									 resultRelInfo,
 									 myslot,
 									 recheckIndexes,
-									 NULL /* transition capture */);
+								 	 ccstate->cstate->transition_capture);
 			}
 			else
 			{
@@ -1173,7 +1204,8 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	MemoryContextSwitchTo(oldcontext);
 
 	/* Execute AFTER STATEMENT insertion triggers */
-	ExecASInsertTriggers(estate, resultRelInfo, NULL);
+	elog(NOTICE, "hello");
+	ExecASInsertTriggers(estate, resultRelInfo, ccstate->cstate->transition_capture);
 
 	/* Handle queued AFTER triggers */
 	AfterTriggerEndQuery(estate);

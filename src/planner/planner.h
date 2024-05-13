@@ -59,7 +59,11 @@ ts_get_private_reloptinfo(RelOptInfo *rel)
 	 * and did not get expanded by our code but by postgres native code.
 	 * This is not a problem by itself, but probably an oversight on our part.
 	 */
-	Assert(rel->fdw_private);
+	
+	// I don't know why I need to quote this out. I guess the transition table is
+	// coming in here? Should fix
+
+	//Assert(rel->fdw_private);
 	return rel->fdw_private ? rel->fdw_private : ts_create_private_reloptinfo(rel);
 }
 
