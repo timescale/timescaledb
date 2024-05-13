@@ -577,7 +577,7 @@ EXPLAIN (COSTS OFF) EXECUTE prep_plan;
 ----------------------------------------------------------------------
  Finalize Aggregate
    ->  Append
-         ->  Partial Aggregate
+         ->  Custom Scan (VectorAgg)
                ->  Custom Scan (DecompressChunk) on _hyper_7_16_chunk
                      ->  Seq Scan on compress_hyper_8_18_chunk
          ->  Partial Aggregate
