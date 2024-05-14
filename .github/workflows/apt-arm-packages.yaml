@@ -4,6 +4,8 @@ name: APT ARM64 packages
   schedule:
     # run daily 0:00 on main branch
     - cron: '0 0 * * *'
+  pull_request:
+    paths: .github/workflows/apt-arm-packages.yaml
   push:
     tags:
     - '*'
