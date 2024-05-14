@@ -1040,7 +1040,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
 									   const char *prefix)
 {
-#if PG14_GE
 	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
 	if (osm_chunk_insert_hook)
@@ -1080,7 +1079,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
 	}
-#endif
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
@@ -1120,11 +1118,7 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 		.type = T_AlterTableStmt,
 		.cmds = list_make1(&altercmd),
 		.missing_ok = false,
-#if PG14_GE
 		.objtype = OBJECT_TABLE,
-#else
-		.relkind = OBJECT_TABLE,
-#endif
 		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
 								 (char *) NameStr(chunk->fd.table_name),
 								 0),
@@ -3385,34 +3379,19 @@ ts_chunk_set_partial(Chunk *chunk)
 bool
 ts_chunk_set_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
 ts_chunk_unset_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_clear_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
 ts_chunk_is_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 /* only caller used to be ts_chunk_unset_frozen. This code was in PG14 block as we run into
@@ -3952,8 +3931,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 	}
 	// if we have tiered chunks cascade drop to tiering layer as well
-#if PG14_GE
-
 	if (osm_chunk_id != INVALID_CHUNK_ID)
 	{
 		hypertable_drop_chunks_hook_type osm_drop_chunks_hook =
@@ -3977,7 +3954,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			}
 		}
 	}
-#endif
 
 	/* When dropping chunks for a given CAgg then force set the watermark */
 	if (is_materialization_hypertable)

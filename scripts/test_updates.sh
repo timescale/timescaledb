@@ -43,15 +43,9 @@ for version in ${ALL_VERSIONS}; do
     continue
   fi
 
-  if [ "${minor_version}" -eq 0 ]; then
+  if [ "${minor_version}" -le 4 ]; then
     # not part of any valid update path
     continue
-  elif [ "${minor_version}" -le 4 ]; then
-    continue
-    # on <= 2.4 we need to run v7 version of the update test
-    if [ "${PG_MAJOR_VERSION}" -le 13 ]; then
-        VERSIONS="${VERSIONS} ${version}"
-    fi
   elif [ "${minor_version}" -le 8 ]; then
     if [ "${PG_MAJOR_VERSION}" -le 14 ]; then
         VERSIONS="${VERSIONS} ${version}"
@@ -93,11 +87,7 @@ if [ -n "${VERSIONS}" ]; then
   for version in ${VERSIONS}; do
     ts_minor_version=$(echo "${version}" | awk -F. '{print $2}')
 
-    if [ "${ts_minor_version}" -le 4 ]; then
-      TEST_VERSION=v7
-    else
-      TEST_VERSION=v8
-    fi
+    TEST_VERSION=v8
 
     if [ "${ts_minor_version}" -ge 10 ]; then
       TEST_REPAIR=true

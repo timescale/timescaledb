@@ -49,6 +49,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(
     APPEND
     TEST_FILES
+    bgw_custom.sql
     bgw_db_scheduler.sql
     bgw_job_stat_history.sql
     bgw_job_stat_history_errors.sql
@@ -61,6 +62,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     chunk_merge.sql
     chunk_utils_compression.sql
     compression_algos.sql
+    compression_bgw.sql
     compression_ddl.sql
     compression_hypertable.sql
     compression_merge.sql
@@ -114,7 +116,7 @@ endif()
 set(SOLO_TESTS
     # This interferes with other tests since it reloads the config to increase
     # log level.
-    bgw_custom-${PG_VERSION_MAJOR}
+    bgw_custom
     bgw_scheduler_control
     bgw_db_scheduler
     bgw_job_stat_history_errors_permissions
@@ -131,12 +133,10 @@ set(SOLO_TESTS
     cagg_invalidation
     move
     reorder
-    telemetry_stats-${PG_VERSION_MAJOR})
+    telemetry_stats)
 
 set(TEST_TEMPLATES
-    bgw_custom.sql.in
     cagg_watermark.sql.in
-    compression_bgw.sql.in
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
@@ -161,7 +161,7 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     compression_errors.sql.in
     continuous_aggs.sql.in)
   if(USE_TELEMETRY)
-    list(APPEND TEST_TEMPLATES telemetry_stats.sql.in)
+    list(APPEND TEST_FILES telemetry_stats.sql)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
@@ -171,7 +171,7 @@ if(EXISTS ${PG_CONFIG_H})
   file(STRINGS "${PG_CONFIG_H}" PG_USE_LLVM
        REGEX "^#[\t ]*define[\t ]+USE_LLVM[\t ]+1.*")
   if(PG_USE_LLVM)
-    list(APPEND TEST_TEMPLATES jit.sql.in)
+    list(APPEND TEST_FILES jit.sql)
   endif()
 endif()
 

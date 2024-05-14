@@ -87,9 +87,6 @@ static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_func
 												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
-#if PG14_LT
-static bool check_trigger_exists_hypertable(Oid relid, char *trigname);
-#endif
 static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
 static void mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
@@ -300,40 +297,6 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 				 errmsg("could not create materialization hypertable")));
 }
 
-#if PG14_LT
-static bool
-check_trigger_exists_hypertable(Oid relid, char *trigname)
-{
-	Relation tgrel;
-	ScanKeyData skey[1];
-	SysScanDesc tgscan;
-	HeapTuple tuple;
-	bool trg_found = false;
-
-	tgrel = table_open(TriggerRelationId, ShareUpdateExclusiveLock);
-	ScanKeyInit(&skey[0],
-				Anum_pg_trigger_tgrelid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(relid));
-
-	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true, NULL, 1, skey);
-
-	while (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
-	{
-		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
-		if (namestrcmp(&(trig->tgname), trigname) == 0)
-		{
-			trg_found = true;
-			break;
-		}
-	}
-	systable_endscan(tgscan);
-	table_close(tgrel, NoLock);
-	return trg_found;
-}
-#endif
-
 /*
  * Add continuous agg invalidation trigger to hypertable
  * relid - oid of hypertable
@@ -354,10 +317,8 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 	CreateTrigStmt stmt_template = {
 		.type = T_CreateTrigStmt,
 		.row = true,
-#if PG14_GE
 		/* Using OR REPLACE option introduced on Postgres 14 */
 		.replace = true,
-#endif
 		.timing = TRIGGER_TYPE_AFTER,
 		.trigname = CAGGINVAL_TRIGGER_NAME,
 		.relation = makeRangeVar(schema, relname, -1),
@@ -366,12 +327,6 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 		.args = NIL, /* to be filled in later */
 		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
 	};
-
-#if PG14_LT
-	/* OR REPLACE was introduced in Postgres 14 so this check make no sense */
-	if (check_trigger_exists_hypertable(relid, CAGGINVAL_TRIGGER_NAME))
-		return;
-#endif
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
 	CreateTrigStmt local_stmt = stmt_template;

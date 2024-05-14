@@ -235,7 +235,7 @@ ts_estimate_group(PlannerInfo *root, double path_rows)
 
 	/* multiply by default estimates */
 	if (new_group_expr != NIL)
-		d_num_groups *= estimate_num_groups_compat(root, new_group_expr, path_rows, NULL, NULL);
+		d_num_groups *= estimate_num_groups(root, new_group_expr, path_rows, NULL, NULL);
 
 	if (d_num_groups > path_rows)
 		return INVALID_ESTIMATE;
