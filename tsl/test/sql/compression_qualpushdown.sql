@@ -186,3 +186,13 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE NOT c_bool;
 -- current_query() is not a sqlvaluefunction and volatile so should not be pushed down
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = current_query();
 
+-- test or constraints in lateral query #6912
+SELECT FROM svf_pushdown m1,
+LATERAL(
+  SELECT FROM svf_pushdown m2
+  WHERE
+    m1.time = m2.time AND
+    EXISTS (SELECT random()) OR
+    EXISTS (SELECT FROM meta) LIMIT 1
+) l;
+
