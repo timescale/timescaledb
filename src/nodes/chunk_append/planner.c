@@ -89,6 +89,7 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 										 &nullsFirst);
 
 	/* inject sort node if child sort order does not match desired order */
+//	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
 	if (!pathkeys_contained_in(pathkeys, path->pathkeys) && !IsA(plan, Sort))
 	{
 		plan = (Plan *)
