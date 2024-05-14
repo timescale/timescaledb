@@ -13,6 +13,7 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "annotations.h"
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
 #include "ts_catalog/array_utils.h"
@@ -329,6 +330,15 @@ modify_expression(Node *node, QualPushdownContext *context)
 			break;
 		}
 		case T_BoolExpr:
+		{
+			if (castNode(BoolExpr, node)->boolop == OR_EXPR)
+			{
+				/* ORs are not pushable */
+				context->can_pushdown = false;
+				return NULL;
+			}
+			TS_FALLTHROUGH;
+		}
 		case T_CoerceViaIO:
 		case T_RelabelType:
 		case T_ScalarArrayOpExpr:
