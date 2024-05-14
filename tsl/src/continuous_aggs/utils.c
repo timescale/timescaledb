@@ -261,9 +261,7 @@ get_replacement_timebucket_function(const ContinuousAgg *cagg, bool *need_parame
 											  func_arg_types,
 											  true /* expand_variadic */,
 											  true /* expand_defaults */,
-#if PG14_GE
 											  false /* include_out_arguments */,
-#endif
 											  &funcid,
 											  &rettype,
 											  &retset,

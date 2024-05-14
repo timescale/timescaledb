@@ -78,7 +78,6 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
 
-#if PG14_GE
 /* The prefix of a logical replication message which is inserted into the
  * replication stream right before decompression inserts are happening
  */
@@ -87,28 +86,23 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
  * replication stream right after all decompression inserts have finished
  */
 #define DECOMPRESSION_MARKER_END "::timescaledb-decompression-end"
-#endif
 
 static inline void
 write_logical_replication_msg_decompression_start()
 {
-#if PG14_GE
 	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
 	{
 		LogLogicalMessage(DECOMPRESSION_MARKER_START, "", 0, true);
 	}
-#endif
 }
 
 static inline void
 write_logical_replication_msg_decompression_end()
 {
-#if PG14_GE
 	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
 	{
 		LogLogicalMessage(DECOMPRESSION_MARKER_END, "", 0, true);
 	}
-#endif
 }
 
 static Compressor *
@@ -223,12 +217,8 @@ truncate_relation(Oid table_oid)
 		table_close(rel, NoLock);
 	}
 
-#if PG14_LT
-	int options = 0;
-#else
 	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
-#endif
 	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, options);
 	rel = table_open(table_oid, AccessExclusiveLock);
 	CommandCounterIncrement();
@@ -1789,9 +1779,6 @@ row_decompressor_decompress_row_to_table(RowDecompressor *decompressor)
 
 				/* Arrange for econtext's scan tuple to be the tuple under test */
 				econtext->ecxt_scantuple = decompressed_slot;
-#if PG14_LT
-				estate->es_result_relation_info = &indexstate_copy;
-#endif
 				ExecInsertIndexTuplesCompat(&indexstate_copy,
 											decompressed_slot,
 											estate,
@@ -2391,7 +2378,6 @@ algorithm_definition(CompressionAlgorithm algo)
 	return &definitions[algo];
 }
 
-#if PG14_GE
 static BatchFilter *
 make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation, RegProcedure opcode,
 				 Const *value, bool is_null_check, bool is_null, bool is_array_op)
@@ -3384,5 +3370,3 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 
 	return planstate_tree_walker(ps, decompress_chunk_walker, ctx);
 }
-
-#endif

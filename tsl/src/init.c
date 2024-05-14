@@ -157,11 +157,7 @@ CrossModuleFunctions tsl_cm_functions = {
 	.compress_chunk = tsl_compress_chunk,
 	.decompress_chunk = tsl_decompress_chunk,
 	.decompress_batches_for_insert = decompress_batches_for_insert,
-#if PG14_GE
 	.decompress_target_segments = decompress_target_segments,
-#else
-	.decompress_target_segments = NULL,
-#endif
 
 	.show_chunk = chunk_show,
 	.create_compressed_chunk = tsl_create_compressed_chunk,

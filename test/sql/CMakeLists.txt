@@ -15,7 +15,10 @@ set(TEST_FILES
     constraint.sql
     copy.sql
     copy_where.sql
+    cursor.sql
+    ddl.sql
     ddl_errors.sql
+    delete.sql
     debug_utils.sql
     drop_extension.sql
     drop_hypertable.sql
@@ -49,6 +52,7 @@ set(TEST_FILES
     tablespace.sql
     triggers.sql
     truncate.sql
+    update.sql
     upsert.sql
     util.sql
     vacuum.sql
@@ -58,14 +62,10 @@ set(TEST_FILES
 set(TEST_TEMPLATES
     append.sql.in
     cluster.sql.in
-    cursor.sql.in
-    ddl.sql.in
-    delete.sql.in
     histogram_test.sql.in
     insert.sql.in
     plan_hashagg.sql.in
     rowsecurity.sql.in
-    update.sql.in
     parallel.sql.in
     partitionwise.sql.in
     plan_expand_hypertable.sql.in

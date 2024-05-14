@@ -66,26 +66,17 @@ plan_add_parallel_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *
 	if (parse->hasAggs)
 	{
 		/* partial phase */
-		get_agg_clause_costs_compat(root,
-									(Node *) partial_grouping_target->exprs,
-									AGGSPLIT_INITIAL_SERIAL,
-									&agg_partial_costs);
+		get_agg_clause_costs(root, AGGSPLIT_INITIAL_SERIAL, &agg_partial_costs);
 
 		/* final phase */
-		get_agg_clause_costs_compat(root,
-									(Node *) target->exprs,
-									AGGSPLIT_FINAL_DESERIAL,
-									&agg_final_costs);
-		get_agg_clause_costs_compat(root,
-									parse->havingQual,
-									AGGSPLIT_FINAL_DESERIAL,
-									&agg_final_costs);
+		get_agg_clause_costs(root, AGGSPLIT_FINAL_DESERIAL, &agg_final_costs);
+		get_agg_clause_costs(root, AGGSPLIT_FINAL_DESERIAL, &agg_final_costs);
 	}
 
-	hashagg_table_size = estimate_hashagg_tablesize_compat(root,
-														   cheapest_partial_path,
-														   &agg_partial_costs,
-														   d_num_partial_groups);
+	hashagg_table_size = estimate_hashagg_tablesize(root,
+													cheapest_partial_path,
+													&agg_partial_costs,
+													d_num_partial_groups);
 
 	/*
 	 * Tentatively produce a partial HashAgg Path, depending on if it looks as
@@ -155,16 +146,11 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 		return;
 
 	MemSet(&agg_costs, 0, sizeof(AggClauseCosts));
-	get_agg_clause_costs_compat(root, (Node *) root->processed_tlist, AGGSPLIT_SIMPLE, &agg_costs);
-	get_agg_clause_costs_compat(root, parse->havingQual, AGGSPLIT_SIMPLE, &agg_costs);
+	get_agg_clause_costs(root, AGGSPLIT_SIMPLE, &agg_costs);
+	get_agg_clause_costs(root, AGGSPLIT_SIMPLE, &agg_costs);
 
-	can_hash = (parse->groupClause != NIL &&
-#if PG14_LT
-				agg_costs.numOrderedAggs == 0
-#else
-				root->numOrderedAggs == 0
-#endif
-				&& grouping_is_hashable(parse->groupClause));
+	can_hash = (parse->groupClause != NIL && root->numOrderedAggs == 0 &&
+				grouping_is_hashable(parse->groupClause));
 
 	if (!can_hash)
 		return;
@@ -175,8 +161,7 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 	if (!IS_VALID_ESTIMATE(d_num_groups))
 		return;
 
-	hashaggtablesize =
-		estimate_hashagg_tablesize_compat(root, cheapest_path, &agg_costs, d_num_groups);
+	hashaggtablesize = estimate_hashagg_tablesize(root, cheapest_path, &agg_costs, d_num_groups);
 
 	if (hashaggtablesize >= work_mem * UINT64CONST(1024))
 		return;
@@ -191,11 +176,7 @@ ts_plan_add_hashagg(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *output
 		/* Nothing to use as input for partial aggregate. */
 		try_parallel_aggregation = false;
 	}
-#if PG14_LT
-	else if (agg_costs.hasNonPartial || agg_costs.hasNonSerial)
-#else
 	else if (root->hasNonPartialAggs || root->hasNonSerialAggs)
-#endif
 	{
 		/* Insufficient support for partial mode. */
 		try_parallel_aggregation = false;

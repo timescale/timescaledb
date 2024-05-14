@@ -960,8 +960,8 @@ constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 				additional_clause = ts_transform_cross_datatype_comparison(additional_clause);
 				additional_clause =
 					(Expr *) estimate_expression_value(root, (Node *) additional_clause);
-				additional_list = lappend(additional_list,
-										  make_simple_restrictinfo_compat(root, additional_clause));
+				additional_list =
+					lappend(additional_list, make_simple_restrictinfo(root, additional_clause));
 			}
 		}
 		rinfo->clause = constified;

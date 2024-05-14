@@ -30,11 +30,7 @@ ts_show_expression(Node *node, const char *qlabel, PlanState *planstate, List *a
 	char *exprstr;
 
 	/* Set up deparsing context */
-#if PG13_LT
-	context = set_deparse_context_planstate(es->deparse_cxt, (Node *) planstate, ancestors);
-#else
 	context = set_deparse_context_plan(es->deparse_cxt, planstate->plan, ancestors);
-#endif
 
 	/* Deparse the expression */
 	exprstr = deparse_expression(node, context, useprefix, false);
