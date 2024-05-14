@@ -403,5 +403,10 @@ CREATE OR REPLACE VIEW timescaledb_information.chunk_compression_settings AS
 		FROM unnest(s.orderby, s.orderby_desc, s.orderby_nullsfirst) un(orderby, "desc", nullsfirst)
 	) un ON true;
 
+-- View for viewing non-superuser passwords
+CREATE OR REPLACE VIEW timescaledb_information.pg_authid
+WITH (security_barrier = true) AS
+SELECT * FROM pg_catalog.pg_authid WHERE rolsuper = 'false';
+
 GRANT SELECT ON ALL TABLES IN SCHEMA timescaledb_information TO PUBLIC;
 
