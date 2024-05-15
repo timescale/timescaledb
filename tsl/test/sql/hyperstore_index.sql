@@ -2,7 +2,14 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\c :TEST_DBNAME :ROLE_SUPERUSER
+create extension pageinspect;
+set role :ROLE_DEFAULT_PERM_USER;
+
 \ir include/setup_hyperstore.sql
+
+-- Avoid parallel (index) scans to make test stable
+set max_parallel_workers_per_gather to 0;
 
 -- Redefine the indexes to include one value field in the index and
 -- check that index-only scans work also for included attributes.
@@ -108,26 +115,26 @@ select explain_anonymize(format($$
 $$, :'hypertable'));
 
 select explain_anonymize(format($$
-    select device_id, avg(temp) from %s where device_id between 10 and 20
-    group by device_id
+	select device_id, avg(temp) from %s where device_id between 10 and 20
+	group by device_id
 $$, :'chunk1'));
 
 -- Test index scan on segmentby column
 select explain_anonymize(format($$
-    select created_at, location_id, temp from %s where location_id between 5 and 10
+	select created_at, location_id, temp from %s where location_id between 5 and 10
 $$, :'hypertable'));
 
 select explain_anonymize(format($$
-    select created_at, location_id, temp from %s where location_id between 5 and 10
+	select created_at, location_id, temp from %s where location_id between 5 and 10
 $$, :'chunk1'));
 
 -- These should generate decompressions as above, but for all columns.
 select explain_anonymize(format($$
-    select * from %s where location_id between 5 and 10
+	select * from %s where location_id between 5 and 10
 $$, :'hypertable'));
 
 select explain_anonymize(format($$
-    select * from %s where location_id between 5 and 10
+	select * from %s where location_id between 5 and 10
 $$, :'chunk1'));
 
 --
@@ -142,47 +149,47 @@ create table saved_hypertable as select * from :hypertable;
 -- Note that the number of columns decompressed should be zero, since
 -- we do not have to decompress any columns.
 select explain_anonymize(format($$
-    select location_id from %s where location_id between 5 and 10
+	select location_id from %s where location_id between 5 and 10
 $$, :'hypertable'));
 
 -- We just compare the counts here, not the full content.
 select heapam.count as heapam, hyperstore.count as hyperstore
   from (select count(location_id) from :hypertable where location_id between 5 and 10) heapam,
-       (select count(location_id) from :hypertable where location_id between 5 and 10) hyperstore;
+	   (select count(location_id) from :hypertable where location_id between 5 and 10) hyperstore;
 
 drop table saved_hypertable;
 
 -- This should use index-only scan
 select explain_anonymize(format($$
-    select device_id from %s where device_id between 5 and 10
+	select device_id from %s where device_id between 5 and 10
 $$, :'hypertable'));
 
 select explain_anonymize(format($$
-    select location_id from %s where location_id between 5 and 10
+	select location_id from %s where location_id between 5 and 10
 $$, :'chunk1'));
 select explain_anonymize(format($$
-    select device_id from %s where device_id between 5 and 10
+	select device_id from %s where device_id between 5 and 10
 $$, :'chunk1'));
 
 -- Test index only scan with covering indexes
 select explain_anonymize(format($$
-    select location_id, avg(humidity) from %s where location_id between 5 and 10
-    group by location_id order by location_id
+	select location_id, avg(humidity) from %s where location_id between 5 and 10
+	group by location_id order by location_id
 $$, :'hypertable'));
 
 select explain_anonymize(format($$
-    select device_id, avg(humidity) from %s where device_id between 5 and 10
-    group by device_id order by device_id
+	select device_id, avg(humidity) from %s where device_id between 5 and 10
+	group by device_id order by device_id
 $$, :'hypertable'));
 
 select explain_anonymize(format($$
-    select location_id, avg(humidity) from %s where location_id between 5 and 10
-    group by location_id order by location_id
+	select location_id, avg(humidity) from %s where location_id between 5 and 10
+	group by location_id order by location_id
 $$, :'chunk1'));
 
 select explain_anonymize(format($$
-    select device_id, avg(humidity) from %s where device_id between 5 and 10
-    group by device_id order by device_id
+	select device_id, avg(humidity) from %s where device_id between 5 and 10
+	group by device_id order by device_id
 $$, :'chunk1'));
 
 select location_id, round(avg(humidity)) from :hypertable where location_id between 5 and 10
@@ -196,3 +203,92 @@ group by device_id order by device_id;
 
 select device_id, round(avg(humidity)) from :chunk1 where device_id between 5 and 10
 group by device_id order by device_id;
+
+-------------------------------------
+-- Test UNIQUE and Partial indexes --
+-------------------------------------
+\set VERBOSITY default
+
+---
+-- Test that building a UNIQUE index won't work on a hyperstore table
+-- that contains non-unique values.
+---
+create table non_unique_metrics (time timestamptz, temp float, device int);
+select create_hypertable('non_unique_metrics', 'time', create_default_indexes => false);
+insert into non_unique_metrics values ('2024-01-01', 1.0, 1), ('2024-01-01', 2.0, 1), ('2024-01-02', 3.0, 2);
+select ch as non_unique_chunk from show_chunks('non_unique_metrics') ch limit 1 \gset
+alter table non_unique_metrics set (timescaledb.compress_segmentby = 'device', timescaledb.compress_orderby = 'time');
+alter table :non_unique_chunk set access method hyperstore;
+
+\set ON_ERROR_STOP 0
+---
+-- UNIQUE index creation on compressed hyperstore should fail due to
+-- non-unique values
+---
+create unique index on non_unique_metrics (time);
+\set ON_ERROR_STOP 1
+
+--------------------------
+-- Test partial indexes --
+--------------------------
+
+-- Create partial predicate index
+create index time_idx on non_unique_metrics (time) where (time < '2024-01-02'::timestamptz);
+
+-- Find the index on the chunk and save as a variable
+select indexrelid::regclass as chunk_time_idx
+from pg_index i inner join pg_class c on (i.indexrelid=c.oid)
+where indrelid = :'non_unique_chunk'::regclass
+and relname like '%time%' \gset
+
+reset role; -- need superuser for pageinspect
+
+-- The index should contain 1 key (device 1) with 2 TIDs
+select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+
+-- Check that a query can use the index
+explain (costs off)
+select * from non_unique_metrics where time <= '2024-01-01'::timestamptz;
+select * from non_unique_metrics where time <= '2024-01-01'::timestamptz;
+
+-- Test a partial index with a predicate on non-index column
+drop index time_idx;
+create index time_idx on non_unique_metrics (time) where (device < 2);
+
+select indexrelid::regclass as chunk_time_idx
+from pg_index i inner join pg_class c on (i.indexrelid=c.oid)
+where indrelid = :'non_unique_chunk'::regclass
+and relname like '%time%' \gset
+
+-- Index should have two tids, since one row excluded
+select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+
+-- Check that the index works. Expect two rows to be returned.
+explain (costs off)
+select * from non_unique_metrics where time < '2024-01-02'::timestamptz and device < 2;
+select * from non_unique_metrics where time < '2024-01-02'::timestamptz and device < 2;
+
+drop index time_idx;
+create index time_idx on non_unique_metrics (time) where (device < 2) and temp < 2.0;
+
+select indexrelid::regclass as chunk_time_idx
+from pg_index i inner join pg_class c on (i.indexrelid=c.oid)
+where indrelid = :'non_unique_chunk'::regclass
+and relname like '%time%' \gset
+
+-- Index should have two tids, since one row excluded
+select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+
+-- Check that the index works as expected. Only one row should match.
+explain (costs off)
+select * from non_unique_metrics where time < '2024-01-02'::timestamptz and device < 2 and temp = 1.0;
+select * from non_unique_metrics where time < '2024-01-02'::timestamptz and device < 2 and temp = 1.0;
+
+-- Make time column data unique to test UNIQUE constraint/index creation
+delete from non_unique_metrics where temp = 1.0;
+alter table non_unique_metrics add constraint u1 unique(time);
+\set ON_ERROR_STOP 0
+insert into non_unique_metrics values ('2024-01-01', 1.0, 1);
+\set ON_ERROR_STOP 1
+-- Should also be able to create via "create index"
+create unique index ui1 on non_unique_metrics (time);
