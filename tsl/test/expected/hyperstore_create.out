@@ -2,14 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 -- Testing the basic API for creating a hyperstore
--- This is a replacement for compress chunk for the time being.
-create function twist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method hyperstore', chunk);
-    return chunk;
-end
-$$;
 CREATE TABLE test2(
        created_at timestamptz not null,
        location_id int,
@@ -42,13 +34,16 @@ alter table test2
       set access method hyperstore,
       set (timescaledb.compress_segmentby = 'location_id');
 NOTICE:  default order by for hypertable "test2" is set to "created_at DESC, device_id"
+-- Test altering hypertable to hyperstore again. It should be allowed
+-- and be a no-op.
+alter table test2 set access method hyperstore;
 \set ON_ERROR_STOP 0
 -- This shows an error but the error is weird, we should probably get
 -- a better one.
 alter table test2
       set access method hyperstore,
       set (compress_segmentby = 'location_id');
-ERROR:  operation not supported on hypertables that have compression enabled
+ERROR:  unrecognized parameter "compress_segmentby"
 \set ON_ERROR_STOP 1
 select relname, amname
   from pg_class join pg_am on (relam = pg_am.oid)
@@ -108,4 +103,77 @@ select * from timescaledb_information.chunk_compression_settings;
  test2      | _timescaledb_internal._hyper_1_9_chunk  | location_id | created_at DESC,device_id
  test2      | _timescaledb_internal._hyper_1_11_chunk | location_id | created_at DESC,device_id
 (6 rows)
+
+--------------------------
+-- Test alter on chunks --
+--------------------------
+create table test3 (time timestamptz not null, device int, temp float);
+select create_hypertable('test3', 'time');
+ create_hypertable  
+--------------------
+ (4,public,test3,t)
+(1 row)
+
+-- create one chunk
+insert into test3 values ('2022-06-01', 1, 1.0);
+-- save chunk as variable
+select ch as chunk from show_chunks('test3') ch limit 1 \gset
+-- Check that chunk is NOT using hyperstore
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+      relname      | amname 
+-------------------+--------
+ _hyper_4_13_chunk | heap
+(1 row)
+
+\set ON_ERROR_STOP 0
+alter table :chunk set access method hyperstore;
+ERROR:  hypertable "test3" is missing compression settings
+\set ON_ERROR_STOP 1
+-- Add compression settings
+alter table test3 set (timescaledb.compress_segmentby = 'device');
+NOTICE:  default order by for hypertable "test3" is set to ""time" DESC"
+alter table :chunk set access method hyperstore;
+-- Check that chunk is using hyperstore
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+      relname      |   amname   
+-------------------+------------
+ _hyper_4_13_chunk | hyperstore
+(1 row)
+
+-- Test setting same access method again
+alter table :chunk set access method hyperstore;
+-- Create a second chunk
+insert into test3 values ('2022-08-01', 1, 1.0);
+-- The second chunk should not be a hyperstore chunk
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+      relname      |   amname   
+-------------------+------------
+ _hyper_4_13_chunk | hyperstore
+ _hyper_4_15_chunk | heap
+(2 rows)
+
+-- Set hyperstore on hypertable
+alter table test3 set access method hyperstore;
+-- Create a third chunk
+insert into test3 values ('2022-10-01', 1, 1.0);
+-- The third chunk should be a hyperstore chunk
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+      relname      |   amname   
+-------------------+------------
+ _hyper_4_13_chunk | hyperstore
+ _hyper_4_15_chunk | heap
+ _hyper_4_16_chunk | hyperstore
+(3 rows)
 
