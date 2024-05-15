@@ -4,15 +4,6 @@
 
 -- Testing the basic API for creating a hyperstore
 
--- This is a replacement for compress chunk for the time being.
-create function twist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method hyperstore', chunk);
-    return chunk;
-end
-$$;
-
 CREATE TABLE test2(
        created_at timestamptz not null,
        location_id int,
@@ -39,6 +30,10 @@ alter table test2
 alter table test2
       set access method hyperstore,
       set (timescaledb.compress_segmentby = 'location_id');
+
+-- Test altering hypertable to hyperstore again. It should be allowed
+-- and be a no-op.
+alter table test2 set access method hyperstore;
 
 \set ON_ERROR_STOP 0
 -- This shows an error but the error is weird, we should probably get
@@ -67,3 +62,59 @@ select relname, amname
 select * from _timescaledb_catalog.compression_settings;
 select * from timescaledb_information.compression_settings;
 select * from timescaledb_information.chunk_compression_settings;
+
+--------------------------
+-- Test alter on chunks --
+--------------------------
+create table test3 (time timestamptz not null, device int, temp float);
+select create_hypertable('test3', 'time');
+
+-- create one chunk
+insert into test3 values ('2022-06-01', 1, 1.0);
+
+-- save chunk as variable
+select ch as chunk from show_chunks('test3') ch limit 1 \gset
+
+-- Check that chunk is NOT using hyperstore
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+
+\set ON_ERROR_STOP 0
+alter table :chunk set access method hyperstore;
+\set ON_ERROR_STOP 1
+
+-- Add compression settings
+alter table test3 set (timescaledb.compress_segmentby = 'device');
+alter table :chunk set access method hyperstore;
+
+-- Check that chunk is using hyperstore
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+
+-- Test setting same access method again
+alter table :chunk set access method hyperstore;
+
+-- Create a second chunk
+insert into test3 values ('2022-08-01', 1, 1.0);
+
+-- The second chunk should not be a hyperstore chunk
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+
+-- Set hyperstore on hypertable
+alter table test3 set access method hyperstore;
+
+-- Create a third chunk
+insert into test3 values ('2022-10-01', 1, 1.0);
+
+-- The third chunk should be a hyperstore chunk
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
