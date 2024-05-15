@@ -126,11 +126,17 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 		 * connection to the original chunk. We do not need constraints,
 		 * foreign keys, or any other things on this table since it never
 		 * participate in any plans. */
-
 		Chunk *chunk = ts_chunk_get_by_relid(rel->rd_id, true);
-		Ensure(chunk, "\"%s\" is not a chunk", get_rel_name(rel->rd_id));
 		Hypertable *ht = ts_hypertable_get_by_id(chunk->fd.hypertable_id);
 		Hypertable *ht_compressed = ts_hypertable_get_by_id(ht->fd.compressed_hypertable_id);
+
+		if (NULL == ht_compressed)
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("hypertable \"%s\" is missing compression settings",
+							NameStr(ht->fd.table_name)),
+					 errhint("Enable compression on the hypertable.")));
+
 		Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
 
 		caminfo->compressed_relation_id = c_chunk->fd.id;

@@ -42,35 +42,32 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 					{
 						Oid relid = AlterTableLookupRelation(stmt, NoLock);
 						bool to_hyperstore = (strcmp(cmd->name, "hyperstore") == 0);
-						if (!to_hyperstore)
-						{
-							/* If neither the current tableam nor the desired tableam is hyperstore,
-							 * we do nothing. */
-							Relation rel = RelationIdGetRelation(relid);
-							if (rel->rd_tableam != hyperstore_routine())
-								return;
-							RelationClose(rel);
-						}
+						Relation rel = RelationIdGetRelation(relid);
+						bool is_hyperstore = rel->rd_tableam == hyperstore_routine();
+						RelationClose(rel);
 
-						/* Here we know that we are either moving to or from a hyperstore */
+						/* If neither the current tableam nor the desired
+						 * tableam is hyperstore, we do nothing. We also do
+						 * nothing if the table is already using hyperstore
+						 * and we are trying to convert to hyperstore
+						 * again. */
+						if (is_hyperstore == to_hyperstore)
+							break;
 
+						/* Here we know that we are either moving to or from a
+						 * hyperstore. Check that it is on a chunk or
+						 * hypertable. */
 						Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
 						if (chunk)
-						{
 							hyperstore_alter_access_method_begin(relid, !to_hyperstore);
-							return;
-						}
-
-						if (ts_is_hypertable(relid))
-							return;
-
-						ereport(ERROR,
-								errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								errmsg("hyperstore access method not supported on \"%s\"",
-									   stmt->relation->relname),
-								errdetail("Hyperstore access method is only supported on "
-										  "hypertables and chunks."));
-
+						else if (!ts_is_hypertable(relid))
+							ereport(ERROR,
+									errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									errmsg("hyperstore access method not supported on \"%s\"",
+										   stmt->relation->relname),
+									errdetail("Hyperstore access method is only supported on "
+											  "hypertables and chunks."));
 						break;
 					}
 #endif
