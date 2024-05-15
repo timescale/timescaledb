@@ -26,6 +26,7 @@
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
 #include <nodes/plannodes.h>
+#include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <parser/parsetree.h>
 #include <pgstat.h>
@@ -1951,52 +1952,68 @@ hyperstore_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin,
 	return result;
 }
 
-typedef struct IndexCallbackState
+typedef struct IndexBuildCallbackState
 {
+	/* Original callback and state state */
 	IndexBuildCallback callback;
+	void *orig_state;
+
+	/* The table building an index over and original index info */
 	Relation rel;
 	IndexInfo *index_info;
+
+	/* Expression state and slot for predicate evaluation when building
+	 * partial indexes */
 	EState *estate;
-	void *orig_state;
+	ExprContext *econtext;
+	ExprState *predicate;
+	TupleTableSlot *slot;
+	int num_non_index_predicates;
+
+	/* Information needed to process values from compressed data */
 	int16 tuple_index;
 	double ntuples;
-	Datum *values;
-	bool *isnull;
 	Bitmapset *segmentby_cols;
 	Bitmapset *orderby_cols;
 	bool is_segmentby_index;
 	MemoryContext decompression_mcxt;
 	ArrowArray **arrow_columns;
-} IndexCallbackState;
+} IndexBuildCallbackState;
 
 /*
  * Callback for index builds on compressed relation.
  *
+ * See hyperstore_index_build_range_scan() for general overview.
+ *
  * When building an index, this function is called once for every compressed
- * tuple. But to build an index over the original (non-compressed) values, it
- * is necessary to "unwrap" the compressed data. Therefore, the function calls
+ * tuple. To build an index over the original (non-compressed) values, it is
+ * necessary to "unwrap" the compressed data. Therefore, the function calls
  * the original index build callback once for every value in the compressed
  * tuple.
  *
- * However, when the index covers only segmentby columns, and the value is the
- * same for all original rows in the segment, the index storage can be
- * optimized by only indexing the compressed row and then unwrapping it during
+ * Note that, when the index covers only segmentby columns and the value is
+ * the same for all original rows in the segment, the index storage is
+ * optimized to only index the compressed row and then unwrapping it during
  * scanning instead.
- *
- * TODO: need to rerun filters on uncompressed tuples.
  */
 static void
-compression_index_build_callback(Relation index, ItemPointer tid, Datum *values, bool *isnull,
-								 bool tupleIsAlive, void *state)
+hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, bool *isnull,
+								bool tupleIsAlive, void *state)
 {
-	IndexCallbackState *icstate = state;
-	// bool checking_uniqueness = (callback_state->index_info->ii_Unique ||
-	//							callback_state->index_info->ii_ExclusionOps != NULL);
+	IndexBuildCallbackState *icstate = state;
 	int32 num_rows = -1;
-	TupleDesc idesc = RelationGetDescr(index);
+	const TupleDesc tupdesc = RelationGetDescr(icstate->rel);
 	const Bitmapset *segmentby_cols = icstate->segmentby_cols;
+	/* We expect the compressed rel scan to produce a datum array that first
+	 * includes the index columns, then any columns referenced in index
+	 * predicates that are not index columns. */
+	int natts = icstate->index_info->ii_NumIndexAttrs + icstate->num_non_index_predicates;
 
-	for (int i = 0; i < icstate->index_info->ii_NumIndexAttrs; i++)
+	/*
+	 * Phase 1: Go through all attribute values and decompress segments into
+	 * multiple rows in columnar arrow array format.
+	 */
+	for (int i = 0; i < natts; i++)
 	{
 		const AttrNumber attno = icstate->index_info->ii_IndexAttrNumbers[i];
 
@@ -2021,56 +2038,68 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 			}
 			else
 			{
-				int countoff = icstate->index_info->ii_NumIndexAttrs;
+				int countoff = natts;
 				Assert(num_rows == -1 || num_rows == DatumGetInt32(values[countoff]));
 				num_rows = DatumGetInt32(values[countoff]);
 			}
 		}
-		else
+		else if (!isnull[i])
 		{
-			if (isnull[i])
-			{
-				// do nothing
-			}
-			else
-			{
-				const Form_pg_attribute attr = &idesc->attrs[i];
-				const CompressedDataHeader *header =
-					(CompressedDataHeader *) PG_DETOAST_DATUM(values[i]);
-				DecompressAllFunction decompress_all =
-					tsl_get_decompress_all_function(header->compression_algorithm, attr->atttypid);
-				Assert(decompress_all != NULL);
-				MemoryContext oldcxt = MemoryContextSwitchTo(icstate->decompression_mcxt);
-				icstate->arrow_columns[i] =
-					decompress_all(PointerGetDatum(header), idesc->attrs[i].atttypid, oldcxt);
+			const Form_pg_attribute attr = TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
+			const CompressedDataHeader *header =
+				(CompressedDataHeader *) PG_DETOAST_DATUM(values[i]);
+			DecompressAllFunction decompress_all =
+				tsl_get_decompress_all_function(header->compression_algorithm, attr->atttypid);
+			Assert(decompress_all != NULL);
+			MemoryContext oldcxt = MemoryContextSwitchTo(icstate->decompression_mcxt);
+			icstate->arrow_columns[i] =
+				decompress_all(PointerGetDatum(header), attr->atttypid, oldcxt);
 
-				/* If "num_rows" was set previously by another column, the
-				 * value should be the same for this column */
-				Assert(num_rows == -1 || num_rows == icstate->arrow_columns[i]->length);
-				num_rows = icstate->arrow_columns[i]->length;
-				MemoryContextReset(icstate->decompression_mcxt);
-				MemoryContextSwitchTo(oldcxt);
-			}
+			/* If "num_rows" was set previously by another column, the
+			 * value should be the same for this column */
+			Assert(num_rows == -1 || num_rows == icstate->arrow_columns[i]->length);
+			num_rows = icstate->arrow_columns[i]->length;
+			MemoryContextReset(icstate->decompression_mcxt);
+			MemoryContextSwitchTo(oldcxt);
 		}
 	}
 
 	Assert(num_rows > 0);
 
+	/*
+	 * Phase 2: Loop over all "unwrapped" rows in the arrow arrays, build
+	 * index tuples, and index them unless they fail predicate checks.
+	 */
+
+	/* Table slot for predicate checks. We need to re-create a slot in table
+	 * format to be able to do predicate checks once we have decompressed the
+	 * values. */
+	TupleTableSlot *slot = icstate->slot;
+
 	for (int rownum = 0; rownum < num_rows; rownum++)
 	{
-		for (int colnum = 0; colnum < icstate->index_info->ii_NumIndexAttrs; colnum++)
+		/* The slot is a table slot, not index slot. But we only fill in the
+		 * columns needed for the index and predicate checks. Therefore, make sure
+		 * other columns are initialized to "null" */
+		memset(slot->tts_isnull, true, sizeof(bool) * slot->tts_tupleDescriptor->natts);
+		ExecClearTuple(slot);
+
+		for (int colnum = 0; colnum < natts; colnum++)
 		{
 			const AttrNumber attno = icstate->index_info->ii_IndexAttrNumbers[colnum];
 
 			if (bms_is_member(attno, segmentby_cols))
 			{
-				// Segment by column
+				/* Segmentby columns are not compressed, so the datum in the
+				 * values array is already set and valid */
 			}
 			else
 			{
 				const char *restrict arrow_values = icstate->arrow_columns[colnum]->buffers[1];
 				const uint64 *restrict validity = icstate->arrow_columns[colnum]->buffers[0];
-				int16 value_bytes = get_typlen(idesc->attrs[colnum].atttypid);
+				const Form_pg_attribute attr =
+					TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
+				int16 value_bytes = get_typlen(attr->atttypid);
 
 				/*
 				 * The conversion of Datum to more narrow types will truncate
@@ -2101,11 +2130,28 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 				values[colnum] = datum;
 				isnull[colnum] = !arrow_row_is_valid(validity, rownum);
 			}
+
+			/* Fill in the values in the table slot for predicate checks */
+			slot->tts_values[AttrNumberGetAttrOffset(attno)] = values[colnum];
+			slot->tts_isnull[AttrNumberGetAttrOffset(attno)] = isnull[colnum];
 		}
 
 		ItemPointerData index_tid;
 		tid_to_compressed_tid(&index_tid, tid, rownum + 1);
 		Assert(!icstate->is_segmentby_index || rownum == 0);
+
+		/*
+		 * In a partial index, discard tuples that don't satisfy the
+		 * predicate.
+		 */
+		if (icstate->predicate)
+		{
+			/* Mark the slot as valid */
+			ExecStoreVirtualTuple(slot);
+
+			if (!ExecQual(icstate->predicate, icstate->econtext))
+				continue;
+		}
 
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
 		icstate->ntuples++;
@@ -2113,7 +2159,30 @@ compression_index_build_callback(Relation index, ItemPointer tid, Datum *values,
 }
 
 /*
- * Build index.
+ * Build an index over a Hyperstore table.
+ *
+ * The task of this function is to scan all tuples in the table and then,
+ * after visibility and predicate checks, pass the tuple to the "index build
+ * callback" to have it indexed.
+ *
+ * Since a Hyperstore table technically consists of two heaps: one
+ * non-compressed and one compressed, it is necessary to scan both of them. To
+ * avoid rewriting/copying the heap code, we make use of the heap AM's
+ * machinery. However, that comes with some complications when dealing with
+ * compressed tuples. To build an index over compressed tuples, we need to
+ * first decompress the segments into individual values. To make this work, we
+ * replace the given index build callback with our own, so that we can first
+ * decompress the data and then call the real index build callback.
+ *
+ * Partial indexes present an additional complication because every tuple
+ * scanned needs to be checked against the index predicate to know whether it
+ * should be part of the index or not. However, the index build callback only
+ * gets the values of the indexed columns, not the original table tuple. That
+ * won't work for predicates on non-indexed column. Therefore, before calling
+ * the heap AM machinery, we change the index definition so that also
+ * non-indexed predicate columns will be included in the values array passed
+ * on to the "our" index build callback. Then we can reconstruct a table tuple
+ * from those values in order to do the predicate check.
  */
 static double
 hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, IndexInfo *indexInfo,
@@ -2134,13 +2203,15 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 		return 0.0;
 
 	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
-
 	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
-	IndexCallbackState icstate = {
+	EState *estate = CreateExecutorState();
+	IndexBuildCallbackState icstate = {
 		.callback = callback,
 		.orig_state = callback_state,
 		.rel = relation,
-		.estate = CreateExecutorState(),
+		.estate = estate,
+		.econtext = GetPerTupleExprContext(estate),
+		.slot = MakeSingleTupleTableSlot(RelationGetDescr(relation), &TTSOpsVirtual),
 		.index_info = indexInfo,
 		.tuple_index = -1,
 		.ntuples = 0,
@@ -2149,10 +2220,18 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 													/* minContextSize = */ 0,
 													/* initBlockSize = */ 64 * 1024,
 													/* maxBlockSize = */ 64 * 1024),
-		.arrow_columns = palloc(sizeof(ArrowArray *) * indexInfo->ii_NumIndexAttrs),
+		/* Allocate arrow array for all attributes in the relation although
+		 * index might need only a subset. This is to accommodate any extra
+		 * predicate attributes (see below). */
+		.arrow_columns = palloc(sizeof(ArrowArray *) * RelationGetDescr(relation)->natts),
 		.is_segmentby_index = true,
 	};
-	IndexInfo iinfo = *indexInfo;
+
+	/* IndexInfo copy to use when processing compressed relation. It will be
+	 * modified slightly since the compressed rel has different attribute
+	 * number mappings. It is also not possible to do all index processing on
+	 * compressed tuples, e.g., predicate checks (see below). */
+	IndexInfo compress_iinfo = *indexInfo;
 
 	build_segment_and_orderby_bms(hsinfo, &icstate.segmentby_cols, &icstate.orderby_cols);
 
@@ -2162,7 +2241,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 		const AttrNumber attno = indexInfo->ii_IndexAttrNumbers[i];
 		const AttrNumber cattno = hsinfo->columns[AttrNumberGetAttrOffset(attno)].cattnum;
 
-		iinfo.ii_IndexAttrNumbers[i] = cattno;
+		compress_iinfo.ii_IndexAttrNumbers[i] = cattno;
 		icstate.arrow_columns[i] = NULL;
 
 		/* If the indexed column is not a segmentby column, then this is not a
@@ -2171,34 +2250,105 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 			icstate.is_segmentby_index = false;
 	}
 
-	/* Include the count column in the callback. It is needed to know the
+	Assert(indexInfo->ii_NumIndexAttrs == compress_iinfo.ii_NumIndexAttrs);
+
+	/* If there are predicates, it's a partial index build. It is necessary to
+	 * find any columns referenced in the predicates that are not included in
+	 * the index. We need to make sure that the heap AM will include these
+	 * columns when building an index tuple so that we can later do predicate
+	 * checks on them. */
+	if (indexInfo->ii_Predicate != NIL)
+	{
+		const List *vars = pull_vars_of_level((Node *) indexInfo->ii_Predicate, 0);
+		ListCell *lc;
+
+		/* Check if the predicate attribute is already part of the index or
+		 * not. If not, append it to the end of the index attributes. */
+		foreach (lc, vars)
+		{
+			const Var *v = lfirst_node(Var, lc);
+			bool found = false;
+
+			for (int i = 0; i < compress_iinfo.ii_NumIndexAttrs; i++)
+			{
+				AttrNumber attno = compress_iinfo.ii_IndexAttrNumbers[i];
+
+				if (v->varattno == attno)
+				{
+					found = true;
+					break;
+				}
+			}
+
+			if (!found)
+			{
+				/* Need to translate attribute number for compressed rel */
+				const int offset = AttrNumberGetAttrOffset(v->varattno);
+				const AttrNumber cattno = hsinfo->columns[offset].cattnum;
+				const int num_index_attrs =
+					compress_iinfo.ii_NumIndexAttrs + icstate.num_non_index_predicates;
+
+				Ensure(compress_iinfo.ii_NumIndexAttrs < INDEX_MAX_KEYS,
+					   "too many predicate attributes in index");
+
+				/* If the predicate column is not part of the index, we need
+				 * to include it in the index info passed to heap AM when
+				 * scanning the compressed relation. */
+				compress_iinfo.ii_IndexAttrNumbers[num_index_attrs] = cattno;
+
+				/* We also add the attribute mapping to the original index
+				 * info, but we don't increase indexInfo->ii_NumIndexAttrs
+				 * because that will change the index definition. Instead we
+				 * track the number of additional predicate attributes in
+				 * icstate.num_non_index_predicates. */
+				const int natts = indexInfo->ii_NumIndexAttrs + icstate.num_non_index_predicates;
+				indexInfo->ii_IndexAttrNumbers[natts] = v->varattno;
+				icstate.num_non_index_predicates++;
+			}
+		}
+
+		/* Can't evaluate predicates on compressed tuples. This is done in
+		 * hyperstore_index_build_callback instead. */
+		compress_iinfo.ii_Predicate = NULL;
+
+		/* Set final number of index attributes. Includes original number of
+		 * attributes plus the new predicate attributes */
+		compress_iinfo.ii_NumIndexAttrs =
+			compress_iinfo.ii_NumIndexAttrs + icstate.num_non_index_predicates;
+
+		/* Set up predicate evaluation, including the slot for econtext */
+		icstate.econtext->ecxt_scantuple = icstate.slot;
+		icstate.predicate = ExecPrepareQual(indexInfo->ii_Predicate, icstate.estate);
+	}
+
+	/* Make sure the count column is included last in the index tuple
+	 * generated by the heap AM machinery. It is needed to know the
 	 * uncompressed tuple count in case of building an index on the segmentby
 	 * column. */
-	iinfo.ii_IndexAttrNumbers[iinfo.ii_NumIndexAttrs++] = hsinfo->count_cattno;
-	/* Check uniqueness on compressed */
-	iinfo.ii_Unique = false;
-	iinfo.ii_ExclusionOps = NULL;
-	iinfo.ii_Predicate = NULL;
+	Ensure(compress_iinfo.ii_NumIndexAttrs < INDEX_MAX_KEYS,
+		   "too many predicate attributes in index");
+	compress_iinfo.ii_IndexAttrNumbers[compress_iinfo.ii_NumIndexAttrs++] = hsinfo->count_cattno;
 
 	/* Call heap's index_build_range_scan() on the compressed relation. The
 	 * custom callback we give it will "unwrap" the compressed segments into
 	 * individual tuples. Therefore, we cannot use the tuple count returned by
-	 * the function since it only represent the number of compressed
+	 * the function since it only represents the number of compressed
 	 * tuples. Instead, tuples are counted in the callback state. */
 	crel->rd_tableam->index_build_range_scan(crel,
 											 indexRelation,
-											 &iinfo,
+											 &compress_iinfo,
 											 allow_sync,
 											 anyvisible,
 											 progress,
 											 start_blockno,
 											 numblocks,
-											 compression_index_build_callback,
+											 hyperstore_index_build_callback,
 											 &icstate,
 											 scan);
 
 	table_close(crel, NoLock);
 	FreeExecutorState(icstate.estate);
+	ExecDropSingleTupleTableSlot(icstate.slot);
 	MemoryContextDelete(icstate.decompression_mcxt);
 	pfree(icstate.arrow_columns);
 	bms_free(icstate.segmentby_cols);
@@ -2221,6 +2371,11 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	return icstate.ntuples;
 }
 
+/*
+ * Validate index.
+ *
+ * Used for concurrent index builds.
+ */
 static void
 hyperstore_index_validate_scan(Relation compressionRelation, Relation indexRelation,
 							   IndexInfo *indexInfo, Snapshot snapshot, ValidateIndexState *state)
