@@ -4,7 +4,6 @@
 \c :TEST_DBNAME :ROLE_SUPERUSER
 create extension pgstattuple;
 create extension pageinspect;
-grant pg_stat_scan_tables to :ROLE_DEFAULT_PERM_USER;
 set role :ROLE_DEFAULT_PERM_USER;
 select setseed(0.3);
  setseed 
