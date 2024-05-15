@@ -255,6 +255,9 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_ReplicaIdentity:
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
+#if PG15_GE
+			case AT_SetAccessMethod:
+#endif
 				continue;
 				/*
 				 * BLOCKED:
