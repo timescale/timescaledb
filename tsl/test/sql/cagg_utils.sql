@@ -167,13 +167,59 @@ CREATE MATERIALIZED VIEW integer_ht_cagg
      GROUP BY time_bucket(1, a), a;
 
 --- Get the bucket Oids
-SELECT user_view_name,
-       cagg_get_bucket_function(mat_hypertable_id)
-       FROM _timescaledb_catalog.continuous_agg
-       WHERE user_view_name in('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'integer_ht_cagg')
-       ORDER BY user_view_name;
+SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name IN ('temperature_4h', 'temperature_tz_4h', 'temperature_tz_4h_ts', 'integer_ht_cagg')
+ORDER BY user_view_name;
+
+-- Valid multiple time_bucket usage on view definition
+CREATE MATERIALIZED VIEW temperature_tz_4h_2
+WITH  (timescaledb.continuous) AS
+SELECT (time_bucket('4 hour', time) at time zone 'utc')::date, avg(value)
+FROM timestamptz_ht
+GROUP BY time_bucket('4 hour', time)
+ORDER BY 1
+WITH NO DATA;
+
+SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'temperature_tz_4h_2'
+ORDER BY user_view_name;
+
+-- Corrupt the direct view definition
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+SELECT direct_view_schema, direct_view_name
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'temperature_tz_4h_2' \gset
+
+CREATE OR REPLACE VIEW :direct_view_schema.:direct_view_name AS
+SELECT NULL::date AS timezone, NULL::FLOAT8 AS avg;
+
+\set ON_ERROR_STOP 0
+-- Should error because there's no time_bucket function on the view definition
+SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'temperature_tz_4h_2'
+ORDER BY user_view_name;
+\set ON_ERROR_STOP 1
+
+-- Group by another function to make sure it will be ignored
+CREATE FUNCTION skip() RETURNS INTEGER AS $$ SELECT 1; $$ IMMUTABLE LANGUAGE SQL;
+
+CREATE MATERIALIZED VIEW temperature_tz_4h_3
+WITH  (timescaledb.continuous) AS
+SELECT skip(), time_bucket('4 hour', time), avg(value)
+FROM timestamptz_ht
+GROUP BY 1, 2
+ORDER BY 1
+WITH NO DATA;
+
+SELECT user_view_name, cagg_get_bucket_function(mat_hypertable_id)
+FROM _timescaledb_catalog.continuous_agg
+WHERE user_view_name = 'temperature_tz_4h_3'
+ORDER BY user_view_name;
 
 --- Cleanup
-\c :TEST_DBNAME :ROLE_SUPERUSER
 DROP FUNCTION IF EXISTS cagg_get_bucket_function(INTEGER);
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
