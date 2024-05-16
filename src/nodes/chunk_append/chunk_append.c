@@ -53,12 +53,8 @@ create_group_subpath(PlannerInfo *root, RelOptInfo *rel, List *group, List *path
 {
 	if (list_length(group) > 1)
 	{
-		MergeAppendPath *append = create_merge_append_path_compat(root,
-																  rel,
-																  group,
-																  pathkeys,
-																  required_outer,
-																  partitioned_rels);
+		MergeAppendPath *append =
+			create_merge_append_path(root, rel, group, pathkeys, required_outer);
 		*nested_children = lappend(*nested_children, append);
 	}
 	else
@@ -390,12 +386,11 @@ ts_chunk_append_path_create(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, 
 
 			if (list_length(merge_childs) > 1)
 			{
-				append = create_merge_append_path_compat(root,
-														 rel,
-														 merge_childs,
-														 path->cpath.path.pathkeys,
-														 PATH_REQ_OUTER(subpath),
-														 NIL);
+				append = create_merge_append_path(root,
+												  rel,
+												  merge_childs,
+												  path->cpath.path.pathkeys,
+												  PATH_REQ_OUTER(subpath));
 				nested_children = lappend(nested_children, append);
 			}
 			else if (list_length(merge_childs) == 1)

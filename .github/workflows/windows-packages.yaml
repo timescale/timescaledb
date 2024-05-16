@@ -15,11 +15,9 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg13_earliest: ${{ steps.config.outputs.pg13_abi_min }}
       pg14_earliest: ${{ steps.config.outputs.pg14_abi_min }}
       pg15_earliest: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_earliest: ${{ steps.config.outputs.pg16_abi_min }}
-      pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
@@ -39,14 +37,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [ windows-2019 ]
-        test: [ "13min", "13max", "14min", "14max", "15min", "15max", "16min", "16max" ]
+        test: [ "14min", "14max", "15min", "15max", "16min", "16max" ]
         include:
-          - test: 13min
-            pg: 13
-            pkg_version: ${{ fromJson(needs.config.outputs.pg13_earliest) }}.1
-          - test: 13max
-            pg: 13
-            pkg_version: 13.13.0 # hardcoded since 13.14 is not available on chocolatey
           - test: 14min
             pg: 14
             pkg_version: ${{ fromJson(needs.config.outputs.pg14_earliest) }}.1

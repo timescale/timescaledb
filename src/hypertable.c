@@ -654,7 +654,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 			ts_hypertable_drop(compressed_hypertable, DROP_RESTRICT);
 	}
 
-#if PG14_GE
 	hypertable_drop_hook_type osm_htdrop_hook = ts_get_osm_hypertable_drop_hook();
 	/* Invoke the OSM callback if set */
 	if (osm_htdrop_hook)
@@ -665,7 +664,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 		osm_htdrop_hook(NameStr(*schema_name), NameStr(*table_name));
 	}
-#endif
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));

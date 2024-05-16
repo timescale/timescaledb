@@ -29,7 +29,6 @@
 
 #define OSM_EXTENSION_NAME "timescaledb_osm"
 
-#if PG14_GE
 static int osm_present = -1;
 
 static bool
@@ -42,7 +41,6 @@ is_osm_present()
 	}
 	return osm_present;
 }
-#endif
 
 void
 tsl_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage, RelOptInfo *input_rel,
@@ -101,9 +99,7 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 			 * correct. You can observe it in the continuous_aggs-13 test.
 			 * Just ignore this assertion on 13 and look up the chunk.
 			 */
-#if PG14_GE
 			Assert(rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
-#endif
 			fdw_private->cached_chunk_struct =
 				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
 		}
@@ -119,7 +115,6 @@ void
 tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						 Hypertable *ht)
 {
-#if PG14_GE
 	if (is_osm_present())
 	{
 		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, false);
@@ -134,26 +129,6 @@ tsl_set_rel_pathlist_dml(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTbl
 			return;
 		}
 	}
-#else
-	/*
-	 * We do not support UPDATE/DELETE operations on compressed hypertables
-	 * on PG versions < 14, because Custom Scan (HypertableModify) node is
-	 * not generated in the plan for UPDATE/DELETE operations on hypertables
-	 */
-	if (ht != NULL && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
-	{
-		ListCell *lc;
-		Chunk *chunk = ts_chunk_get_by_relid(rte->relid, true);
-		if (chunk->fd.compressed_chunk_id != INVALID_CHUNK_ID)
-		{
-			foreach (lc, rel->pathlist)
-			{
-				Path **pathptr = (Path **) &lfirst(lc);
-				*pathptr = compress_chunk_dml_generate_paths(*pathptr, chunk);
-			}
-		}
-	}
-#endif
 #if PG15_GE
 	/*
 	 * We do not support MERGE command with UPDATE/DELETE merge actions on

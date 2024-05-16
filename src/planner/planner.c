@@ -820,15 +820,11 @@ should_chunk_append(Hypertable *ht, PlannerInfo *root, RelOptInfo *rel, Path *pa
 					int order_attno)
 {
 	if (
-#if PG14_LT
-		root->parse->commandType != CMD_SELECT ||
-#else
 		/*
 		 * We only support chunk exclusion on UPDATE/DELETE when no JOIN is involved on PG14+.
 		 */
 		((root->parse->commandType == CMD_DELETE || root->parse->commandType == CMD_UPDATE) &&
 		 bms_num_members(root->all_baserels) > 1) ||
-#endif
 		!ts_guc_enable_chunk_append)
 		return false;
 
@@ -1078,17 +1074,8 @@ apply_optimizations(PlannerInfo *root, TsRelType reltype, RelOptInfo *rel, Range
 	}
 
 	if (reltype == TS_REL_HYPERTABLE &&
-#if PG14_GE
 		(root->parse->commandType == CMD_SELECT || root->parse->commandType == CMD_DELETE ||
-		 root->parse->commandType == CMD_UPDATE)
-#else
-		/*
-		 * For PG < 14 commandType will be CMD_SELECT even when planning DELETE so we
-		 * check resultRelation instead.
-		 */
-		root->parse->resultRelation == 0
-#endif
-	)
+		 root->parse->commandType == CMD_UPDATE))
 	{
 		TimescaleDBPrivate *private = ts_get_private_reloptinfo(rel);
 		bool ordered = private->appends_ordered;
@@ -1440,11 +1427,9 @@ replace_hypertable_modify_paths(PlannerInfo *root, List *pathlist, RelOptInfo *i
 			RangeTblEntry *rte = planner_rt_fetch(mt->nominalRelation, root);
 			Hypertable *ht = ts_planner_get_hypertable(rte->relid, CACHE_FLAG_CHECK);
 			if (
-#if PG14_GE
 				/* We only route UPDATE/DELETE through our CustomNode for PG 14+ because
 				 * the codepath for earlier versions is different. */
 				mt->operation == CMD_UPDATE || mt->operation == CMD_DELETE ||
-#endif
 				mt->operation == CMD_INSERT)
 			{
 				if (ht)

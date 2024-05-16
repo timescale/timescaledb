@@ -18,10 +18,7 @@ PG_MODULE_MAGIC;
 
 static ProcessUtility_hook_type prev_ProcessUtility_hook;
 
-static void osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString,
-#if PG14_GE
-									 bool readOnlyTree,
-#endif
+static void osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
 									 ProcessUtilityContext context, ParamListInfo params,
 									 QueryEnvironment *queryEnv, DestReceiver *dest,
 									 QueryCompletion *qc);
@@ -57,10 +54,7 @@ ts_mock_osm(PG_FUNCTION_ARGS)
 }
 
 static void
-osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString,
-#if PG14_GE
-						 bool readOnlyTree,
-#endif
+osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString, bool readOnlyTree,
 						 ProcessUtilityContext context, ParamListInfo params,
 						 QueryEnvironment *queryEnv, DestReceiver *dest, QueryCompletion *qc)
 {
@@ -88,9 +82,7 @@ osm_process_utility_hook(PlannedStmt *pstmt, const char *queryString,
 	if (prev_ProcessUtility_hook)
 		prev_ProcessUtility_hook(pstmt,
 								 queryString,
-#if PG14_GE
 								 readOnlyTree,
-#endif
 								 context,
 								 params,
 								 queryEnv,

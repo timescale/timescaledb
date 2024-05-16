@@ -660,7 +660,6 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 	 */
 	Assert(saop != NULL);
 
-#if PG14_GE
 	if (saop->hashfuncid)
 	{
 		/*
@@ -668,7 +667,6 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 		 */
 		return NULL;
 	}
-#endif
 
 	return (Node *) saop;
 }

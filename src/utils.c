@@ -605,9 +605,7 @@ ts_get_function_oid(const char *funcname, const char *schema_name, int nargs, Oi
 											nargs,
 											NIL,
 											false,
-#if PG14_GE
 											false, /* include_out_arguments */
-#endif
 											false,
 											false);
 	while (func_candidates != NULL)
@@ -1031,10 +1029,7 @@ ts_try_relation_cached_size(Relation rel, bool verbose)
 	/* Get heap size, including FSM and VM */
 	for (forkNum = 0; forkNum <= MAX_FORKNUM; forkNum++)
 	{
-#if PG14_GE
-		/* PG13 does not have smgr_cached_nblocks */
 		result = RelationGetSmgr(rel)->smgr_cached_nblocks[forkNum];
-#endif
 
 		if (result != InvalidBlockNumber)
 		{

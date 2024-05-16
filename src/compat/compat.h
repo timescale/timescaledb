@@ -23,9 +23,8 @@
 
 #include "export.h"
 
-#define PG_MAJOR_MIN 13
+#define PG_MAJOR_MIN 14
 
-#define is_supported_pg_version_13(version) ((version >= 130002) && (version < 140000))
 #define is_supported_pg_version_14(version) ((version >= 140000) && (version < 150000))
 #define is_supported_pg_version_15(version) ((version >= 150000) && (version < 160000))
 #define is_supported_pg_version_16(version) ((version >= 160000) && (version < 170000))
@@ -35,16 +34,13 @@
  * To compile with PG16, use -DEXPERIMENTAL=ON with cmake.
  */
 #define is_supported_pg_version(version)                                                           \
-	(is_supported_pg_version_13(version) || is_supported_pg_version_14(version) ||                 \
-	 is_supported_pg_version_15(version) || is_supported_pg_version_16(version))
+	(is_supported_pg_version_14(version) || is_supported_pg_version_15(version) ||                 \
+	 is_supported_pg_version_16(version))
 
-#define PG13 is_supported_pg_version_13(PG_VERSION_NUM)
 #define PG14 is_supported_pg_version_14(PG_VERSION_NUM)
 #define PG15 is_supported_pg_version_15(PG_VERSION_NUM)
 #define PG16 is_supported_pg_version_16(PG_VERSION_NUM)
 
-#define PG13_LT (PG_VERSION_NUM < 130000)
-#define PG13_GE (PG_VERSION_NUM >= 130000)
 #define PG14_LT (PG_VERSION_NUM < 140000)
 #define PG14_GE (PG_VERSION_NUM >= 140000)
 #define PG15_LT (PG_VERSION_NUM < 150000)
@@ -76,25 +72,7 @@
  * behavior of the new version we simply adopt the new version's name.
  */
 
-#if PG13
-#define ExecComputeStoredGeneratedCompat(rri, estate, slot, cmd_type)                              \
-	ExecComputeStoredGenerated(estate, slot, cmd_type)
-#else
-#define ExecComputeStoredGeneratedCompat(rri, estate, slot, cmd_type)                              \
-	ExecComputeStoredGenerated(rri, estate, slot, cmd_type)
-#endif
-
-#if PG14_LT
-#define ExecInsertIndexTuplesCompat(rri,                                                           \
-									slot,                                                          \
-									estate,                                                        \
-									update,                                                        \
-									noDupErr,                                                      \
-									specConflict,                                                  \
-									arbiterIndexes,                                                \
-									onlySummarizing)                                               \
-	ExecInsertIndexTuples(slot, estate, noDupErr, specConflict, arbiterIndexes)
-#elif PG16_LT
+#if PG16_LT
 #define ExecInsertIndexTuplesCompat(rri,                                                           \
 									slot,                                                          \
 									estate,                                                        \
@@ -123,59 +101,16 @@
 						  onlySummarizing)
 #endif
 
-/* PG14 fixes a bug in miscomputation of relids set in pull_varnos. The bugfix
- * got backported to PG13 but changes the signature of pull_varnos,
- * make_simple_restrictinfo and make_restrictinfo. To not break existing code
- * the modified functions get added under different name in PG13. We add a
- * compatibility macro that uses the modified functions when compiling against
- * a postgres version that has them available.
- * PG14 also adds PlannerInfo as argument to make_restrictinfo,
- * make_simple_restrictinfo and pull_varnos.
- *
- * https://github.com/postgres/postgres/commit/73fc2e5bab
- * https://github.com/postgres/postgres/commit/55dc86eca7
- *
+/*
  * PG16 removed outerjoin_delayed, nullable_relids arguments from make_restrictinfo
  * https://github.com/postgres/postgres/commit/b448f1c8d8
  *
  * PG16 adds three new parameter - has_clone, is_clone and incompatible_relids, as a
  * part of fixing the filtering of "cloned" outer-join quals
  * https://github.com/postgres/postgres/commit/991a3df227
- *
  */
 
-#if PG14_LT
-#define pull_varnos_compat(root, expr) pull_varnos_new(root, expr)
-#define make_simple_restrictinfo_compat(root, expr)                                                \
-	make_restrictinfo_new(root, expr, true, false, false, 0, NULL, NULL, NULL)
-#else
-#define pull_varnos_compat(root, expr) pull_varnos(root, expr)
-#define make_simple_restrictinfo_compat(root, clause) make_simple_restrictinfo(root, clause)
-#endif
-
-#if PG14_LT
-#define make_restrictinfo_compat(root,                                                             \
-								 clause,                                                           \
-								 is_pushed_down,                                                   \
-								 has_clone,                                                        \
-								 is_clone,                                                         \
-								 outerjoin_delayed,                                                \
-								 pseudoconstant,                                                   \
-								 security_level,                                                   \
-								 required_relids,                                                  \
-								 incompatible_relids,                                              \
-								 outer_relids,                                                     \
-								 nullable_relids)                                                  \
-	make_restrictinfo_new(root,                                                                    \
-						  clause,                                                                  \
-						  is_pushed_down,                                                          \
-						  outerjoin_delayed,                                                       \
-						  pseudoconstant,                                                          \
-						  security_level,                                                          \
-						  required_relids,                                                         \
-						  outer_relids,                                                            \
-						  nullable_relids)
-#elif PG16_LT
+#if PG16_LT
 #define make_restrictinfo_compat(root,                                                             \
 								 clause,                                                           \
 								 is_pushed_down,                                                   \
@@ -220,14 +155,6 @@
 					  required_relids,                                                             \
 					  incompatible_relids,                                                         \
 					  outer_relids)
-#endif
-
-/* PG14 renames predefined roles
- *
- * https://github.com/postgres/postgres/commit/c9c41c7a33
- */
-#if PG14_LT
-#define ROLE_PG_READ_ALL_SETTINGS DEFAULT_ROLE_READ_ALL_SETTINGS
 #endif
 
 /* fmgr
@@ -294,13 +221,6 @@ pg_md5_hash_compat(const void *buff, size_t len, char *hexsum, const char **errs
 
 #endif
 
-#if PG14_LT
-static inline int
-get_cluster_options(const ClusterStmt *stmt)
-{
-	return stmt->options;
-}
-#else
 static inline ClusterParams *
 get_cluster_options(const ClusterStmt *stmt)
 {
@@ -325,16 +245,12 @@ get_cluster_options(const ClusterStmt *stmt)
 
 	return params;
 }
-#endif
 
 #include <catalog/index.h>
 
 static inline int
 get_reindex_options(ReindexStmt *stmt)
 {
-#if PG14_LT
-	return stmt->options;
-#else
 	ListCell *lc;
 	bool concurrently = false;
 	bool verbose = false;
@@ -354,148 +270,13 @@ get_reindex_options(ReindexStmt *stmt)
 					 parser_errposition(NULL, opt->location)));
 	}
 	return (verbose ? REINDEXOPT_VERBOSE : 0) | (concurrently ? REINDEXOPT_CONCURRENTLY : 0);
-#endif
 }
-
-/* PG14 splits Copy code into separate code for COPY FROM and COPY TO
- * since we were only interested in the COPY FROM parts we macro CopyFromState
- * to CopyState for versions < 14
- * https://github.com/postgres/postgres/commit/c532d15ddd
- */
-#if PG14_LT
-#define CopyFromState CopyState
-#endif
-
-#if PG14_LT
-#define estimate_hashagg_tablesize_compat(root, path, agg_costs, num_groups)                       \
-	estimate_hashagg_tablesize(path, agg_costs, num_groups)
-#else
-#define estimate_hashagg_tablesize_compat(root, path, agg_costs, num_groups)                       \
-	estimate_hashagg_tablesize(root, path, agg_costs, num_groups)
-#endif
-
-#if PG14_LT
-#define get_agg_clause_costs_compat(root, clause, split, costs)                                    \
-	get_agg_clause_costs(root, clause, split, costs)
-#else
-#define get_agg_clause_costs_compat(root, clause, split, costs)                                    \
-	get_agg_clause_costs(root, split, costs)
-#endif
-
-/* list_make5 macro definition was removed in PG13 but was added back in PG14 */
-#if PG13
-#define list_make5(x1, x2, x3, x4, x5) lappend(list_make4(x1, x2, x3, x4), x5)
-#define list_make5_oid(x1, x2, x3, x4, x5) lappend_oid(list_make4_oid(x1, x2, x3, x4), x5)
-#define list_make5_int(x1, x2, x3, x4, x5) lappend_int(list_make4_int(x1, x2, x3, x4), x5)
-#endif
 
 /*
  * define some list macros for convenience
  */
 #define lfifth(l) lfirst(list_nth_cell(l, 4))
 #define lfifth_int(l) lfirst_int(list_nth_cell(l, 4))
-
-#define lsixth(l) lfirst(list_nth_cell(l, 5))
-#define lsixth_int(l) lfirst_int(list_nth_cell(l, 5))
-
-#define list_make6(x1, x2, x3, x4, x5, x6) lappend(list_make5(x1, x2, x3, x4, x5), x6)
-#define list_make6_oid(x1, x2, x3, x4, x5, x6) lappend_oid(list_make5_oid(x1, x2, x3, x4, x5), x6)
-#define list_make6_int(x1, x2, x3, x4, x5, x6) lappend_int(list_make5_int(x1, x2, x3, x4, x5), x6)
-
-/* PG14 adds estinfo parameter to estimate_num_groups for additional context
- * about the estimation
- * https://github.com/postgres/postgres/commit/ed934d4fa3
- */
-#if PG14_LT
-#define estimate_num_groups_compat(root, exprs, rows, pgset, estinfo)                              \
-	estimate_num_groups(root, exprs, rows, pgset)
-#else
-#define estimate_num_groups_compat(root, exprs, rows, pgset, estinfo)                              \
-	estimate_num_groups(root, exprs, rows, pgset, estinfo)
-#endif
-
-/* PG14 removes partitioned_rels from create_append_path and create_merge_append_path
- *
- * https://github.com/postgres/postgres/commit/f003a7522b
- */
-#if PG14_LT
-#define create_append_path_compat(root,                                                            \
-								  rel,                                                             \
-								  subpaths,                                                        \
-								  partial_subpaths,                                                \
-								  pathkeys,                                                        \
-								  required_outer,                                                  \
-								  parallel_worker,                                                 \
-								  parallel_aware,                                                  \
-								  partitioned_rels,                                                \
-								  rows)                                                            \
-	create_append_path(root,                                                                       \
-					   rel,                                                                        \
-					   subpaths,                                                                   \
-					   partial_subpaths,                                                           \
-					   pathkeys,                                                                   \
-					   required_outer,                                                             \
-					   parallel_worker,                                                            \
-					   parallel_aware,                                                             \
-					   partitioned_rels,                                                           \
-					   rows)
-#else
-#define create_append_path_compat(root,                                                            \
-								  rel,                                                             \
-								  subpaths,                                                        \
-								  partial_subpaths,                                                \
-								  pathkeys,                                                        \
-								  required_outer,                                                  \
-								  parallel_worker,                                                 \
-								  parallel_aware,                                                  \
-								  partitioned_rels,                                                \
-								  rows)                                                            \
-	create_append_path(root,                                                                       \
-					   rel,                                                                        \
-					   subpaths,                                                                   \
-					   partial_subpaths,                                                           \
-					   pathkeys,                                                                   \
-					   required_outer,                                                             \
-					   parallel_worker,                                                            \
-					   parallel_aware,                                                             \
-					   rows)
-#endif
-
-#if PG14_LT
-#define create_merge_append_path_compat(root,                                                      \
-										rel,                                                       \
-										subpaths,                                                  \
-										pathkeys,                                                  \
-										required_outer,                                            \
-										partitioned_rels)                                          \
-	create_merge_append_path(root, rel, subpaths, pathkeys, required_outer, partitioned_rels)
-#else
-#define create_merge_append_path_compat(root,                                                      \
-										rel,                                                       \
-										subpaths,                                                  \
-										pathkeys,                                                  \
-										required_outer,                                            \
-										partitioned_rels)                                          \
-	create_merge_append_path(root, rel, subpaths, pathkeys, required_outer)
-#endif
-
-/* PG14 adds a parse mode argument to raw_parser.
- *
- * https://github.com/postgres/postgres/commit/844fe9f159
- */
-#if PG14_LT
-#define raw_parser_compat(cmd) raw_parser(cmd)
-#else
-#define raw_parser_compat(cmd) raw_parser(cmd, RAW_PARSE_DEFAULT)
-#endif
-
-#if PG14_LT
-#define expand_function_arguments_compat(args, result_type, func_tuple)                            \
-	expand_function_arguments(args, result_type, func_tuple)
-#else
-#define expand_function_arguments_compat(args, result_type, func_tuple)                            \
-	expand_function_arguments(args, false, result_type, func_tuple)
-#endif
 
 /* find_em_expr_for_rel was in postgres_fdw in PG12 but got
  * moved out of contrib and into core in PG13. PG15 removed
@@ -546,39 +327,6 @@ get_reindex_options(ReindexStmt *stmt)
 #else
 #define make_new_heap_compat(tableOid, tableSpace, _ignored, relpersistence, ExclusiveLock)        \
 	make_new_heap(tableOid, tableSpace, relpersistence, ExclusiveLock)
-#endif
-
-/*
- * PostgreSQL < 14 does not have F_TIMESTAMPTZ_GT macro but instead has
- * the oid of that function as F_TIMESTAMP_GT even though the signature
- * is with timestamptz but the name of the underlying C function is
- * timestamp_gt.
- */
-#if PG14_LT
-#define F_TIMESTAMPTZ_LE F_TIMESTAMP_LE
-#define F_TIMESTAMPTZ_LT F_TIMESTAMP_LT
-#define F_TIMESTAMPTZ_GE F_TIMESTAMP_GE
-#define F_TIMESTAMPTZ_GT F_TIMESTAMP_GT
-#endif
-
-/*
- * List sorting functions differ between the PG versions.
- */
-#if PG14_LT
-inline static int
-list_int_cmp_compat(const ListCell *p1, const ListCell *p2)
-{
-	int v1 = lfirst_int(p1);
-	int v2 = lfirst_int(p2);
-
-	if (v1 < v2)
-		return -1;
-	if (v1 > v2)
-		return 1;
-	return 0;
-}
-#else
-#define list_int_cmp_compat list_int_cmp
 #endif
 
 /*
@@ -816,7 +564,7 @@ pg_strtoint64(const char *str)
 	ExecBRDeleteTriggers(estate, epqstate, relinfo, tupleid, fdw_trigtuple, epqslot, tmresult, tmfd)
 #endif
 
-#if (PG13 && PG_VERSION_NUM < 130010) || (PG14 && PG_VERSION_NUM < 140007)
+#if PG14 && PG_VERSION_NUM < 140007
 #include <storage/smgr.h>
 /*
  * RelationGetSmgr
@@ -842,22 +590,6 @@ RelationGetSmgr(Relation rel)
 		smgrsetowner(&(rel->rd_smgr), smgropen(rel->rd_node, rel->rd_backend));
 	return rel->rd_smgr;
 }
-#endif
-
-#if PG14_LT
-/*
- * pg_nodiscard was introduced with PostgreSQL 14
- *
- * pg_nodiscard means the compiler should warn if the result of a function
- * call is ignored.  The name "nodiscard" is chosen in alignment with
- * (possibly future) C and C++ standards.  For maximum compatibility, use it
- * as a function declaration specifier, so it goes before the return type.
- */
-#ifdef __GNUC__
-#define pg_nodiscard __attribute__((warn_unused_result))
-#else
-#define pg_nodiscard
-#endif
 #endif
 
 #if PG15_GE
@@ -972,10 +704,6 @@ object_ownercheck(Oid classid, Oid objectid, Oid roleid)
 }
 #endif
 
-#if PG14_LT
-#define F_SUM_INT4 2108
-#endif
-
 /*
  * PG15 refactored elog.c functions and exposed error_severity
  * but previous versions don't have it exposed, so imported it
@@ -1017,10 +745,7 @@ error_severity(int elevel)
 			prefix = gettext_noop("NOTICE");
 			break;
 		case WARNING:
-#if PG14_GE
-		/* https://github.com/postgres/postgres/commit/1f9158ba481 */
 		case WARNING_CLIENT_ONLY:
-#endif
 			prefix = gettext_noop("WARNING");
 			break;
 		case ERROR:
@@ -1038,16 +763,5 @@ error_severity(int elevel)
 	}
 
 	return prefix;
-}
-#endif
-
-#if PG14_LT
-/* Copied from jsonb_util.c */
-static inline void
-JsonbToJsonbValue(Jsonb *jsonb, JsonbValue *val)
-{
-	val->type = jbvBinary;
-	val->val.binary.data = &jsonb->root;
-	val->val.binary.len = VARSIZE(jsonb) - VARHDRSZ;
 }
 #endif
