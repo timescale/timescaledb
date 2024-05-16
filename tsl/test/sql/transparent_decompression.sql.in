@@ -43,7 +43,7 @@ SELECT time,
     device_id + 2,
     device_id + 0.5,
     NULL
-FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', :'INTERVAL') gtime (time),
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', (interval :'INTERVAL') / 3) gtime (time),
     generate_series(1, 5, 1) gdevice (device_id);
 
 ALTER TABLE metrics
@@ -57,7 +57,7 @@ SELECT time,
     device_id + 2,
     device_id + 0.5,
     NULL
-FROM generate_series('2000-01-06 0:00:00+0'::timestamptz, '2000-01-12 23:55:00+0', :'INTERVAL') gtime (time),
+FROM generate_series('2000-01-06 0:00:00+0'::timestamptz, '2000-01-12 23:55:00+0', (interval :'INTERVAL') / 2) gtime (time),
     generate_series(1, 5, 1) gdevice (device_id);
 
 ALTER TABLE metrics
@@ -103,7 +103,7 @@ SELECT time,
     device_id + 2,
     device_id + 0.5,
     NULL
-FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', :'INTERVAL') gtime (time),
+FROM generate_series('2000-01-01 0:00:00+0'::timestamptz, '2000-01-05 23:55:00+0', (interval :'INTERVAL') / 3) gtime (time),
     generate_series(1, 5, 1) gdevice (device_id);
 
 ALTER TABLE metrics_space
@@ -117,7 +117,7 @@ SELECT time,
     device_id + 2,
     device_id + 0.5,
     NULL
-FROM generate_series('2000-01-06 0:00:00+0'::timestamptz, '2000-01-12 23:55:00+0', :'INTERVAL') gtime (time),
+FROM generate_series('2000-01-06 0:00:00+0'::timestamptz, '2000-01-12 23:55:00+0', (interval :'INTERVAL') / 2) gtime (time),
     generate_series(1, 5, 1) gdevice (device_id);
 
 ALTER TABLE metrics_space
@@ -219,8 +219,6 @@ RESET client_min_messages;
 -- will be not stable and differ depending on worker assignment
 
 SET max_parallel_workers_per_gather TO 0;
-
-select name, setting, unit, source from pg_settings where source != 'default' order by name;
 
 -- get explain for queries on hypertable with compression
 \set TEST_TABLE 'metrics'
