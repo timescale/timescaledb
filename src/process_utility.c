@@ -945,6 +945,10 @@ process_truncate(ProcessUtilityArgs *args)
 
 						/* list of materialization hypertables to reset the watermark */
 						mat_hypertables = lappend(mat_hypertables, mat_ht);
+
+						/* include the materialization hypertable to the list to be handled by the
+						 * proper hypertable and chunk truncate code-path later */
+						hypertables = lappend(hypertables, mat_ht);
 					}
 
 					list_append = true;
