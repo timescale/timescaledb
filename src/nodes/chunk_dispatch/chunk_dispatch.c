@@ -147,10 +147,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		cis_changed = false;
 	}
 
-	//	if (found)
-	//	{
-	//}
-
 	MemoryContextSwitchTo(old_context);
 
 	if (cis_changed && on_chunk_changed)
