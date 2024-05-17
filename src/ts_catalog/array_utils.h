@@ -6,6 +6,8 @@
 #pragma once
 
 #include <postgres.h>
+
+#include <lib/stringinfo.h>
 #include <utils/array.h>
 
 #include "export.h"
@@ -31,6 +33,3 @@ extern TSDLLEXPORT ArrayType *ts_array_add_element_text(ArrayType *arr, const ch
 
 extern TSDLLEXPORT ArrayType *ts_array_replace_text(ArrayType *arr, const char *old,
 													const char *new);
-
-extern TSDLLEXPORT ArrayType *ts_array_create_from_list_bool(List *values);
-extern TSDLLEXPORT ArrayType *ts_array_create_from_list_text(List *values);

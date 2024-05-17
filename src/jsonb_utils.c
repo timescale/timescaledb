@@ -4,18 +4,15 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <fmgr.h>
 
+#include <common/jsonapi.h>
+#include <fmgr.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
 
 #include "compat/compat.h"
-
-#include <common/jsonapi.h>
-
 #include "export.h"
-
 #include "jsonb_utils.h"
 
 static void ts_jsonb_add_pair(JsonbParseState *state, JsonbValue *key, JsonbValue *value);
@@ -130,14 +127,6 @@ ts_jsonb_add_interval(JsonbParseState *state, const char *key, Interval *interva
 }
 
 void
-ts_jsonb_add_numeric(JsonbParseState *state, const char *key, const Numeric value)
-{
-	JsonbValue json_value = { .type = jbvNumeric, .val.numeric = value };
-
-	ts_jsonb_add_value(state, key, &json_value);
-}
-
-void
 ts_jsonb_add_value(JsonbParseState *state, const char *key, JsonbValue *value)
 {
 	JsonbValue json_key;
@@ -186,27 +175,6 @@ ts_jsonb_get_str_field(const Jsonb *jsonb, const char *key)
 		return NULL;
 
 	return text_to_cstring(DatumGetTextP(result));
-}
-
-TimestampTz
-ts_jsonb_get_time_field(const Jsonb *jsonb, const char *key, bool *field_found)
-{
-	Datum time_datum;
-	char *time_str = ts_jsonb_get_str_field(jsonb, key);
-
-	if (time_str == NULL)
-	{
-		*field_found = false;
-		return DT_NOBEGIN;
-	}
-
-	time_datum = DirectFunctionCall3(timestamptz_in,
-									 /* str= */ CStringGetDatum(time_str),
-									 /* unused */ Int32GetDatum(-1),
-									 /* typmod= */ Int32GetDatum(-1));
-
-	*field_found = true;
-	return DatumGetTimestampTz(time_datum);
 }
 
 bool

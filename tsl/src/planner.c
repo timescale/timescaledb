@@ -4,24 +4,24 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <catalog/pg_trigger.h>
 #include <commands/extension.h>
-#include <optimizer/paths.h>
-#include <parser/parsetree.h>
 #include <foreign/fdwapi.h>
 #include <nodes/nodeFuncs.h>
+#include <optimizer/paths.h>
+#include <parser/parsetree.h>
 
-#include "nodes/skip_scan/skip_scan.h"
 #include "chunk.h"
 #include "compat/compat.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "hypertable.h"
-#include "nodes/compress_dml/compress_dml.h"
-#include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
+#include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"
+#include "nodes/skip_scan/skip_scan.h"
 #include "nodes/vector_agg/plan.h"
 #include "planner.h"
 

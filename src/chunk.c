@@ -5,8 +5,8 @@
  */
 #include <postgres.h>
 
-#include <access/htup.h>
 #include <access/htup_details.h>
+#include <access/htup.h>
 #include <access/reloptions.h>
 #include <access/tupdesc.h>
 #include <access/xact.h>
@@ -47,17 +47,17 @@
 #include "chunk_scan.h"
 #include "compat/compat.h"
 #include "cross_module_fn.h"
-#include "debug_point.h"
 #include "debug_assert.h"
-#include "dimension.h"
+#include "debug_point.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "dimension.h"
 #include "errors.h"
 #include "export.h"
 #include "extension.h"
 #include "hypercube.h"
-#include "hypertable.h"
 #include "hypertable_cache.h"
+#include "hypertable.h"
 #include "osm_callbacks.h"
 #include "partitioning.h"
 #include "process_utility.h"
@@ -2534,36 +2534,6 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 }
 
 /*
- * Number of chunks created after given chunk.
- * If chunk2.id > chunk1.id then chunk2 is created after chunk1
- */
-int
-ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
-{
-	ScanKeyData scankey[1];
-
-	/*
-	 * Try to find chunks with a greater Id then a given chunk
-	 */
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTGreaterStrategyNumber,
-				F_INT4GT,
-				Int32GetDatum(chunk->fd.id));
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   NULL,
-							   NULL,
-							   0,
-							   ForwardScanDirection,
-							   AccessShareLock,
-							   CurrentMemoryContext);
-}
-
-/*
  * Simple scans provide lightweight ways to access chunk information without the
  * overhead of getting a full chunk (i.e., no extra metadata, like constraints,
  * are joined in). This function forms the basis of a number of lookup functions
@@ -2708,19 +2678,6 @@ ts_chunk_get_hypertable_id_by_reloid(Oid reloid)
 	}
 
 	return 0;
-}
-
-/*
- * Returns the compressed chunk id. The original chunk must exist.
- */
-int32
-ts_chunk_get_compressed_chunk_id(int32 chunk_id)
-{
-	FormData_chunk form;
-	PG_USED_FOR_ASSERTS_ONLY bool result =
-		chunk_simple_scan_by_id(chunk_id, &form, /* missing_ok = */ false);
-	Assert(result);
-	return form.compressed_chunk_id;
 }
 
 FormData_chunk
