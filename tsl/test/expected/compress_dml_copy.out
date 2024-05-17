@@ -1,0 +1,45 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+create table cdmlcopy(filler bigint, ts int, value float, metric text);
+select create_hypertable('cdmlcopy', 'ts', chunk_time_interval => 1000);
+NOTICE:  adding not-null constraint to column "ts"
+   create_hypertable   
+-----------------------
+ (1,public,cdmlcopy,t)
+(1 row)
+
+alter table cdmlcopy add unique (metric, ts);
+alter table cdmlcopy set (timescaledb.compress, timescaledb.compress_segmentby = 'metric');
+NOTICE:  default order by for hypertable "cdmlcopy" is set to "ts DESC"
+insert into cdmlcopy values
+    (0, 1, 1.1, 'metric1'),
+    (0, 1, 1.2, 'metric2');
+select count(compress_chunk(x)) from show_chunks('cdmlcopy') x;
+ count 
+-------
+     1
+(1 row)
+
+alter table cdmlcopy drop column filler;
+insert into cdmlcopy values
+    (1001, 1.1, 'metric1'),
+    (1001, 1.2, 'metric2');
+select count(compress_chunk(x)) from show_chunks('cdmlcopy') x;
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+ count 
+-------
+     2
+(1 row)
+
+\set ON_ERROR_STOP 0
+insert into cdmlcopy values
+    (1, 1.1, 'metric1'),
+    (1, 1.2, 'metric2');
+ERROR:  duplicate key value violates unique constraint "1_1_cdmlcopy_metric_ts_key"
+insert into cdmlcopy values
+    (1001, 1.1, 'metric1'),
+    (1001, 1.2, 'metric2');
+ERROR:  duplicate key value violates unique constraint "3_2_cdmlcopy_metric_ts_key"
+\set ON_ERROR_STOP 1
+drop table cdmlcopy;

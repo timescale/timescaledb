@@ -315,27 +315,8 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	ChunkInsertState *cis =
 		ts_chunk_dispatch_get_chunk_insert_state(miinfo->ccstate->dispatch,
 												 buffer->point,
-												 buffer->slots[0],
 												 NULL /* on chunk changed function */,
 												 NULL /* payload for on chunk changed function */);
-
-	if (ts_guc_max_tuples_decompressed_per_dml > 0)
-	{
-		if (miinfo->ccstate->dispatch->dispatch_state->tuples_decompressed >
-			ts_guc_max_tuples_decompressed_per_dml)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					 errmsg("tuple decompression limit exceeded by operation"),
-					 errdetail("current limit: %d, tuples decompressed: %lld",
-							   ts_guc_max_tuples_decompressed_per_dml,
-							   (long long int)
-								   miinfo->ccstate->dispatch->dispatch_state->tuples_decompressed),
-					 errhint("Consider increasing "
-							 "timescaledb.max_tuples_decompressed_per_dml_transaction or "
-							 "set to 0 (unlimited).")));
-		}
-	}
 
 	ResultRelInfo *resultRelInfo = cis->result_relation_info;
 
@@ -914,11 +895,12 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		/* Find or create the insert state matching the point */
 		cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
 													   point,
-													   myslot,
 													   on_chunk_insert_state_changed,
 													   bistate);
 
 		Assert(cis != NULL);
+
+		ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, myslot);
 
 		/* Triggers and stuff need to be invoked in query context. */
 		MemoryContextSwitchTo(oldcontext);
