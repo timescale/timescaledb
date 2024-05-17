@@ -687,6 +687,19 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
 
 \copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
 
+-- Also test the code path where the chunk insert state goes out of cache.
+set timescaledb.max_open_chunks_per_insert = 1;
+
+truncate table test_copy;
+
+INSERT INTO test_copy SELECT generate_series(1,25,1), -1;
+
+SELECT count(compress_chunk(ch)) FROM show_chunks('test_copy') ch;
+
+\copy test_copy FROM data/copy_data.csv WITH CSV HEADER;
+
+reset timescaledb.max_open_chunks_per_insert;
+
 DROP TABLE test_copy;
 
 -- Text limitting decompressed tuple during an insert
