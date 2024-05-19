@@ -12,8 +12,8 @@
 #include <catalog/indexing.h>
 #include <catalog/objectaccess.h>
 #include <catalog/pg_am_d.h>
-#include <catalog/pg_constraint_d.h>
 #include <catalog/pg_constraint.h>
+#include <catalog/pg_constraint_d.h>
 #include <catalog/pg_type.h>
 #include <catalog/toasting.h>
 #include <commands/alter.h>
@@ -28,27 +28,27 @@
 #include <tcop/utility.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
-#include <utils/rel.h>
 #include <utils/datum.h>
+#include <utils/rel.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
 #include "compat/compat.h"
-#include "ts_catalog/catalog.h"
-#include "create.h"
 #include "chunk.h"
 #include "chunk_index.h"
-#include "ts_catalog/array_utils.h"
-#include "ts_catalog/compression_settings.h"
-#include "ts_catalog/continuous_agg.h"
-#include "compression_with_clause.h"
 #include "compression.h"
 #include "compression/compression_storage.h"
-#include "hypertable_cache.h"
+#include "compression_with_clause.h"
+#include "create.h"
 #include "custom_type_cache.h"
-#include "trigger.h"
-#include "utils.h"
 #include "guc.h"
+#include "hypertable_cache.h"
+#include "trigger.h"
+#include "ts_catalog/array_utils.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
+#include "ts_catalog/continuous_agg.h"
+#include "utils.h"
 #include <executor/spi.h>
 
 static const char *sparse_index_types[] = { "min", "max" };

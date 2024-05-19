@@ -12,23 +12,23 @@
  */
 #include <postgres.h>
 
+#include <access/xact.h>
 #include <miscadmin.h>
+#include <nodes/pg_list.h>
+#include <pgstat.h>
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <storage/latch.h>
 #include <storage/lwlock.h>
 #include <storage/proc.h>
 #include <storage/shmem.h>
+#include <tcop/tcopprot.h>
 #include <utils/acl.h>
 #include <utils/inval.h>
 #include <utils/jsonb.h>
-#include <utils/timestamp.h>
-#include <utils/snapmgr.h>
 #include <utils/memutils.h>
-#include <access/xact.h>
-#include <pgstat.h>
-#include <tcop/tcopprot.h>
-#include <nodes/pg_list.h>
+#include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
 #include "compat/compat.h"
 #include "extension.h"

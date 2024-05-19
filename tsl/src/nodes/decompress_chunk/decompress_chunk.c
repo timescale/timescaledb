@@ -4,9 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include <math.h>
 #include <postgres.h>
 #include <catalog/pg_operator.h>
+#include <math.h>
 #include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
@@ -25,17 +25,17 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "compression/compression.h"
+#include "compression/create.h"
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
-#include "ts_catalog/array_utils.h"
-#include "import/planner.h"
 #include "import/allpaths.h"
-#include "compression/create.h"
-#include "compression/compression.h"
+#include "import/planner.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
+#include "ts_catalog/array_utils.h"
 #include "utils.h"
 
 static CustomPathMethods decompress_chunk_path_methods = {

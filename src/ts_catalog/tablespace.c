@@ -4,25 +4,25 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/xact.h>
+#include <catalog/pg_tablespace_d.h>
+#include <commands/tablecmds.h>
+#include <commands/tablespace.h>
 #include <fmgr.h>
-#include <utils/lsyscache.h>
-#include <utils/spccache.h>
+#include <funcapi.h>
+#include <miscadmin.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
-#include <catalog/pg_tablespace_d.h>
-#include <commands/tablespace.h>
-#include <commands/tablecmds.h>
-#include <access/xact.h>
-#include <miscadmin.h>
-#include <funcapi.h>
+#include <utils/lsyscache.h>
+#include <utils/spccache.h>
 
-#include "hypertable_cache.h"
-#include "errors.h"
-#include "ts_catalog/catalog.h"
-#include "scanner.h"
-#include "ts_catalog/tablespace.h"
 #include "compat/compat.h"
+#include "errors.h"
+#include "hypertable_cache.h"
+#include "scanner.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/tablespace.h"
 #include "utils.h"
 
 #define TABLESPACE_DEFAULT_CAPACITY 4

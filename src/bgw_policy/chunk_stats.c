@@ -8,10 +8,10 @@
 #include <executor/tuptable.h>
 
 #include "bgw/job.h"
-#include "ts_catalog/catalog.h"
 #include "chunk_stats.h"
-#include "utils.h"
 #include "policy.h"
+#include "ts_catalog/catalog.h"
+#include "utils.h"
 
 #include "compat/compat.h"
 

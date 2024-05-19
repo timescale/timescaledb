@@ -4,17 +4,17 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/guc.h>
-#include <utils/varlena.h>
-#include <utils/regproc.h>
-#include <parser/parse_func.h>
 #include <miscadmin.h>
+#include <parser/parse_func.h>
+#include <utils/guc.h>
+#include <utils/regproc.h>
+#include <utils/varlena.h>
 
-#include "guc.h"
-#include "extension.h"
-#include "license_guc.h"
 #include "config.h"
+#include "extension.h"
+#include "guc.h"
 #include "hypertable_cache.h"
+#include "license_guc.h"
 #ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
 #endif

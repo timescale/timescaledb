@@ -18,8 +18,8 @@
 #include <utils/regproc.h>
 #include <utils/syscache.h>
 
-#include "ts_catalog/catalog.h"
 #include "common.h"
+#include "ts_catalog/catalog.h"
 
 #define FINALFN "finalize_agg"
 

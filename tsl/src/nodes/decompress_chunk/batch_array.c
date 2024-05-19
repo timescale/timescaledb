@@ -4,8 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include "compression/compression.h"
 #include "nodes/decompress_chunk/batch_array.h"
+#include "compression/compression.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 /*
  * Create states to hold information for up to n batches.

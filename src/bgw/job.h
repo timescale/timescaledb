@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include <storage/lock.h>
 #include <postmaster/bgworker.h>
+#include <storage/lock.h>
 
 #include "export.h"
 #include "ts_catalog/catalog.h"

@@ -11,9 +11,9 @@
 #include <bgw/job.h>
 #include <hypertable.h>
 
+#include "bgw_policy/chunk_stats.h"
 #include "cache.h"
 #include "continuous_aggs/materialize.h"
-#include "bgw_policy/chunk_stats.h"
 
 /* Add config keys common across job types here */
 #define CONFIG_KEY_VERBOSE_LOG "verbose_log" /*used only by retention now*/

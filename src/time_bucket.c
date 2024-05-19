@@ -12,8 +12,8 @@
 #include <utils/fmgrprotos.h>
 #include <utils/timestamp.h>
 
-#include "utils.h"
 #include "time_bucket.h"
+#include "utils.h"
 
 #define TIME_BUCKET(period, timestamp, offset, min, max, result)                                   \
 	do                                                                                             \

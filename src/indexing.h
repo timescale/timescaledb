@@ -6,11 +6,11 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/pg_list.h>
 #include <nodes/parsenodes.h>
+#include <nodes/pg_list.h>
 
-#include "export.h"
 #include "dimension.h"
+#include "export.h"
 
 extern void ts_indexing_verify_columns(const Hyperspace *hs, const List *indexelems);
 extern void ts_indexing_verify_index(const Hyperspace *hs, const IndexStmt *stmt);

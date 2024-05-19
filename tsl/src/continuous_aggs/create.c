@@ -37,6 +37,7 @@
 #include <nodes/pg_list.h>
 #include <optimizer/clauses.h>
 #include <optimizer/optimizer.h>
+#include <optimizer/prep.h>
 #include <optimizer/tlist.h>
 #include <parser/analyze.h>
 #include <parser/parse_func.h>
@@ -45,36 +46,35 @@
 #include <parser/parse_type.h>
 #include <parser/parsetree.h>
 #include <utils/acl.h>
-#include <utils/rel.h>
 #include <utils/builtins.h>
 #include <utils/catcache.h>
+#include <utils/rel.h>
 #include <utils/ruleutils.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
-#include <optimizer/prep.h>
 
-#include "finalize.h"
 #include "common.h"
 #include "create.h"
+#include "finalize.h"
 #include "invalidation_threshold.h"
 
 #include "debug_assert.h"
+#include "dimension.h"
+#include "errors.h"
+#include "extension_constants.h"
+#include "func_cache.h"
+#include "guc.h"
+#include "hypertable.h"
+#include "hypertable_cache.h"
+#include "invalidation.h"
+#include "options.h"
+#include "refresh.h"
+#include "time_utils.h"
+#include "timezones.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include "dimension.h"
-#include "extension_constants.h"
-#include "func_cache.h"
-#include "hypertable_cache.h"
-#include "hypertable.h"
-#include "invalidation.h"
-#include "options.h"
-#include "time_utils.h"
 #include "utils.h"
-#include "errors.h"
-#include "refresh.h"
-#include "timezones.h"
-#include "guc.h"
 
 static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schema,
 									  const char *user_view, const char *partial_schema,

@@ -8,17 +8,17 @@
 #include <nodes/nodeFuncs.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/restrictinfo.h>
-#include <parser/parsetree.h>
 #include <parser/parse_func.h>
+#include <parser/parsetree.h>
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "compression/create.h"
+#include "compression/segment_meta.h"
+#include "custom_type_cache.h"
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
 #include "ts_catalog/array_utils.h"
-#include "compression/create.h"
-#include "custom_type_cache.h"
-#include "compression/segment_meta.h"
 
 typedef struct QualPushdownContext
 {

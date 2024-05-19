@@ -10,9 +10,9 @@
 
 #include <postgres.h>
 
+#include <mb/pg_wchar.h>
 #include <utils/date.h>
 #include <utils/fmgroids.h>
-#include <mb/pg_wchar.h>
 
 #include "compression/arrow_c_data_interface.h"
 

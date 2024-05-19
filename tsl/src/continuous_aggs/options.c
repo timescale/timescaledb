@@ -13,15 +13,15 @@
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 
-#include "options.h"
 #include "cache.h"
-#include "compression_with_clause.h"
-#include "ts_catalog/continuous_agg.h"
-#include "continuous_aggs/create.h"
 #include "compression/create.h"
+#include "compression_with_clause.h"
+#include "continuous_aggs/create.h"
 #include "errors.h"
 #include "hypertable_cache.h"
+#include "options.h"
 #include "scan_iterator.h"
+#include "ts_catalog/continuous_agg.h"
 
 static void cagg_update_materialized_only(ContinuousAgg *agg, bool materialized_only);
 static List *cagg_find_groupingcols(ContinuousAgg *agg, Hypertable *mat_ht);

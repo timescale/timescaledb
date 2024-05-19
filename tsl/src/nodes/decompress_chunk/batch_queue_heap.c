@@ -4,8 +4,8 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <nodes/bitmapset.h>
 #include <lib/binaryheap.h>
+#include <nodes/bitmapset.h>
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/batch_array.h"

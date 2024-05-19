@@ -12,8 +12,8 @@
 #include <utils/timestamp.h>
 
 #include "extension.h"
-#include "time_bucket.h"
 #include "guc.h"
+#include "time_bucket.h"
 #include "utils.h"
 
 enum

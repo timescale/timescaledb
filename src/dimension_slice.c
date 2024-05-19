@@ -4,19 +4,18 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/heapam.h>
 #include <access/relscan.h>
 #include <access/xact.h>
-#include <access/heapam.h>
-#include <utils/rel.h>
 #include <catalog/indexing.h>
-#include <funcapi.h>
-#include <utils/lsyscache.h>
-#include <utils/builtins.h>
 #include <catalog/pg_opfamily.h>
 #include <catalog/pg_type.h>
+#include <funcapi.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
+#include <utils/rel.h>
 
 #include "bgw_policy/chunk_stats.h"
-#include "ts_catalog/catalog.h"
 #include "chunk.h"
 #include "chunk_constraint.h"
 #include "dimension.h"
@@ -24,6 +23,7 @@
 #include "dimension_vector.h"
 #include "hypertable.h"
 #include "scanner.h"
+#include "ts_catalog/catalog.h"
 
 #include "compat/compat.h"
 

@@ -16,11 +16,11 @@
 #include <bgw/job.h>
 #include <bgw/job_stat.h>
 
-#include "job.h"
-#include "job_api.h"
-#include "hypertable_cache.h"
 #include "bgw/timer.h"
 #include "debug_assert.h"
+#include "hypertable_cache.h"
+#include "job.h"
+#include "job_api.h"
 
 /* Default max runtime for a custom job is unlimited for now */
 #define DEFAULT_MAX_RUNTIME 0

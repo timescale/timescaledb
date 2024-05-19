@@ -12,12 +12,12 @@
 #include <optimizer/paths.h>
 #include <parser/parsetree.h>
 
-#include "chunk.h"
 #include "compat/compat.h"
+#include "chunk.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
-#include "hypertable_cache.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"

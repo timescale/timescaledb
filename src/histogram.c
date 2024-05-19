@@ -5,16 +5,16 @@
  */
 #include <postgres.h>
 #include <catalog/pg_type.h>
-#include <utils/builtins.h>
-#include <utils/array.h>
-#include <nodes/makefuncs.h>
-#include <utils/lsyscache.h>
-#include <netinet/in.h>
 #include <libpq/pqformat.h>
+#include <netinet/in.h>
+#include <nodes/makefuncs.h>
+#include <utils/array.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
 
 #include "compat/compat.h"
-#include "utils.h"
 #include "debug_assert.h"
+#include "utils.h"
 
 /* aggregate histogram:
  *	 histogram(state, val, min, max, nbuckets) returns the histogram array with nbuckets

@@ -12,8 +12,8 @@
 #include <utils/builtins.h>
 #include <utils/fmgroids.h>
 
-#include "array_utils.h"
 #include "compat/compat.h"
+#include "array_utils.h"
 #include "debug_assert.h"
 
 /*

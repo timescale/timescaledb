@@ -6,18 +6,18 @@
 #include <postgres.h>
 #include <catalog/namespace.h>
 #include <storage/lmgr.h>
-#include <utils/syscache.h>
 #include <utils/builtins.h>
+#include <utils/syscache.h>
 
+#include "chunk.h"
+#include "chunk_constraint.h"
+#include "chunk_scan.h"
 #include "debug_point.h"
 #include "dimension_vector.h"
 #include "guc.h"
-#include "hypertable.h"
 #include "hypercube.h"
+#include "hypertable.h"
 #include "scan_iterator.h"
-#include "chunk_scan.h"
-#include "chunk.h"
-#include "chunk_constraint.h"
 #include "utils.h"
 
 /*

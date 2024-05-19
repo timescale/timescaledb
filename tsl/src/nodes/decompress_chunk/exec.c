@@ -5,9 +5,9 @@
  */
 
 #include <postgres.h>
-#include <miscadmin.h>
 #include <access/sysattr.h>
 #include <executor/executor.h>
+#include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -28,8 +28,8 @@
 #include "import/ts_explain.h"
 #include "nodes/decompress_chunk/batch_array.h"
 #include "nodes/decompress_chunk/batch_queue.h"
-#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
 

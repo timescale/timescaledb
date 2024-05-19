@@ -12,10 +12,10 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
-#include "planner/planner.h"
-#include "nodes/chunk_append/chunk_append.h"
 #include "func_cache.h"
 #include "guc.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "planner/planner.h"
 
 static Var *find_equality_join_var(Var *sort_var, Index ht_relid, Oid eq_opr,
 								   List *join_conditions);

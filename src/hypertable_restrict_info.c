@@ -8,11 +8,11 @@
 #include <catalog/pg_inherits.h>
 #include <optimizer/optimizer.h>
 #include <parser/parsetree.h>
+#include <tcop/tcopprot.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/typcache.h>
-#include <tcop/tcopprot.h>
 
 #include "hypertable_restrict_info.h"
 

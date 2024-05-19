@@ -7,8 +7,8 @@
 
 #include <postgres.h>
 
-#include <commands/dbcommands.h>
 #include <compat/compat.h>
+#include <commands/dbcommands.h>
 #include <fmgr.h>
 #include <miscadmin.h>
 #include <storage/latch.h>

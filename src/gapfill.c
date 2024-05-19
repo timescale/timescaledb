@@ -6,11 +6,11 @@
 #include <postgres.h>
 #include <fmgr.h>
 
-#include "license_guc.h"
-#include "cross_module_fn.h"
 #include "compat/compat.h"
+#include "cross_module_fn.h"
 #include "export.h"
 #include "gapfill.h"
+#include "license_guc.h"
 
 bool
 ts_is_gapfill_path(Path *path)

@@ -22,12 +22,12 @@
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "hypertable_modify.h"
 #include "nodes/chunk_append/chunk_append.h"
+#include "nodes/chunk_dispatch/chunk_dispatch.h"
 
 static void fireASTriggers(ModifyTableState *node);
 static void fireBSTriggers(ModifyTableState *node);

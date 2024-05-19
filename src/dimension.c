@@ -4,35 +4,35 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <catalog/pg_type.h>
-#include <catalog/namespace.h>
 #include <access/relscan.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_type.h>
 #include <commands/tablecmds.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
-#include <utils/builtins.h>
-#include <utils/timestamp.h>
 #include <funcapi.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
 #include <storage/lmgr.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
+#include <utils/syscache.h>
+#include <utils/timestamp.h>
 
-#include "ts_catalog/catalog.h"
 #include "compat/compat.h"
 #include "cross_module_fn.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
 #include "error_utils.h"
+#include "errors.h"
 #include "hypertable.h"
-#include "indexing.h"
 #include "hypertable_cache.h"
+#include "indexing.h"
 #include "partitioning.h"
 #include "scanner.h"
 #include "time_utils.h"
+#include "ts_catalog/catalog.h"
 #include "utils.h"
-#include "errors.h"
-#include "debug_point.h"
 
 /* add_dimension record attribute numbers */
 enum Anum_add_dimension

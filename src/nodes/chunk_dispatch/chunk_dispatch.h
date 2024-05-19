@@ -6,17 +6,17 @@
 #pragma once
 
 #include <postgres.h>
+#include <executor/tuptable.h>
+#include <nodes/execnodes.h>
 #include <nodes/extensible.h>
 #include <nodes/parsenodes.h>
 #include <nodes/plannodes.h>
-#include <nodes/execnodes.h>
-#include <executor/tuptable.h>
 
-#include "hypertable_cache.h"
 #include "cache.h"
-#include "export.h"
-#include "subspace_store.h"
 #include "chunk_insert_state.h"
+#include "export.h"
+#include "hypertable_cache.h"
+#include "subspace_store.h"
 
 /*
  * ChunkDispatch keeps cached state needed to dispatch tuples to chunks. It is

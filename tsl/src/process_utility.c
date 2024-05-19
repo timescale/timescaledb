@@ -5,15 +5,15 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
-#include <commands/event_trigger.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_trigger.h>
+#include <commands/event_trigger.h>
 
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
-#include "ts_catalog/continuous_agg.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
+#include "ts_catalog/continuous_agg.h"
 
 /* AlterTableCmds that need tsl side processing invoke this function
  * we only process AddColumn command right now.

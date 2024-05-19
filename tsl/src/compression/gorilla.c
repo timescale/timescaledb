@@ -8,8 +8,8 @@
 #include <catalog/pg_type.h>
 #include <common/base64.h>
 #include <funcapi.h>
-#include <libpq/pqformat.h>
 #include <lib/stringinfo.h>
+#include <libpq/pqformat.h>
 #include <port/pg_bitutils.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>

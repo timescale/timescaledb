@@ -10,14 +10,14 @@
 #ifndef WIN32
 #include <access/parallel.h>
 #endif
-#include <commands/extension.h>
-#include <miscadmin.h>
-#include <utils/guc.h>
-#include <utils/inval.h>
-#include <parser/analyze.h>
 #include "compat/compat.h"
 #include "export.h"
 #include "extension.h"
+#include <commands/extension.h>
+#include <miscadmin.h>
+#include <parser/analyze.h>
+#include <utils/guc.h>
+#include <utils/inval.h>
 
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)

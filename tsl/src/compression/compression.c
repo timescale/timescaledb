@@ -36,8 +36,8 @@
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/portal.h>
-#include <utils/relcache.h>
 #include <utils/rel.h>
+#include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
@@ -57,14 +57,14 @@
 #include "expression_utils.h"
 #include "gorilla.h"
 #include "guc.h"
+#include "indexing.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "nodes/hypertable_modify.h"
-#include "indexing.h"
 #include "segment_meta.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
-#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
 
 StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
 				 "max row numbers must be harmonized");

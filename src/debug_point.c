@@ -12,13 +12,13 @@
 
 #include <access/hash.h>
 #include <access/xact.h>
+#include <miscadmin.h>
 #include <storage/ipc.h>
 #include <storage/lock.h>
-#include <miscadmin.h>
 #include <utils/builtins.h>
 
-#include "export.h"
 #include "annotations.h"
+#include "export.h"
 
 TS_FUNCTION_INFO_V1(ts_debug_point_enable);
 TS_FUNCTION_INFO_V1(ts_debug_point_release);

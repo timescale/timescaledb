@@ -4,17 +4,17 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_authid.h>
 #include <fmgr.h>
+#include <miscadmin.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/guc.h>
-#include <miscadmin.h>
-#include <catalog/pg_authid.h>
 
-#include "extension_constants.h"
-#include "export.h"
-#include "license_guc.h"
 #include "cross_module_fn.h"
+#include "export.h"
+#include "extension_constants.h"
+#include "license_guc.h"
 
 static bool load_enabled = false;
 static GucSource load_source = PGC_S_DEFAULT;

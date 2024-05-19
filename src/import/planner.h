@@ -18,8 +18,8 @@
 
 #include <postgres.h>
 #include <nodes/execnodes.h>
-#include <utils/selfuncs.h>
 #include <utils/rel.h>
+#include <utils/selfuncs.h>
 
 #include "export.h"
 
