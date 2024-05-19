@@ -4,27 +4,27 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <access/table.h>
 #include <access/genam.h>
-#include <access/tableam.h>
 #include <access/htup_details.h>
-#include <catalog/pg_class.h>
+#include <access/table.h>
+#include <access/tableam.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_class.h>
 #include <catalog/pg_namespace.h>
-#include <utils/builtins.h>
-#include <utils/syscache.h>
-#include <utils/snapmgr.h>
-#include <storage/lmgr.h>
 #include <fmgr.h>
+#include <storage/lmgr.h>
+#include <utils/builtins.h>
+#include <utils/snapmgr.h>
+#include <utils/syscache.h>
 
+#include "chunk.h"
+#include "debug_point.h"
+#include "extension.h"
+#include "hypertable_cache.h"
 #include "stats.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/continuous_agg.h"
-#include "chunk.h"
-#include "extension.h"
-#include "hypertable_cache.h"
-#include "debug_point.h"
 #include "utils.h"
 
 typedef struct StatsContext

@@ -9,8 +9,8 @@
 #include <nodes/primnodes.h>
 #include <utils/lsyscache.h>
 
-#include "expression_utils.h"
 #include "export.h"
+#include "expression_utils.h"
 
 /*
  * This function is meant to extract the expression components to be used in a ScanKey.

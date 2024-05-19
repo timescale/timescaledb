@@ -7,24 +7,24 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <miscadmin.h>
+#include <parser/parse_coerce.h>
 #include <utils/builtins.h>
 #include <utils/float.h>
-#include <parser/parse_coerce.h>
 
+#include "compat/compat.h"
+#include "bgw/job.h"
+#include "bgw_policy/continuous_aggregate_api.h"
+#include "bgw_policy/job.h"
+#include "bgw_policy/policies_v2.h"
 #include "compression_api.h"
 #include "errors.h"
+#include "funcapi.h"
+#include "guc.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
+#include "jsonb_utils.h"
 #include "policy_utils.h"
 #include "utils.h"
-#include "guc.h"
-#include "jsonb_utils.h"
-#include "bgw/job.h"
-#include "bgw_policy/job.h"
-#include "bgw_policy/continuous_aggregate_api.h"
-#include "bgw_policy/policies_v2.h"
-#include "funcapi.h"
-#include "compat/compat.h"
 #if PG16_GE
 #include "nodes/miscnodes.h"
 #endif

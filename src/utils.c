@@ -6,8 +6,8 @@
 #include <postgres.h>
 #include <access/genam.h>
 #include <access/heapam.h>
-#include <access/htup_details.h>
 #include <access/htup.h>
+#include <access/htup_details.h>
 #include <access/reloptions.h>
 #include <access/xact.h>
 #include <catalog/indexing.h>
@@ -40,8 +40,8 @@
 #include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"
-#include "utils.h"
 #include "time_utils.h"
+#include "utils.h"
 
 typedef struct
 {

@@ -5,34 +5,34 @@
  */
 #include <postgres.h>
 
+#include <access/xact.h>
 #include <miscadmin.h>
+#include <pgstat.h>
 #include <postmaster/bgworker.h>
+#include <signal.h>
 #include <storage/ipc.h>
 #include <storage/latch.h>
-#include <storage/lwlock.h>
 #include <storage/lmgr.h>
+#include <storage/lwlock.h>
 #include <storage/proc.h>
 #include <storage/shmem.h>
+#include <utils/builtins.h>
 #include <utils/guc.h>
 #include <utils/jsonb.h>
-#include <utils/timestamp.h>
-#include <utils/snapmgr.h>
 #include <utils/memutils.h>
-#include <utils/builtins.h>
-#include <access/xact.h>
-#include <pgstat.h>
-#include <signal.h>
+#include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
-#include "extension.h"
-#include "log.h"
-#include "bgw/scheduler.h"
 #include "bgw/job.h"
 #include "bgw/job_stat.h"
-#include "timer_mock.h"
+#include "bgw/scheduler.h"
+#include "cross_module_fn.h"
+#include "extension.h"
+#include "log.h"
 #include "params.h"
 #include "test_utils.h"
-#include "cross_module_fn.h"
 #include "time_bucket.h"
+#include "timer_mock.h"
 
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run_and_wait_for_scheduler_finish);
 TS_FUNCTION_INFO_V1(ts_bgw_db_scheduler_test_run);

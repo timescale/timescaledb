@@ -7,8 +7,8 @@
 
 #include <postgres.h>
 
-#include <chunk.h>
 #include "chunk.h"
+#include <chunk.h>
 
 extern Datum chunk_status(PG_FUNCTION_ARGS);
 extern Datum chunk_show(PG_FUNCTION_ARGS);

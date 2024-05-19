@@ -5,17 +5,17 @@
  */
 #include <postgres.h>
 #include <catalog/namespace.h>
+#include <utils/builtins.h>
 #include <utils/catcache.h>
 #include <utils/lsyscache.h>
-#include <utils/builtins.h>
 
-#include "errors.h"
-#include "hypertable_cache.h"
-#include "hypertable.h"
-#include "ts_catalog/catalog.h"
 #include "cache.h"
-#include "scanner.h"
 #include "dimension.h"
+#include "errors.h"
+#include "hypertable.h"
+#include "hypertable_cache.h"
+#include "scanner.h"
+#include "ts_catalog/catalog.h"
 #include "ts_catalog/tablespace.h"
 
 static void *hypertable_cache_create_entry(Cache *cache, CacheQuery *query);

@@ -16,12 +16,12 @@
 #include <parser/parsetree.h>
 
 #include "compat/compat.h"
-#include "planner.h"
-#include "import/planner.h"
-#include "utils.h"
+#include "estimate.h"
 #include "gapfill.h"
 #include "guc.h"
-#include "estimate.h"
+#include "import/planner.h"
+#include "planner.h"
+#include "utils.h"
 
 /* This optimization adds a HashAggregate plan to many group by queries.
  * In plain postgres, many time-series queries will not use a hash aggregate

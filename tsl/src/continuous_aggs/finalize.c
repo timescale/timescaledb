@@ -12,8 +12,8 @@
 
 #include <parser/parse_relation.h>
 
-#include "create.h"
 #include "common.h"
+#include "create.h"
 #include <partialize_finalize.h>
 
 /* Static function prototypes */

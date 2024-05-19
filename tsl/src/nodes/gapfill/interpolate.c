@@ -9,8 +9,8 @@
 #include <catalog/pg_type.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
-#include <utils/typcache.h>
 #include <utils/numeric.h>
+#include <utils/typcache.h>
 
 #include "compat/compat.h"
 #include "gapfill_internal.h"

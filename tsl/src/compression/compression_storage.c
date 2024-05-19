@@ -26,16 +26,16 @@
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 
-#include "extension_constants.h"
+#include "compression.h"
+#include "compression_storage.h"
+#include "create.h"
 #include "custom_type_cache.h"
+#include "extension_constants.h"
+#include "guc.h"
+#include "hypertable.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
-#include "compression_storage.h"
-#include "hypertable.h"
-#include "compression.h"
-#include "create.h"
 #include "utils.h"
-#include "guc.h"
 
 #define PRINT_COMPRESSION_TABLE_NAME(buf, prefix, hypertable_id)                                   \
 	do                                                                                             \

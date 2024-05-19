@@ -14,14 +14,14 @@
 #include <jsonb_utils.h>
 #include <utils/builtins.h>
 
+#include "bgw/job.h"
+#include "bgw/job_stat.h"
+#include "bgw/timer.h"
 #include "bgw_policy/continuous_aggregate_api.h"
-#include "bgw_policy/job_api.h"
 #include "bgw_policy/job.h"
+#include "bgw_policy/job_api.h"
 #include "bgw_policy/policies_v2.h"
 #include "bgw_policy/policy_utils.h"
-#include "bgw/job_stat.h"
-#include "bgw/job.h"
-#include "bgw/timer.h"
 #include "continuous_aggs/materialize.h"
 #include "dimension.h"
 #include "guc.h"

@@ -5,8 +5,8 @@
  */
 #include <postgres.h>
 
-#include <access/htup_details.h>
 #include <access/htup.h>
+#include <access/htup_details.h>
 #include <access/multixact.h>
 #include <access/visibilitymap.h>
 #include <access/xact.h>
@@ -29,9 +29,9 @@
 #include <utils/palloc.h>
 #include <utils/syscache.h>
 
-#include "chunk_api.h"
-#include "chunk.h"
 #include "compat/compat.h"
+#include "chunk.h"
+#include "chunk_api.h"
 #include "error_utils.h"
 #include "errors.h"
 #include "hypercube.h"

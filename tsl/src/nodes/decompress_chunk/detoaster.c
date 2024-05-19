@@ -15,14 +15,14 @@
 #include <access/table.h>
 #include <access/tableam.h>
 #include <access/toast_internals.h>
-#include <utils/fmgroids.h>
 #include <utils/expandeddatum.h>
+#include <utils/fmgroids.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
 
 #include <compat/compat.h>
-#include <compression/compression.h>
 #include "debug_assert.h"
+#include <compression/compression.h>
 
 /* We redefine this postgres macro to fix a warning about signed integer comparison. */
 #define TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer)                                            \

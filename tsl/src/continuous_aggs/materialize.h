@@ -6,10 +6,10 @@
 #pragma once
 
 #include <postgres.h>
+#include "common.h"
+#include "ts_catalog/continuous_agg.h"
 #include <fmgr.h>
 #include <nodes/pg_list.h>
-#include "ts_catalog/continuous_agg.h"
-#include "common.h"
 
 typedef struct SchemaAndName
 {

@@ -28,15 +28,15 @@
 #include "compression/create.h"
 #include "custom_type_cache.h"
 #include "guc.h"
-#include "import/planner.h"
 #include "import/list.h"
+#include "import/planner.h"
+#include "nodes/chunk_append/transform.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
-#include "nodes/chunk_append/transform.h"
 #include "nodes/vector_agg/exec.h"
-#include "vector_predicates.h"
 #include "ts_catalog/array_utils.h"
+#include "vector_predicates.h"
 
 static CustomScanMethods decompress_chunk_plan_methods = {
 	.CustomName = "DecompressChunk",

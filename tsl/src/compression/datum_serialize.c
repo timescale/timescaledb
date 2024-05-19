@@ -5,20 +5,20 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/sortsupport.h>
-#include <utils/typcache.h>
-#include <utils/builtins.h>
-#include <utils/datum.h>
-#include <access/tupmacs.h>
 #include <access/htup_details.h>
-#include <utils/lsyscache.h>
-#include <utils/syscache.h>
+#include <access/tupmacs.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <libpq/pqformat.h>
+#include <utils/builtins.h>
+#include <utils/datum.h>
+#include <utils/lsyscache.h>
+#include <utils/sortsupport.h>
+#include <utils/syscache.h>
+#include <utils/typcache.h>
 
-#include "datum_serialize.h"
 #include "compat/compat.h"
+#include "datum_serialize.h"
 
 #include "compression.h"
 

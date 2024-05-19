@@ -4,24 +4,24 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <catalog/pg_namespace.h>
-#include <catalog/namespace.h>
-#include <catalog/indexing.h>
-#include <utils/lsyscache.h>
-#include <utils/builtins.h>
-#include <utils/regproc.h>
-#include <utils/syscache.h>
-#include <utils/inval.h>
-#include <access/xact.h>
 #include <access/htup_details.h>
-#include <miscadmin.h>
+#include <access/xact.h>
+#include <catalog/indexing.h>
+#include <catalog/namespace.h>
+#include <catalog/pg_namespace.h>
 #include <commands/dbcommands.h>
 #include <commands/sequence.h>
+#include <miscadmin.h>
+#include <utils/builtins.h>
+#include <utils/inval.h>
+#include <utils/lsyscache.h>
+#include <utils/regproc.h>
+#include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "ts_catalog/catalog.h"
-#include "extension.h"
 #include "cache_invalidate.h"
+#include "extension.h"
+#include "ts_catalog/catalog.h"
 #include "utils.h"
 
 static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {

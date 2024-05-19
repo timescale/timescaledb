@@ -22,8 +22,8 @@
 #include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
-#include <parser/parsetree.h>
 #include <parser/parse_relation.h>
+#include <parser/parsetree.h>
 #include <utils/elog.h>
 #include <utils/fmgroids.h>
 #include <utils/guc.h>
@@ -53,8 +53,8 @@
 #include "nodes/constraint_aware_append/constraint_aware_append.h"
 #include "nodes/hypertable_modify.h"
 #include "partitioning.h"
-#include "planner/planner.h"
 #include "planner/partialize.h"
+#include "planner/planner.h"
 #include "utils.h"
 
 #include "compat/compat.h"

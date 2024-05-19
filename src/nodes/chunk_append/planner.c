@@ -20,12 +20,12 @@
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 
+#include "guc.h"
+#include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
 #include "nodes/hypertable_modify.h"
 #include "nodes/vector_agg.h"
-#include "import/planner.h"
-#include "guc.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
 					   Oid *collations, bool *nullsFirst);

@@ -5,8 +5,8 @@
  */
 
 #include <postgres.h>
-#include <fmgr.h>
 #include <catalog/pg_type.h>
+#include <fmgr.h>
 #include <utils/date.h>
 
 #include "export.h"

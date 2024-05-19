@@ -4,11 +4,11 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <fmgr.h>
-#include <miscadmin.h>
 #include <catalog/pg_collation.h>
 #include <executor/executor.h>
 #include <executor/nodeSubplan.h>
+#include <fmgr.h>
+#include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
@@ -26,8 +26,8 @@
 
 #include <math.h>
 
-#include "nodes/chunk_append/chunk_append.h"
 #include "loader/lwlocks.h"
+#include "nodes/chunk_append/chunk_append.h"
 #include "planner/planner.h"
 #include "transform.h"
 

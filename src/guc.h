@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include "export.h"
 #include "config.h"
+#include "export.h"
 
 #ifdef USE_TELEMETRY
 extern bool ts_telemetry_on(void);

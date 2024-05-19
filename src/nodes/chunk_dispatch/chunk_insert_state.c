@@ -26,13 +26,13 @@
 #include <utils/rls.h>
 
 #include "compat/compat.h"
-#include "errors.h"
 #include "chunk_dispatch.h"
+#include "chunk_index.h"
 #include "chunk_insert_state.h"
 #include "debug_point.h"
-#include "ts_catalog/continuous_agg.h"
-#include "chunk_index.h"
+#include "errors.h"
 #include "indexing.h"
+#include "ts_catalog/continuous_agg.h"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *

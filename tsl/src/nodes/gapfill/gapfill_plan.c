@@ -13,8 +13,8 @@
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
 #include <optimizer/tlist.h>
-#include <utils/lsyscache.h>
 #include <parser/parse_func.h>
+#include <utils/lsyscache.h>
 
 #include "compat/compat.h"
 

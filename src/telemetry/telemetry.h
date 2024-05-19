@@ -10,10 +10,10 @@
 #include <utils/builtins.h>
 
 #include "compat/compat.h"
-#include "version.h"
 #include "net/conn.h"
 #include "net/http.h"
 #include "utils.h"
+#include "version.h"
 
 #define REQ_LICENSE_INFO "license"
 #define REQ_LICENSE_EDITION "edition"

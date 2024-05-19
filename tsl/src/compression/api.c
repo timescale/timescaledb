@@ -13,41 +13,41 @@
 #include <catalog/dependency.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
+#include <libpq-fe.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
-#include <nodes/pg_list.h>
 #include <nodes/parsenodes.h>
+#include <nodes/pg_list.h>
 #include <parser/parse_func.h>
 #include <storage/lmgr.h>
 #include <trigger.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/fmgrprotos.h>
-#include <libpq-fe.h>
-#include <utils/snapmgr.h>
 #include <utils/inval.h>
+#include <utils/snapmgr.h>
 
 #include "compat/compat.h"
+#include "api.h"
 #include "cache.h"
 #include "chunk.h"
+#include "compression.h"
+#include "create.h"
 #include "debug_point.h"
-#include "errors.h"
 #include "error_utils.h"
+#include "errors.h"
+#include "guc.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/array_utils.h"
-#include "ts_catalog/continuous_agg.h"
-#include "ts_catalog/compression_settings.h"
-#include "ts_catalog/compression_chunk_size.h"
-#include "create.h"
-#include "api.h"
-#include "compression.h"
-#include "scanner.h"
 #include "scan_iterator.h"
+#include "scanner.h"
+#include "ts_catalog/array_utils.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
+#include "ts_catalog/continuous_agg.h"
 #include "utils.h"
-#include "guc.h"
 
 typedef struct CompressChunkCxt
 {

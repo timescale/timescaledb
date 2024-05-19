@@ -12,33 +12,33 @@
 #include <commands/defrem.h>
 #include <commands/user.h>
 #include <nodes/print.h>
-#include <utils/guc.h>
-#include <utils/inval.h>
+#include <parser/analyze.h>
 #include <pg_config.h>
 #include <postmaster/bgworker.h>
-#include <parser/analyze.h>
 #include <storage/ipc.h>
 #include <tcop/utility.h>
+#include <utils/guc.h>
+#include <utils/inval.h>
 
 #if PG_VERSION_NUM < 150000
-#include "../compat/compat-msvc-enter.h"
+#include "compat/compat-msvc-enter.h"
 #include <commands/extension.h>
 #include <miscadmin.h>
-#include "../compat/compat-msvc-exit.h"
+#include "compat/compat-msvc-exit.h"
 #endif
 
-#include "extension_utils.c"
+#include "compat/compat.h"
 #include "config.h"
 #include "export.h"
-#include "compat/compat.h"
 #include "extension_constants.h"
+#include "extension_utils.c"
 
-#include "loader/loader.h"
-#include "loader/function_telemetry.h"
 #include "loader/bgw_counter.h"
 #include "loader/bgw_interface.h"
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
+#include "loader/function_telemetry.h"
+#include "loader/loader.h"
 #include "loader/lwlocks.h"
 
 /*
