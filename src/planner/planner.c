@@ -11,12 +11,14 @@
 #include <executor/nodeAgg.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/plannodes.h>
 #include <optimizer/appendinfo.h>
 #include <optimizer/clauses.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
 #include <optimizer/paths.h>
+#include <optimizer/plancat.h>
 #include <optimizer/planner.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
@@ -29,16 +31,6 @@
 #include <utils/memutils.h>
 #include <utils/selfuncs.h>
 #include <utils/timestamp.h>
-
-#include "compat/compat-msvc-enter.h"
-#include <catalog/pg_constraint.h>
-#include <nodes/nodeFuncs.h>
-#include <optimizer/cost.h>
-#include <optimizer/plancat.h>
-#include <parser/analyze.h>
-#include <tcop/tcopprot.h>
-#include <utils/fmgrprotos.h>
-#include "compat/compat-msvc-exit.h"
 
 #include <math.h>
 
