@@ -15,10 +15,6 @@
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 
-#include "compat/compat-msvc-enter.h"
-#include <optimizer/cost.h>
-#include "compat/compat-msvc-exit.h"
-
 #include "compat/compat.h"
 #include "planner.h"
 #include "import/planner.h"
