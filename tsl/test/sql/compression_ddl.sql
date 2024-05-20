@@ -48,8 +48,8 @@ ALTER TABLE test1 REPLICA IDENTITY DEFAULT;
 
 -- make sure we cannot create constraints or unique indexes on compressed hypertables
 \set ON_ERROR_STOP 0
-ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE(time,i);
-CREATE UNIQUE INDEX unique_index ON test1(time,i);
+ALTER TABLE test1 ADD CONSTRAINT c1 UNIQUE("Time",i);
+CREATE UNIQUE INDEX unique_index ON test1("Time",i);
 \set ON_ERROR_STOP 1
 
 --test adding boolean columns with default and not null

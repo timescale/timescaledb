@@ -242,10 +242,12 @@ ALTER TABLE foo ALTER COLUMN t SET NOT NULL;
 ERROR:  operation not supported on hypertables that have compression enabled
 ALTER TABLE foo RESET (timescaledb.compress);
 ERROR:  compression options cannot be reset
+--can add constraints as long as no data is compressed
 ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
-ERROR:  operation not supported on hypertables that have compression enabled
-ALTER TABLE foo ADD CONSTRAINT chk UNIQUE(b);
-ERROR:  operation not supported on hypertables that have compression enabled
+ALTER TABLE foo ADD CONSTRAINT unq UNIQUE(a);
+--restore
+ALTER TABLE foo DROP CONSTRAINT chk;
+ALTER TABLE foo DROP CONSTRAINT unq;
 --should succeed
 BEGIN;
 ALTER TABLE foo DROP CONSTRAINT chk_existing;
@@ -290,6 +292,13 @@ NOTICE:  chunk "_hyper_10_2_chunk" is already compressed
  _timescaledb_internal._hyper_10_2_chunk
 (1 row)
 
+--adding these constraints when there is compressed data should fail
+ALTER TABLE foo ADD CONSTRAINT chk CHECK(b > 0);
+ERROR:  operation not supported on hypertables that have compressed data
+HINT:  Decompress the data before retrying the operation.
+ALTER TABLE foo ADD CONSTRAINT unq UNIQUE(a);
+ERROR:  operation not supported on hypertables that have compressed data
+HINT:  Decompress the data before retrying the operation.
 SELECT compress_chunk(ch) FROM show_chunks('non_compressed') ch LIMIT 1;
 ERROR:  compression not enabled on "non_compressed"
 DETAIL:  It is not possible to compress chunks on a hypertable or continuous aggregate that does not have compression enabled.
@@ -338,6 +347,7 @@ create table  table_constr( device_id integer,
                    d integer,
                    primary key ( device_id, timec)
 );
+insert into fortable values (1);
 select table_name from create_hypertable('table_constr', 'timec', chunk_time_interval=> 10);
   table_name  
 --------------
@@ -361,9 +371,23 @@ HINT:  Exclusion constraints are not supported on hypertables that are compresse
 alter table table_constr drop constraint table_constr_exclu ;
 --now it works
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
---can't add fks after compression enabled
+--can add fks after compression enabled but before any data is compressed
 alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
-ERROR:  operation not supported on hypertables that have compression enabled
+alter table table_constr drop constraint table_constr_fk_add_after;
+insert into table_constr values (1, 1, 1, 21, 1);
+--can still add fks when chunks exists as long as there is no compressed data
+alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
+alter table table_constr drop constraint table_constr_fk_add_after;
+select compress_chunk(ch) from show_chunks('table_constr') ch;
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_12_7_chunk
+(1 row)
+
+--can't add fks after compressed data exists
+alter table table_constr add constraint table_constr_fk_add_after FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
+ERROR:  operation not supported on hypertables that have compressed data
+HINT:  Decompress the data before retrying the operation.
 -- ddl ADD column variants that are not supported
 ALTER TABLE table_constr ADD COLUMN newcol integer CHECK ( newcol < 10 );
 ERROR:  cannot add column with constraints to a hypertable that has compression enabled
@@ -404,7 +428,6 @@ ALTER TABLE table_fk DROP COLUMN id1;
 ALTER TABLE table_fk SET (timescaledb.compress,timescaledb.compress_segmentby = 'id2');
 NOTICE:  default order by for hypertable "table_fk" is set to ""time" DESC"
 -- TEST fk cascade delete behavior on compressed chunk --
-insert into fortable values(1);
 insert into fortable values(10);
 --we want 2 chunks here --
 insert into table_constr values(1000, 1, 44, 44, 1);
