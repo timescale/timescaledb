@@ -72,18 +72,7 @@ typedef struct CAggTimebucketInfo
 	int64 htpartcol_interval_len;	/* interval length setting for primary partitioning column */
 
 	/* General bucket information */
-	FuncExpr *bucket_func; /* function call expr of the bucketing function */
-	Oid bucket_width_type; /* type of bucket_width */
-
-	/* Time based buckets */
-	Interval *bucket_time_width;	  /* stores the interval, NULL if not specified */
-	const char *bucket_time_timezone; /* the name of the timezone, NULL if not specified */
-	Interval *bucket_time_offset;	  /* the offset of set, NULL if not specified */
-	TimestampTz bucket_time_origin;	  /* origin as UTC timestamp. infinity if not specified */
-
-	/* Integer based buckets */
-	int64 bucket_integer_width;	 /* bucket_width of time_bucket */
-	int64 bucket_integer_offset; /* bucket offset of the time_bucket */
+	ContinuousAggsBucketFunction *bf;
 } CAggTimebucketInfo;
 
 typedef enum CaggRefreshCallContext
@@ -93,7 +82,8 @@ typedef enum CaggRefreshCallContext
 	CAGG_REFRESH_POLICY,
 } CaggRefreshCallContext;
 
-#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info) (bucket_info->bucket_width_type == INTERVALOID)
+#define IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info)                                                \
+	(bucket_info->bf->bucket_width_type == INTERVALOID)
 
 #define CAGG_MAKEQUERY(selquery, srcquery)                                                         \
 	do                                                                                             \
