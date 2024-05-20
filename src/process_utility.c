@@ -39,6 +39,7 @@
 #include <utils/guc.h>
 #include <utils/inval.h>
 #include <utils/lsyscache.h>
+#include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
@@ -111,10 +112,14 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 static void
 check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 {
+	const Chunk *chunk;
+
 	if (expect_chunk_modification)
 		return;
 
-	if (ts_chunk_exists_relid(relid))
+	chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
+
+	if (chunk != NULL)
 	{
 		bool all_allowed = true;
 		ListCell *lc;
@@ -149,8 +154,7 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_AddConstraint:
 				{
 					/* if this is an OSM chunk, block the operation */
-					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
-					if (chunk && chunk->fd.osm_chunk)
+					if (chunk->fd.osm_chunk)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -161,12 +165,28 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_DropConstraint:
 				{
 					/* if this is an OSM chunk, block the operation */
-					Chunk *chunk = ts_chunk_get_by_relid(relid, false /* fail_if_not_found */);
-					if (chunk && chunk->fd.osm_chunk)
+					if (chunk->fd.osm_chunk)
 					{
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 								 errmsg("operation not supported on OSM chunk tables")));
+					}
+
+					ChunkConstraints *ccs =
+						ts_chunk_constraint_scan_by_chunk_id(chunk->fd.id,
+															 10,
+															 CurrentMemoryContext);
+					Assert(cmd->name);
+
+					for (int i = 0; i < ccs->num_constraints; i++)
+					{
+						ChunkConstraint *cc = &ccs->constraints[i];
+
+						if (namestrcmp(&cc->fd.constraint_name, cmd->name) == 0)
+							ereport(ERROR,
+									(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+									 errmsg("cannot drop inherited constraint"),
+									 errhint("Drop the constraint on the hypertable instead.")));
 					}
 					break;
 				}
@@ -237,6 +257,7 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			 * This is a whitelist of allowed commands.
 			 */
 			case AT_AddIndex:
+			case AT_AddConstraint:
 			case AT_ReAddIndex:
 			case AT_ResetRelOptions:
 			case AT_ReplaceRelOptions:
@@ -2229,24 +2250,54 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 	}
 }
 
+typedef struct ChunkConstraintInfo
+{
+	const AlterTableCmd *cmd;
+	const char *constraint_name;
+	Oid hypertable_constraint_oid;
+} ChunkConstraintInfo;
+
 static void
 process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
-	Oid hypertable_constraint_oid = *((Oid *) arg);
+	const ChunkConstraintInfo *info = arg;
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
-	ts_chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid);
+	switch (info->cmd->subtype)
+	{
+		case AT_AddIndex:
+		case AT_AddConstraint:
+#if PG16_LT
+		case AT_AddConstraintRecurse:
+#endif
+			if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("operation not supported on hypertables that have compressed "
+								"data"),
+						 errhint("Decompress the data before retrying the operation.")));
+			break;
+			/* Other AT commands might not be allowed on compressed chunks, but
+			 * they are checked at hypertable level in that case */
+		default:
+			break;
+	}
+
+	ts_chunk_constraint_create_on_chunk(ht, chunk, info->hypertable_constraint_oid);
 }
 
 static void
-process_altertable_add_constraint(Hypertable *ht, const char *constraint_name)
+process_altertable_add_constraint(Hypertable *ht, const AlterTableCmd *cmd,
+								  const char *constraint_name)
 {
-	Oid hypertable_constraint_oid =
-		get_relation_constraint_oid(ht->main_table_relid, constraint_name, false);
+	ChunkConstraintInfo info = {
+		.cmd = cmd,
+		.constraint_name = constraint_name,
+		.hypertable_constraint_oid =
+			get_relation_constraint_oid(ht->main_table_relid, constraint_name, false),
+	};
 
-	Assert(constraint_name != NULL);
-
-	foreach_chunk(ht, process_add_constraint_chunk, &hypertable_constraint_oid);
+	foreach_chunk(ht, process_add_constraint_chunk, &info);
 }
 
 static void
@@ -2432,6 +2483,22 @@ typedef struct CreateIndexInfo
 	MemoryContext mctx;
 } CreateIndexInfo;
 
+static inline void
+raise_error_if_creating_index_on_compressed(const Chunk *chunk, const IndexStmt *stmt)
+{
+	if (ts_chunk_is_compressed(chunk) && !ts_is_hypercore_am(chunk->amoid))
+	{
+		/* unique indexes are not allowed on compressed hypertables*/
+		if (stmt->unique || stmt->primary || stmt->isconstraint)
+		{
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("operation not supported on hypertables that have compression "
+							"enabled")));
+		}
+	}
+}
+
 /*
  * Create index on a chunk.
  *
@@ -2453,6 +2520,9 @@ process_index_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
 		return;
 	}
+
+	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+
 	chunk_rel = table_open(chunk_relid, ShareLock);
 	hypertable_index_rel = index_open(info->obj.objectId, AccessShareLock);
 	indexinfo = BuildIndexInfo(hypertable_index_rel);
@@ -2561,6 +2631,9 @@ process_index_chunk_multitransaction(int32 hypertable_id, Oid chunk_relid, void 
 	{
 		ereport(NOTICE, (errmsg("skipping index creation for tiered data")));
 	}
+
+	raise_error_if_creating_index_on_compressed(chunk, info->stmt);
+
 	table_close(chunk_rel, NoLock);
 
 	ts_catalog_restore_user(&sec_ctx);
@@ -2680,18 +2753,6 @@ process_index_start(ProcessUtilityArgs *args)
 
 		/* Make the RangeVar for the underlying materialization hypertable */
 		stmt->relation = makeRangeVar(NameStr(ht->fd.schema_name), NameStr(ht->fd.table_name), -1);
-	}
-	else if (TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
-	{
-		/* unique indexes are not allowed on compressed hypertables*/
-		if (stmt->unique || stmt->primary || stmt->isconstraint)
-		{
-			ts_cache_release(hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("operation not supported on hypertables that have compression "
-							"enabled")));
-		}
 	}
 
 	ts_hypertable_permissions_check_by_id(ht->fd.id);
@@ -3786,7 +3847,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			if (idxname == NULL)
 				idxname = get_rel_name(obj->objectId);
 
-			process_altertable_add_constraint(ht, idxname);
+			process_altertable_add_constraint(ht, cmd, idxname);
 		}
 		break;
 		case AT_AddConstraint:
@@ -3799,14 +3860,10 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 
 			Assert(IsA(cmd->def, Constraint));
 
-			/* Check constraints are recursed to chunks by default */
-			if (stmt->contype == CONSTR_CHECK)
-				break;
-
 			if (conname == NULL)
 				conname = get_rel_name(obj->objectId);
 
-			process_altertable_add_constraint(ht, conname);
+			process_altertable_add_constraint(ht, cmd, conname);
 		}
 		break;
 		case AT_AlterColumnType:
