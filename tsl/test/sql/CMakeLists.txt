@@ -101,7 +101,7 @@ endif(CMAKE_BUILD_TYPE MATCHES Debug)
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES chunk_utils_internal.sql
-         compression_update_delete.sql)
+         compression_update_delete.sql correlated_constraints.sql)
   endif()
   list(APPEND TEST_FILES compression.sql compression_permissions.sql)
 endif()

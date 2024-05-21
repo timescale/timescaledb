@@ -44,6 +44,7 @@
 #include "compression_with_clause.h"
 #include "compression.h"
 #include "compression/compression_storage.h"
+#include "dimension_slice.h"
 #include "hypertable_cache.h"
 #include "custom_type_cache.h"
 #include "trigger.h"

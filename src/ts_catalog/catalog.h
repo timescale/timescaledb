@@ -186,6 +186,7 @@ enum Anum_dimension
 	Anum_dimension_compress_interval_length,
 	Anum_dimension_integer_now_func_schema,
 	Anum_dimension_integer_now_func,
+	Anum_dimension_type,
 	_Anum_dimension_max,
 };
 
@@ -207,6 +208,7 @@ typedef struct FormData_dimension
 	int64 compress_interval_length;
 	NameData integer_now_func_schema;
 	NameData integer_now_func;
+	char type;
 } FormData_dimension;
 
 typedef FormData_dimension *Form_dimension;

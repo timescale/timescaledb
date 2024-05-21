@@ -19,11 +19,14 @@ typedef struct PartitioningInfo PartitioningInfo;
 typedef struct DimensionSlice DimensionSlice;
 typedef struct DimensionVec DimensionVec;
 
+/* Valid values for FormData_dimension fd.type */
 typedef enum DimensionType
 {
-	DIMENSION_TYPE_OPEN,
-	DIMENSION_TYPE_CLOSED,
-	DIMENSION_TYPE_ANY,
+	DIMENSION_TYPE_ANY = '-',
+	DIMENSION_TYPE_OPEN = 'o',
+	DIMENSION_TYPE_CLOSED = 'c',
+	DIMENSION_TYPE_CORRELATED = 'r',
+	DIMENSION_TYPE_CHECK = 'h', /* these are not stored in dimension catalog table */
 } DimensionType;
 
 typedef struct Dimension
@@ -37,6 +40,7 @@ typedef struct Dimension
 
 #define IS_OPEN_DIMENSION(d) ((d)->type == DIMENSION_TYPE_OPEN)
 #define IS_CLOSED_DIMENSION(d) ((d)->type == DIMENSION_TYPE_CLOSED)
+#define IS_CORRELATED_DIMENSION(d) ((d)->type == DIMENSION_TYPE_CORRELATED)
 #define IS_VALID_OPEN_DIM_TYPE(type)                                                               \
 	(IS_INTEGER_TYPE(type) || IS_TIMESTAMP_TYPE(type) || ts_type_is_int8_binary_compatible(type))
 
@@ -117,10 +121,15 @@ typedef struct DimensionInfo
 } DimensionInfo;
 
 #define DIMENSION_INFO_IS_SET(di) (di != NULL && OidIsValid((di)->table_relid))
-#define DIMENSION_INFO_IS_VALID(di) (info->num_slices_is_set || OidIsValid(info->interval_type))
+#define DIMENSION_INFO_IS_VALID(di)                                                                \
+	(info->num_slices_is_set || OidIsValid(info->interval_type) ||                                 \
+	 info->type == DIMENSION_TYPE_CORRELATED)
 
 extern Hyperspace *ts_dimension_scan(int32 hypertable_id, Oid main_table_relid, int16 num_dimension,
 									 MemoryContext mctx);
+extern void ts_dimension_correlated_constraints_assign(Hypertable *h, MemoryContext mctx);
+extern void ts_dimension_correlated_drop(const Hypertable *ht, const char *col_name,
+										 int32 *dimension_id, bool *dropped);
 extern DimensionSlice *ts_dimension_calculate_default_slice(const Dimension *dim, int64 value);
 extern TSDLLEXPORT Point *ts_hyperspace_calculate_point(const Hyperspace *h, TupleTableSlot *slot);
 extern int ts_dimension_get_slice_ordinal(const Dimension *dim, const DimensionSlice *slice);
@@ -135,7 +144,8 @@ extern TSDLLEXPORT Dimension *
 ts_hyperspace_get_mutable_dimension_by_name(Hyperspace *hs, DimensionType type, const char *name);
 extern DimensionVec *ts_dimension_get_slices(const Dimension *dim);
 extern int32 ts_dimension_get_hypertable_id(int32 dimension_id);
-extern int ts_dimension_set_type(Dimension *dim, Oid newtype);
+extern char ts_dimension_get_dimension_type(int32 dimension_id);
+extern int ts_dimension_set_column_type(Dimension *dim, Oid newtype);
 extern TSDLLEXPORT Oid ts_dimension_get_partition_type(const Dimension *dim);
 extern int ts_dimension_set_name(Dimension *dim, const char *newname);
 extern int ts_dimension_set_chunk_interval(Dimension *dim, int64 chunk_interval);
@@ -143,6 +153,7 @@ extern int ts_dimension_set_compress_interval(Dimension *dim, int64 compress_int
 extern Datum ts_dimension_transform_value(const Dimension *dim, Oid collation, Datum value,
 										  Oid const_datum_type, Oid *restype);
 extern int ts_dimension_delete_by_hypertable_id(int32 hypertable_id, bool delete_slices);
+extern int ts_dimension_delete_by_id(int32 dimension_id);
 
 extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_open(Oid table_relid, Name column_name,
 																Datum interval, Oid interval_type,
