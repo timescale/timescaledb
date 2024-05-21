@@ -16,11 +16,11 @@ CREATE SCHEMA _timescaledb_debug;
 GRANT USAGE ON SCHEMA
       _timescaledb_cache,
       _timescaledb_catalog,
+      _timescaledb_config,
+      _timescaledb_debug,
       _timescaledb_functions,
       _timescaledb_internal,
-      _timescaledb_config,
-      timescaledb_information,
       timescaledb_experimental,
-      _timescaledb_debug
+      timescaledb_information
 TO PUBLIC;
 
