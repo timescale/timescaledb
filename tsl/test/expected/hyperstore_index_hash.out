@@ -1,0 +1,354 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/setup_hyperstore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+\ir hyperstore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function explain_analyze_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id int,		--segmentby attribute with index
+       owner_id int,		--segmentby attribute without index
+       device_id int,		--non-segmentby attribute
+       temp float,
+       humidity float
+);
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+-- Get some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 \gset
+-- Set the number of parallel workers to zero to disable parallel
+-- plans. This differs between different PG versions.
+set max_parallel_workers_per_gather to 0;
+-- Redefine the indexes to use hash indexes
+drop index hypertable_location_id_idx;
+drop index hypertable_device_id_idx;
+create index hypertable_location_id_idx on :hypertable using hash (location_id);
+create index hypertable_device_id_idx on :hypertable using hash (device_id);
+create view chunk_indexes as
+select ch::regclass as chunk, indexrelid::regclass as index, attname
+from pg_attribute att inner join pg_index ind
+on (att.attrelid=ind.indrelid and att.attnum=ind.indkey[0])
+inner join show_chunks(:'hypertable') ch on (ch = att.attrelid)
+order by chunk, index;
+-- save some reference data from an index (only) scan
+select explain_anonymize(format($$
+       select location_id, count(*) into orig from %s
+       where location_id in (3,4,5) group by location_id
+$$, :'hypertable'));
+                                    explain_anonymize                                     
+------------------------------------------------------------------------------------------
+ Finalize HashAggregate
+   Group Key: _hyper_I_N_chunk.location_id
+   ->  Append
+         ->  Partial HashAggregate
+               Group Key: _hyper_I_N_chunk.location_id
+               ->  Bitmap Heap Scan on _hyper_I_N_chunk
+                     Recheck Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+                     ->  Bitmap Index Scan on _hyper_I_N_chunk_hypertable_location_id_idx
+                           Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+         ->  Partial HashAggregate
+               Group Key: _hyper_I_N_chunk.location_id
+               ->  Bitmap Heap Scan on _hyper_I_N_chunk
+                     Recheck Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+                     ->  Bitmap Index Scan on _hyper_I_N_chunk_hypertable_location_id_idx
+                           Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+         ->  Partial HashAggregate
+               Group Key: _hyper_I_N_chunk.location_id
+               ->  Bitmap Heap Scan on _hyper_I_N_chunk
+                     Recheck Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+                     ->  Bitmap Index Scan on _hyper_I_N_chunk_hypertable_location_id_idx
+                           Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+         ->  Partial HashAggregate
+               Group Key: _hyper_I_N_chunk.location_id
+               ->  Bitmap Heap Scan on _hyper_I_N_chunk
+                     Recheck Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+                     ->  Bitmap Index Scan on _hyper_I_N_chunk_hypertable_location_id_idx
+                           Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+         ->  Partial HashAggregate
+               Group Key: _hyper_I_N_chunk.location_id
+               ->  Bitmap Heap Scan on _hyper_I_N_chunk
+                     Recheck Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+                     ->  Bitmap Index Scan on _hyper_I_N_chunk_hypertable_location_id_idx
+                           Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+         ->  Partial HashAggregate
+               Group Key: _hyper_I_N_chunk.location_id
+               ->  Bitmap Heap Scan on _hyper_I_N_chunk
+                     Recheck Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+                     ->  Bitmap Index Scan on _hyper_I_N_chunk_hypertable_location_id_idx
+                           Index Cond: (location_id = ANY ('{3,4,5}'::integer[]))
+(39 rows)
+
+select location_id, count(*) into orig from :hypertable
+where location_id in (3,4,5) group by location_id;
+alter table :chunk2 set access method hyperstore;
+--
+-- test that indexes work after updates
+--
+select _timescaledb_debug.is_compressed_tid(ctid),
+       created_at,
+       location_id,
+       temp
+  from :chunk2
+order by location_id, created_at desc limit 2;
+ is_compressed_tid |          created_at          | location_id |       temp       
+-------------------+------------------------------+-------------+------------------
+ t                 | Wed Jun 08 16:57:50 2022 PDT |           1 | 4.61673551524566
+ t                 | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
+(2 rows)
+
+-- first update moves the value from the compressed rel to the non-compressed (seen via ctid)
+update :hypertable set temp=1.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
+select _timescaledb_debug.is_compressed_tid(ctid),
+       created_at,
+       location_id,
+       temp
+  from :chunk2
+order by location_id, created_at desc limit 2;
+ is_compressed_tid |          created_at          | location_id |       temp       
+-------------------+------------------------------+-------------+------------------
+ f                 | Wed Jun 08 16:57:50 2022 PDT |           1 |                1
+ t                 | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
+(2 rows)
+
+-- second update should be a hot update (tuple in same block after update, as shown by ctid)
+update :hypertable set temp=2.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
+select _timescaledb_debug.is_compressed_tid(ctid),
+       created_at,
+       location_id,
+       temp
+  from :chunk2
+order by location_id, created_at desc limit 2;
+ is_compressed_tid |          created_at          | location_id |       temp       
+-------------------+------------------------------+-------------+------------------
+ f                 | Wed Jun 08 16:57:50 2022 PDT |           1 |                2
+ t                 | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
+(2 rows)
+
+-- make sure query uses a segmentby index and returns the correct data for the update value
+select explain_anonymize(format($$
+       select created_at, location_id, temp from %s where location_id=1 and temp=2.0
+$$, :'chunk2'));
+                                explain_anonymize                                 
+----------------------------------------------------------------------------------
+ Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk
+   Index Cond: (location_id = 1)
+   Filter: (temp = '2'::double precision)
+(3 rows)
+
+select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
+          created_at          | location_id | temp 
+------------------------------+-------------+------
+ Wed Jun 08 16:57:50 2022 PDT |           1 |    2
+(1 row)
+
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+vacuum analyze :hypertable;
+-- Test index scan on non-segmentby column
+select explain_analyze_anonymize(format($$
+   select device_id, avg(temp) from %s where device_id = 10
+   group by device_id
+$$, :'hypertable'));
+                                                explain_analyze_anonymize                                                 
+--------------------------------------------------------------------------------------------------------------------------
+ Finalize GroupAggregate (actual rows=N loops=N)
+   ->  Append (actual rows=N loops=N)
+         ->  Partial GroupAggregate (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                     Index Cond: (device_id = 10)
+         ->  Partial GroupAggregate (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                     Index Cond: (device_id = 10)
+         ->  Partial GroupAggregate (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                     Index Cond: (device_id = 10)
+         ->  Partial GroupAggregate (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                     Index Cond: (device_id = 10)
+         ->  Partial GroupAggregate (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                     Index Cond: (device_id = 10)
+         ->  Partial GroupAggregate (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+                     Index Cond: (device_id = 10)
+ Arrays read from cache: N
+ Arrays decompressed: 998
+(22 rows)
+
+select explain_analyze_anonymize(format($$
+   select device_id, avg(temp) from %s where device_id = 10
+   group by device_id
+$$, :'chunk1'));
+                                          explain_analyze_anonymize                                           
+--------------------------------------------------------------------------------------------------------------
+ GroupAggregate (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (device_id = 10)
+ Arrays read from cache: N
+ Arrays decompressed: 197
+(5 rows)
+
+-- Test index scan on segmentby column
+select explain_analyze_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id = 5
+$$, :'hypertable'));
+                                           explain_analyze_anonymize                                            
+----------------------------------------------------------------------------------------------------------------
+ Append (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+ Arrays read from cache: N
+ Arrays decompressed: 100
+(15 rows)
+
+select explain_analyze_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id = 5
+$$, :'chunk1'));
+                                        explain_analyze_anonymize                                         
+----------------------------------------------------------------------------------------------------------
+ Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+   Index Cond: (location_id = 5)
+ Arrays read from cache: N
+ Arrays decompressed: 10
+(4 rows)
+
+-- These should generate decompressions as above, but for all columns.
+select explain_analyze_anonymize(format($$
+    select * from %s where location_id = 5
+$$, :'hypertable'));
+                                           explain_analyze_anonymize                                            
+----------------------------------------------------------------------------------------------------------------
+ Append (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         Index Cond: (location_id = 5)
+ Arrays read from cache: N
+ Arrays decompressed: 100
+(15 rows)
+
+select explain_analyze_anonymize(format($$
+    select * from %s where location_id = 5
+$$, :'chunk1'));
+                                        explain_analyze_anonymize                                         
+----------------------------------------------------------------------------------------------------------
+ Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+   Index Cond: (location_id = 5)
+ Arrays read from cache: N
+ Arrays decompressed: 10
+(4 rows)
+
+drop table :hypertable cascade;
+NOTICE:  drop cascades to view chunk_indexes
