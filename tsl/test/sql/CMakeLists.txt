@@ -120,7 +120,8 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_create.sql
     hyperstore_cursor.sql
     hyperstore_delete.sql
-    hyperstore_index.sql
+    hyperstore_index_btree.sql
+    hyperstore_index_hash.sql
     hyperstore_insert.sql
     hyperstore_join.sql
     hyperstore_scans.sql
