@@ -120,9 +120,9 @@ WHERE user_view_name = 'conditions_summary_tz'
 SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id_tz;
-                                   bucket_func                                   | bucket_width | bucket_origin | bucket_timezone | bucket_fixed_width 
----------------------------------------------------------------------------------+--------------+---------------+-----------------+--------------------
- timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,text) | @ 1 mon      |               | MSK             | f
+                                        bucket_func                                         | bucket_width | bucket_origin | bucket_timezone | bucket_fixed_width 
+--------------------------------------------------------------------------------------------+--------------+---------------+-----------------+--------------------
+ timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,pg_catalog.text) | @ 1 mon      |               | MSK             | f
 (1 row)
 
 -- Make sure that buckets with specified timezone are always treated as
@@ -146,9 +146,9 @@ WHERE user_view_name = 'conditions_summary_1w'
 SELECT bucket_func, bucket_width, bucket_origin, bucket_timezone, bucket_fixed_width
 FROM _timescaledb_catalog.continuous_aggs_bucket_function
 WHERE mat_hypertable_id = :cagg_id_1w;
-                                   bucket_func                                   | bucket_width | bucket_origin | bucket_timezone | bucket_fixed_width 
----------------------------------------------------------------------------------+--------------+---------------+-----------------+--------------------
- timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,text) | @ 7 days     |               | MSK             | f
+                                        bucket_func                                         | bucket_width | bucket_origin | bucket_timezone | bucket_fixed_width 
+--------------------------------------------------------------------------------------------+--------------+---------------+-----------------+--------------------
+ timescaledb_experimental.time_bucket_ng(interval,timestamp with time zone,pg_catalog.text) | @ 7 days     |               | MSK             | f
 (1 row)
 
 -- Check the invalidation threshold is -infinity
