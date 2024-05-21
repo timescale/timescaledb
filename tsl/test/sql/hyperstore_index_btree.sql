@@ -30,9 +30,10 @@ order by chunk, index;
 set max_parallel_workers_per_gather to 0;
 
 -- save some reference data from an index (only) scan
-explain (costs off)
-select location_id, count(*) into orig from :hypertable
-where location_id in (3,4,5) group by location_id;
+select explain_anonymize(format($$
+       select location_id, count(*) into orig from %s
+       where location_id in (3,4,5) group by location_id
+$$, :'hypertable'));
 
 select location_id, count(*) into orig from :hypertable
 where location_id in (3,4,5) group by location_id;
@@ -53,9 +54,10 @@ create index hypertable_owner_idx on :hypertable (owner_id);
 create index hypertable_location_id_owner_id_idx on :hypertable (location_id, owner_id);
 
 -- Result should be the same with indexes
-explain (costs off)
-select owner_id, count(*) into owner_comp from :hypertable
-where owner_id in (3,4,5) group by owner_id;
+select explain_anonymize(format($$
+       select owner_id, count(*) into owner_comp from %s
+       where owner_id in (3,4,5) group by owner_id
+$$, :'hypertable'));
 select owner_id, count(*) into owner_comp from :hypertable
 where owner_id in (3,4,5) group by owner_id;
 select * from owner_orig join owner_comp using (owner_id) where owner_orig.count != owner_comp.count;
@@ -69,13 +71,16 @@ where chunk=:'chunk2'::regclass and (attname='location_id' or attname='device_id
 
 -- the query should not use index-only scan on the hypestore chunk
 -- (number 2) because it is not supported on segmentby indexes
-explain (costs off)
-select location_id, count(*) into comp from :hypertable
-where location_id in (3,4,5) group by location_id;
+select explain_anonymize(format($$
+       select location_id, count(*) into comp from %s
+       where location_id in (3,4,5) group by location_id
+$$, :'hypertable'));
 
 -- result should be the same
 select location_id, count(*) into comp from :hypertable where location_id in (3,4,5) group by location_id;
 select * from orig join comp using (location_id) where orig.count != comp.count;
+
+drop table orig, owner_orig, owner_comp;
 
 --
 -- test that indexes work after updates
@@ -91,8 +96,9 @@ update :hypertable set temp=2.0 where location_id=1 and created_at='Wed Jun 08 1
 select ctid, created_at, location_id, temp from :chunk2 order by location_id, created_at desc limit 2;
 
 -- make sure query uses a segmentby index and returns the correct data for the update value
-explain (costs off)
-select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
+select explain_anonymize(format($$
+       select created_at, location_id, temp from %s where location_id=1 and temp=2.0
+$$, :'chunk2'));
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 
 select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
@@ -101,40 +107,40 @@ vacuum analyze :hypertable;
 
 -- Test sequence scan
 set enable_indexscan to off;
-select explain_anonymize(format('select * from %s where owner_id = 3', :'hypertable'));
+select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :'hypertable'));
 
 -- TODO(timescale/timescaledb-private#1117): the Decompress Count here
 -- is not correct, but the result shows correctly.
-select explain_anonymize(format('select * from %s where owner_id = 3', :'chunk1'));
+select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :'chunk1'));
 reset enable_indexscan;
 
 -- Test index scan on non-segmentby column
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
    select device_id, avg(temp) from %s where device_id between 10 and 20
    group by device_id
 $$, :'hypertable'));
 
-select explain_anonymize(format($$
-	select device_id, avg(temp) from %s where device_id between 10 and 20
-	group by device_id
+select explain_analyze_anonymize(format($$
+    select device_id, avg(temp) from %s where device_id between 10 and 20
+    group by device_id
 $$, :'chunk1'));
 
 -- Test index scan on segmentby column
-select explain_anonymize(format($$
-	select created_at, location_id, temp from %s where location_id between 5 and 10
+select explain_analyze_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id between 5 and 10
 $$, :'hypertable'));
 
-select explain_anonymize(format($$
-	select created_at, location_id, temp from %s where location_id between 5 and 10
+select explain_analyze_anonymize(format($$
+    select created_at, location_id, temp from %s where location_id between 5 and 10
 $$, :'chunk1'));
 
 -- These should generate decompressions as above, but for all columns.
-select explain_anonymize(format($$
-	select * from %s where location_id between 5 and 10
+select explain_analyze_anonymize(format($$
+    select * from %s where location_id between 5 and 10
 $$, :'hypertable'));
 
-select explain_anonymize(format($$
-	select * from %s where location_id between 5 and 10
+select explain_analyze_anonymize(format($$
+    select * from %s where location_id between 5 and 10
 $$, :'chunk1'));
 
 --
@@ -148,8 +154,8 @@ create table saved_hypertable as select * from :hypertable;
 --
 -- Note that the number of columns decompressed should be zero, since
 -- we do not have to decompress any columns.
-select explain_anonymize(format($$
-	select location_id from %s where location_id between 5 and 10
+select explain_analyze_anonymize(format($$
+    select location_id from %s where location_id between 5 and 10
 $$, :'hypertable'));
 
 -- We just compare the counts here, not the full content.
@@ -159,37 +165,37 @@ select heapam.count as heapam, hyperstore.count as hyperstore
 
 drop table saved_hypertable;
 
--- This should use index-only scan
-select explain_anonymize(format($$
-	select device_id from %s where device_id between 5 and 10
+\echo == This should use index-only scan ==
+select explain_analyze_anonymize(format($$
+    select device_id from %s where device_id between 5 and 10
 $$, :'hypertable'));
 
-select explain_anonymize(format($$
-	select location_id from %s where location_id between 5 and 10
+select explain_analyze_anonymize(format($$
+    select location_id from %s where location_id between 5 and 10
 $$, :'chunk1'));
-select explain_anonymize(format($$
-	select device_id from %s where device_id between 5 and 10
+select explain_analyze_anonymize(format($$
+    select device_id from %s where device_id between 5 and 10
 $$, :'chunk1'));
 
 -- Test index only scan with covering indexes
-select explain_anonymize(format($$
-	select location_id, avg(humidity) from %s where location_id between 5 and 10
-	group by location_id order by location_id
+select explain_analyze_anonymize(format($$
+    select location_id, avg(humidity) from %s where location_id between 5 and 10
+    group by location_id order by location_id
 $$, :'hypertable'));
 
-select explain_anonymize(format($$
-	select device_id, avg(humidity) from %s where device_id between 5 and 10
-	group by device_id order by device_id
+select explain_analyze_anonymize(format($$
+    select device_id, avg(humidity) from %s where device_id between 5 and 10
+    group by device_id order by device_id
 $$, :'hypertable'));
 
-select explain_anonymize(format($$
-	select location_id, avg(humidity) from %s where location_id between 5 and 10
-	group by location_id order by location_id
+select explain_analyze_anonymize(format($$
+    select location_id, avg(humidity) from %s where location_id between 5 and 10
+    group by location_id order by location_id
 $$, :'chunk1'));
 
-select explain_anonymize(format($$
-	select device_id, avg(humidity) from %s where device_id between 5 and 10
-	group by device_id order by device_id
+select explain_analyze_anonymize(format($$
+    select device_id, avg(humidity) from %s where device_id between 5 and 10
+    group by device_id order by device_id
 $$, :'chunk1'));
 
 select location_id, round(avg(humidity)) from :hypertable where location_id between 5 and 10
@@ -292,3 +298,5 @@ insert into non_unique_metrics values ('2024-01-01', 1.0, 1);
 \set ON_ERROR_STOP 1
 -- Should also be able to create via "create index"
 create unique index ui1 on non_unique_metrics (time);
+
+drop table :hypertable cascade;
