@@ -70,7 +70,7 @@ SELECT time,
     NULL
 FROM generate_series('2000-01-13 0:00:00+0'::timestamptz, '2000-01-19 23:55:00+0', :'INTERVAL') gtime (time),
     generate_series(1, 5, 1) gdevice (device_id);
-ANALYZE metrics;
+VACUUM ANALYZE metrics;
 -- create identical hypertable with space partitioning
 CREATE TABLE metrics_space (
     filler_1 int,
