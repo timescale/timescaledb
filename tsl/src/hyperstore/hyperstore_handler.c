@@ -1312,28 +1312,229 @@ hyperstore_tuple_complete_speculative(Relation relation, TupleTableSlot *slot, u
 	relation->rd_tableam = oldtam;
 }
 
+/*
+ * WholeSegmentDeleteState is used to enforce the invariant that only whole
+ * compressed segments can be deleted. See the delete handler function below
+ * for more information.
+ */
+typedef struct WholeSegmentDeleteState
+{
+	ItemPointerData ctid;	  /* Original TID of compressed tuple (decoded) */
+	CommandId cid;			  /* Command ID for the query doing the deletion */
+	int32 count;			  /* The number of values/rows in compressed tuple */
+	Bitmapset *tuple_indexes; /* The values/rows of the compressed tuple deleted so far */
+	MemoryContextCallback end_of_query_cb;
+	MemoryContext mcxt;
+} WholeSegmentDeleteState;
+
+static WholeSegmentDeleteState *delete_state = NULL;
+
+static bool
+whole_segment_delete_state_clear(void)
+{
+	if (delete_state)
+	{
+		/* Only reset the global pointer to indicate this delete state is
+		 * reset. The actual memory is freed when the PortalContext is
+		 * reset */
+		delete_state = NULL;
+		return true;
+	}
+	return false;
+}
+
+#define RAISE_DELETION_ERROR()                                                                     \
+	ereport(ERROR,                                                                                 \
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),                                               \
+			 errmsg("only whole-segment deletes are possible on compressed data"),                 \
+			 errhint("Try deleting based on segment_by key.")));
+
+/*
+ * Callback invoked at the end of a query (command).
+ *
+ * Ensure that the query only deleted whole segments of compressed
+ * data. Otherwise, raise an error.
+ *
+ * The callback is attached to the PortalContext memory context which is
+ * always cleared at the end of a query.
+ */
+static void
+whole_segment_delete_callback(void *arg)
+{
+	/* Clear delete state, but only raise error if we aren't already aborted */
+	if (whole_segment_delete_state_clear() && IsTransactionState())
+		RAISE_DELETION_ERROR();
+}
+
+/*
+ * Create a new delete state.
+ *
+ * Construct the delete state and tie it to the current query via the
+ * PortalContext's callback. This context is reset at the end of a query,
+ * which is a good point to check that delete invariants hold.
+ */
+static WholeSegmentDeleteState *
+whole_segment_delete_state_create(const HyperstoreInfo *hinfo, Relation crel, CommandId cid,
+								  ItemPointer ctid)
+{
+	WholeSegmentDeleteState *state;
+	HeapTupleData tp;
+	Page page;
+	BlockNumber block;
+	Buffer buffer;
+	ItemId lp;
+	bool isnull;
+	Datum d;
+
+	state = MemoryContextAllocZero(PortalContext, sizeof(WholeSegmentDeleteState));
+	state->mcxt = PortalContext;
+	state->end_of_query_cb.func = whole_segment_delete_callback;
+	ItemPointerCopy(ctid, &state->ctid);
+	state->cid = cid;
+	MemoryContextRegisterResetCallback(state->mcxt, &state->end_of_query_cb);
+
+	/* Need to construct a tuple in order to read out the "count" from the
+	 * compressed segment */
+	block = ItemPointerGetBlockNumber(ctid);
+	buffer = ReadBuffer(crel, block);
+	page = BufferGetPage(buffer);
+
+	LockBuffer(buffer, BUFFER_LOCK_EXCLUSIVE);
+
+	lp = PageGetItemId(page, ItemPointerGetOffsetNumber(ctid));
+	Assert(ItemIdIsNormal(lp));
+
+	tp.t_tableOid = RelationGetRelid(crel);
+	tp.t_data = (HeapTupleHeader) PageGetItem(page, lp);
+	tp.t_len = ItemIdGetLength(lp);
+	tp.t_self = *ctid;
+
+	d = heap_getattr(&tp, hinfo->count_cattno, RelationGetDescr(crel), &isnull);
+	state->count = DatumGetInt32(d);
+	UnlockReleaseBuffer(buffer);
+
+	return state;
+}
+
+static void
+whole_segment_delete_state_add_row(WholeSegmentDeleteState *state, uint16 tuple_index)
+{
+	MemoryContext oldmcxt = MemoryContextSwitchTo(state->mcxt);
+	state->tuple_indexes = bms_add_member(state->tuple_indexes, tuple_index);
+	MemoryContextSwitchTo(oldmcxt);
+}
+
+/*
+ * Check if a delete violates the "whole segment" invariant.
+ *
+ * The function will keep accumulating deleted TIDs as long as the following
+ * holds:
+ *
+ * 1. The delete is part of a segment that is the same segment as the previous delete.
+ * 2. The command ID is the same as the previous delete (i.e., still in same query).
+ * 3. The segment still contains rows that haven't been deleted.
+ *
+ * The function raises an error if any of 1 or 2 above is violated.
+ *
+ * Returns true if the whole segment has been deleted, otherwise false.
+ */
+static bool
+is_whole_segment_delete(const HyperstoreInfo *hinfo, Relation crel, CommandId cid, ItemPointer ctid,
+						uint16 tuple_index)
+{
+	if (delete_state == NULL)
+		delete_state = whole_segment_delete_state_create(hinfo, crel, cid, ctid);
+
+	/* Check if any invariant is violated */
+	if (delete_state->cid != cid || !ItemPointerEquals(&delete_state->ctid, ctid))
+	{
+		whole_segment_delete_state_clear();
+		RAISE_DELETION_ERROR();
+	}
+
+	whole_segment_delete_state_add_row(delete_state, tuple_index);
+
+	/* Check if the whole segment is deleted. If so, cleanup. */
+	bool is_whole_segment = bms_num_members(delete_state->tuple_indexes) == delete_state->count;
+
+	if (is_whole_segment)
+		whole_segment_delete_state_clear();
+
+	return is_whole_segment;
+}
+
+/*
+ * Delete handler function.
+ *
+ * The TAM delete handler is invoked for individual rows referenced by TID,
+ * and these TIDs can point to either non-compressed data or into a compressed
+ * segment tuple. For TIDs pointing to non-compressed data, the row can be
+ * deleted directly. However, a TID pointing into a compressed tuple cannot
+ * lead to a delete of the whole compressed tuple unless also all the other
+ * rows in it should be deleted.
+ *
+ * It is tempting to simply disallow deletes directly on compressed
+ * data. However, Hyperstore needs to support such deletes in some cases, for
+ * example, to support foreign key cascading deletes.
+ *
+ * Fortunately, some deletes of compressed data can be supported as long as
+ * the delete involves all rows in a compressed segment.
+ *
+ * The WholeSegmentDeleteState is used to track that this invariant is not
+ * violated.
+ */
 static TM_Result
 hyperstore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snapshot snapshot,
 						Snapshot crosscheck, bool wait, TM_FailureData *tmfd, bool changingPart)
 {
-	if (!is_compressed_tid(tid))
+	TM_Result result = TM_Ok;
+
+	if (is_compressed_tid(tid))
+	{
+		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
+		Relation crel = table_open(caminfo->compressed_relid, RowExclusiveLock);
+		ItemPointerData decoded_tid;
+		uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+
+		/*
+		 * It is only possible to delete the compressed segment if all rows in
+		 * it are deleted.
+		 */
+		if (is_whole_segment_delete(caminfo, crel, cid, &decoded_tid, tuple_index))
+		{
+			result = crel->rd_tableam->tuple_delete(crel,
+													&decoded_tid,
+													cid,
+													snapshot,
+													crosscheck,
+													wait,
+													tmfd,
+													changingPart);
+
+			if (result == TM_SelfModified)
+			{
+				/* The compressed tuple was already deleted by other means in
+				 * the same transaction. This can happen because compression
+				 * DML implemented the optimization to delete whole compressed
+				 * segments after whole-segment deletes were implemented in
+				 * the TAM. Trying to delete again should not hurt, and if it
+				 * is already deleted, we ignore it. */
+				result = TM_Ok;
+			}
+		}
+		table_close(crel, NoLock);
+	}
+	else
 	{
 		/* Just pass this on to regular heap AM */
 		const TableAmRoutine *oldtam = switch_to_heapam(relation);
-		TM_Result result =
+		result =
 			relation->rd_tableam
 				->tuple_delete(relation, tid, cid, snapshot, crosscheck, wait, tmfd, changingPart);
 		relation->rd_tableam = oldtam;
-		return result;
 	}
 
-	/* This shouldn't happen because hypertable_modify should have
-	 * decompressed the data to be deleted already. It can happen, however, if
-	 * DELETE is run directly on a hypertable chunk, because that case isn't
-	 * handled in the current code for DML on compressed chunks. */
-	elog(ERROR, "cannot delete compressed tuple");
-
-	return TM_Ok;
+	return result;
 }
 
 #if PG16_LT
@@ -2706,6 +2907,7 @@ hyperstore_xact_event(XactEvent event, void *arg)
 		case XACT_EVENT_PRE_COMMIT:
 		{
 			ListCell *lc;
+
 			/* Check for relations that might now be partially compressed and
 			 * update their status */
 			foreach (lc, partially_compressed_relids)

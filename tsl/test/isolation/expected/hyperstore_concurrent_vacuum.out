@@ -35,7 +35,6 @@ count
 (1 row)
 
 step s3_delete_half: 
-    set timescaledb.enable_compressed_direct_batch_delete=false;
 	delete from metrics where device_id > 15;
 
 step s3_select: 
@@ -52,12 +51,12 @@ count
 
 tuples_temp_idx|dead_tuples_temp_idx
 ---------------+--------------------
-            775|                   0
+            510|                   0
 (1 row)
 
 tuples_device_id_idx|dead_tuples_device_id_idx
 --------------------+-------------------------
-                 295|                        0
+                  30|                        0
 (1 row)
 
 step s2_vacuum: 
@@ -77,12 +76,12 @@ count
 
 tuples_temp_idx|dead_tuples_temp_idx
 ---------------+--------------------
-            775|                   0
+            510|                   0
 (1 row)
 
 tuples_device_id_idx|dead_tuples_device_id_idx
 --------------------+-------------------------
-                 295|                        0
+                  30|                        0
 (1 row)
 
 step s1_commit: 
@@ -102,12 +101,12 @@ count
 
 tuples_temp_idx|dead_tuples_temp_idx
 ---------------+--------------------
-            333|                 442
+            289|                 221
 (1 row)
 
 tuples_device_id_idx|dead_tuples_device_id_idx
 --------------------+-------------------------
-                 295|                        0
+                  30|                        0
 (1 row)
 
 step s2_vacuum: 
