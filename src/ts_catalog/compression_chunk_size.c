@@ -5,10 +5,10 @@
  */
 #include <postgres.h>
 
-#include "ts_catalog/compression_chunk_size.h"
-#include "ts_catalog/catalog.h"
-#include "scanner.h"
 #include "scan_iterator.h"
+#include "scanner.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_chunk_size.h"
 
 static void
 init_scan_by_uncompressed_chunk_id(ScanIterator *iterator, int32 uncompressed_chunk_id)
@@ -36,96 +36,4 @@ ts_compression_chunk_size_delete(int32 uncompressed_chunk_id)
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
 	}
 	return count;
-}
-
-TotalSizes
-ts_compression_chunk_size_totals()
-{
-	TotalSizes sizes = { 0 };
-	ScanIterator iterator =
-		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessExclusiveLock, CurrentMemoryContext);
-
-	ts_scanner_foreach(&iterator)
-	{
-		bool nulls[Natts_compression_chunk_size];
-		Datum values[Natts_compression_chunk_size];
-		FormData_compression_chunk_size fd;
-		bool should_free;
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-
-		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, nulls);
-		memset(&fd, 0, sizeof(FormData_compression_chunk_size));
-
-		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_heap_size)]);
-		Assert(
-			!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_index_size)]);
-		Assert(
-			!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_toast_size)]);
-		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_heap_size)]);
-		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)]);
-		Assert(!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_toast_size)]);
-		fd.uncompressed_heap_size = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_heap_size)]);
-		fd.uncompressed_index_size = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_index_size)]);
-		fd.uncompressed_toast_size = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_uncompressed_toast_size)]);
-		fd.compressed_heap_size = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_heap_size)]);
-		fd.compressed_index_size = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_index_size)]);
-		fd.compressed_toast_size = DatumGetInt64(
-			values[AttrNumberGetAttrOffset(Anum_compression_chunk_size_compressed_toast_size)]);
-
-		sizes.uncompressed_heap_size += fd.uncompressed_heap_size;
-		sizes.uncompressed_index_size += fd.uncompressed_index_size;
-		sizes.uncompressed_toast_size += fd.uncompressed_toast_size;
-		sizes.compressed_heap_size += fd.compressed_heap_size;
-		sizes.compressed_index_size += fd.compressed_index_size;
-		sizes.compressed_toast_size += fd.compressed_toast_size;
-
-		if (should_free)
-			heap_freetuple(tuple);
-	}
-
-	return sizes;
-}
-
-/* Return the pre-compression row count for the chunk */
-int64
-ts_compression_chunk_size_row_count(int32 uncompressed_chunk_id)
-{
-	int found_cnt = 0;
-	int64 rowcnt = 0;
-	ScanIterator iterator =
-		ts_scan_iterator_create(COMPRESSION_CHUNK_SIZE, AccessShareLock, CurrentMemoryContext);
-	init_scan_by_uncompressed_chunk_id(&iterator, uncompressed_chunk_id);
-	ts_scanner_foreach(&iterator)
-	{
-		bool nulls[Natts_compression_chunk_size];
-		Datum values[Natts_compression_chunk_size];
-		bool should_free;
-		HeapTuple tuple = ts_scan_iterator_fetch_heap_tuple(&iterator, false, &should_free);
-
-		heap_deform_tuple(tuple, ts_scan_iterator_tupledesc(&iterator), values, nulls);
-		if (!nulls[AttrNumberGetAttrOffset(Anum_compression_chunk_size_numrows_pre_compression)])
-			rowcnt = DatumGetInt64(values[AttrNumberGetAttrOffset(
-				Anum_compression_chunk_size_numrows_pre_compression)]);
-		if (should_free)
-			heap_freetuple(tuple);
-		found_cnt++;
-	}
-	if (found_cnt != 1)
-	{
-		/* We do not want to error here because this runs as part of VACUUM
-		 * and we want that to successfully finish even if metadata for a
-		 * chunk is incomplete here.
-		 */
-		rowcnt = 0;
-		elog(WARNING,
-			 "no unique record for chunk with id %d in %s",
-			 uncompressed_chunk_id,
-			 COMPRESSION_CHUNK_SIZE_TABLE_NAME);
-	}
-	return rowcnt;
 }

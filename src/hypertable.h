@@ -151,8 +151,6 @@ extern TSDLLEXPORT int64 ts_hypertable_get_open_dim_max_value(const Hypertable *
 
 extern TSDLLEXPORT bool ts_hypertable_has_compression_table(const Hypertable *ht);
 extern TSDLLEXPORT void ts_hypertable_formdata_fill(FormData_hypertable *fd, const TupleInfo *ti);
-extern TSDLLEXPORT void ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema,
-												   const char *name);
 
 #define hypertable_scan(schema, table, tuple_found, data, lockmode)                                \
 	ts_hypertable_scan_with_memory_context(schema,                                                 \

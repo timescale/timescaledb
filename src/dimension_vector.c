@@ -14,18 +14,6 @@ cmp_slices(const void *left, const void *right)
 	return ts_dimension_slice_cmp(left_slice, right_slice);
 }
 
-/*
- * identical to cmp_slices except for reversed arguments to ts_dimension_slice_cmp
- */
-static int
-cmp_slices_reverse(const void *left, const void *right)
-{
-	const DimensionSlice *left_slice = *((DimensionSlice **) left);
-	const DimensionSlice *right_slice = *((DimensionSlice **) right);
-
-	return -ts_dimension_slice_cmp(left_slice, right_slice);
-}
-
 static int
 cmp_coordinate_and_slice(const void *left, const void *right)
 {
@@ -69,17 +57,6 @@ ts_dimension_vec_sort(DimensionVec **vecptr)
 
 	if (vec->num_slices > 1)
 		qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices);
-
-	return vec;
-}
-
-DimensionVec *
-ts_dimension_vec_sort_reverse(DimensionVec **vecptr)
-{
-	DimensionVec *vec = *vecptr;
-
-	if (vec->num_slices > 1)
-		qsort(vec->slices, vec->num_slices, sizeof(DimensionSlice *), cmp_slices_reverse);
 
 	return vec;
 }

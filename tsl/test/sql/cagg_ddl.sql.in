@@ -1312,8 +1312,14 @@ CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
 -- Check the watermark after the refresh and before truncate the CAgg
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_before;
 
+-- Exists chunks before truncate the cagg (> 0)
+SELECT count(*) FROM show_chunks('conditions_daily');
+
 -- Truncate the given CAgg, it should reset the watermark to the empty state
 TRUNCATE conditions_daily;
+
+-- No chunks remains after truncate the cagg (= 0)
+SELECT count(*) FROM show_chunks('conditions_daily');
 
 -- Watermark should be reseted
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_after;
