@@ -351,7 +351,7 @@ SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_agg'
 CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
   mat_hypertable_id integer NOT NULL,
   -- The bucket function
-  bucket_func regprocedure NOT NULL,
+  bucket_func text NOT NULL,
   -- `bucket_width` argument of the function, e.g. "1 month"
   bucket_width text NOT NULL,
   -- optional `origin` argument of the function provided by the user
@@ -364,7 +364,8 @@ CREATE TABLE _timescaledb_catalog.continuous_aggs_bucket_function (
   bucket_fixed_width bool NOT NULL,
   -- table constraints
   CONSTRAINT continuous_aggs_bucket_function_pkey PRIMARY KEY (mat_hypertable_id),
-  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE
+  CONSTRAINT continuous_aggs_bucket_function_mat_hypertable_id_fkey FOREIGN KEY (mat_hypertable_id) REFERENCES _timescaledb_catalog.hypertable (id) ON DELETE CASCADE,
+  CONSTRAINT continuous_aggs_bucket_function_func_check CHECK (pg_catalog.to_regprocedure(bucket_func) IS DISTINCT FROM 0)
 );
 
 SELECT pg_catalog.pg_extension_config_dump('_timescaledb_catalog.continuous_aggs_bucket_function', '');
