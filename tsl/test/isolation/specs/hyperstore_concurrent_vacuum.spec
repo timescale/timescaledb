@@ -63,7 +63,6 @@ step "s2_vacuum" {
 
 session "s3"
 step "s3_delete_half" {
-    set timescaledb.enable_compressed_direct_batch_delete=false;
 	delete from metrics where device_id > 15;
 }
 step "s3_select" {
