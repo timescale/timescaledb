@@ -38,7 +38,7 @@ alter table :chunk set access method hyperstore;
 
 -- Test that filtering is not removed on ColumnarScan when it includes
 -- columns that cannot be scankeys.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select * from %s where device < 4 and location = 2 limit 5
 $$, :'chunk'));
 
@@ -61,14 +61,14 @@ where lhs.metric_id is null or rhs.metric_id is null;
 -- does not decompress more than necessary to filter data. The
 -- decompress count should be equal to the number cache hits (i.e., we
 -- only decompress one column per segment).
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where humidity > 110
 $$, :'chunk'));
 select count(*) from :chunk where humidity > 110;
 
 -- Test with a query that should generate some rows. Make sure it
 -- matches the result of a normal table.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where humidity > 50
 $$, :'chunk'));
 
@@ -85,13 +85,13 @@ where lhs.metric_id is null or rhs.metric_id is null;
 
 -- Test that a type that a type that does not support batch
 -- decompression (numeric in this case) behaves as expected.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where temp > 50
 $$, :'chunk'));
 select count(*) from :chunk where temp > 50;
 
 -- test same thing with a query that should generate some rows.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where temp > 20
 $$, :'chunk'));
 
@@ -118,7 +118,7 @@ from (select count(*) from :chunk where humidity > 40 and temp > 20) lhs,
 
 -- test scans with clasues that are vectorizable, non-vectorizable,
 -- and used as scan key.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where humidity > 40 and temp > 20 and device = 3
 $$, :'chunk'));
 select count(*) from :chunk where humidity > 40 and temp > 20 and device = 3;
@@ -129,7 +129,7 @@ select lhs.count, rhs.count from
 
 -- test that columnar scan can be turned off
 set timescaledb.enable_columnarscan = false;
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select * from %s where device < 4 order by device asc limit 5
 $$, :'chunk'));
 

@@ -14,7 +14,7 @@
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
 -- number of heap fetches, rows, loops, etc.
-create function explain_anonymize(text) returns setof text
+create function explain_analyze_anonymize(text) returns setof text
 language plpgsql as
 $$
 declare
@@ -23,11 +23,32 @@ begin
     for ln in
         execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
     loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
         ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
         return next ln;
     end loop;
 end;
@@ -80,30 +101,16 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
  order by chunk2 asc
  limit 1 offset 1 \gset
-create function explain_costs(text) returns setof text
-language plpgsql as
-$$
-declare
-    ln text;
-begin
-    for ln in
-        execute format('explain (costs off) %s', $1)
-    loop
-	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
-        return next ln;
-    end loop;
-end;
-$$;
 -- We need to drop the index to trigger parallel plans. Otherwise they
 -- will use the index.
 drop index hypertable_device_id_idx;
 -- Show parallel plan and count on uncompressed (non-hyperstore)
 -- hypertable
 set max_parallel_workers_per_gather=2;
-select explain_costs(format($$
+select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
-                         explain_costs                         
+                       explain_anonymize                       
 ---------------------------------------------------------------
  Finalize GroupAggregate
    ->  Gather
@@ -156,10 +163,10 @@ select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore'
 -- Show count without parallel plan and without ColumnarScan
 set timescaledb.enable_columnarscan=false;
 set max_parallel_workers_per_gather=0;
-select explain_costs(format($$
+select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
-                 explain_costs                  
+               explain_anonymize                
 ------------------------------------------------
  Finalize GroupAggregate
    ->  Append
@@ -191,10 +198,10 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
 
 -- Enable parallel on SeqScan and check for same result
 set max_parallel_workers_per_gather=2;
-select explain_costs(format($$
+select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
-                         explain_costs                         
+                       explain_anonymize                       
 ---------------------------------------------------------------
  Finalize GroupAggregate
    ->  Gather
@@ -228,10 +235,10 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
 
 -- Enable ColumnarScan and check for same result
 set timescaledb.enable_columnarscan=true;
-select explain_costs(format($$
+select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
-                                  explain_costs                                  
+                                explain_anonymize                                
 ---------------------------------------------------------------------------------
  Finalize GroupAggregate
    ->  Gather
@@ -264,10 +271,10 @@ select device_id, count(*) from :hypertable where device_id=1 group by device_id
 (1 row)
 
 -- Parallel plan with hyperstore on single chunk
-select explain_costs(format($$
+select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
-                                  explain_costs                                  
+                                explain_anonymize                                
 ---------------------------------------------------------------------------------
  Finalize GroupAggregate
    ->  Gather

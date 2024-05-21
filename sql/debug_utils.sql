@@ -11,3 +11,6 @@ AS '@MODULE_PATHNAME@', 'ts_extension_get_state' LANGUAGE C;
 
 CREATE OR REPLACE FUNCTION _timescaledb_debug.is_compressed_tid(tid) RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_is_compressed_tid' LANGUAGE C STRICT;
+
+GRANT EXECUTE ON FUNCTION _timescaledb_debug.is_compressed_tid TO PUBLIC;
+
