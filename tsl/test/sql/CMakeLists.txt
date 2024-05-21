@@ -133,6 +133,7 @@ set(SOLO_TESTS
     cagg_invalidation
     move
     reorder
+    transparent_decompression-${PG_VERSION_MAJOR}
     telemetry_stats)
 
 set(TEST_TEMPLATES
