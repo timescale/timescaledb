@@ -8,6 +8,7 @@
 #include <commands/view.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
+#include <utils/regproc.h>
 #include <utils/timestamp.h>
 
 #include "extension.h"
@@ -310,7 +311,7 @@ cagg_time_bucket_update(TupleInfo *ti, void *data)
 
 	/* Update the bucket function */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
-		ObjectIdGetDatum(cagg->bucket_function->bucket_function);
+		CStringGetTextDatum(format_procedure_qualified(cagg->bucket_function->bucket_function));
 	doReplace[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] = true;
 
 	/* Set new origin if not already present. Time_bucket and time_bucket_ng use different
