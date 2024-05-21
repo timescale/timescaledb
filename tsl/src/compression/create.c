@@ -592,6 +592,13 @@ validate_existing_constraints(Hypertable *ht, CompressionSettings *settings)
 										   " enforced with the given compression configuration.",
 										   NameStr(form->conname))));
 				}
+#if PG17_GE
+				else if (form->contype == CONSTRAINT_NOTNULL)
+				{
+					/* CONSTRAINT_NOTNULL introduced in PG17, see b0e96f311985 */
+					continue;
+				}
+#endif
 				/* is colno a segment-by or order_by column */
 				else if (!form->conindid && !ts_array_is_member(settings->fd.segmentby, attname) &&
 						 !ts_array_is_member(settings->fd.orderby, attname))
