@@ -208,7 +208,7 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 
 	/* Bucket function */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
-		ObjectIdGetDatum(bucket_function);
+		CStringGetTextDatum(format_procedure_qualified(bucket_function));
 
 	/* Bucket width */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
