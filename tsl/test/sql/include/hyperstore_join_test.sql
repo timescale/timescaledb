@@ -6,7 +6,7 @@
 \set outer :jointype _outer_join
 
 -- Test inner join to make sure that it works.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
     select * from %s join the_hyperstore using (device_id)
 $$, :'chunk1'));
 
@@ -19,7 +19,7 @@ where r.device_id is null or e.device_id is null;
 \x off
 
 -- Test outer join (left in this case) to make sure that it works.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
 select created_at, updated_at, o.device_id, i.humidity, o.height
   from :chunk1 i left join the_hyperstore o
     on i.created_at = o.updated_at and i.device_id = o.device_id;
