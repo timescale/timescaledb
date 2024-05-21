@@ -9,7 +9,7 @@
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
 -- number of heap fetches, rows, loops, etc.
-create function explain_anonymize(text) returns setof text
+create function explain_analyze_anonymize(text) returns setof text
 language plpgsql as
 $$
 declare
@@ -18,11 +18,32 @@ begin
     for ln in
         execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
     loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
         ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
         return next ln;
     end loop;
 end;
@@ -66,10 +87,10 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk
 alter table :chunk set access method hyperstore;
 -- Test that filtering is not removed on ColumnarScan when it includes
 -- columns that cannot be scankeys.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select * from %s where device < 4 and location = 2 limit 5
 $$, :'chunk'));
-                              explain_anonymize                               
+                          explain_analyze_anonymize                           
 ------------------------------------------------------------------------------
  Limit (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
@@ -100,10 +121,10 @@ where lhs.metric_id is null or rhs.metric_id is null;
 -- does not decompress more than necessary to filter data. The
 -- decompress count should be equal to the number cache hits (i.e., we
 -- only decompress one column per segment).
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where humidity > 110
 $$, :'chunk'));
-                              explain_anonymize                               
+                          explain_analyze_anonymize                           
 ------------------------------------------------------------------------------
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
@@ -121,10 +142,10 @@ select count(*) from :chunk where humidity > 110;
 
 -- Test with a query that should generate some rows. Make sure it
 -- matches the result of a normal table.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where humidity > 50
 $$, :'chunk'));
-                              explain_anonymize                               
+                          explain_analyze_anonymize                           
 ------------------------------------------------------------------------------
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
@@ -154,10 +175,10 @@ where lhs.metric_id is null or rhs.metric_id is null;
 
 -- Test that a type that a type that does not support batch
 -- decompression (numeric in this case) behaves as expected.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where temp > 50
 $$, :'chunk'));
-                              explain_anonymize                               
+                          explain_analyze_anonymize                           
 ------------------------------------------------------------------------------
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
@@ -174,10 +195,10 @@ select count(*) from :chunk where temp > 50;
 (1 row)
 
 -- test same thing with a query that should generate some rows.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where temp > 20
 $$, :'chunk'));
-                              explain_anonymize                               
+                          explain_analyze_anonymize                           
 ------------------------------------------------------------------------------
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
@@ -236,10 +257,10 @@ from (select count(*) from :chunk where humidity > 40 and temp > 20) lhs,
 
 -- test scans with clasues that are vectorizable, non-vectorizable,
 -- and used as scan key.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select count(*) from %s where humidity > 40 and temp > 20 and device = 3
 $$, :'chunk'));
-                              explain_anonymize                               
+                          explain_analyze_anonymize                           
 ------------------------------------------------------------------------------
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
@@ -267,10 +288,10 @@ select lhs.count, rhs.count from
 
 -- test that columnar scan can be turned off
 set timescaledb.enable_columnarscan = false;
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
        select * from %s where device < 4 order by device asc limit 5
 $$, :'chunk'));
-                        explain_anonymize                         
+                    explain_analyze_anonymize                     
 ------------------------------------------------------------------
  Limit (actual rows=N loops=N)
    ->  Sort (actual rows=N loops=N)

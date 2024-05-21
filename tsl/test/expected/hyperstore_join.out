@@ -14,7 +14,7 @@
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
 -- number of heap fetches, rows, loops, etc.
-create function explain_anonymize(text) returns setof text
+create function explain_analyze_anonymize(text) returns setof text
 language plpgsql as
 $$
 declare
@@ -23,11 +23,32 @@ begin
     for ln in
         execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
     loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
         ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
-	ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
         return next ln;
     end loop;
 end;
@@ -136,20 +157,20 @@ set enable_nestloop to false;
 \set inner :jointype _join
 \set outer :jointype _outer_join
 -- Test inner join to make sure that it works.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
     select * from %s join the_hyperstore using (device_id)
 $$, :'chunk1'));
-                                                      explain_anonymize                                                       
+                                                  explain_analyze_anonymize                                                   
 ------------------------------------------------------------------------------------------------------------------------------
  Merge Join (actual rows=N loops=N)
-   Merge Cond: (_hyper_I_N_chunk.device_id = _hyper_3_7_chunk.device_id)
-   ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_1_chunk (actual rows=N loops=N)
+   Merge Cond: (_hyper_I_N_chunk.device_id = _hyper_I_N_chunk.device_id)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
    ->  Materialize (actual rows=N loops=N)
          ->  Merge Append (actual rows=N loops=N)
                Sort Key: _hyper_I_N_chunk.device_id
-               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_3_7_chunk (actual rows=N loops=N)
-               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_3_8_chunk (actual rows=N loops=N)
-               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_3_9_chunk (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
  Arrays read from cache: N
  Arrays decompressed: 9
 (11 rows)
@@ -163,7 +184,7 @@ where r.device_id is null or e.device_id is null;
 
 \x off
 -- Test outer join (left in this case) to make sure that it works.
-select explain_anonymize(format($$
+select explain_analyze_anonymize(format($$
 select created_at, updated_at, o.device_id, i.humidity, o.height
   from :chunk1 i left join the_hyperstore o
     on i.created_at = o.updated_at and i.device_id = o.device_id;
