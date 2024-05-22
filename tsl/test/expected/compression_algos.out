@@ -1596,10 +1596,10 @@ group by 2, 3 order by 1 desc
  count | bulk_result | rowbyrow_result 
 -------+-------------+-----------------
     18 | true        | true
-    17 | XX001       | XX001
+    15 | XX001       | XX001
      8 | 08P01       | 08P01
-     2 | 22021       | 22021
      2 | 3F000       | 3F000
+     1 | 22021       | 22021
      1 | false       | false
 (6 rows)
 
