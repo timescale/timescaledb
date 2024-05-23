@@ -15,7 +15,6 @@
 #include "compat/compat.h"
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 
-#if PG14_GE
 /* clang-format off */
 /*
  * Context struct for a ModifyTable operation, containing basic execution
@@ -102,8 +101,6 @@ TM_Result	ht_ExecDeleteAct(ModifyTableContext * context, ResultRelInfo * resultR
 				 ItemPointer tupleid, bool changingPart);
 void		ht_ExecDeleteEpilogue(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 				   ItemPointer tupleid, HeapTuple oldtuple);
-
-#endif
 
 #if PG15_GE
 /* MERGE specific */

@@ -24,10 +24,6 @@
 #include <compression/compression.h>
 #include "debug_assert.h"
 
-#if PG14_LT
-#define VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer) (toast_pointer).va_extsize
-#endif
-
 /* We redefine this postgres macro to fix a warning about signed integer comparison. */
 #define TS_VARATT_EXTERNAL_IS_COMPRESSED(toast_pointer)                                            \
 	(((int32) VARATT_EXTERNAL_GET_EXTSIZE(toast_pointer)) < (toast_pointer).va_rawsize - VARHDRSZ)
@@ -277,38 +273,6 @@ ts_toast_fetch_datum(struct varlena *attr, Detoaster *detoaster, MemoryContext d
 	return result;
 }
 
-/*
- * Copy of Postgres' toast_decompress_datum(): Decompress a compressed version
- * of a varlena datum
- * The decompression functions have changed since PG13, so we have to keep two
- * implementations.
- */
-#if PG14_LT
-
-#include <common/pg_lzcompress.h>
-
-static struct varlena *
-ts_toast_decompress_datum(struct varlena *attr)
-{
-	struct varlena *result;
-
-	Assert(VARATT_IS_COMPRESSED(attr));
-
-	result = (struct varlena *) palloc(TOAST_COMPRESS_RAWSIZE(attr) + VARHDRSZ);
-	SET_VARSIZE(result, TOAST_COMPRESS_RAWSIZE(attr) + VARHDRSZ);
-
-	if (pglz_decompress(TOAST_COMPRESS_RAWDATA(attr),
-						TOAST_COMPRESS_SIZE(attr),
-						VARDATA(result),
-						TOAST_COMPRESS_RAWSIZE(attr),
-						true) < 0)
-		elog(ERROR, "compressed data is corrupted");
-
-	return result;
-}
-
-#else
-
 #include <access/toast_compression.h>
 
 static struct varlena *
@@ -334,7 +298,6 @@ ts_toast_decompress_datum(struct varlena *attr)
 			return NULL; /* keep compiler quiet */
 	}
 }
-#endif
 
 /*
  * Modification of Postgres' detoast_attr() where we use the stateful Detoaster

@@ -150,7 +150,6 @@ collation_oid_from_name(char *schema_name, char *collation_name)
 	return get_collation_oid(namel, false);
 }
 
-#if PG14_GE
 /*
  * =======================================
  * Record serialized partials errata here:
@@ -223,13 +222,11 @@ zero_fill_bytearray(bytea *serialized_partial, size_t missing_length)
 
 	return new_bytea;
 }
-#endif
 
 /* Only call this function if the partial is known to be problematic. */
 static bytea *
 sanitize_serialized_partial(Oid deserialfnoid, bytea *serialized_partial)
 {
-#if PG14_GE
 	if ((deserialfnoid == F_NUMERIC_DESERIALIZE) || (deserialfnoid == F_NUMERIC_AVG_DESERIALIZE))
 		/*
 		 * Always add NUMERIC_PARTIAL_MISSING_LENGTH extra bytes because the length is not fixed.
@@ -237,7 +234,6 @@ sanitize_serialized_partial(Oid deserialfnoid, bytea *serialized_partial)
 		 * exception is thrown if the serialized_partial is not fully consumed by deserialfn().
 		 */
 		return zero_fill_bytearray(serialized_partial, NUMERIC_PARTIAL_MISSING_LENGTH);
-#endif
 
 	return serialized_partial;
 }

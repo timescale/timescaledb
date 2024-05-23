@@ -400,8 +400,7 @@ QUERY PLAN
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
                      Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                      ->  Parallel Seq Scan on compress_hyper_X_X_chunk
-                           Filter: ((_ts_meta_max_1 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
-(9 rows)
+(8 rows)
 
 --functions not yet optimized
 :PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;

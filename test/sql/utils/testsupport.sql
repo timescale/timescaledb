@@ -5,6 +5,10 @@
 
 SELECT _timescaledb_functions.stop_background_workers();
 
+-- Cleanup any system job stats that can lead to flaky test
+DELETE FROM _timescaledb_internal.bgw_job_stat_history WHERE job_id < 1000;
+DELETE FROM _timescaledb_internal.bgw_job_stat WHERE job_id < 1000;
+
 CREATE SCHEMA IF NOT EXISTS test;
 GRANT USAGE ON SCHEMA test TO PUBLIC;
 

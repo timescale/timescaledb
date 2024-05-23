@@ -13,6 +13,7 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
+#include "annotations.h"
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
 #include "ts_catalog/array_utils.h"
@@ -73,13 +74,12 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 				{
 					compressed_rel->baserestrictinfo =
 						lappend(compressed_rel->baserestrictinfo,
-								make_simple_restrictinfo_compat(root, lfirst(lc_and)));
+								make_simple_restrictinfo(root, lfirst(lc_and)));
 				}
 			}
 			else
 				compressed_rel->baserestrictinfo =
-					lappend(compressed_rel->baserestrictinfo,
-							make_simple_restrictinfo_compat(root, expr));
+					lappend(compressed_rel->baserestrictinfo, make_simple_restrictinfo(root, expr));
 		}
 		/* We need to check the restriction clause on the decompress node if the clause can't be
 		 * pushed down or needs re-checking */
@@ -329,6 +329,15 @@ modify_expression(Node *node, QualPushdownContext *context)
 			break;
 		}
 		case T_BoolExpr:
+		{
+			if (castNode(BoolExpr, node)->boolop == OR_EXPR)
+			{
+				/* ORs are not pushable */
+				context->can_pushdown = false;
+				return NULL;
+			}
+			TS_FALLTHROUGH;
+		}
 		case T_CoerceViaIO:
 		case T_RelabelType:
 		case T_ScalarArrayOpExpr:
