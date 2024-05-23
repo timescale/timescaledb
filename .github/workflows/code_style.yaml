@@ -107,8 +107,24 @@ jobs:
             psutil pygithub pglast
           pip list
           pip list --user
+
+      # Using e375302a until 1.10.1 get released including the following PR
+      # https://github.com/postgrespro/testgres/pull/125
+      - name: Checkout testgres
+        uses: actions/checkout@v4
+        with:
+          repository: 'postgrespro/testgres'
+          path: 'testgres'
+          ref: e375302a114cd4df3ceed54d6526f250c44c08e7
+
+      - name: Build and install testgres
+        run: |
+          cd testgres
+          python setup.py install --user
+
       - name: Checkout source
         uses: actions/checkout@v4
+
       - name: Run prospector
         run: |
           find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +
