@@ -208,7 +208,7 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 
 	/* Bucket function */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
-		ObjectIdGetDatum(bucket_function);
+		CStringGetTextDatum(format_procedure_qualified(bucket_function));
 
 	/* Bucket width */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
@@ -780,47 +780,48 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info))
 	{
 		/* Bucketing on time */
-		Assert(bucket_info->bucket_time_width != NULL);
+		Assert(bucket_info->bf->bucket_time_width != NULL);
 		bucket_width = DatumGetCString(
-			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->bucket_time_width)));
+			DirectFunctionCall1(interval_out,
+								IntervalPGetDatum(bucket_info->bf->bucket_time_width)));
 
-		if (!TIMESTAMP_NOT_FINITE(bucket_info->bucket_time_origin))
+		if (!TIMESTAMP_NOT_FINITE(bucket_info->bf->bucket_time_origin))
 		{
 			bucket_origin = DatumGetCString(
 				DirectFunctionCall1(timestamptz_out,
-									TimestampTzGetDatum(bucket_info->bucket_time_origin)));
+									TimestampTzGetDatum(bucket_info->bf->bucket_time_origin)));
 		}
 
-		if (bucket_info->bucket_time_offset != NULL)
+		if (bucket_info->bf->bucket_time_offset != NULL)
 		{
 			bucket_offset = DatumGetCString(
 				DirectFunctionCall1(interval_out,
-									IntervalPGetDatum(bucket_info->bucket_time_offset)));
+									IntervalPGetDatum(bucket_info->bf->bucket_time_offset)));
 		}
 	}
 	else
 	{
 		/* Bucketing on integers */
 		bucket_width = palloc0(MAXINT8LEN + 1 * sizeof(char));
-		pg_lltoa(bucket_info->bucket_integer_width, bucket_width);
+		pg_lltoa(bucket_info->bf->bucket_integer_width, bucket_width);
 
 		/* Integer buckets with origin are not supported, so noting to do. */
 		Assert(bucket_origin == NULL);
 
-		if (bucket_info->bucket_integer_offset != 0)
+		if (bucket_info->bf->bucket_integer_offset != 0)
 		{
 			bucket_offset = palloc0(MAXINT8LEN + 1 * sizeof(char));
-			pg_lltoa(bucket_info->bucket_integer_offset, bucket_offset);
+			pg_lltoa(bucket_info->bf->bucket_integer_offset, bucket_offset);
 		}
 	}
 
 	create_bucket_function_catalog_entry(materialize_hypertable_id,
-										 bucket_info->bucket_func->funcid,
+										 bucket_info->bf->bucket_function,
 										 bucket_width,
 										 bucket_origin,
 										 bucket_offset,
-										 bucket_info->bucket_time_timezone,
-										 time_bucket_info_has_fixed_width(bucket_info));
+										 bucket_info->bf->bucket_time_timezone,
+										 bucket_info->bf->bucket_fixed_interval);
 
 	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
 	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);
