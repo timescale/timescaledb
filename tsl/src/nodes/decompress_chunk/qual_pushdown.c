@@ -13,7 +13,6 @@
 #include <utils/builtins.h>
 #include <utils/typcache.h>
 
-#include "annotations.h"
 #include "decompress_chunk.h"
 #include "qual_pushdown.h"
 #include "ts_catalog/array_utils.h"
@@ -63,8 +62,18 @@ pushdown_quals(PlannerInfo *root, CompressionSettings *settings, RelOptInfo *chu
 		context.can_pushdown = true;
 		context.needs_recheck = false;
 		expr = (Expr *) modify_expression((Node *) ri->clause, &context);
+
 		if (context.can_pushdown)
 		{
+			/*
+			 * We have to call eval_const_expressions after pushing down
+			 * the quals, to normalize the bool expressions. Namely, we might add an
+			 * AND boolexpr on minmax metadata columns, but the normal form is not
+			 * allowed to have nested AND boolexprs. They break some functions like
+			 * generate_bitmap_or_paths().
+			 */
+			expr = (Expr *) eval_const_expressions(root, (Node *) expr);
+
 			if (IsA(expr, BoolExpr) && ((BoolExpr *) expr)->boolop == AND_EXPR)
 			{
 				/* have to separate out and expr into different restrict infos */
@@ -329,15 +338,6 @@ modify_expression(Node *node, QualPushdownContext *context)
 			break;
 		}
 		case T_BoolExpr:
-		{
-			if (castNode(BoolExpr, node)->boolop == OR_EXPR)
-			{
-				/* ORs are not pushable */
-				context->can_pushdown = false;
-				return NULL;
-			}
-			TS_FALLTHROUGH;
-		}
 		case T_CoerceViaIO:
 		case T_RelabelType:
 		case T_ScalarArrayOpExpr:

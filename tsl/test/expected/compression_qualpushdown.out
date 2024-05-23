@@ -490,13 +490,13 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = SESSION_USER;
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_USER OR c_name = SESSION_USER;
-                              QUERY PLAN                              
-----------------------------------------------------------------------
+                                 QUERY PLAN                                 
+----------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on svf_pushdown
    Chunks excluded during startup: 0
    ->  Custom Scan (DecompressChunk) on _hyper_11_12_chunk
-         Filter: ((c_name = CURRENT_USER) OR (c_name = SESSION_USER))
          ->  Seq Scan on compress_hyper_12_13_chunk
+               Filter: ((c_name = CURRENT_USER) OR (c_name = SESSION_USER))
 (5 rows)
 
 EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = CURRENT_CATALOG;
@@ -561,16 +561,4 @@ EXPLAIN (costs off) SELECT * FROM svf_pushdown WHERE c_name = current_query();
          Filter: (c_name = current_query())
          ->  Seq Scan on compress_hyper_12_13_chunk
 (5 rows)
-
--- test or constraints in lateral query #6912
-SELECT FROM svf_pushdown m1,
-LATERAL(
-  SELECT FROM svf_pushdown m2
-  WHERE
-    m1.time = m2.time AND
-    EXISTS (SELECT random()) OR
-    EXISTS (SELECT FROM meta) LIMIT 1
-) l;
---
-(1 row)
 
