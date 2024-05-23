@@ -63,7 +63,6 @@ destroy_chunk_insert_state(void *cis)
  */
 extern ChunkInsertState *
 ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
-										 TupleTableSlot *slot,
 										 const on_chunk_changed_func on_chunk_changed, void *data)
 {
 	ChunkInsertState *cis;
@@ -97,7 +96,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		 * locking the hypertable. This serves as a fast path for the usual case
 		 * where the chunk already exists.
 		 */
-		Assert(slot);
 		chunk = ts_hypertable_find_chunk_for_point(dispatch->hypertable, point);
 
 #if PG14_GE
@@ -151,36 +149,6 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 		cis_changed = false;
 	}
 
-	if (found)
-	{
-		if (cis->chunk_compressed)
-		{
-			/*
-			 * If this is an INSERT into a compressed chunk with UNIQUE or
-			 * PRIMARY KEY constraints we need to make sure any batches that could
-			 * potentially lead to a conflict are in the decompressed chunk so
-			 * postgres can do proper constraint checking.
-			 */
-			if (ts_cm_functions->decompress_batches_for_insert)
-			{
-				ts_cm_functions->decompress_batches_for_insert(cis, slot);
-				OnConflictAction onconflict_action =
-					chunk_dispatch_get_on_conflict_action(dispatch);
-				/* mark rows visible */
-				if (onconflict_action == ONCONFLICT_UPDATE)
-					dispatch->estate->es_output_cid = GetCurrentCommandId(true);
-			}
-			else
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("functionality not supported under the current \"%s\" license. "
-								"Learn more at https://timescale.com/.",
-								ts_guc_license),
-						 errhint("To access all features and the best time-series "
-								 "experience, try out Timescale Cloud")));
-		}
-	}
-
 	MemoryContextSwitchTo(old_context);
 
 	if (cis_changed && on_chunk_changed)
@@ -190,6 +158,54 @@ ts_chunk_dispatch_get_chunk_insert_state(ChunkDispatch *dispatch, Point *point,
 	dispatch->prev_cis = cis;
 	dispatch->prev_cis_oid = cis->rel->rd_id;
 	return cis;
+}
+
+extern void
+ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkInsertState *cis,
+												TupleTableSlot *slot)
+{
+	if (cis->chunk_compressed)
+	{
+		/*
+		 * If this is an INSERT into a compressed chunk with UNIQUE or
+		 * PRIMARY KEY constraints we need to make sure any batches that could
+		 * potentially lead to a conflict are in the decompressed chunk so
+		 * postgres can do proper constraint checking.
+		 */
+		if (ts_cm_functions->decompress_batches_for_insert)
+		{
+			ts_cm_functions->decompress_batches_for_insert(cis, slot);
+			OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
+			/* mark rows visible */
+			if (onconflict_action == ONCONFLICT_UPDATE)
+				dispatch->estate->es_output_cid = GetCurrentCommandId(true);
+
+			if (ts_guc_max_tuples_decompressed_per_dml > 0)
+			{
+				if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
+							 errmsg("tuple decompression limit exceeded by operation"),
+							 errdetail("current limit: %d, tuples decompressed: %lld",
+									   ts_guc_max_tuples_decompressed_per_dml,
+									   (long long int) cis->cds->tuples_decompressed),
+							 errhint(
+								 "Consider increasing "
+								 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
+								 "to 0 (unlimited).")));
+				}
+			}
+		}
+		else
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("functionality not supported under the current \"%s\" license. "
+							"Learn more at https://timescale.com/.",
+							ts_guc_license),
+					 errhint("To access all features and the best time-series "
+							 "experience, try out Timescale Cloud")));
+	}
 }
 
 static CustomScanMethods chunk_dispatch_plan_methods = {
@@ -413,25 +429,10 @@ chunk_dispatch_exec(CustomScanState *node)
 	/* Find or create the insert state matching the point */
 	cis = ts_chunk_dispatch_get_chunk_insert_state(dispatch,
 												   point,
-												   slot,
 												   on_chunk_insert_state_changed,
 												   state);
 
-	if (ts_guc_max_tuples_decompressed_per_dml > 0)
-	{
-		if (cis->cds->tuples_decompressed > ts_guc_max_tuples_decompressed_per_dml)
-		{
-			ereport(ERROR,
-					(errcode(ERRCODE_CONFIGURATION_LIMIT_EXCEEDED),
-					 errmsg("tuple decompression limit exceeded by operation"),
-					 errdetail("current limit: %d, tuples decompressed: %lld",
-							   ts_guc_max_tuples_decompressed_per_dml,
-							   (long long int) cis->cds->tuples_decompressed),
-					 errhint("Consider increasing "
-							 "timescaledb.max_tuples_decompressed_per_dml_transaction or set "
-							 "to 0 (unlimited).")));
-		}
-	}
+	ts_chunk_dispatch_decompress_batches_for_insert(dispatch, cis, slot);
 
 	/*
 	 * Set the result relation in the executor state to the target chunk.
