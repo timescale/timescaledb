@@ -253,11 +253,7 @@ process_partition(HyperStats *stats, Form_pg_class class, bool ischunk)
 	 * all children, so no need to count the partitions separately since the
 	 * sum will be in the root.
 	 */
-	if (
-#if PG14_GE
-		ischunk &&
-#endif
-		class->reltuples > 0)
+	if (ischunk && class->reltuples > 0)
 	{
 		stats->storage.base.reltuples += class->reltuples;
 	}

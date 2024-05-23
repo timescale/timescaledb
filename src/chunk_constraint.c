@@ -299,12 +299,7 @@ create_dimension_check_constraint(const Dimension *dim, const DimensionSlice *sl
 		PartitioningInfo *partinfo = dim->partitioning;
 		List *funcname = list_make2(makeString(NameStr(partinfo->partfunc.schema)),
 									makeString(NameStr(partinfo->partfunc.name)));
-		dimdef = (Node *) makeFuncCall(funcname,
-									   list_make1(colref),
-#if PG14_GE
-									   COERCE_EXPLICIT_CALL,
-#endif
-									   -1);
+		dimdef = (Node *) makeFuncCall(funcname, list_make1(colref), COERCE_EXPLICIT_CALL, -1);
 
 		if (IS_OPEN_DIMENSION(dim))
 		{

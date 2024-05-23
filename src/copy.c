@@ -34,6 +34,7 @@
 #include <access/xact.h>
 #include <catalog/pg_trigger_d.h>
 #include <commands/copy.h>
+#include <commands/copyfrom_internal.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
 #include <executor/executor.h>
@@ -63,10 +64,6 @@
 #include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "subspace_store.h"
-
-#if PG14_GE
-#include <commands/copyfrom_internal.h>
-#endif
 
 /*
  * No more than this many tuples per TSCopyMultiInsertBuffer
@@ -138,17 +135,6 @@ typedef struct MultiInsertBufferEntry
 	int32 key;
 	TSCopyMultiInsertBuffer *buffer;
 } MultiInsertBufferEntry;
-
-/*
- * Represents the heap insert method to be used during COPY FROM.
- */
-#if PG14_LT
-typedef enum CopyInsertMethod
-{
-	CIM_SINGLE,			  /* use table_tuple_insert or fdw routine */
-	CIM_MULTI_CONDITIONAL /* use table_multi_insert only if valid */
-} CopyInsertMethod;
-#endif
 
 /*
  * Change to another chunk for inserts.
@@ -355,13 +341,8 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 
 	/*
 	 * Add context information to the copy state, which is used to display
-	 * error messages with additional details. Providing this information is
-	 * only possible in PG >= 14. Until PG13 the CopyFromState structure is
-	 * kept internally in copy.c and no access to its members is possible.
-	 * Since PG14, the structure is stored in copyfrom_internal.h and the
-	 * members can be accessed.
+	 * error messages with additional details.
 	 */
-#if PG14_GE
 	uint64 save_cur_lineno = 0;
 	bool line_buf_valid = false;
 	CopyFromState cstate = miinfo->ccstate->cstate;
@@ -374,11 +355,6 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 
 		cstate->line_buf_valid = false;
 	}
-#endif
-
-#if PG14_LT
-	estate->es_result_relation_info = resultRelInfo;
-#endif
 
 	table_multi_insert(resultRelInfo->ri_RelationDesc,
 					   slots,
@@ -390,10 +366,8 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 
 	for (i = 0; i < nused; i++)
 	{
-#if PG14_GE
 		if (cstate != NULL)
 			cstate->cur_lineno = buffer->linenos[i];
-#endif
 		/*
 		 * If there are any indexes, update them for all the inserted tuples,
 		 * and run AFTER ROW INSERT triggers.
@@ -449,13 +423,11 @@ TSCopyMultiInsertBufferFlush(TSCopyMultiInsertInfo *miinfo, TSCopyMultiInsertBuf
 	table_finish_bulk_insert(result_relation_info->ri_RelationDesc, miinfo->ti_options);
 
 	/* Reset cur_lineno and line_buf_valid to what they were */
-#if PG14_GE
 	if (cstate != NULL)
 	{
 		cstate->line_buf_valid = line_buf_valid;
 		cstate->cur_lineno = save_cur_lineno;
 	}
-#endif
 
 	return cis->chunk_id;
 }
@@ -627,10 +599,8 @@ TSCopyMultiInsertInfoStore(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 	/* The structure CopyFromState is private in PG < 14. So we can not access
 	 * the members like the line number or the size of the tuple.
 	 */
-#if PG14_GE
 	if (cstate != NULL)
 		lineno = cstate->cur_lineno;
-#endif
 	buffer->linenos[buffer->nused] = lineno;
 
 	/* Record this slot as being used */
@@ -644,13 +614,11 @@ TSCopyMultiInsertInfoStore(TSCopyMultiInsertInfo *miinfo, ResultRelInfo *rri,
 	 * tuple. So, we perform flushing in PG < 14 only based on the number of buffered
 	 * tuples and not based on the size.
 	 */
-#if PG14_GE
 	if (cstate != NULL)
 	{
 		int tuplen = cstate->line_buf.len;
 		miinfo->bufferedBytes += tuplen;
 	}
-#endif
 }
 
 static void
@@ -829,13 +797,6 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	 */
 	resultRelInfo = makeNode(ResultRelInfo);
 
-#if PG14_LT
-	InitResultRelInfo(resultRelInfo,
-					  ccstate->rel,
-					  /* RangeTableIndex */ 1,
-					  NULL,
-					  0);
-#else
 #if PG16_LT
 	ExecInitRangeTable(estate, pstate->p_rtable);
 #else
@@ -843,20 +804,10 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 	ExecInitRangeTable(estate, pstate->p_rtable, pstate->p_rteperminfos);
 #endif
 	ExecInitResultRelation(estate, resultRelInfo, 1);
-#endif
 
 	CheckValidResultRel(resultRelInfo, CMD_INSERT);
 
 	ExecOpenIndices(resultRelInfo, false);
-
-#if PG14_LT
-	estate->es_result_relations = resultRelInfo;
-	estate->es_num_result_relations = 1;
-	estate->es_result_relation_info = resultRelInfo;
-	estate->es_range_table = pstate->p_rtable;
-
-	ExecInitRangeTable(estate, estate->es_range_table);
-#endif
 
 	if (!dispatch->hypertable_result_rel_info)
 		dispatch->hypertable_result_rel_info = resultRelInfo;
@@ -1048,9 +999,6 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		 */
 		saved_resultRelInfo = resultRelInfo;
 		resultRelInfo = cis->result_relation_info;
-#if PG14_LT
-		estate->es_result_relation_info = resultRelInfo;
-#endif
 
 		/* Set the right relation for triggers */
 		ts_tuptableslot_set_table_oid(myslot, RelationGetRelid(resultRelInfo->ri_RelationDesc));
@@ -1072,7 +1020,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 			/* Compute stored generated columns */
 			if (resultRelInfo->ri_RelationDesc->rd_att->constr &&
 				resultRelInfo->ri_RelationDesc->rd_att->constr->has_generated_stored)
-				ExecComputeStoredGeneratedCompat(resultRelInfo, estate, myslot, CMD_INSERT);
+				ExecComputeStoredGenerated(resultRelInfo, estate, myslot, CMD_INSERT);
 
 			/*
 			 * If the target is a plain table, check the constraints of
@@ -1151,14 +1099,7 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 		}
 
 		resultRelInfo = saved_resultRelInfo;
-#if PG14_LT
-		estate->es_result_relation_info = resultRelInfo;
-#endif
 	}
-
-#if PG14_LT
-	estate->es_result_relation_info = ccstate->dispatch->hypertable_result_rel_info;
-#endif
 
 	/* Flush any remaining buffered tuples */
 	if (insertMethod != CIM_SINGLE)
@@ -1180,14 +1121,8 @@ copyfrom(CopyChunkState *ccstate, ParseState *pstate, Hypertable *ht, MemoryCont
 
 	ExecResetTupleTable(estate->es_tupleTable, false);
 
-#if PG14_LT
-	ExecCloseIndices(resultRelInfo);
-	/* Close any trigger target relations */
-	ExecCleanUpTriggerState(estate);
-#else
 	ExecCloseResultRelations(estate);
 	ExecCloseRangeTableRelations(estate);
-#endif
 
 	/*
 	 * If we skipped writing WAL, then we need to sync the heap (but not
@@ -1391,9 +1326,7 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	cstate = BeginCopyFrom(pstate,
 						   rel,
-#if PG14_GE
 						   NULL,
-#endif
 						   stmt->filename,
 						   stmt->is_program,
 						   NULL,
@@ -1415,25 +1348,13 @@ timescaledb_DoCopy(const CopyStmt *stmt, const char *queryString, uint64 *proces
 
 	ccstate = copy_chunk_state_create(ht, rel, next_copy_from, cstate, NULL);
 	ccstate->where_clause = where_clause;
-
-#if PG14_GE
-	/* Take the copy memory context from cstate, if we can access the struct (PG>=14) */
 	copycontext = cstate->copycontext;
-#else
-	/* Or create a new memory context. */
-	copycontext = AllocSetContextCreate(CurrentMemoryContext, "COPY", ALLOCSET_DEFAULT_SIZES);
-#endif
 	*processed = copyfrom(ccstate, pstate, ht, copycontext, CopyFromErrorCallback, cstate);
 
 	copy_chunk_state_destroy(ccstate);
 	EndCopyFrom(cstate);
 	free_parsestate(pstate);
 	table_close(rel, NoLock);
-
-#if PG14_LT
-	if (MemoryContextIsValid(copycontext))
-		MemoryContextDelete(copycontext);
-#endif
 }
 
 static bool

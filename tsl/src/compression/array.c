@@ -368,8 +368,7 @@ tsl_array_decompression_iterator_from_datum_forward(Datum compressed_array, Oid 
 
 	Assert(compressed_array_header->compression_algorithm == COMPRESSION_ALGORITHM_ARRAY);
 
-	if (element_type != compressed_array_header->element_type)
-		elog(ERROR, "trying to decompress the wrong type");
+	CheckCompressedData(element_type == compressed_array_header->element_type);
 
 	return array_decompression_iterator_alloc_forward(&si,
 													  compressed_array_header->element_type,

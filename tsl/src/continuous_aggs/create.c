@@ -87,9 +87,6 @@ static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_func
 												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
-#if PG14_LT
-static bool check_trigger_exists_hypertable(Oid relid, char *trigname);
-#endif
 static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
 static void mattablecolumninfo_add_mattable_index(MatTableColumnInfo *matcolinfo, Hypertable *ht);
 static ObjectAddress create_view_for_query(Query *selquery, RangeVar *viewrel);
@@ -211,7 +208,7 @@ create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const 
 
 	/* Bucket function */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
-		ObjectIdGetDatum(bucket_function);
+		CStringGetTextDatum(format_procedure_qualified(bucket_function));
 
 	/* Bucket width */
 	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
@@ -300,40 +297,6 @@ cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartc
 				 errmsg("could not create materialization hypertable")));
 }
 
-#if PG14_LT
-static bool
-check_trigger_exists_hypertable(Oid relid, char *trigname)
-{
-	Relation tgrel;
-	ScanKeyData skey[1];
-	SysScanDesc tgscan;
-	HeapTuple tuple;
-	bool trg_found = false;
-
-	tgrel = table_open(TriggerRelationId, ShareUpdateExclusiveLock);
-	ScanKeyInit(&skey[0],
-				Anum_pg_trigger_tgrelid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(relid));
-
-	tgscan = systable_beginscan(tgrel, TriggerRelidNameIndexId, true, NULL, 1, skey);
-
-	while (HeapTupleIsValid(tuple = systable_getnext(tgscan)))
-	{
-		Form_pg_trigger trig = (Form_pg_trigger) GETSTRUCT(tuple);
-		if (namestrcmp(&(trig->tgname), trigname) == 0)
-		{
-			trg_found = true;
-			break;
-		}
-	}
-	systable_endscan(tgscan);
-	table_close(tgrel, NoLock);
-	return trg_found;
-}
-#endif
-
 /*
  * Add continuous agg invalidation trigger to hypertable
  * relid - oid of hypertable
@@ -354,10 +317,8 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 	CreateTrigStmt stmt_template = {
 		.type = T_CreateTrigStmt,
 		.row = true,
-#if PG14_GE
 		/* Using OR REPLACE option introduced on Postgres 14 */
 		.replace = true,
-#endif
 		.timing = TRIGGER_TYPE_AFTER,
 		.trigname = CAGGINVAL_TRIGGER_NAME,
 		.relation = makeRangeVar(schema, relname, -1),
@@ -366,12 +327,6 @@ cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id)
 		.args = NIL, /* to be filled in later */
 		.events = TRIGGER_TYPE_INSERT | TRIGGER_TYPE_UPDATE | TRIGGER_TYPE_DELETE,
 	};
-
-#if PG14_LT
-	/* OR REPLACE was introduced in Postgres 14 so this check make no sense */
-	if (check_trigger_exists_hypertable(relid, CAGGINVAL_TRIGGER_NAME))
-		return;
-#endif
 
 	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_NONE, &hcache);
 	CreateTrigStmt local_stmt = stmt_template;
@@ -825,47 +780,48 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info))
 	{
 		/* Bucketing on time */
-		Assert(bucket_info->bucket_time_width != NULL);
+		Assert(bucket_info->bf->bucket_time_width != NULL);
 		bucket_width = DatumGetCString(
-			DirectFunctionCall1(interval_out, IntervalPGetDatum(bucket_info->bucket_time_width)));
+			DirectFunctionCall1(interval_out,
+								IntervalPGetDatum(bucket_info->bf->bucket_time_width)));
 
-		if (!TIMESTAMP_NOT_FINITE(bucket_info->bucket_time_origin))
+		if (!TIMESTAMP_NOT_FINITE(bucket_info->bf->bucket_time_origin))
 		{
 			bucket_origin = DatumGetCString(
 				DirectFunctionCall1(timestamptz_out,
-									TimestampTzGetDatum(bucket_info->bucket_time_origin)));
+									TimestampTzGetDatum(bucket_info->bf->bucket_time_origin)));
 		}
 
-		if (bucket_info->bucket_time_offset != NULL)
+		if (bucket_info->bf->bucket_time_offset != NULL)
 		{
 			bucket_offset = DatumGetCString(
 				DirectFunctionCall1(interval_out,
-									IntervalPGetDatum(bucket_info->bucket_time_offset)));
+									IntervalPGetDatum(bucket_info->bf->bucket_time_offset)));
 		}
 	}
 	else
 	{
 		/* Bucketing on integers */
 		bucket_width = palloc0(MAXINT8LEN + 1 * sizeof(char));
-		pg_lltoa(bucket_info->bucket_integer_width, bucket_width);
+		pg_lltoa(bucket_info->bf->bucket_integer_width, bucket_width);
 
 		/* Integer buckets with origin are not supported, so noting to do. */
 		Assert(bucket_origin == NULL);
 
-		if (bucket_info->bucket_integer_offset != 0)
+		if (bucket_info->bf->bucket_integer_offset != 0)
 		{
 			bucket_offset = palloc0(MAXINT8LEN + 1 * sizeof(char));
-			pg_lltoa(bucket_info->bucket_integer_offset, bucket_offset);
+			pg_lltoa(bucket_info->bf->bucket_integer_offset, bucket_offset);
 		}
 	}
 
 	create_bucket_function_catalog_entry(materialize_hypertable_id,
-										 bucket_info->bucket_func->funcid,
+										 bucket_info->bf->bucket_function,
 										 bucket_width,
 										 bucket_origin,
 										 bucket_offset,
-										 bucket_info->bucket_time_timezone,
-										 time_bucket_info_has_fixed_width(bucket_info));
+										 bucket_info->bf->bucket_time_timezone,
+										 bucket_info->bf->bucket_fixed_interval);
 
 	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
 	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);

@@ -269,12 +269,11 @@ tsl_skip_scan_paths_add(PlannerInfo *root, RelOptInfo *input_rel, RelOptInfo *ou
 			if (!new_paths)
 				continue;
 
-			subpath = (Path *) create_merge_append_path_compat(root,
-															   merge_path->path.parent,
-															   new_paths,
-															   merge_path->path.pathkeys,
-															   NULL,
-															   merge_path->partitioned_rels);
+			subpath = (Path *) create_merge_append_path(root,
+														merge_path->path.parent,
+														new_paths,
+														merge_path->path.pathkeys,
+														NULL);
 			subpath->pathtarget = copy_pathtarget(merge_path->path.pathtarget);
 		}
 		else if (ts_is_chunk_append_path(subpath))
@@ -598,7 +597,7 @@ build_skip_qual(PlannerInfo *root, SkipScanPath *skip_scan_path, IndexPath *inde
 										  info->indexcollations[idx_key] /*inputcollid*/);
 	set_opfuncid(castNode(OpExpr, comparison_expr));
 
-	skip_scan_path->skip_clause = make_simple_restrictinfo_compat(root, comparison_expr);
+	skip_scan_path->skip_clause = make_simple_restrictinfo(root, comparison_expr);
 
 	return true;
 }

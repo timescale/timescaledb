@@ -620,18 +620,16 @@ ERROR:  must be owner of hypertable "test_table"
 select add_retention_policy('test_strict', drop_after => NULL);
 ERROR:  need to specify one of "drop_after" or "drop_created_before"
 \set ON_ERROR_STOP 1
--- Check the number of non-telemetry policies. We check for telemetry
--- policy in telemetry_community.sql
+-- Check the number of non-internal policies
 SELECT proc_name, count(*)
 FROM _timescaledb_config.bgw_job
-WHERE proc_name NOT LIKE '%telemetry%'
+WHERE id >= 1000
 GROUP BY proc_name;
-             proc_name             | count 
------------------------------------+-------
- policy_reorder                    |     1
- policy_job_stat_history_retention |     1
- policy_retention                  |     2
-(3 rows)
+    proc_name     | count 
+------------------+-------
+ policy_reorder   |     1
+ policy_retention |     2
+(2 rows)
 
 -- test retention with null arguments
 select add_retention_policy(NULL, NULL);

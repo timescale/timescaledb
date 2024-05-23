@@ -166,14 +166,9 @@ TsExtension extensions[] = {
 };
 
 inline static void extension_check(TsExtension * /*ext*/);
-#if PG14_LT
-static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-												   TsExtension const *);
-#else
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 												   TsExtension const * /*ext*/,
 												   JumbleState *jstate);
-#endif
 
 static bool
 extension_is_loaded(TsExtension const *const ext)
@@ -394,11 +389,7 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 }
 
 static void
-#if PG14_LT
-post_analyze_hook(ParseState *pstate, Query *query)
-#else
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
-#endif
 {
 	if (query->commandType == CMD_UTILITY)
 	{
@@ -534,20 +525,12 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 		 * extension hook and calls it explicitly after the check for installing
 		 * the extension.
 		 */
-#if PG14_LT
-		call_extension_post_parse_analyze_hook(pstate, query, ext);
-#else
 		call_extension_post_parse_analyze_hook(pstate, query, ext, jstate);
-#endif
 	}
 
 	if (prev_post_parse_analyze_hook != NULL)
 	{
-#if PG14_LT
-		prev_post_parse_analyze_hook(pstate, query);
-#else
 		prev_post_parse_analyze_hook(pstate, query, jstate);
-#endif
 	}
 }
 
@@ -769,20 +752,11 @@ ts_loader_extension_check(void)
 }
 
 static void
-#if PG14_LT
-call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-									   TsExtension const *const ext)
-#else
 call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 									   TsExtension const *const ext, JumbleState *jstate)
-#endif
 {
 	if (extension_is_loaded(ext) && ext->post_parse_analyze_hook != NULL)
 	{
-#if PG14_LT
-		ext->post_parse_analyze_hook(pstate, query);
-#else
 		ext->post_parse_analyze_hook(pstate, query, jstate);
-#endif
 	}
 }

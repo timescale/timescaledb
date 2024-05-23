@@ -286,6 +286,7 @@ typedef struct BatchFilter
 	/* IS NULL or IS NOT NULL */
 	bool is_null_check;
 	bool is_null;
+	bool is_array_op;
 } BatchFilter;
 
 extern Datum tsl_compressed_data_decompress_forward(PG_FUNCTION_ARGS);
@@ -333,10 +334,8 @@ extern DecompressAllFunction tsl_get_decompress_all_function(CompressionAlgorith
 typedef struct Chunk Chunk;
 typedef struct ChunkInsertState ChunkInsertState;
 extern void decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot);
-#if PG14_GE
 typedef struct HypertableModifyState HypertableModifyState;
 extern bool decompress_target_segments(HypertableModifyState *ht_state);
-#endif
 /* CompressSingleRowState methods */
 struct CompressSingleRowState;
 typedef struct CompressSingleRowState CompressSingleRowState;

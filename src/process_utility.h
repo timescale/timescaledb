@@ -24,9 +24,7 @@ typedef struct ProcessUtilityArgs
 	DestReceiver *dest;
 	List *hypertable_list;
 	QueryCompletion *completion_tag;
-#if PG14_GE
 	bool readonly_tree;
-#endif
 } ProcessUtilityArgs;
 
 typedef enum

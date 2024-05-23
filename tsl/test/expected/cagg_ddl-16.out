@@ -2053,8 +2053,22 @@ SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark
  Fri Nov 02 17:00:00 2018 PDT
 (1 row)
 
+-- Exists chunks before truncate the cagg (> 0)
+SELECT count(*) FROM show_chunks('conditions_daily');
+ count 
+-------
+     2
+(1 row)
+
 -- Truncate the given CAgg, it should reset the watermark to the empty state
 TRUNCATE conditions_daily;
+-- No chunks remains after truncate the cagg (= 0)
+SELECT count(*) FROM show_chunks('conditions_daily');
+ count 
+-------
+     0
+(1 row)
+
 -- Watermark should be reseted
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_after;
          watermak_after          
@@ -2096,7 +2110,7 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('cagg1') ch;
 (1 row)
 
 DROP MATERIALIZED VIEW cagg1;
-NOTICE:  drop cascades to table _timescaledb_internal._hyper_52_68_chunk
+NOTICE:  drop cascades to table _timescaledb_internal._hyper_52_70_chunk
 SELECT * FROM _timescaledb_catalog.compression_settings;
  relid | segmentby | orderby | orderby_desc | orderby_nullsfirst 
 -------+-----------+---------+--------------+--------------------

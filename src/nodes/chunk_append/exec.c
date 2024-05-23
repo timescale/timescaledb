@@ -147,11 +147,9 @@ static CustomExecMethods chunk_append_state_methods = {
 static void choose_next_subplan_non_parallel(ChunkAppendState *state);
 static void choose_next_subplan_for_worker(ChunkAppendState *state);
 
-static List *constify_restrictinfos(PlannerInfo *root, List *restrictinfos);
 static bool can_exclude_chunk(List *constraints, List *baserestrictinfo);
 static void do_startup_exclusion(ChunkAppendState *state);
 static Node *constify_param_mutator(Node *node, void *context);
-static List *constify_restrictinfo_params(PlannerInfo *root, EState *state, List *restrictinfos);
 
 static void initialize_constraints(ChunkAppendState *state, List *initial_rt_indexes);
 static LWLock *chunk_append_get_lock_pointer(void);
@@ -254,7 +252,7 @@ do_startup_exclusion(ChunkAppendState *state)
 				ri->clause = lfirst(lc);
 				restrictinfos = lappend(restrictinfos, ri);
 			}
-			restrictinfos = constify_restrictinfos(&root, restrictinfos);
+			restrictinfos = ts_constify_restrictinfos(&root, restrictinfos);
 
 			if (can_exclude_chunk(lfirst(lc_constraints), restrictinfos))
 			{
@@ -436,7 +434,7 @@ can_exclude_constraints_using_clauses(ChunkAppendState *state, List *constraints
 		ri->clause = lfirst(lc);
 		restrictinfos = lappend(restrictinfos, ri);
 	}
-	restrictinfos = constify_restrictinfo_params(root, ps->state, restrictinfos);
+	restrictinfos = ts_constify_restrictinfo_params(root, ps->state, restrictinfos);
 
 	can_exclude = can_exclude_chunk(constraints, restrictinfos);
 
@@ -924,8 +922,8 @@ chunk_append_get_lock_pointer()
  *
  * ...WHERE time > '2017-06-02 11:26:43.935712+02'
  */
-static List *
-constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
+List *
+ts_constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 {
 	List *additional_list = NIL;
 
@@ -960,8 +958,8 @@ constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 				additional_clause = ts_transform_cross_datatype_comparison(additional_clause);
 				additional_clause =
 					(Expr *) estimate_expression_value(root, (Node *) additional_clause);
-				additional_list = lappend(additional_list,
-										  make_simple_restrictinfo_compat(root, additional_clause));
+				additional_list =
+					lappend(additional_list, make_simple_restrictinfo(root, additional_clause));
 			}
 		}
 		rinfo->clause = constified;
@@ -970,8 +968,8 @@ constify_restrictinfos(PlannerInfo *root, List *restrictinfos)
 	return list_concat(restrictinfos, additional_list);
 }
 
-static List *
-constify_restrictinfo_params(PlannerInfo *root, EState *state, List *restrictinfos)
+List *
+ts_constify_restrictinfo_params(PlannerInfo *root, EState *state, List *restrictinfos)
 {
 	ListCell *lc;
 
