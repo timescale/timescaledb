@@ -28,7 +28,8 @@ SELECT time_bucket ('1d', time),
 FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time,
-    device_id;
+    device_id
+LIMIT 1000;
 
 -- test empty targetlist
 :PREFIX
@@ -51,20 +52,23 @@ FROM :TEST_TABLE;
 SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1;
+ORDER BY v1
+LIMIT 1000;
 
 -- test order not present in targetlist
 :PREFIX
 SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1;
+ORDER BY v1
+LIMIT 1000;
 
 -- test column with all NULL
 :PREFIX
 SELECT v3
 FROM :TEST_TABLE
-WHERE device_id = 1;
+WHERE device_id = 1
+LIMIT 1000;
 
 --
 -- test qual pushdown
