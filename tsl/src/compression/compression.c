@@ -2061,7 +2061,20 @@ build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
 			char *attname = get_attname(decompressor->out_rel->rd_id, attno, false);
 			bool isnull;
 			AttrNumber ht_attno = get_attnum(hypertable_relid, attname);
+
+			/*
+			 * This is a not very precise but easy assertion to detect attno
+			 * mismatch at least in some cases. The mismatch might happen if the
+			 * hypertable and chunk layout are different because of dropped
+			 * columns, and we're using a wrong slot type here.
+			 */
+			PG_USED_FOR_ASSERTS_ONLY Oid ht_atttype = get_atttype(hypertable_relid, ht_attno);
+			PG_USED_FOR_ASSERTS_ONLY Oid slot_atttype =
+				slot->tts_tupleDescriptor->attrs[AttrNumberGetAttrOffset(ht_attno)].atttypid;
+			Assert(ht_atttype == slot_atttype);
+
 			Datum value = slot_getattr(slot, ht_attno, &isnull);
+
 			/*
 			 * There are 3 possible scenarios we have to consider
 			 * when dealing with columns which are part of unique
@@ -2260,14 +2273,11 @@ compressed_insert_key_columns(Relation relation)
 void
 decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 {
-	/* COPY operation can end up flushing an empty buffer which
-	 * could in turn send an empty slot our way. No need to decompress
-	 * anything if that happens.
+	/*
+	 * This is supposed to be called with the actual tuple that is being
+	 * inserted, so it cannot be empty.
 	 */
-	if (TTS_EMPTY(slot))
-	{
-		return;
-	}
+	Assert(!TTS_EMPTY(slot));
 
 	Relation out_rel = cis->rel;
 
