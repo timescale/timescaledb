@@ -1,0 +1,2 @@
+Fixes: #6540 Segmentation fault when backfilling data with COPY into a compressed chunk
+Thanks: @iliastsa and @SystemParadox for reporting an issue with COPY into a compressed chunk
