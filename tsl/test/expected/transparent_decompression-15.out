@@ -277,14 +277,14 @@ FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time,
     device_id
-LIMIT 101;
+LIMIT 11;
                                               QUERY PLAN                                              
 ------------------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Result (actual rows=101 loops=1)
-         ->  Custom Scan (ChunkAppend) on metrics (actual rows=101 loops=1)
+ Limit (actual rows=11 loops=1)
+   ->  Result (actual rows=11 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics (actual rows=11 loops=1)
                Order: metrics."time", metrics.device_id
-               ->  Sort (actual rows=101 loops=1)
+               ->  Sort (actual rows=11 loops=1)
                      Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device_id
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=1440 loops=1)
@@ -358,13 +358,13 @@ SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 101;
+LIMIT 11;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Merge Append (actual rows=101 loops=1)
+ Limit (actual rows=11 loops=1)
+   ->  Merge Append (actual rows=11 loops=1)
          Sort Key: _hyper_1_1_chunk.v1
-         ->  Sort (actual rows=101 loops=1)
+         ->  Sort (actual rows=11 loops=1)
                Sort Key: _hyper_1_1_chunk.v1
                Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=720 loops=1)
@@ -392,13 +392,13 @@ SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 101;
+LIMIT 11;
                                           QUERY PLAN                                           
 -----------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Merge Append (actual rows=101 loops=1)
+ Limit (actual rows=11 loops=1)
+   ->  Merge Append (actual rows=11 loops=1)
          Sort Key: _hyper_1_1_chunk.v1
-         ->  Sort (actual rows=101 loops=1)
+         ->  Sort (actual rows=11 loops=1)
                Sort Key: _hyper_1_1_chunk.v1
                Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=720 loops=1)
@@ -425,12 +425,12 @@ LIMIT 101;
 SELECT v3
 FROM :TEST_TABLE
 WHERE device_id = 1
-LIMIT 101;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Append (actual rows=101 loops=1)
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=101 loops=1)
+LIMIT 11;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Limit (actual rows=11 loops=1)
+   ->  Append (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=11 loops=1)
                ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=1 loops=1)
                      Filter: (device_id = 1)
          ->  Seq Scan on _hyper_1_2_chunk (never executed)
@@ -3263,22 +3263,22 @@ FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time,
     device_id
-LIMIT 101;
+LIMIT 11;
                                                                      QUERY PLAN                                                                      
 -----------------------------------------------------------------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Result (actual rows=101 loops=1)
-         ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=101 loops=1)
+ Limit (actual rows=11 loops=1)
+   ->  Result (actual rows=11 loops=1)
+         ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=11 loops=1)
                Order: metrics_space."time", metrics_space.device_id
-               ->  Merge Append (actual rows=101 loops=1)
+               ->  Merge Append (actual rows=11 loops=1)
                      Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
-                     ->  Sort (actual rows=51 loops=1)
+                     ->  Sort (actual rows=6 loops=1)
                            Sort Key: _hyper_2_4_chunk."time", _hyper_2_4_chunk.device_id
                            Sort Method: top-N heapsort 
                            ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=720 loops=1)
                                  ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
                                        Filter: (device_id = ANY ('{1,2}'::integer[]))
-                     ->  Sort (actual rows=51 loops=1)
+                     ->  Sort (actual rows=6 loops=1)
                            Sort Key: _hyper_2_5_chunk."time", _hyper_2_5_chunk.device_id
                            Sort Method: top-N heapsort 
                            ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk (actual rows=720 loops=1)
@@ -3400,13 +3400,13 @@ SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 101;
+LIMIT 11;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Merge Append (actual rows=101 loops=1)
+ Limit (actual rows=11 loops=1)
+   ->  Merge Append (actual rows=11 loops=1)
          Sort Key: _hyper_2_4_chunk.v1
-         ->  Sort (actual rows=101 loops=1)
+         ->  Sort (actual rows=11 loops=1)
                Sort Key: _hyper_2_4_chunk.v1
                Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=720 loops=1)
@@ -3431,13 +3431,13 @@ SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 101;
+LIMIT 11;
                                            QUERY PLAN                                           
 ------------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Merge Append (actual rows=101 loops=1)
+ Limit (actual rows=11 loops=1)
+   ->  Merge Append (actual rows=11 loops=1)
          Sort Key: _hyper_2_4_chunk.v1
-         ->  Sort (actual rows=101 loops=1)
+         ->  Sort (actual rows=11 loops=1)
                Sort Key: _hyper_2_4_chunk.v1
                Sort Method: top-N heapsort 
                ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=720 loops=1)
@@ -3461,12 +3461,12 @@ LIMIT 101;
 SELECT v3
 FROM :TEST_TABLE
 WHERE device_id = 1
-LIMIT 101;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Limit (actual rows=101 loops=1)
-   ->  Append (actual rows=101 loops=1)
-         ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=101 loops=1)
+LIMIT 11;
+                                       QUERY PLAN                                       
+----------------------------------------------------------------------------------------
+ Limit (actual rows=11 loops=1)
+   ->  Append (actual rows=11 loops=1)
+         ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=11 loops=1)
                ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
                      Filter: (device_id = 1)
          ->  Seq Scan on _hyper_2_7_chunk (never executed)

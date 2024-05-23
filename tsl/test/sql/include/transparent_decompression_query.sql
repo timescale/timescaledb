@@ -29,7 +29,7 @@ FROM :TEST_TABLE
 WHERE device_id IN (1, 2)
 ORDER BY time,
     device_id
-LIMIT 101;
+LIMIT 11;
 
 -- test empty targetlist
 :PREFIX
@@ -53,7 +53,7 @@ SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 101;
+LIMIT 11;
 
 -- test order not present in targetlist
 :PREFIX
@@ -61,14 +61,14 @@ SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 101;
+LIMIT 11;
 
 -- test column with all NULL
 :PREFIX
 SELECT v3
 FROM :TEST_TABLE
 WHERE device_id = 1
-LIMIT 101;
+LIMIT 11;
 
 --
 -- test qual pushdown
