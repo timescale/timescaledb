@@ -87,7 +87,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	RemoveRangeTableEntries(direct_query);
 
 	/*
-	 * If there is a join in CAggs then rebuild it definitley,
+	 * If there is a join in CAggs then rebuild it definitely,
 	 * because v2.10.0 has created the definition with missing structs.
 	 *
 	 * Removed the check for direct_query->jointree != NULL because

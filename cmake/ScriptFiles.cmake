@@ -79,7 +79,7 @@ list(APPEND SOURCE_FILES
 list(APPEND SOURCE_FILES
   bgw_startup.sql)
 
-# These files should be pre-pended to update scripts so that they are executed
+# These files should be prepended to update scripts so that they are executed
 # before anything else during updates
 set(PRE_UPDATE_FILES updates/pre-version-change.sql updates/pre-update.sql)
 set(PRE_DOWNGRADE_FILES updates/pre-version-change.sql)
