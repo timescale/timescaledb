@@ -113,7 +113,7 @@ endfunction()
 # update.
 #
 # MODULE_PATHNAME: Pathname to timescale extension of the version being
-# dowgraded to. This can be used to load "old" functions from the correct
+# downgraded to. This can be used to load "old" functions from the correct
 # library.
 function(generate_downgrade_script)
   set(options)
