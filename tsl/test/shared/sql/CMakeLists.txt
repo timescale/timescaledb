@@ -21,7 +21,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 # this test was changing the contents of tables in shared_setup.sql thus causing
-# other dependent tests to fail. Hence runing this test in solo
+# other dependent tests to fail. Hence running this test in solo
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(APPEND SOLO_TESTS merge_dml.sql)
 endif()

@@ -68,7 +68,7 @@ def get_referenced_issue(pr_number):
     #    'title': '[Bug]: Segfault when `ts_insert_blocker` function is called',
     #    'labels': {'nodes': [{'name': 'bug'}]}}]}}}}}
     #
-    # We can have {'nodes': [None]} in case it references an inaccessble repository,
+    # We can have {'nodes': [None]} in case it references an inaccessible repository,
     # just ignore it.
 
     ref_nodes = ref_result["data"]["repository"]["pullRequest"][
