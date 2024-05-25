@@ -292,22 +292,27 @@ SELECT current_setting('timezone');
 
 -- should be blocked because non-immutable expression
 \set ON_ERROR_STOP 0
-CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 day', time, current_setting('timezone')) FROM metrics GROUP BY 1;
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 day', time, current_setting('timezone')) FROM metrics GROUP BY 1;
 \set ON_ERROR_STOP 1
 
-CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 day', time, 'PST8PDT') FROM metrics GROUP BY 1;
+CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 day', time, 'PST8PDT') FROM metrics GROUP BY 1;
 SELECT * FROM cagg1;
 
-CREATE MATERIALIZED VIEW cagg2 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT') FROM metrics GROUP BY 1;
+CREATE MATERIALIZED VIEW cagg2 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 month', time, 'PST8PDT') FROM metrics GROUP BY 1;
 SELECT * FROM cagg2;
 
--- custom origin - not supported due to variable size
-\set ON_ERROR_STOP 0
-CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', '2000-01-01'::timestamptz) FROM metrics GROUP BY 1;
+-- custom origin with variable size
+CREATE MATERIALIZED VIEW cagg3 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 month', time, 'PST8PDT', '2000-01-01'::timestamptz) FROM metrics GROUP BY 1;
+SELECT * FROM cagg3;
 
--- offset - not supported due to variable size
-CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
-\set ON_ERROR_STOP 1
+-- offset with variable size
+CREATE MATERIALIZED VIEW cagg4 WITH (timescaledb.continuous,timescaledb.materialized_only=true) AS
+SELECT time_bucket('1 month', time, 'PST8PDT', "offset":= INTERVAL '15 day') FROM metrics GROUP BY 1;
+SELECT * FROM cagg4;
 
 --
 -- drop chunks tests
@@ -322,7 +327,7 @@ WHERE h.id = c.hypertable_id and h.table_name = 'metrics'
 ORDER BY 1;
 
 -- all caggs in the new format (finalized=true)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3') ORDER BY 1;
+SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
 
 -- dropping chunk should also remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-01 00:00:00-02'::timestamptz);
@@ -341,7 +346,7 @@ UPDATE _timescaledb_catalog.continuous_agg SET finalized=FALSE WHERE user_view_n
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
 
 -- cagg1 now is a fake old format (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3') ORDER BY 1;
+SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
 
 -- cagg1 now is in the old format (finalized=false)
 -- dropping chunk should NOT remove the catalog data
@@ -359,7 +364,7 @@ ORDER BY 1;
 DROP MATERIALIZED VIEW cagg1;
 
 -- no more old format caggs (finalized=false)
-SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3') ORDER BY 1;
+SELECT user_view_name, finalized FROM _timescaledb_catalog.continuous_agg WHERE user_view_name in ('cagg1', 'cagg2', 'cagg3', 'cagg4') ORDER BY 1;
 
 -- dropping chunk should remove the catalog data
 SELECT drop_chunks('metrics', older_than => '2000-01-25 00:00:00-02'::timestamptz);
