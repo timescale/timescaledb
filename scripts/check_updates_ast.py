@@ -1,4 +1,5 @@
 from pglast import parse_sql
+from pglast.ast import ColumnDef
 from pglast.visitors import Visitor
 from pglast import enums
 import sys
@@ -69,6 +70,42 @@ class SQLVisitor(Visitor):
             print(
                 f"ERROR: Attempting to CREATE TABLE IF NOT EXISTS {node.relation.relname}"
             )
+
+        # We have to be careful with the column types we use in our catalog to only allow types
+        # that are safe to use in catalog tables and not cause problems during extension upgrade,
+        # pg_upgrade or dump/restore.
+        if node.tableElts is not None:
+            for coldef in node.tableElts:
+                if isinstance(coldef, ColumnDef):
+                    if coldef.typeName.arrayBounds is not None:
+                        if coldef.typeName.names[-1].sval not in [
+                            "bool",
+                            "text",
+                        ]:
+                            self.errors += 1
+                            print(
+                                f"ERROR: Attempting to CREATE TABLE {node.relation.relname} with blocked array type {coldef.typeName.names[-1].sval}"
+                            )
+                    else:
+                        if coldef.typeName.names[-1].sval not in [
+                            "bool",
+                            "int2",
+                            "int4",
+                            "int8",
+                            "interval",
+                            "jsonb",
+                            "name",
+                            "regclass",
+                            "regtype",
+                            "regrole",
+                            "serial",
+                            "text",
+                            "timestamptz",
+                        ]:
+                            self.errors += 1
+                            print(
+                                f"ERROR: Attempting to CREATE TABLE {node.relation.relname} with blocked type {coldef.typeName.names[-1].sval}"
+                            )
 
     # CREATE SCHEMA IF NOT EXISTS ..
     def visit_CreateSchemaStmt(
