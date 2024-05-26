@@ -195,7 +195,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 * already refers a compressed column, it is a bug. See
 			 * build_sortinfo().
 			 */
-			Assert(compressed_em != NULL);
+			Ensure(compressed_em, "corresponding equivalence member not found");
 
 			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 
@@ -1482,17 +1482,6 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
-		/*
-		 * We want to base our equivalence member on the hypertable equivalence
-		 * member, not on the uncompressed chunk one, because the latter is
-		 * marked as child itself. This is mostly relevant for PG16 where we
-		 * have to specify a parent for the newly created equivalence member.
-		 */
-		if (cur_em->em_is_child)
-		{
-			continue;
-		}
-
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
 		var = (Var *) cur_em->em_expr;
@@ -1501,6 +1490,13 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		if (!(var && IsA(var, Var)))
 			continue;
 
+		/*
+		 * We want to base our equivalence member on the hypertable equivalence
+		 * member, not on the uncompressed chunk one. We can't just check for
+		 * em_is_child though because the hypertable might be a child itself and not
+		 * a top-level EquivalenceMember. This is mostly relevant for PG16+ where
+		 * we have to specify a parent for the newly created equivalence member.
+		 */
 		if ((Index) var->varno != info->ht_rel->relid)
 			continue;
 
