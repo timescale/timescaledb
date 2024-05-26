@@ -802,171 +802,164 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 					 errmsg("invalid continuous aggregate view")));
 	}
 
-	if (rte->relkind == RELKIND_RELATION || rte->relkind == RELKIND_VIEW)
+	Ensure(rte->relkind == RELKIND_RELATION || rte->relkind == RELKIND_VIEW,
+		   "invalid continuous aggregate view");
+
+	const Dimension *part_dimension = NULL;
+	int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
+	Cache *hcache = ts_hypertable_cache_pin();
+
+	if (rte->relkind == RELKIND_RELATION)
 	{
-		const Dimension *part_dimension = NULL;
-		int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;
-		Cache *hcache = ts_hypertable_cache_pin();
+		ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
 
-		if (rte->relkind == RELKIND_RELATION)
-		{
-			ht = ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
-
-			if (!ht)
-			{
-				ts_cache_release(hcache);
-				ereport(ERROR,
-						(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
-						 errmsg("table \"%s\" is not a hypertable", get_rel_name(rte->relid))));
-			}
-		}
-		else
-		{
-			cagg_parent = ts_continuous_agg_find_by_relid(rte->relid);
-
-			if (!cagg_parent)
-			{
-				ts_cache_release(hcache);
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("invalid continuous aggregate query"),
-						 errhint("Continuous aggregate needs to query hypertable or another "
-								 "continuous aggregate.")));
-			}
-
-			if (!ContinuousAggIsFinalized(cagg_parent))
-			{
-				ts_cache_release(hcache);
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("old format of continuous aggregate is not supported"),
-						 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
-								 "format.",
-								 NameStr(cagg_parent->data.user_view_schema),
-								 NameStr(cagg_parent->data.user_view_name))));
-			}
-
-			parent_mat_hypertable_id = cagg_parent->data.mat_hypertable_id;
-			ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
-
-			/* If parent cagg is hierarchical then we should get the matht otherwise the rawht. */
-			if (ContinuousAggIsHierarchical(cagg_parent))
-				ht_parent =
-					ts_hypertable_cache_get_entry_by_id(hcache,
-														cagg_parent->data.mat_hypertable_id);
-			else
-				ht_parent =
-					ts_hypertable_cache_get_entry_by_id(hcache,
-														cagg_parent->data.raw_hypertable_id);
-
-			/* Get the querydef for the source cagg. */
-			is_hierarchical = true;
-			prev_query = ts_continuous_agg_get_query(cagg_parent);
-		}
-
-		if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		if (!ht)
 		{
 			ts_cache_release(hcache);
 			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertable is an internal compressed hypertable")));
+					(errcode(ERRCODE_TS_HYPERTABLE_NOT_EXIST),
+					 errmsg("table \"%s\" is not a hypertable", get_rel_name(rte->relid))));
 		}
-
-		if (rte->relkind == RELKIND_RELATION)
-		{
-			ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
-
-			/* Prevent create a CAGG over an existing materialization hypertable. */
-			if (status == HypertableIsMaterialization ||
-				status == HypertableIsMaterializationAndRaw)
-			{
-				const ContinuousAgg *cagg =
-					ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
-				Assert(cagg != NULL);
-
-				ts_cache_release(hcache);
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("hypertable is a continuous aggregate materialization table"),
-						 errdetail("Materialization hypertable \"%s.%s\".",
-								   NameStr(ht->fd.schema_name),
-								   NameStr(ht->fd.table_name)),
-						 errhint("Do you want to use continuous aggregate \"%s.%s\" instead?",
-								 NameStr(cagg->data.user_view_schema),
-								 NameStr(cagg->data.user_view_name))));
-			}
-		}
-
-		/* Get primary partitioning column information. */
-		part_dimension = hyperspace_get_open_dimension(ht->space, 0);
-
-		/*
-		 * NOTE: if we ever allow custom partitioning functions we'll need to
-		 *       change part_dimension->fd.column_type to partitioning_type
-		 *       below, along with any other fallout.
-		 */
-		if (part_dimension->partitioning != NULL)
-		{
-			ts_cache_release(hcache);
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("custom partitioning functions not supported"
-							" with continuous aggregates")));
-		}
-
-		if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)) &&
-			rte->relkind == RELKIND_RELATION)
-		{
-			const char *funcschema = NameStr(part_dimension->fd.integer_now_func_schema);
-			const char *funcname = NameStr(part_dimension->fd.integer_now_func);
-
-			if (strlen(funcschema) == 0 || strlen(funcname) == 0)
-			{
-				ts_cache_release(hcache);
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("custom time function required on hypertable \"%s\"",
-								get_rel_name(ht->main_table_relid)),
-						 errdetail("An integer-based hypertable requires a custom time function to "
-								   "support continuous aggregates."),
-						 errhint("Set a custom time function on the hypertable.")));
-			}
-		}
-
-		caggtimebucketinfo_init(&bucket_info,
-								ht->fd.id,
-								ht->main_table_relid,
-								part_dimension->column_attno,
-								part_dimension->fd.column_type,
-								part_dimension->fd.interval_length,
-								parent_mat_hypertable_id);
-
-		if (is_hierarchical)
-		{
-			const Dimension *part_dimension_parent =
-				hyperspace_get_open_dimension(ht_parent->space, 0);
-
-			caggtimebucketinfo_init(&bucket_info_parent,
-									ht_parent->fd.id,
-									ht_parent->main_table_relid,
-									part_dimension_parent->column_attno,
-									part_dimension_parent->fd.column_type,
-									part_dimension_parent->fd.interval_length,
-									INVALID_HYPERTABLE_ID);
-		}
-
-		ts_cache_release(hcache);
-
-		/*
-		 * We need a GROUP By clause with time_bucket on the partitioning
-		 * column of the hypertable
-		 */
-		Assert(query->groupClause);
-		caggtimebucket_validate(&bucket_info,
-								query->groupClause,
-								query->targetList,
-								is_cagg_create);
 	}
+	else
+	{
+		cagg_parent = ts_continuous_agg_find_by_relid(rte->relid);
+
+		if (!cagg_parent)
+		{
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid continuous aggregate query"),
+					 errhint("Continuous aggregate needs to query hypertable or another "
+							 "continuous aggregate.")));
+		}
+
+		if (!ContinuousAggIsFinalized(cagg_parent))
+		{
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("old format of continuous aggregate is not supported"),
+					 errhint("Run \"CALL cagg_migrate('%s.%s');\" to migrate to the new "
+							 "format.",
+							 NameStr(cagg_parent->data.user_view_schema),
+							 NameStr(cagg_parent->data.user_view_name))));
+		}
+
+		parent_mat_hypertable_id = cagg_parent->data.mat_hypertable_id;
+		ht = ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
+
+		/* If parent cagg is hierarchical then we should get the matht otherwise the rawht. */
+		if (ContinuousAggIsHierarchical(cagg_parent))
+			ht_parent =
+				ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.mat_hypertable_id);
+		else
+			ht_parent =
+				ts_hypertable_cache_get_entry_by_id(hcache, cagg_parent->data.raw_hypertable_id);
+
+		/* Get the querydef for the source cagg. */
+		is_hierarchical = true;
+		prev_query = ts_continuous_agg_get_query(cagg_parent);
+	}
+
+	if (TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+	{
+		ts_cache_release(hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("hypertable is an internal compressed hypertable")));
+	}
+
+	if (rte->relkind == RELKIND_RELATION)
+	{
+		ContinuousAggHypertableStatus status = ts_continuous_agg_hypertable_status(ht->fd.id);
+
+		/* Prevent create a CAGG over an existing materialization hypertable. */
+		if (status == HypertableIsMaterialization || status == HypertableIsMaterializationAndRaw)
+		{
+			const ContinuousAgg *cagg =
+				ts_continuous_agg_find_by_mat_hypertable_id(ht->fd.id, false);
+			Assert(cagg != NULL);
+
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("hypertable is a continuous aggregate materialization table"),
+					 errdetail("Materialization hypertable \"%s.%s\".",
+							   NameStr(ht->fd.schema_name),
+							   NameStr(ht->fd.table_name)),
+					 errhint("Do you want to use continuous aggregate \"%s.%s\" instead?",
+							 NameStr(cagg->data.user_view_schema),
+							 NameStr(cagg->data.user_view_name))));
+		}
+	}
+
+	/* Get primary partitioning column information. */
+	part_dimension = hyperspace_get_open_dimension(ht->space, 0);
+
+	/*
+	 * NOTE: if we ever allow custom partitioning functions we'll need to
+	 *       change part_dimension->fd.column_type to partitioning_type
+	 *       below, along with any other fallout.
+	 */
+	if (part_dimension->partitioning != NULL)
+	{
+		ts_cache_release(hcache);
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("custom partitioning functions not supported"
+						" with continuous aggregates")));
+	}
+
+	if (IS_INTEGER_TYPE(ts_dimension_get_partition_type(part_dimension)) &&
+		rte->relkind == RELKIND_RELATION)
+	{
+		const char *funcschema = NameStr(part_dimension->fd.integer_now_func_schema);
+		const char *funcname = NameStr(part_dimension->fd.integer_now_func);
+
+		if (strlen(funcschema) == 0 || strlen(funcname) == 0)
+		{
+			ts_cache_release(hcache);
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("custom time function required on hypertable \"%s\"",
+							get_rel_name(ht->main_table_relid)),
+					 errdetail("An integer-based hypertable requires a custom time function to "
+							   "support continuous aggregates."),
+					 errhint("Set a custom time function on the hypertable.")));
+		}
+	}
+
+	caggtimebucketinfo_init(&bucket_info,
+							ht->fd.id,
+							ht->main_table_relid,
+							part_dimension->column_attno,
+							part_dimension->fd.column_type,
+							part_dimension->fd.interval_length,
+							parent_mat_hypertable_id);
+
+	if (is_hierarchical)
+	{
+		const Dimension *part_dimension_parent = hyperspace_get_open_dimension(ht_parent->space, 0);
+
+		caggtimebucketinfo_init(&bucket_info_parent,
+								ht_parent->fd.id,
+								ht_parent->main_table_relid,
+								part_dimension_parent->column_attno,
+								part_dimension_parent->fd.column_type,
+								part_dimension_parent->fd.interval_length,
+								INVALID_HYPERTABLE_ID);
+	}
+
+	ts_cache_release(hcache);
+
+	/*
+	 * We need a GROUP By clause with time_bucket on the partitioning
+	 * column of the hypertable
+	 */
+	Assert(query->groupClause);
+	caggtimebucket_validate(&bucket_info, query->groupClause, query->targetList, is_cagg_create);
 
 	/* Check row security settings for the table. */
 	if (ts_has_row_security(rte->relid))
