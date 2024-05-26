@@ -2951,8 +2951,15 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 			table_endscan(scan);
 			report_error(result);
 		}
-		row_decompressor_decompress_row_to_table(decompressor);
-		*chunk_status_changed = true;
+		if (decompressor->delete_only)
+		{
+			decompressor->batches_deleted++;
+		}
+		else
+		{
+			row_decompressor_decompress_row_to_table(decompressor);
+			*chunk_status_changed = true;
+		}
 	}
 	if (scankeys)
 		pfree(scankeys);
@@ -3133,8 +3140,15 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 			index_close(index_rel, AccessShareLock);
 			report_error(result);
 		}
-		row_decompressor_decompress_row_to_table(decompressor);
-		*chunk_status_changed = true;
+		if (decompressor->delete_only)
+		{
+			decompressor->batches_deleted++;
+		}
+		else
+		{
+			row_decompressor_decompress_row_to_table(decompressor);
+			*chunk_status_changed = true;
+		}
 	}
 
 	if (ts_guc_debug_compression_path_info)
@@ -3149,6 +3163,36 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(scan);
 	CommandCounterIncrement();
+	return true;
+}
+
+static bool
+can_delete_without_decompression(CompressionSettings *settings, Chunk *chunk, List *predicates)
+{
+	ListCell *lc;
+
+	foreach (lc, predicates)
+	{
+		Node *node = lfirst(lc);
+		Var *var;
+		Expr *arg_value;
+		Oid opno;
+
+		if (ts_extract_expr_args((Expr *) node, &var, &arg_value, &opno, NULL))
+		{
+			if (!IsA(arg_value, Const))
+			{
+				return false;
+			}
+			char *column_name = get_attname(chunk->table_id, var->varattno, false);
+			if (ts_array_is_member(settings->fd.segmentby, column_name))
+			{
+				continue;
+			}
+		}
+		return false;
+	}
+
 	return true;
 }
 
@@ -3192,6 +3236,12 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
 	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
 	decompressor = build_decompressor(comp_chunk_rel, chunk_rel);
+
+	if (ht_state->mt->operation == CMD_DELETE &&
+		can_delete_without_decompression(settings, chunk, predicates))
+	{
+		decompressor.delete_only = true;
+	}
 
 	if (index_filters)
 	{
@@ -3253,6 +3303,7 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 		filter = lfirst(lc);
 		pfree(filter);
 	}
+	ht_state->batches_deleted += decompressor.batches_deleted;
 	ht_state->batches_decompressed += decompressor.batches_decompressed;
 	ht_state->tuples_decompressed += decompressor.tuples_decompressed;
 }

@@ -244,6 +244,8 @@ hypertable_modify_explain(CustomScanState *node, List *ancestors, ExplainState *
 			state->tuples_decompressed += cds->tuples_decompressed;
 		}
 	}
+	if (state->batches_deleted > 0)
+		ExplainPropertyInteger("Batches deleted", NULL, state->batches_deleted, es);
 	if (state->batches_decompressed > 0)
 		ExplainPropertyInteger("Batches decompressed", NULL, state->batches_decompressed, es);
 	if (state->tuples_decompressed > 0)
