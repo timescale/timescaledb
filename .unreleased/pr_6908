@@ -1,2 +1,0 @@
-Fixes: #6908 Fix gapfill with timezone behaviour around dst switches
-Thanks: @DiAifU, @kiddhombre and @intermittentnrg for reporting issues with gapfill and daylight saving time
