@@ -1,1 +1,0 @@
-Fixes: #6957 Fix segfault in UNION queries with ordering on compressed chunks
