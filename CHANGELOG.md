@@ -4,6 +4,32 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.15.1 (2024-05-28)
+
+This release contains performance improvements and bug fixes since
+the 2.15.0 release. Best practice is to upgrade at the next
+available opportunity.
+
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+If you are migrating from TimescaleDB v2.15.0, no changes are required.
+
+**Bugfixes**
+* #6540: Segmentation fault when you backfill data using COPY into a compressed chunk.
+* #6858: `BEFORE UPDATE` trigger not working correctly.
+* #6908: Fix `time_bucket_gapfill()` with timezone behaviour around daylight savings time (DST) switches.
+* #6911: Fix dropped chunk metadata removal in the update script.
+* #6940: Fix `pg_upgrade` failure by removing `regprocedure` from the catalog table.
+* #6957: Fix the `segfault` in UNION queries that contain ordering on compressed chunks.
+
+**Thanks**
+* @DiAifU, @kiddhombre and @intermittentnrg for reporting the issues with gapfill and daylight saving time.
+* @edgarzamora for reporting the issue with update triggers.
+* @hongquan for reporting the issue with the update script.
+* @iliastsa and @SystemParadox for reporting the issue with COPY into a compressed chunk.
+
 ## 2.15.0 (2024-05-08)
 
 This release contains performance improvements and bug fixes since
@@ -23,7 +49,9 @@ In addition, it includes these noteworthy features:
 * Recommend users to [migrate their old Continuous Aggregate format to the new one](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/migrate/) because it support will be completely removed in next releases prevent them to migrate.
 * This is the last release supporting PostgreSQL 13.
 
-**For on-premise users and this release only**, you will need to run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql) after running `ALTER EXTENSION`. More details can be found in the pull request [#6786](https://github.com/timescale/timescaledb/pull/6797).
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
 
 **Features**
 * #6382 Support for time_bucket with origin and offset in CAggs

@@ -1,1 +1,0 @@
-Fixes: #6940 Fix `pg_upgrade` failure by removing `regprocedure` from catalog table
