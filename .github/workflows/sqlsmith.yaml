@@ -11,6 +11,9 @@ name: SQLsmith
   pull_request:
     paths: .github/workflows/sqlsmith.yaml
 
+permissions:
+  contents: read
+
 jobs:
   sqlsmith:
     # Change the JOB_NAME variable below when changing the name.
@@ -29,6 +32,11 @@ jobs:
       JOB_NAME: SQLsmith PG${{ matrix.pg }}
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Install Dependencies
       run: |
         sudo apt-get update
@@ -46,7 +54,7 @@ jobs:
         { psql -c "select 1" && exit 1 ; } || :
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Build TimescaleDB
       run: |
@@ -55,7 +63,7 @@ jobs:
         sudo make -C build install
 
     - name: Checkout sqlsmith
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       with:
         repository: 'timescale/sqlsmith'
         path: 'sqlsmith'
@@ -136,14 +144,14 @@ jobs:
 
     - name: Upload Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
       with:
         name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps
 
     - name: Save PostgreSQL log
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
       with:
         name: PostgreSQL log for PG${{ matrix.pg }}
         path: postgres.*

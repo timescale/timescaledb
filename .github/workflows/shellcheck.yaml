@@ -12,19 +12,27 @@ name: Shellcheck
     paths:
       - '**.sh'
       - .github/workflows/shellcheck.yaml
+permissions:
+  contents: read
+
 jobs:
   shellcheck:
     name: Shellcheck
     runs-on: ubuntu-latest
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Install Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install shellcheck
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       with:
         fetch-depth: 0
 

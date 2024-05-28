@@ -20,8 +20,13 @@ jobs:
     name: Enforce single commit pull request
     runs-on: ubuntu-latest
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout source
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         fetch-depth: 0
@@ -62,8 +67,13 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'upgrade-requires-restart') }}
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
       - name: Check if the pull request changes the loader
         shell: bash --norc --noprofile {0}

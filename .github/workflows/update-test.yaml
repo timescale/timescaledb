@@ -5,6 +5,9 @@ name: Test Update and Downgrade
       - main
       - prerelease_test
   pull_request:
+permissions:
+  contents: read
+
 jobs:
   update_test:
     name: Update test PG${{ matrix.pg }}
@@ -17,8 +20,13 @@ jobs:
       PG_VERSION: ${{ matrix.pg }}
       POSTGRES_HOST_AUTH_METHOD: trust
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Install Dependencies
       run: |
@@ -80,14 +88,14 @@ jobs:
 
     - name: Upload Coredumps
       if: always() && steps.collectlogs.outputs.coredumps == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
       with:
         name: Coredumps sqlsmith ${{ matrix.os }} PG${{ matrix.pg }}
         path: coredumps
 
     - name: Upload Artifacts
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
       with:
         name: Update test PG${{ matrix.pg }}
         path: update_test

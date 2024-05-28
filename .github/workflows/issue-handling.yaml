@@ -15,15 +15,20 @@ jobs:
     if: ${{ !github.event.issue.pull_request }}
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Add to bugs board
-        uses: actions/add-to-project@v0.5.0
+        uses: actions/add-to-project@31b3f3ccdc584546fc445612dec3f38ff5edb41c # v0.5.0
         with:
           project-url: https://github.com/orgs/timescale/projects/55
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           labeled: bug, needs-triage, flaky-test
           label-operator: OR
       - name: Add to CAggs board
-        uses: actions/add-to-project@v0.5.0
+        uses: actions/add-to-project@31b3f3ccdc584546fc445612dec3f38ff5edb41c # v0.5.0
         with:
           project-url: https://github.com/orgs/timescale/projects/128
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
@@ -40,8 +45,13 @@ jobs:
     env:
       SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Post to Security Channel
-        uses: slackapi/slack-github-action@v1.25.0
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
           channel-id: '${{ secrets.SLACK_CHANNEL_SECURITY }}'
           payload: |
@@ -63,7 +73,12 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issues' && github.event.action == 'closed' && contains(github.event.issues.issue.labels.*.name, 'bug')
     steps:
-      - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
+      - uses: leonsteinhaeuser/project-beta-automations@6ad2dc04dc4ca680c7e2583e9503708bd454e6a2 # v2.0.0
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale
@@ -82,7 +97,12 @@ jobs:
     if: github.event_name == 'issues' && github.event.action == 'labeled'
       && github.event.label.name == 'waiting-for-author'
     steps:
-      - uses: leonsteinhaeuser/project-beta-automations@v2.0.0
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
+      - uses: leonsteinhaeuser/project-beta-automations@6ad2dc04dc4ca680c7e2583e9503708bd454e6a2 # v2.0.0
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale
@@ -95,6 +115,11 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -160,7 +185,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
       - name: Check if organization member
-        uses: tspascoal/get-user-teams-membership@v2
+        uses: tspascoal/get-user-teams-membership@ba78054988f58bea69b7c6136d563236f8ed2fc0 # v2.1.0
         id: checkUserMember
         with:
          username: ${{ github.actor }}
@@ -178,7 +203,7 @@ jobs:
       - name: Move to waiting for engineering column
         if: ${{ steps.checkUserMember.outputs.isTeamMember == 'false'
           && steps.extract_board_column.outputs.issue_board_column == 'Waiting for Author' }}
-        uses: leonsteinhaeuser/project-beta-automations@v2.0.0
+        uses: leonsteinhaeuser/project-beta-automations@6ad2dc04dc4ca680c7e2583e9503708bd454e6a2 # v2.0.0
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale

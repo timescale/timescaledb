@@ -21,14 +21,24 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
-      - uses: toshimaru/auto-author-assign@v2.1.0
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
+      - uses: toshimaru/auto-author-assign@ebd30f10fb56e46eb0759a14951f36991426fed0 # v2.1.0
 
   ask-review:
     name: Run pull-review
     runs-on: ubuntu-latest
     if: ${{ !github.event.pull_request.draft }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Run pull-review with docker
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

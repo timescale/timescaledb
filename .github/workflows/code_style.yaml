@@ -6,15 +6,23 @@ name: Code style
       - prerelease_test
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   cmake_checks:
     name: Check CMake files
     runs-on: ubuntu-22.04
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Install prerequisites
         run: pip install cmakelang
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Run format on CMake files
         run: |
           find  -name CMakeLists.txt  -exec cmake-format -i {} +
@@ -26,10 +34,15 @@ jobs:
     name: Check Perl code in tree
     runs-on: ubuntu-22.04
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Install prerequisites
         run: sudo apt install perltidy
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Check trailing whitespace
         if: always()
         run: |
@@ -45,11 +58,16 @@ jobs:
     name: Check YAML code in tree
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Install prerequisites
         run: |
           pip install yamllint
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Run yamllint
         run: |
           find . -type f \( -name "*.yaml" -or -name "*.yml" \) -print -exec yamllint {} \+
@@ -58,11 +76,16 @@ jobs:
     name: Check spelling
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Install prerequisites
         run: |
           pip install codespell
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
       - name: Run codespell
         run: |
           find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.yml" -or -name "*.sh" -or -name "*.cmake" -or -name "*.py" -or -name "*.pl" -or -name "CMakeLists.txt" \) \
@@ -74,8 +97,13 @@ jobs:
     strategy:
       fail-fast: false
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout source
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
     - name: Check trailing whitespace
       if: always()
       run: |
@@ -95,6 +123,11 @@ jobs:
     name: Check Python code in tree
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Install prerequisites
         run: |
           pip install --upgrade pip
@@ -111,7 +144,7 @@ jobs:
       # Using e375302a until 1.10.1 get released including the following PR
       # https://github.com/postgrespro/testgres/pull/125
       - name: Checkout testgres
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
         with:
           repository: 'postgrespro/testgres'
           path: 'testgres'
@@ -123,7 +156,7 @@ jobs:
           python setup.py install --user
 
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
       - name: Run prospector
         run: |
@@ -136,9 +169,14 @@ jobs:
     strategy:
       fail-fast: false
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout source
       if: always()
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
     - name: Check license
       if: always()
       run: ./scripts/check_license_all.sh

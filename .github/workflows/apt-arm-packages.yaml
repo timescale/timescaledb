@@ -12,6 +12,9 @@ name: APT ARM64 packages
     branches:
     - release_test
     - trigger/package_test
+permissions:
+  contents: read
+
 jobs:
   apt_tests:
     name: APT ARM64 ${{ matrix.image }} PG${{ matrix.pg }}
@@ -23,6 +26,11 @@ jobs:
         pg: [ 14, 15, 16 ]
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Setup emulation
       run: |
         sudo apt-get update
@@ -63,7 +71,7 @@ jobs:
           dpkg -L timescaledb-2-postgresql-${{ matrix.pg }}
         EOF
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Read versions
       id: versions

@@ -6,6 +6,9 @@ name: Coccinelle
     branches:
       - main
       - prerelease_test
+permissions:
+  contents: read
+
 jobs:
   coccinelle:
     name: Coccinelle
@@ -14,13 +17,18 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Install Dependencies
       run: |
         sudo apt-get update
         sudo apt-get -y install coccinelle
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Run coccinelle
       run: |
@@ -28,7 +36,7 @@ jobs:
 
     - name: Save coccinelle.diff
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
       with:
         name: coccinelle.diff
         path: coccinelle.diff
