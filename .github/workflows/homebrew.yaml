@@ -12,6 +12,9 @@ name: Homebrew
     - trigger/package_test
     - trigger/homebrew_test
 
+permissions:
+  contents: read
+
 jobs:
   homebrew:
     name: Homebrew
@@ -25,6 +28,11 @@ jobs:
             install_options: "--with-oss-only"
 
     steps:
+
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
 
     - name: Setup
       run: |
@@ -41,7 +49,7 @@ jobs:
         brew services start postgresql@16
 
     # checkout code to get version information
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Test Installation
       run: |

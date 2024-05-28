@@ -21,6 +21,9 @@ name: Regression Windows
       - 'LICENSE*'
       - NOTICE
       - 'bootstrap*'
+permissions:
+  contents: read
+
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -28,8 +31,13 @@ jobs:
       build_type: ${{ steps.build_type.outputs.build_type }}
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
     - name: Set build_type
       id: build_type
       run: |
@@ -49,5 +57,10 @@ jobs:
         os: [ windows-2022 ]
         build_type: ${{ fromJson(needs.config.outputs.build_type) }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - run: |
           echo "No build required"

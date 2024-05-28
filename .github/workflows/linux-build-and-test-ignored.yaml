@@ -17,14 +17,22 @@ name: Regression
       - '**.md'
       - 'LICENSE*'
       - NOTICE
+permissions:
+  contents: read
+
 jobs:
   matrixbuilder:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Build matrix
       id: set-matrix
@@ -44,5 +52,10 @@ jobs:
     strategy:
       matrix: ${{ fromJson(needs.matrixbuilder.outputs.matrix) }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - run: |
           echo "No build required"

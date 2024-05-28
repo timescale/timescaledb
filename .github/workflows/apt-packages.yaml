@@ -12,6 +12,9 @@ name: APT packages
     branches:
     - release_test
     - trigger/package_test
+permissions:
+  contents: read
+
 jobs:
   apt_tests:
     name: APT ${{ matrix.image }} PG${{ matrix.pg }} ${{ matrix.license }}
@@ -31,6 +34,11 @@ jobs:
             pkg_suffix: "-oss"
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Add repositories
       run: |
         apt-get update
@@ -57,7 +65,7 @@ jobs:
       run: |
         dpkg -L timescaledb-2${{ matrix.pkg_suffix }}-postgresql-${{ matrix.pg }}
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Read versions
       id: versions

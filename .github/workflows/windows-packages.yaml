@@ -11,6 +11,9 @@ name: Windows Packages
     - release_test
     - trigger/windows_packages
 
+permissions:
+  contents: read
+
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -23,8 +26,13 @@ jobs:
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
     - name: Read configuration
       id: config
       run: python .github/gh_config_reader.py
@@ -63,8 +71,13 @@ jobs:
       PGDATA: pgdata
     steps:
 
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout TimescaleDB source
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Get version
       id: version

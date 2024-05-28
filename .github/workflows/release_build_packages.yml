@@ -4,11 +4,19 @@ name: "Build distribution packages"
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   update:
     runs-on: ubuntu-latest
 
     steps:
+        - name: Harden Runner
+          uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+          with:
+            egress-policy: audit
+
         - name: Build distribution packages
           env:
             GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}

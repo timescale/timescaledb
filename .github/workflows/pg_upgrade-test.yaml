@@ -6,6 +6,9 @@ name: pg_upgrade test
       - prerelease_test
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   pg_upgrade_test:
     name: pg_upgrade test from PG${{ matrix.pg_version_old }} to PG${{ matrix.pg_version_new }}
@@ -24,6 +27,11 @@ jobs:
       OUTPUT_DIR: ${{ github.workspace }}/pg_upgrade_test
 
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - name: Install Linux Dependencies
         run: |
           sudo apt-get update
@@ -32,7 +40,7 @@ jobs:
       # Using e375302a until 1.10.1 get released including the following PR
       # https://github.com/postgrespro/testgres/pull/125
       - name: Checkout testgres
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
         with:
           repository: 'postgrespro/testgres'
           path: 'testgres'
@@ -57,7 +65,7 @@ jobs:
             timescaledb-2-postgresql-${{ matrix.pg_version_new }}
 
       - name: Checkout TimescaleDB
-        uses: actions/checkout@v4
+        uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
       - name: Build and install TimescaleDB on PostgreSQL ${{ matrix.pg_version_old}}
         env:
@@ -111,7 +119,7 @@ jobs:
 
       - name: Upload pg_upgrade logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: pg_upgrade logs from ${{ matrix.pg_version_old }} to ${{ matrix.pg_version_new }}
           path: /tmp/pg_upgrade_artifacts.tgz

@@ -17,6 +17,9 @@ name: Regression Linux i386
       - '**.md'
       - 'LICENSE*'
       - NOTICE
+permissions:
+  contents: read
+
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -24,8 +27,13 @@ jobs:
       pg_latest: ${{ steps.setter.outputs.PG_LATEST }}
       pg16_latest: ${{ steps.setter.outputs.PG16_LATEST }}
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Checkout source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
     - name: Read configuration
       id: setter
       run: python .github/gh_config_reader.py
@@ -42,5 +50,10 @@ jobs:
           - pg: ${{ fromJson(needs.config.outputs.pg16_latest) }}
             build_type: Debug
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+        with:
+          egress-policy: audit
+
       - run: |
           echo "No build required"

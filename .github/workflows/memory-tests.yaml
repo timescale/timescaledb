@@ -6,6 +6,9 @@ name: Memory tests
       - prerelease_test
       - memory_test
       - trigger/memory_test
+permissions:
+  contents: read
+
 jobs:
   memory_leak:
     name: Memory leak on insert PG${{ matrix.pg }}
@@ -16,6 +19,11 @@ jobs:
       fail-fast: false
 
     steps:
+    - name: Harden Runner
+      uses: step-security/harden-runner@f086349bfa2bd1361f7909c78558e816508cdc10 # v2.8.0
+      with:
+        egress-policy: audit
+
     - name: Install Dependencies
       run: |
         sudo apt-get update
@@ -25,7 +33,7 @@ jobs:
         sudo apt-get install postgresql-${{ matrix.pg }} postgresql-server-dev-${{ matrix.pg }}
 
     - name: Checkout TimescaleDB
-      uses: actions/checkout@v4
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29 # v4.1.6
 
     - name: Build TimescaleDB
       run: |
