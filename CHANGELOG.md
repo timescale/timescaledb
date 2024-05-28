@@ -4,6 +4,26 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.15.1 (2024-05-28)
+
+This release contains performance improvements and bug fixes since
+the 2.15.0 release. We recommend that you upgrade at the next
+available opportunity.
+
+**Bugfixes**
+* #6540 Segmentation fault when backfilling data with COPY into a compressed chunk
+* #6858 Before update trigger not working correctly
+* #6908 Fix gapfill with timezone behaviour around dst switches
+* #6911 Fix dropped chunk metadata removal in update script
+* #6940 Fix `pg_upgrade` failure by removing `regprocedure` from catalog table
+* #6957 Fix segfault in UNION queries with ordering on compressed chunks
+
+**Thanks**
+* @DiAifU, @kiddhombre and @intermittentnrg for reporting issues with gapfill and daylight saving time
+* @edgarzamora for reporting issue with update triggers
+* @hongquan for reporting an issue with the update script
+* @iliastsa and @SystemParadox for reporting an issue with COPY into a compressed chunk
+
 ## 2.15.0 (2024-05-08)
 
 This release contains performance improvements and bug fixes since
