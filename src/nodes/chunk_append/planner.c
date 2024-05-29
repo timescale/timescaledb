@@ -89,11 +89,17 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 										 &nullsFirst);
 
 	/* inject sort node if child sort order does not match desired order */
-//	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
-	if (!pathkeys_contained_in(pathkeys, path->pathkeys) && !IsA(plan, Sort))
+	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
+//	if (!pathkeys_contained_in(pathkeys, path->pathkeys) && !IsA(plan, Sort))
 	{
+		Plan *child = plan;
+		if (IsA(plan, Sort))
+		{
+			child = plan->lefttree;
+		}
+
 		plan = (Plan *)
-			make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
+			make_sort(child, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
 	}
 	return plan;
 }
