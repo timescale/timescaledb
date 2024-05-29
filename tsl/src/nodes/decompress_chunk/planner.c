@@ -1327,7 +1327,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 	/*
 	 * We might be using a custom scan tuple if it allows us to avoid the
 	 * projection. Otherwise, this tlist is NIL and we'll be using the
-	 * ucompressed tuple as the custom scan tuple.
+	 * uncompressed tuple as the custom scan tuple.
 	 */
 	decompress_plan->custom_scan_tlist = context.custom_scan_targetlist;
 
