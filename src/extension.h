@@ -8,8 +8,8 @@
 #include <postgres.h>
 #include <nodes/parsenodes.h>
 
-#include "extension_constants.h"
 #include "export.h"
+#include "extension_constants.h"
 
 extern void ts_extension_invalidate(void);
 extern TSDLLEXPORT bool ts_extension_is_loaded(void);

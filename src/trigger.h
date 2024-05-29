@@ -6,9 +6,9 @@
 #pragma once
 
 #include <postgres.h>
-#include <catalog/pg_trigger.h>
-#include "hypertable.h"
 #include "chunk.h"
+#include "hypertable.h"
+#include <catalog/pg_trigger.h>
 
 #define trigger_is_chunk_trigger(trigger)                                                          \
 	((trigger) != NULL && TRIGGER_FOR_ROW((trigger)->tgtype) && !(trigger)->tgisinternal &&        \

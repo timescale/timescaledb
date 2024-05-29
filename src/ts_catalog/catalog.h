@@ -6,10 +6,10 @@
 #pragma once
 
 #include <postgres.h>
+#include <access/heapam.h>
+#include <nodes/nodes.h>
 #include <utils/jsonb.h>
 #include <utils/rel.h>
-#include <nodes/nodes.h>
-#include <access/heapam.h>
 
 #include "export.h"
 #include "extension_constants.h"

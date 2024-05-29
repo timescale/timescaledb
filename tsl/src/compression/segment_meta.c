@@ -5,14 +5,14 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/sortsupport.h>
-#include <utils/typcache.h>
+#include <libpq/pqformat.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
-#include <libpq/pqformat.h>
+#include <utils/sortsupport.h>
+#include <utils/typcache.h>
 
-#include "segment_meta.h"
 #include "datum_serialize.h"
+#include "segment_meta.h"
 
 SegmentMetaMinMaxBuilder *
 segment_meta_min_max_builder_create(Oid type_oid, Oid collation)

@@ -5,11 +5,11 @@
  */
 #pragma once
 
+#include "compat/compat.h"
 #include <postgres.h>
+#include "hypertable_cache.h"
 #include <nodes/plannodes.h>
 #include <tcop/utility.h>
-#include "hypertable_cache.h"
-#include "compat/compat.h"
 
 typedef struct ProcessUtilityArgs
 {

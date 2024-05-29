@@ -5,7 +5,7 @@
  */
 #pragma once
 
-#include <postgres.h>
 #include <compat/compat.h>
+#include <postgres.h>
 
 extern TSDLLEXPORT int ts_compression_chunk_size_delete(int32 uncompressed_chunk_id);

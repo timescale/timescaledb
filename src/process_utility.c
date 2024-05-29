@@ -41,10 +41,10 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
-#include "annotations.h"
-#include "chunk_index.h"
-#include "chunk.h"
 #include "compat/compat.h"
+#include "annotations.h"
+#include "chunk.h"
+#include "chunk_index.h"
 #include "compression_with_clause.h"
 #include "copy.h"
 #include "cross_module_fn.h"
@@ -54,11 +54,11 @@
 #include "errors.h"
 #include "event_trigger.h"
 #include "export.h"
-#include "extension_constants.h"
 #include "extension.h"
+#include "extension_constants.h"
 #include "hypercube.h"
-#include "hypertable_cache.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "indexing.h"
 #include "partitioning.h"
 #include "process_utility.h"

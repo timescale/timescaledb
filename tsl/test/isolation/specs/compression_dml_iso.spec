@@ -65,12 +65,21 @@ step "CA1" {
   FROM show_chunks('ts_device_table') AS ch
   ORDER BY ch::text;
 }
+step "NOS"
+{
+    ALTER TABLE ts_device_table set(timescaledb.compress, timescaledb.compress_orderby='time');
+}
 step "CAc" { COMMIT; }
 
 # Test concurrent update/delete operations
 permutation "CA1" "CAc" "SH" "I1" "Ic" "SH" "UPD1" "UPDc" "SH" "DEL1" "DELc" "SH" "UPD1" "UPDc" "SH"
 permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPD1" "DELc" "UPDc" "SH" "SS"
 permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPD1" "DEL1" "UPDc" "DELc" "SH" "SS"
+
+# Test same operations with no segmentby columns (no index scanning)
+permutation "NOS" "CA1" "CAc" "SH" "I1" "Ic" "SH" "UPD1" "UPDc" "SH" "DEL1" "DELc" "SH" "UPD1" "UPDc" "SH"
+permutation "NOS" "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPD1" "DELc" "UPDc" "SH" "SS"
+permutation "NOS" "IN1" "INc" "CA1" "CAc" "SH" "SS" "UPD1" "DEL1" "UPDc" "DELc" "SH" "SS"
 
 #Test interaction with upper isolation levels
 permutation "IN1" "INc" "CA1" "CAc" "SH" "SS" "DEL1" "UPDrr"  "DELc" "UPDc" "SH" "SS"

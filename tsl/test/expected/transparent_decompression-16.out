@@ -1157,8 +1157,8 @@ WHERE time > '2000-01-01 1:00:00+0'
 ORDER BY time,
     device_id
 LIMIT 10;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics (actual rows=10 loops=1)
          Order: metrics."time", metrics.device_id
@@ -1169,6 +1169,7 @@ LIMIT 10;
                      Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                      Rows Removed by Filter: 16
                      ->  Seq Scan on compress_hyper_5_15_chunk (actual rows=5 loops=1)
+                           Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
          ->  Sort (never executed)
                Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device_id
                ->  Seq Scan on _hyper_1_2_chunk (never executed)
@@ -1178,7 +1179,8 @@ LIMIT 10;
                ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
                      Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                      ->  Seq Scan on compress_hyper_5_16_chunk (never executed)
-(19 rows)
+                           Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
+(21 rows)
 
 --functions not yet optimized
 :PREFIX
@@ -4933,8 +4935,8 @@ WHERE time > '2000-01-01 1:00:00+0'
 ORDER BY time,
     device_id
 LIMIT 10;
-                                                            QUERY PLAN                                                            
-----------------------------------------------------------------------------------------------------------------------------------
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=10 loops=1)
          Order: metrics_space."time", metrics_space.device_id
@@ -4946,6 +4948,7 @@ LIMIT 10;
                      ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk (actual rows=360 loops=1)
                            Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                            ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=1 loops=1)
+                                 Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                ->  Sort (actual rows=4 loops=1)
                      Sort Key: _hyper_2_5_chunk."time", _hyper_2_5_chunk.device_id
                      Sort Method: top-N heapsort 
@@ -4953,6 +4956,7 @@ LIMIT 10;
                            Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                            Rows Removed by Filter: 12
                            ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=3 loops=1)
+                                 Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                ->  Sort (actual rows=2 loops=1)
                      Sort Key: _hyper_2_6_chunk."time", _hyper_2_6_chunk.device_id
                      Sort Method: top-N heapsort 
@@ -4960,6 +4964,7 @@ LIMIT 10;
                            Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                            Rows Removed by Filter: 4
                            ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=1 loops=1)
+                                 Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
@@ -4987,18 +4992,20 @@ LIMIT 10;
                      ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk (never executed)
                            Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                            ->  Seq Scan on compress_hyper_6_20_chunk (never executed)
+                                 Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                ->  Sort (never executed)
                      Sort Key: _hyper_2_11_chunk."time", _hyper_2_11_chunk.device_id
                      ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (never executed)
                            Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                            ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
+                                 Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                      ->  Sort (never executed)
                            Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                            ->  Seq Scan on _hyper_2_12_chunk (never executed)
                                  Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
-(63 rows)
+(68 rows)
 
 --functions not yet optimized
 :PREFIX

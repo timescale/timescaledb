@@ -10,9 +10,9 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <common/base64.h>
+#include <funcapi.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
-#include <funcapi.h>
 
 #include "compression/array.h"
 #include "compression/compression.h"

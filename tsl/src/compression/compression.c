@@ -27,7 +27,6 @@
 #include <optimizer/optimizer.h>
 #include <parser/parse_coerce.h>
 #include <parser/parsetree.h>
-#include <replication/message.h>
 #include <storage/lmgr.h>
 #include <storage/predicate.h>
 #include <utils/builtins.h>
@@ -36,8 +35,8 @@
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 #include <utils/portal.h>
-#include <utils/relcache.h>
 #include <utils/rel.h>
+#include <utils/relcache.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 #include <utils/tuplesort.h>
@@ -57,14 +56,15 @@
 #include "expression_utils.h"
 #include "gorilla.h"
 #include "guc.h"
+#include "indexing.h"
 #include "nodes/chunk_dispatch/chunk_insert_state.h"
 #include "nodes/hypertable_modify.h"
-#include "indexing.h"
 #include "segment_meta.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
-#include "ts_catalog/compression_settings.h"
 #include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
+#include "wal_utils.h"
 
 StaticAssertDecl(GLOBAL_MAX_ROWS_PER_COMPRESSION >= TARGET_COMPRESSED_BATCH_SIZE,
 				 "max row numbers must be harmonized");
@@ -77,33 +77,6 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_GORILLA] = GORILLA_ALGORITHM_DEFINITION,
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
-
-/* The prefix of a logical replication message which is inserted into the
- * replication stream right before decompression inserts are happening
- */
-#define DECOMPRESSION_MARKER_START "::timescaledb-decompression-start"
-/* The prefix of a logical replication message which is inserted into the
- * replication stream right after all decompression inserts have finished
- */
-#define DECOMPRESSION_MARKER_END "::timescaledb-decompression-end"
-
-static inline void
-write_logical_replication_msg_decompression_start()
-{
-	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
-	{
-		LogLogicalMessage(DECOMPRESSION_MARKER_START, "", 0, true);
-	}
-}
-
-static inline void
-write_logical_replication_msg_decompression_end()
-{
-	if (ts_guc_enable_decompression_logrep_markers && XLogLogicalInfoActive())
-	{
-		LogLogicalMessage(DECOMPRESSION_MARKER_END, "", 0, true);
-	}
-}
 
 static Compressor *
 compressor_for_type(Oid type)
@@ -2354,7 +2327,6 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 
 		write_logical_replication_msg_decompression_start();
 		row_decompressor_decompress_row_to_table(&decompressor);
-		write_logical_replication_msg_decompression_end();
 
 		TM_FailureData tmfd;
 		TM_Result result pg_attribute_unused();
@@ -2366,6 +2338,9 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 									true,
 									&tmfd,
 									false);
+
+		write_logical_replication_msg_decompression_end();
+
 		Assert(result == TM_Ok);
 
 		Assert(cis->cds != NULL);
@@ -2879,8 +2854,11 @@ report_error(TM_Result result)
  *  4.insert decompressed rows to uncompressed chunk
  *
  * Return value:
- * if all 4 steps defined above pass set chunk_status_changed to true and return true
- * if step 4 fails return false. Step 3 will fail if there are conflicting concurrent operations on
+ * return true if any tuples are decompressed or decompression of the same data happened
+ * in a concurrent operation. This is important for snapshot management in order to
+ * see the uncompressed data in this transaction.
+ * if all 4 steps defined above pass set chunk_status_changed to true
+ * Step 3 will fail if there are conflicting concurrent operations on
  * same chunk.
  */
 static bool
@@ -2891,6 +2869,7 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 
 	TupleTableSlot *slot = table_slot_create(decompressor->in_rel, NULL);
 	TableScanDesc scan = table_beginscan(decompressor->in_rel, snapshot, num_scankeys, scankeys);
+	bool data_decompressed = false;
 	int num_scanned_rows = 0;
 	int num_filtered_rows = 0;
 
@@ -2946,6 +2925,16 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 									&tmfd,
 									false);
 
+		/* skip reporting error if isolation level is < Repeatable Read
+		 * since somebody decompressed the data concurrently, we need to take
+		 * that data into account as well when in Read Committed level
+		 */
+		if (result == TM_Deleted && !IsolationUsesXactSnapshot())
+		{
+			data_decompressed = true;
+			continue;
+		}
+
 		if (result != TM_Ok)
 		{
 			table_endscan(scan);
@@ -2953,6 +2942,7 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 		}
 		row_decompressor_decompress_row_to_table(decompressor);
 		*chunk_status_changed = true;
+		data_decompressed = true;
 	}
 	if (scankeys)
 		pfree(scankeys);
@@ -2968,7 +2958,7 @@ decompress_batches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num
 			 num_filtered_rows);
 	}
 
-	return true;
+	return data_decompressed;
 }
 
 /*
@@ -3037,6 +3027,7 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 	Snapshot snapshot = GetTransactionSnapshot();
 	int num_segmentby_filtered_rows = 0;
 	int num_heap_filtered_rows = 0;
+	bool data_decompressed = false;
 
 	IndexScanDesc scan =
 		index_beginscan(decompressor->in_rel, index_rel, snapshot, num_index_scankeys, 0);
@@ -3123,9 +3114,15 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 									&tmfd,
 									false);
 
-		/* skip reporting error if isolation level is < Repeatable Read */
+		/* skip reporting error if isolation level is < Repeatable Read
+		 * since somebody decompressed the data concurrently, we need to take
+		 * that data into account as well when in Read Committed level
+		 */
 		if (result == TM_Deleted && !IsolationUsesXactSnapshot())
+		{
+			data_decompressed = true;
 			continue;
+		}
 
 		if (result != TM_Ok)
 		{
@@ -3135,6 +3132,7 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 		}
 		row_decompressor_decompress_row_to_table(decompressor);
 		*chunk_status_changed = true;
+		data_decompressed = true;
 	}
 
 	if (ts_guc_debug_compression_path_info)
@@ -3148,8 +3146,8 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
 
 	ExecDropSingleTupleTableSlot(slot);
 	index_endscan(scan);
-	CommandCounterIncrement();
-	return true;
+
+	return data_decompressed;
 }
 
 /*
@@ -3159,8 +3157,10 @@ decompress_batches_using_index(RowDecompressor *decompressor, Relation index_rel
  *  2. Build scan keys for SEGMENT BY columns.
  *  3. Move scanned rows to staging area.
  *  4. Update catalog table to change status of moved chunk.
+ *
+ *  Returns true if it decompresses any data.
  */
-static void
+static bool
 decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chunk,
 									 List *predicates, EState *estate)
 {
@@ -3178,6 +3178,7 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	BatchFilter *filter;
 
 	bool chunk_status_changed = false;
+	bool data_decompressed = false;
 	ScanKeyData *scankeys = NULL;
 	Bitmapset *null_columns = NULL;
 	int num_scankeys = 0;
@@ -3208,28 +3209,27 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	{
 		index_scankeys =
 			build_index_scankeys(matching_index_rel, index_filters, &num_index_scankeys);
-		decompress_batches_using_index(&decompressor,
-									   matching_index_rel,
-									   index_scankeys,
-									   num_index_scankeys,
-									   scankeys,
-									   num_scankeys,
-									   null_columns,
-									   is_null,
-									   &chunk_status_changed);
+		data_decompressed = decompress_batches_using_index(&decompressor,
+														   matching_index_rel,
+														   index_scankeys,
+														   num_index_scankeys,
+														   scankeys,
+														   num_scankeys,
+														   null_columns,
+														   is_null,
+														   &chunk_status_changed);
 		/* close the selected index */
 		index_close(matching_index_rel, AccessShareLock);
 	}
 	else
 	{
-		decompress_batches(&decompressor,
-						   scankeys,
-						   num_scankeys,
-						   null_columns,
-						   is_null,
-						   &chunk_status_changed);
+		data_decompressed = decompress_batches(&decompressor,
+											   scankeys,
+											   num_scankeys,
+											   null_columns,
+											   is_null,
+											   &chunk_status_changed);
 	}
-	write_logical_replication_msg_decompression_end();
 
 	/*
 	 * tuples from compressed chunk has been decompressed and moved
@@ -3237,6 +3237,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	 */
 	if (chunk_status_changed == true)
 		ts_chunk_set_partial(chunk);
+
+	write_logical_replication_msg_decompression_end();
 
 	row_decompressor_close(&decompressor);
 
@@ -3255,6 +3257,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	}
 	ht_state->batches_decompressed += decompressor.batches_decompressed;
 	ht_state->tuples_decompressed += decompressor.tuples_decompressed;
+
+	return data_decompressed;
 }
 
 /*
@@ -3267,6 +3271,8 @@ struct decompress_chunk_context
 {
 	List *relids;
 	HypertableModifyState *ht_state;
+	/* indicates decompression actually occurred */
+	bool batches_decompressed;
 };
 
 static bool decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx);
@@ -3283,7 +3289,8 @@ decompress_target_segments(HypertableModifyState *ht_state)
 	};
 	Assert(ctx.relids);
 
-	return decompress_chunk_walker(&ps->ps, &ctx);
+	decompress_chunk_walker(&ps->ps, &ctx);
+	return ctx.batches_decompressed;
 }
 
 static bool
@@ -3292,6 +3299,7 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 	RangeTblEntry *rte = NULL;
 	bool needs_decompression = false;
 	bool should_rescan = false;
+	bool batches_decompressed = false;
 	List *predicates = NIL;
 	Chunk *current_chunk;
 	if (ps == NULL)
@@ -3349,10 +3357,11 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
 							 errmsg("UPDATE/DELETE is disabled on compressed chunks"),
 							 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
-				decompress_batches_for_update_delete(ctx->ht_state,
-													 current_chunk,
-													 predicates,
-													 ps->state);
+				batches_decompressed = decompress_batches_for_update_delete(ctx->ht_state,
+																			current_chunk,
+																			predicates,
+																			ps->state);
+				ctx->batches_decompressed |= batches_decompressed;
 
 				/* This is a workaround specifically for bitmap heap scans:
 				 * during node initialization, initialize the scan state with the active snapshot

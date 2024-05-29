@@ -7,8 +7,8 @@
 #include <fmgr.h>
 #include <utils/lsyscache.h>
 
-#include "time_bucket.h"
 #include "gapfill_functions.h"
+#include "time_bucket.h"
 
 Datum
 gapfill_marker(PG_FUNCTION_ARGS)

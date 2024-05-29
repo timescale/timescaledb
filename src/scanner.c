@@ -4,15 +4,15 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/htup_details.h>
 #include <access/relscan.h>
 #include <access/xact.h>
-#include <access/htup_details.h>
 #include <executor/tuptable.h>
-#include <storage/lmgr.h>
 #include <storage/bufmgr.h>
+#include <storage/lmgr.h>
 #include <storage/procarray.h>
-#include <utils/rel.h>
 #include <utils/palloc.h>
+#include <utils/rel.h>
 #include <utils/snapmgr.h>
 
 #include "scanner.h"

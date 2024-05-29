@@ -50,9 +50,9 @@
 #include <optimizer/planmain.h>
 #include <optimizer/subselect.h>
 #include <optimizer/tlist.h>
-#include <parser/parsetree.h>
 #include <parser/parse_clause.h>
 #include <parser/parse_func.h>
+#include <parser/parsetree.h>
 #include <rewrite/rewriteManip.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>

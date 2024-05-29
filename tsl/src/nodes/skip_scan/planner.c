@@ -7,14 +7,14 @@
 #include <postgres.h>
 #include <access/sysattr.h>
 #include <nodes/extensible.h>
-#include <nodes/nodeFuncs.h>
 #include <nodes/makefuncs.h>
+#include <nodes/nodeFuncs.h>
 #include <nodes/pathnodes.h>
 #include <optimizer/clauses.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
-#include <optimizer/paths.h>
 #include <optimizer/pathnode.h>
+#include <optimizer/paths.h>
 #include <optimizer/planmain.h>
 #include <optimizer/restrictinfo.h>
 #include <optimizer/tlist.h>
@@ -24,12 +24,12 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include <import/planner.h>
-#include "guc.h"
-#include "nodes/skip_scan/skip_scan.h"
-#include "nodes/constraint_aware_append/constraint_aware_append.h"
-#include "nodes/chunk_append/chunk_append.h"
 #include "compat/compat.h"
+#include "guc.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "nodes/constraint_aware_append/constraint_aware_append.h"
+#include "nodes/skip_scan/skip_scan.h"
+#include <import/planner.h>
 
 #include <math.h>
 

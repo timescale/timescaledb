@@ -6,13 +6,13 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/pg_list.h>
 #include <nodes/parsenodes.h>
 #include <nodes/pathnodes.h>
+#include <nodes/pg_list.h>
 
 #include "export.h"
-#include "hypertable.h"
 #include "guc.h"
+#include "hypertable.h"
 
 /*
  * Constraints created during planning to improve chunk exclusion

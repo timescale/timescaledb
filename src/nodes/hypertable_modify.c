@@ -22,12 +22,12 @@
 #include <utils/rel.h>
 #include <utils/snapmgr.h>
 
-#include "nodes/chunk_dispatch/chunk_dispatch.h"
 #include "cross_module_fn.h"
 #include "guc.h"
 #include "hypertable_cache.h"
 #include "hypertable_modify.h"
 #include "nodes/chunk_append/chunk_append.h"
+#include "nodes/chunk_dispatch/chunk_dispatch.h"
 
 static void fireASTriggers(ModifyTableState *node);
 static void fireBSTriggers(ModifyTableState *node);
@@ -706,18 +706,22 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 	 */
 	if ((operation == CMD_DELETE || operation == CMD_UPDATE) && !ht_state->comp_chunks_processed)
 	{
-		if (ts_cm_functions->decompress_target_segments)
+		/* Modify snapshot only if something got decompressed */
+		if (ts_cm_functions->decompress_target_segments &&
+			ts_cm_functions->decompress_target_segments(ht_state))
 		{
-			ts_cm_functions->decompress_target_segments(ht_state);
 			ht_state->comp_chunks_processed = true;
 			/*
 			 * save snapshot set during ExecutorStart(), since this is the same
 			 * snapshot used to SeqScan of uncompressed chunks
 			 */
 			ht_state->snapshot = estate->es_snapshot;
-			/* use current transaction snapshot */
-			estate->es_snapshot = GetTransactionSnapshot();
+
 			CommandCounterIncrement();
+			/* use a static copy of current transaction snapshot
+			 * this needs to be a copy so we don't read trigger updates
+			 */
+			estate->es_snapshot = RegisterSnapshot(GetTransactionSnapshot());
 			/* mark rows visible */
 			estate->es_output_cid = GetCurrentCommandId(true);
 
@@ -994,6 +998,7 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 
 	if (ht_state->comp_chunks_processed)
 	{
+		UnregisterSnapshot(estate->es_snapshot);
 		estate->es_snapshot = ht_state->snapshot;
 		ht_state->comp_chunks_processed = false;
 	}

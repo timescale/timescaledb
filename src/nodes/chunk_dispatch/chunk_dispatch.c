@@ -5,26 +5,26 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
-#include <nodes/nodes.h>
+#include <catalog/pg_type.h>
 #include <nodes/extensible.h>
 #include <nodes/makefuncs.h>
 #include <nodes/nodeFuncs.h>
+#include <nodes/nodes.h>
 #include <parser/parsetree.h>
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
-#include <catalog/pg_type.h>
 
 #include "compat/compat.h"
 #include "chunk_dispatch.h"
 #include "chunk_insert_state.h"
-#include "errors.h"
-#include "subspace_store.h"
 #include "dimension.h"
+#include "errors.h"
 #include "guc.h"
-#include "nodes/hypertable_modify.h"
 #include "hypercube.h"
+#include "nodes/hypertable_modify.h"
+#include "subspace_store.h"
 
 static Node *chunk_dispatch_state_create(CustomScan *cscan);
 

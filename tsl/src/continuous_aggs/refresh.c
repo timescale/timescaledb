@@ -27,11 +27,11 @@
 #include <time_utils.h>
 #include <utils.h>
 
-#include "refresh.h"
-#include "materialize.h"
+#include "guc.h"
 #include "invalidation.h"
 #include "invalidation_threshold.h"
-#include "guc.h"
+#include "materialize.h"
+#include "refresh.h"
 
 #define CAGG_REFRESH_LOG_LEVEL (callctx == CAGG_REFRESH_POLICY ? LOG : DEBUG1)
 

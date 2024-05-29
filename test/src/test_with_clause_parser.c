@@ -5,20 +5,20 @@
  */
 
 #include <postgres.h>
+#include <access/htup_details.h>
+#include <catalog/pg_type.h>
+#include <commands/defrem.h>
 #include <fmgr.h>
 #include <funcapi.h>
-#include <access/htup_details.h>
-#include <commands/defrem.h>
-#include <catalog/pg_type.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/memutils.h>
 
+#include "annotations.h"
 #include "export.h"
 #include "test_utils.h"
 #include "with_clause_parser.h"
-#include "annotations.h"
 
 static DefElem *
 def_elem_from_texts(Datum *texts, int nelems)

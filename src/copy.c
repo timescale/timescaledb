@@ -22,11 +22,11 @@
 
 #include <postgres.h>
 
-#include <ctype.h>
 #include <unistd.h>
-#include <sys/stat.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ctype.h>
+#include <netinet/in.h>
+#include <sys/stat.h>
 
 #include <access/heapam.h>
 #include <access/hio.h>

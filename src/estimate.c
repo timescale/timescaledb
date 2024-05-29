@@ -4,14 +4,14 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_type.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_oper.h>
-#include <catalog/pg_type.h>
 #include <utils/selfuncs.h>
 
 #include "compat/compat.h"
-#include "func_cache.h"
 #include "estimate.h"
+#include "func_cache.h"
 #include "import/planner.h"
 #include "utils.h"
 

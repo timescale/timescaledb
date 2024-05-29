@@ -7,25 +7,25 @@
 #include <postgres.h>
 #include <catalog/pg_proc.h>
 #include <catalog/pg_type.h>
-#include <utils/acl.h>
-#include <utils/syscache.h>
-#include <utils/lsyscache.h>
-#include <utils/guc.h>
-#include <utils/builtins.h>
-#include <utils/array.h>
-#include <utils/snapmgr.h>
-#include <utils/typcache.h>
 #include <funcapi.h>
 #include <math.h>
-#include <parser/parse_func.h>
 #include <miscadmin.h>
+#include <parser/parse_func.h>
+#include <utils/acl.h>
+#include <utils/array.h>
+#include <utils/builtins.h>
+#include <utils/guc.h>
+#include <utils/lsyscache.h>
+#include <utils/snapmgr.h>
+#include <utils/syscache.h>
+#include <utils/typcache.h>
 
-#include "hypertable_cache.h"
-#include "errors.h"
 #include "compat/compat.h"
-#include "chunk_adaptive.h"
 #include "chunk.h"
+#include "chunk_adaptive.h"
+#include "errors.h"
 #include "hypercube.h"
+#include "hypertable_cache.h"
 #include "utils.h"
 
 #define DEFAULT_CHUNK_SIZING_FN_NAME "calculate_chunk_interval"
