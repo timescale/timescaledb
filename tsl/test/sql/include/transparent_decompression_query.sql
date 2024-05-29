@@ -17,19 +17,6 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY time;
 
--- test expressions
-:PREFIX
-SELECT time_bucket ('1d', time),
-    v1 + v2 AS "sum",
-    COALESCE(NULL, v1, v2) AS "coalesce",
-    NULL AS "NULL",
-    'text' AS "text",
-    :TEST_TABLE AS "RECORD"
-FROM :TEST_TABLE
-WHERE device_id IN (1, 2)
-ORDER BY time,
-    device_id
-LIMIT 11;
 
 -- test empty targetlist
 :PREFIX
@@ -47,13 +34,30 @@ WHERE device_id < 0;
 SELECT 1
 FROM :TEST_TABLE;
 
+-- The following plans are flaky between MergeAppend or Sort + Append.
+SET enable_sort = off;
+
+-- test expressions
+:PREFIX
+SELECT time_bucket ('1d', time),
+    v1 + v2 AS "sum",
+    COALESCE(NULL, v1, v2) AS "coalesce",
+    NULL AS "NULL",
+    'text' AS "text",
+    :TEST_TABLE AS "RECORD"
+FROM :TEST_TABLE
+WHERE device_id IN (1, 2)
+ORDER BY time,
+    device_id
+;
+
 -- test constraints not present in targetlist
 :PREFIX
 SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 11;
+;
 
 -- test order not present in targetlist
 :PREFIX
@@ -61,14 +65,16 @@ SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY v1
-LIMIT 11;
+;
 
 -- test column with all NULL
 :PREFIX
 SELECT v3
 FROM :TEST_TABLE
 WHERE device_id = 1
-LIMIT 11;
+;
+
+RESET enable_sort;
 
 --
 -- test qual pushdown
