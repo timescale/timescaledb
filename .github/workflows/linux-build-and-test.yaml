@@ -125,15 +125,17 @@ jobs:
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --with-openssl \
           --without-readline --without-zlib --without-libxml ${{ matrix.pg_extra_args }}
         make -j $MAKE_JOBS
-        make -j $MAKE_JOBS -C src/test/isolation
-        make -j $MAKE_JOBS -C contrib/postgres_fdw
-        make -j $MAKE_JOBS -C contrib/test_decoding
+        for ext in ${{ matrix.pg_extensions }}; do
+          make -j $MAKE_JOBS -C contrib/${ext}
+        done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
-        make -C ~/$PG_SRC_DIR install
-        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
-        make -C ~/$PG_SRC_DIR/contrib/test_decoding install
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in ${{ matrix.pg_extensions }}; do
+          make -C contrib/${ext} install
+        done
         echo "$HOME/$PG_INSTALL_DIR/bin" >> "${GITHUB_PATH}"
 
     - name: Upload config.log
