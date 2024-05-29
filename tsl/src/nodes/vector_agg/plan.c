@@ -77,10 +77,9 @@ resolve_outer_special_vars_mutator(Node *node, void *context)
 	}
 
 	Var *aggregated_var = castNode(Var, node);
-	if (aggregated_var->varno != OUTER_VAR)
-	{
-		return copyObject(node);
-	}
+	Ensure(aggregated_var->varno == OUTER_VAR,
+		   "encountered unexpected varno %d as an aggregate argument",
+		   aggregated_var->varno);
 
 	CustomScan *custom = castNode(CustomScan, context);
 	TargetEntry *decompress_chunk_tentry =
