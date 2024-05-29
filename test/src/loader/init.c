@@ -10,14 +10,14 @@
 #ifndef WIN32
 #include <access/parallel.h>
 #endif
-#include <commands/extension.h>
-#include <miscadmin.h>
-#include <utils/guc.h>
-#include <utils/inval.h>
-#include <parser/analyze.h>
 #include "compat/compat.h"
 #include "export.h"
 #include "extension.h"
+#include <commands/extension.h>
+#include <miscadmin.h>
+#include <parser/analyze.h>
+#include <utils/guc.h>
+#include <utils/inval.h>
 
 #define STR_EXPAND(x) #x
 #define STR(x) STR_EXPAND(x)
@@ -45,11 +45,7 @@ cache_invalidate_callback(Datum arg, Oid relid)
 }
 
 static void
-#if PG14_LT
-post_analyze_hook(ParseState *pstate, Query *query)
-#else
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
-#endif
 {
 	if (ts_extension_is_loaded())
 		elog(WARNING, "mock post_analyze_hook " STR(TIMESCALEDB_VERSION_MOD));

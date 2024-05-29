@@ -5,11 +5,11 @@
  */
 #pragma once
 
+#include "compat/compat.h"
 #include <postgres.h>
+#include "hypertable_cache.h"
 #include <nodes/plannodes.h>
 #include <tcop/utility.h>
-#include "hypertable_cache.h"
-#include "compat/compat.h"
 
 typedef struct ProcessUtilityArgs
 {
@@ -24,9 +24,7 @@ typedef struct ProcessUtilityArgs
 	DestReceiver *dest;
 	List *hypertable_list;
 	QueryCompletion *completion_tag;
-#if PG14_GE
 	bool readonly_tree;
-#endif
 } ProcessUtilityArgs;
 
 typedef enum

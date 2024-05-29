@@ -26,8 +26,6 @@ import json
 import os
 import subprocess
 from ci_settings import (
-    PG13_EARLIEST,
-    PG13_LATEST,
     PG14_EARLIEST,
     PG14_LATEST,
     PG15_EARLIEST,
@@ -167,10 +165,6 @@ if pull_request:
 
 # always test debug build on latest of all supported pg versions
 m["include"].append(
-    build_debug_config({"pg": PG13_LATEST, "ignored_tests": ignored_tests})
-)
-
-m["include"].append(
     build_debug_config({"pg": PG14_LATEST, "ignored_tests": ignored_tests})
 )
 
@@ -207,19 +201,6 @@ m["include"].append(
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
 if not pull_request:
-    # add debug test for first supported PG13 version
-    pg13_debug_earliest = {
-        "pg": PG13_EARLIEST,
-        # The early releases don't build with llvm 14.
-        "pg_extra_args": "--enable-debug --enable-cassert --without-llvm",
-        "skipped_tests": {"001_extension"},
-        "ignored_tests": {
-            "transparent_decompress_chunk-13",
-        },
-        "tsdb_build_args": "-DWARNINGS_AS_ERRORS=ON -DASSERTIONS=ON -DPG_ISOLATION_REGRESS=OFF",
-    }
-    m["include"].append(build_debug_config(pg13_debug_earliest))
-
     # add debug test for first supported PG14 version
     m["include"].append(
         build_debug_config(
@@ -256,7 +237,6 @@ if not pull_request:
     )
 
     # add release test for latest pg releases
-    m["include"].append(build_release_config({"pg": PG13_LATEST}))
     m["include"].append(build_release_config({"pg": PG14_LATEST}))
     m["include"].append(
         build_release_config({"pg": PG15_LATEST, "ignored_tests": ignored_tests})
@@ -271,7 +251,6 @@ if not pull_request:
 
     # to discover issues with upcoming releases we run CI against
     # the stable branches of supported PG releases
-    m["include"].append(build_debug_config({"pg": 13, "snapshot": "snapshot"}))
     m["include"].append(
         build_debug_config(
             {

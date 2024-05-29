@@ -47,8 +47,8 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "cross_module_fn.h"
-#include "extension_constants.h"
 #include "extension.h"
+#include "extension_constants.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
@@ -664,7 +664,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 	for (lc = list_head((List *) quals); lc != NULL; prev = lc, lc = lnext((List *) quals, lc))
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
+		Relids relids = pull_varnos(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/* stop processing if not for current rel */
@@ -713,7 +713,7 @@ process_quals(Node *quals, CollectQualCtx *ctx, bool is_outer_join)
 		 * relation when it should show all rows */
 		if (!is_outer_join)
 			ctx->restrictions =
-				lappend(ctx->restrictions, make_simple_restrictinfo_compat(ctx->root, qual));
+				lappend(ctx->restrictions, make_simple_restrictinfo(ctx->root, qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -727,7 +727,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 	foreach (lc, castNode(List, quals))
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
+		Relids relids = pull_varnos(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/* stop processing if not for current rel */
@@ -753,8 +753,7 @@ timebucket_annotate(Node *quals, CollectQualCtx *ctx)
 			qual = transformed;
 		}
 
-		ctx->restrictions =
-			lappend(ctx->restrictions, make_simple_restrictinfo_compat(ctx->root, qual));
+		ctx->restrictions = lappend(ctx->restrictions, make_simple_restrictinfo(ctx->root, qual));
 	}
 	return (Node *) list_concat((List *) quals, additional_quals);
 }
@@ -784,7 +783,7 @@ collect_join_quals(Node *quals, CollectQualCtx *ctx, bool can_propagate)
 	foreach (lc, (List *) quals)
 	{
 		Expr *qual = lfirst(lc);
-		Relids relids = pull_varnos_compat(ctx->root, (Node *) qual);
+		Relids relids = pull_varnos(ctx->root, (Node *) qual);
 		int num_rels = bms_num_members(relids);
 
 		/*
@@ -1267,7 +1266,7 @@ propagate_join_quals(PlannerInfo *root, RelOptInfo *rel, CollectQualCtx *ctx)
 
 			if (new_qual)
 			{
-				Relids relids = pull_varnos_compat(ctx->root, (Node *) propagated);
+				Relids relids = pull_varnos(ctx->root, (Node *) propagated);
 				RestrictInfo *restrictinfo;
 
 				restrictinfo = make_restrictinfo_compat(root,

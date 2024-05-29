@@ -1,2 +1,0 @@
-Fixes: #6820 Fix a crash when the ts_hypertable_insert_blocker was called directly
-Thanks: @brasic for reporting a crash when the ts_hypertable_insert_blocker was called directly

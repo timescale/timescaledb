@@ -393,7 +393,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_3_3_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -413,7 +412,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_2_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_2_7_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -762,7 +761,7 @@ psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditi
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_9_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_8_11_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -790,7 +789,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_7_8_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -810,7 +808,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_7_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_6_14_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -1485,7 +1483,7 @@ psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditi
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_14_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_16_18_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -1513,7 +1511,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_15_13_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -1533,7 +1530,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_12_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_14_20_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -1878,7 +1875,7 @@ psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditi
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_18_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_20_24_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -1906,7 +1903,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_19_17_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -1926,7 +1922,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_16_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_18_26_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -2701,7 +2697,7 @@ psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditi
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_22_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_29_30_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -2729,7 +2725,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_28_21_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -2749,7 +2744,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_20_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_27_32_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -3093,7 +3088,7 @@ psql:include/cagg_on_cagg_common.sql:169: NOTICE:  continuous aggregate "conditi
 \set ON_ERROR_STOP 1
 -- DROP the 3TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_26_chunk
+psql:include/cagg_on_cagg_common.sql:173: NOTICE:  drop cascades to table _timescaledb_internal._hyper_33_36_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
@@ -3121,7 +3116,6 @@ SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_common.sql:187: NOTICE:  drop cascades to table _timescaledb_internal._hyper_32_25_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
@@ -3141,7 +3135,7 @@ SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_31_24_chunk
+psql:include/cagg_on_cagg_common.sql:197: NOTICE:  drop cascades to table _timescaledb_internal._hyper_31_38_chunk
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
 SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
@@ -4022,16 +4016,16 @@ UNION ALL
 (1 row)
 
   DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:79: NOTICE:  drop cascades to table _timescaledb_internal._hyper_46_31_chunk
+psql:include/cagg_on_cagg_validations.sql:79: NOTICE:  drop cascades to table _timescaledb_internal._hyper_46_43_chunk
   DELETE FROM conditions WHERE device_id = 4;
 \endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  drop cascades to table _timescaledb_internal._hyper_45_30_chunk
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  drop cascades to table _timescaledb_internal._hyper_45_42_chunk
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:87: NOTICE:  drop cascades to table _timescaledb_internal._hyper_44_29_chunk
+psql:include/cagg_on_cagg_validations.sql:87: NOTICE:  drop cascades to table _timescaledb_internal._hyper_44_41_chunk
 \set INTERVAL_TEST FALSE
 --
 -- Variable bucket size with different timezones
@@ -4275,16 +4269,16 @@ UNION ALL
 (1 row)
 
   DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:79: NOTICE:  drop cascades to table _timescaledb_internal._hyper_51_34_chunk
+psql:include/cagg_on_cagg_validations.sql:79: NOTICE:  drop cascades to table _timescaledb_internal._hyper_51_46_chunk
   DELETE FROM conditions WHERE device_id = 4;
 \endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  drop cascades to table _timescaledb_internal._hyper_50_33_chunk
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  drop cascades to table _timescaledb_internal._hyper_50_45_chunk
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:87: NOTICE:  drop cascades to table _timescaledb_internal._hyper_49_32_chunk
+psql:include/cagg_on_cagg_validations.sql:87: NOTICE:  drop cascades to table _timescaledb_internal._hyper_49_44_chunk
 \set INTERVAL_TEST FALSE
 --
 -- TZ bucket on top of non-TZ bucket
@@ -4529,16 +4523,16 @@ UNION ALL
 (1 row)
 
   DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_3TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:79: NOTICE:  drop cascades to table _timescaledb_internal._hyper_56_37_chunk
+psql:include/cagg_on_cagg_validations.sql:79: NOTICE:  drop cascades to table _timescaledb_internal._hyper_56_49_chunk
   DELETE FROM conditions WHERE device_id = 4;
 \endif
 --
 -- Cleanup
 --
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_2TH_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  drop cascades to table _timescaledb_internal._hyper_55_36_chunk
+psql:include/cagg_on_cagg_validations.sql:86: NOTICE:  drop cascades to table _timescaledb_internal._hyper_55_48_chunk
 DROP MATERIALIZED VIEW IF EXISTS :CAGG_NAME_1ST_LEVEL;
-psql:include/cagg_on_cagg_validations.sql:87: NOTICE:  drop cascades to table _timescaledb_internal._hyper_54_35_chunk
+psql:include/cagg_on_cagg_validations.sql:87: NOTICE:  drop cascades to table _timescaledb_internal._hyper_54_47_chunk
 \set INTERVAL_TEST FALSE
 --
 -- non-TZ bucket on top of TZ bucket

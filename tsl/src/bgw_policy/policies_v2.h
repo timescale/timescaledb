@@ -6,12 +6,12 @@
 #pragma once
 
 #include <postgres.h>
-#include <utils/jsonb.h>
 #include "dimension.h"
-#include <continuous_aggs/materialize.h>
 #include <bgw_policy/compression_api.h>
 #include <bgw_policy/continuous_aggregate_api.h>
 #include <bgw_policy/retention_api.h>
+#include <continuous_aggs/materialize.h>
+#include <utils/jsonb.h>
 
 #define POLICY_REFRESH_CAGG_PROC_NAME "policy_refresh_continuous_aggregate"
 #define POLICY_REFRESH_CAGG_CHECK_NAME "policy_refresh_continuous_aggregate_check"

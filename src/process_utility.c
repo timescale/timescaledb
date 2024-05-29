@@ -41,10 +41,10 @@
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
 
-#include "annotations.h"
-#include "chunk_index.h"
-#include "chunk.h"
 #include "compat/compat.h"
+#include "annotations.h"
+#include "chunk.h"
+#include "chunk_index.h"
 #include "compression_with_clause.h"
 #include "copy.h"
 #include "cross_module_fn.h"
@@ -54,11 +54,11 @@
 #include "errors.h"
 #include "event_trigger.h"
 #include "export.h"
-#include "extension_constants.h"
 #include "extension.h"
+#include "extension_constants.h"
 #include "hypercube.h"
-#include "hypertable_cache.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "indexing.h"
 #include "partitioning.h"
 #include "process_utility.h"
@@ -96,34 +96,12 @@ prev_ProcessUtility(ProcessUtilityArgs *args)
 
 	hook(args->pstmt,
 		 args->query_string,
-#if PG14_GE
 		 args->readonly_tree,
-#endif
 		 args->context,
 		 args->params,
 		 args->queryEnv,
 		 args->dest,
 		 args->completion_tag);
-}
-
-static ObjectType
-get_altertable_objecttype(AlterTableStmt *stmt)
-{
-#if PG14_GE
-	return stmt->objtype;
-#else
-	return stmt->relkind;
-#endif
-}
-
-static ObjectType
-get_createtableas_objecttype(CreateTableAsStmt *stmt)
-{
-#if PG14_GE
-	return stmt->objtype;
-#else
-	return stmt->relkind;
-#endif
 }
 
 static void
@@ -156,10 +134,8 @@ check_chunk_alter_table_operation_allowed(Oid relid, AlterTableStmt *stmt)
 				case AT_EnableRowSecurity:
 				case AT_DisableRowSecurity:
 				case AT_SetTableSpace:
-#if PG14_GE
 				case AT_ReAddStatistics:
 				case AT_SetCompression:
-#endif
 					/* allowed on chunks */
 					break;
 				case AT_AddConstraint:
@@ -256,10 +232,9 @@ check_alter_table_allowed_on_ht_with_compression(Hypertable *ht, AlterTableStmt 
 			case AT_ColumnDefault:	/* this is passed down */
 			case AT_DropColumn:		/* this is passed down */
 			case AT_DropConstraint: /* this is passed down */
-#if PG14_GE
+			case AT_ReplicaIdentity:
 			case AT_ReAddStatistics:
 			case AT_SetCompression:
-#endif
 				continue;
 				/*
 				 * BLOCKED:
@@ -970,6 +945,10 @@ process_truncate(ProcessUtilityArgs *args)
 
 						/* list of materialization hypertables to reset the watermark */
 						mat_hypertables = lappend(mat_hypertables, mat_ht);
+
+						/* include the materialization hypertable to the list to be handled by the
+						 * proper hypertable and chunk truncate code-path later */
+						hypertables = lappend(hypertables, mat_ht);
 					}
 
 					list_append = true;
@@ -1026,10 +1005,8 @@ process_truncate(ProcessUtilityArgs *args)
 						/*
 						 * Block direct TRUNCATE on frozen chunk.
 						 */
-#if PG14_GE
 						if (ts_chunk_is_frozen(chunk))
 							elog(ERROR, "cannot TRUNCATE frozen chunk \"%s\"", get_rel_name(relid));
-#endif
 
 						Assert(ht != NULL);
 
@@ -1756,14 +1733,7 @@ reindex_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 		case REINDEX_OBJECT_TABLE:
 			stmt->relation->relname = NameStr(chunk->fd.table_name);
 			stmt->relation->schemaname = NameStr(chunk->fd.schema_name);
-#if PG14_LT
-			ReindexTable(stmt->relation,
-						 get_reindex_options(stmt),
-						 stmt->concurrent /* should test for deadlocks */
-			);
-#elif PG14_GE
 			ExecReindex(NULL, stmt, false);
-#endif
 			break;
 		case REINDEX_OBJECT_INDEX:
 			/* Not supported, a.t.m. See note in process_reindex(). */
@@ -1806,11 +1776,7 @@ process_reindex(ProcessUtilityArgs *args)
 			{
 				PreventCommandDuringRecovery("REINDEX");
 				ts_hypertable_permissions_check_by_id(ht->fd.id);
-#if PG14_LT
-				if (stmt->concurrent)
-#else
 				if (get_reindex_options(stmt) & REINDEXOPT_CONCURRENTLY)
-#endif
 					ereport(ERROR,
 							(errmsg("concurrent index creation on hypertables is not supported")));
 
@@ -3636,7 +3602,7 @@ static DDLResult
 process_altertable_start(ProcessUtilityArgs *args)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) args->parsetree;
-	switch (get_altertable_objecttype(stmt))
+	switch (stmt->objtype)
 	{
 		case OBJECT_TABLE:
 			return process_altertable_start_table(args);
@@ -3760,10 +3726,8 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_DropOids:
 		case AT_SetOptions:
 		case AT_ResetOptions:
-#if PG14_GE
 		case AT_ReAddStatistics:
 		case AT_SetCompression:
-#endif
 			/* Avoid running this command for distributed hypertable chunks
 			 * since PostgreSQL currently does not allow to alter
 			 * storage options for a foreign table. */
@@ -3781,9 +3745,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_SetLogged:
 		case AT_SetStorage:
 		case AT_ColumnDefault:
-#if PG_VERSION_NUM >= 120005
 		case AT_CookedColumnDefault:
-#endif
 		case AT_SetNotNull:
 		case AT_CheckNotNull:
 		case AT_DropNotNull:
@@ -3843,9 +3805,7 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 											* process_altertable_start_table but also
 											* here as failsafe */
 		case AT_DetachPartition:
-#if PG14_GE
 		case AT_DetachPartitionFinalize:
-#endif
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("operation not supported on hypertables %d", cmd->subtype)));
@@ -3918,7 +3878,7 @@ process_altertable_end(Node *parsetree, CollectedCommand *cmd)
 {
 	AlterTableStmt *stmt = (AlterTableStmt *) parsetree;
 
-	switch (get_altertable_objecttype(stmt))
+	switch (stmt->objtype)
 	{
 		case OBJECT_TABLE:
 			process_altertable_end_table(parsetree, cmd);
@@ -4061,7 +4021,7 @@ process_create_table_as(ProcessUtilityArgs *args)
 	bool is_cagg = false;
 	List *pg_options = NIL, *cagg_options = NIL;
 
-	if (get_createtableas_objecttype(stmt) == OBJECT_MATVIEW)
+	if (stmt->objtype == OBJECT_MATVIEW)
 	{
 		/* Check for creation of continuous aggregate */
 		ts_with_clause_filter(stmt->into->options, &cagg_options, &pg_options);
@@ -4407,29 +4367,22 @@ process_ddl_sql_drop(EventTriggerDropObject *obj)
  * PostgreSQL.
  */
 static void
-timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string,
-#if PG14_GE
-							  bool readonly_tree,
-#endif
+timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool readonly_tree,
 							  ProcessUtilityContext context, ParamListInfo params,
 							  QueryEnvironment *queryEnv, DestReceiver *dest,
 							  QueryCompletion *completion_tag)
 {
-	ProcessUtilityArgs args = {
-		.query_string = query_string,
-		.context = context,
-		.params = params,
-#if PG14_GE
-		.readonly_tree = readonly_tree,
-#endif
-		.dest = dest,
-		.completion_tag = completion_tag,
-		.pstmt = pstmt,
-		.parsetree = pstmt->utilityStmt,
-		.queryEnv = queryEnv,
-		.parse_state = make_parsestate(NULL),
-		.hypertable_list = NIL
-	};
+	ProcessUtilityArgs args = { .query_string = query_string,
+								.context = context,
+								.params = params,
+								.readonly_tree = readonly_tree,
+								.dest = dest,
+								.completion_tag = completion_tag,
+								.pstmt = pstmt,
+								.parsetree = pstmt->utilityStmt,
+								.queryEnv = queryEnv,
+								.parse_state = make_parsestate(NULL),
+								.hypertable_list = NIL };
 
 	bool altering_timescaledb = false;
 	DDLResult result;

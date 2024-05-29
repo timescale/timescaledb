@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/execnodes.h>
 #include <foreign/fdwapi.h>
+#include <nodes/execnodes.h>
 
 #include "hypertable.h"
 #include "import/ht_hypertable_modify.h"
@@ -36,7 +36,5 @@ extern Path *ts_hypertable_modify_path_create(PlannerInfo *root, ModifyTablePath
 											  Hypertable *ht, RelOptInfo *input_rel);
 extern List *ts_replace_rowid_vars(PlannerInfo *root, List *tlist, int varno);
 
-#if PG14_GE
 extern TupleTableSlot *ExecInsert(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 								  TupleTableSlot *slot, bool canSetTag);
-#endif

@@ -3,38 +3,42 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <postgres.h>
 
-#include <access/xact.h>
+#include <postgres.h>
 #include <access/heapam.h>
-#include "../compat/compat-msvc-enter.h"
-#include <postmaster/bgworker.h>
-#include <commands/extension.h>
-#include <commands/user.h>
-#include <miscadmin.h>
-#include <parser/analyze.h>
-#include <storage/ipc.h>
-#include <tcop/utility.h>
-#include "../compat/compat-msvc-exit.h"
-#include <utils/guc.h>
-#include <utils/inval.h>
-#include <nodes/print.h>
+#include <access/parallel.h>
+#include <access/xact.h>
 #include <commands/dbcommands.h>
 #include <commands/defrem.h>
-#include <access/parallel.h>
+#include <commands/user.h>
+#include <nodes/print.h>
+#include <parser/analyze.h>
+#include <pg_config.h>
+#include <postmaster/bgworker.h>
+#include <storage/ipc.h>
+#include <tcop/utility.h>
+#include <utils/guc.h>
+#include <utils/inval.h>
 
-#include "extension_utils.c"
+#if PG_VERSION_NUM < 150000
+#include "compat/compat-msvc-enter.h"
+#include <commands/extension.h>
+#include <miscadmin.h>
+#include "compat/compat-msvc-exit.h"
+#endif
+
+#include "compat/compat.h"
 #include "config.h"
 #include "export.h"
-#include "compat/compat.h"
 #include "extension_constants.h"
+#include "extension_utils.c"
 
-#include "loader/loader.h"
-#include "loader/function_telemetry.h"
 #include "loader/bgw_counter.h"
 #include "loader/bgw_interface.h"
 #include "loader/bgw_launcher.h"
 #include "loader/bgw_message_queue.h"
+#include "loader/function_telemetry.h"
+#include "loader/loader.h"
 #include "loader/lwlocks.h"
 
 /*
@@ -166,14 +170,9 @@ TsExtension extensions[] = {
 };
 
 inline static void extension_check(TsExtension * /*ext*/);
-#if PG14_LT
-static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-												   TsExtension const *);
-#else
 static void call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 												   TsExtension const * /*ext*/,
 												   JumbleState *jstate);
-#endif
 
 static bool
 extension_is_loaded(TsExtension const *const ext)
@@ -394,11 +393,7 @@ stop_workers_on_db_drop(DropdbStmt *drop_db_statement)
 }
 
 static void
-#if PG14_LT
-post_analyze_hook(ParseState *pstate, Query *query)
-#else
 post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
-#endif
 {
 	if (query->commandType == CMD_UTILITY)
 	{
@@ -534,20 +529,12 @@ post_analyze_hook(ParseState *pstate, Query *query, JumbleState *jstate)
 		 * extension hook and calls it explicitly after the check for installing
 		 * the extension.
 		 */
-#if PG14_LT
-		call_extension_post_parse_analyze_hook(pstate, query, ext);
-#else
 		call_extension_post_parse_analyze_hook(pstate, query, ext, jstate);
-#endif
 	}
 
 	if (prev_post_parse_analyze_hook != NULL)
 	{
-#if PG14_LT
-		prev_post_parse_analyze_hook(pstate, query);
-#else
 		prev_post_parse_analyze_hook(pstate, query, jstate);
-#endif
 	}
 }
 
@@ -769,20 +756,11 @@ ts_loader_extension_check(void)
 }
 
 static void
-#if PG14_LT
-call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
-									   TsExtension const *const ext)
-#else
 call_extension_post_parse_analyze_hook(ParseState *pstate, Query *query,
 									   TsExtension const *const ext, JumbleState *jstate)
-#endif
 {
 	if (extension_is_loaded(ext) && ext->post_parse_analyze_hook != NULL)
 	{
-#if PG14_LT
-		ext->post_parse_analyze_hook(pstate, query);
-#else
 		ext->post_parse_analyze_hook(pstate, query, jstate);
-#endif
 	}
 }

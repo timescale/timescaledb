@@ -17,7 +17,6 @@
 
 #include "ht_hypertable_modify.h"
 
-#if PG14_GE
 /* clang-format off */
 /*
  * ht_ExecUpdatePrologue -- subroutine for ht_ExecUpdate
@@ -337,7 +336,6 @@ ht_ExecDeleteEpilogue(ModifyTableContext * context, ResultRelInfo * resultRelInf
 	/* AFTER ROW DELETE Triggers */
 	ExecARDeleteTriggersCompat(estate, resultRelInfo, tupleid, oldtuple, ar_delete_trig_tcs, false);
 }
-#endif
 
 #if PG15_GE
 

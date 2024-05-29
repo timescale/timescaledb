@@ -5,8 +5,8 @@
  */
 #pragma once
 
-#include <postgres.h>
 #include "compat/compat.h"
+#include <postgres.h>
 
 typedef enum CustomType
 {

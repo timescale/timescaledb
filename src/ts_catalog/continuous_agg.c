@@ -32,8 +32,8 @@
 #include "errors.h"
 #include "func_cache.h"
 #include "hypercube.h"
-#include "hypertable_cache.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "scan_iterator.h"
 #include "time_bucket.h"
 #include "time_utils.h"
@@ -504,10 +504,10 @@ continuous_agg_fill_bucket_function(int32 mat_hypertable_id, ContinuousAggsBucke
 
 		/* Bucket function */
 		Assert(!isnull[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
-		bf->bucket_function = DatumGetObjectId(
+		const char *bucket_function_str = TextDatumGetCString(
 			values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)]);
-
-		Assert(OidIsValid(bf->bucket_function));
+		bf->bucket_function = DatumGetObjectId(
+			DirectFunctionCall1(regprocedurein, CStringGetDatum(bucket_function_str)));
 
 		bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
 

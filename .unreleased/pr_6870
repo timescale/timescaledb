@@ -1,1 +1,0 @@
-Fixes: #6870 Fix bool expression pushdown for queries on compressed chunks

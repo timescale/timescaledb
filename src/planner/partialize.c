@@ -23,15 +23,15 @@
 
 #include "cross_module_fn.h"
 #include "debug_assert.h"
+#include "estimate.h"
+#include "extension_constants.h"
+#include "gapfill.h"
+#include "import/planner.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "nodes/print.h"
 #include "partialize.h"
 #include "planner.h"
-#include "gapfill.h"
-#include "nodes/print.h"
-#include "extension_constants.h"
 #include "utils.h"
-#include "estimate.h"
-#include "nodes/chunk_append/chunk_append.h"
-#include "import/planner.h"
 
 #define TS_PARTIALFN "partialize_agg"
 
@@ -283,16 +283,8 @@ static MergeAppendPath *
 copy_merge_append_path(PlannerInfo *root, MergeAppendPath *path, List *subpaths,
 					   PathTarget *pathtarget)
 {
-	MergeAppendPath *newPath = create_merge_append_path_compat(root,
-															   path->path.parent,
-															   subpaths,
-															   path->path.pathkeys,
-															   NULL,
-															   path->partitioned_rels);
-
-#if PG14_LT
-	newPath->partitioned_rels = list_copy(path->partitioned_rels);
-#endif
+	MergeAppendPath *newPath =
+		create_merge_append_path(root, path->path.parent, subpaths, path->path.pathkeys, NULL);
 
 	newPath->path.param_info = path->path.param_info;
 	newPath->path.pathtarget = copy_pathtarget(pathtarget);
@@ -787,17 +779,8 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	if (existing_agg_path->aggsplit == AGGSPLIT_INITIAL_SERIAL)
 		return;
 
-/* Don't replan aggregation if it contains already partials or non-serializable aggregates */
-#if PG14_LT
-	AggClauseCosts agg_costs;
-	MemSet(&agg_costs, 0, sizeof(AggClauseCosts));
-	get_agg_clause_costs_compat(root, (Node *) root->processed_tlist, AGGSPLIT_SIMPLE, &agg_costs);
-	get_agg_clause_costs_compat(root, parse->havingQual, AGGSPLIT_SIMPLE, &agg_costs);
-
-	if (agg_costs.hasNonPartial || agg_costs.hasNonSerial)
-#else
+	/* Don't replan aggregation if it contains already partials or non-serializable aggregates */
 	if (root->hasNonPartialAggs || root->hasNonSerialAggs)
-#endif
 		return;
 
 	double d_num_groups = existing_agg_path->numGroups;
@@ -826,16 +809,10 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 		MemSet(&extra_data->agg_final_costs, 0, sizeof(AggClauseCosts));
 
 		/* partial phase */
-		get_agg_clause_costs_compat(root,
-									(Node *) partial_grouping_target->exprs,
-									AGGSPLIT_INITIAL_SERIAL,
-									&extra_data->agg_partial_costs);
+		get_agg_clause_costs(root, AGGSPLIT_INITIAL_SERIAL, &extra_data->agg_partial_costs);
 
 		/* final phase */
-		get_agg_clause_costs_compat(root,
-									(Node *) root->upper_targets[UPPERREL_GROUP_AGG]->exprs,
-									AGGSPLIT_FINAL_DESERIAL,
-									&extra_data->agg_final_costs);
+		get_agg_clause_costs(root, AGGSPLIT_FINAL_DESERIAL, &extra_data->agg_final_costs);
 
 		extra_data->partial_costs_set = true;
 	}

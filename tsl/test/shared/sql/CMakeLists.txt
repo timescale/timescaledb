@@ -7,13 +7,14 @@ set(TEST_FILES_SHARED
     constraint_exclusion_prepared.sql
     decompress_join.sql
     decompress_placeholdervar.sql
+    generated_columns.sql
     security_barrier.sql
+    space_constraint.sql
     subtract_integer_from_now.sql)
 
 set(TEST_TEMPLATES_SHARED
-    generated_columns.sql.in gapfill.sql.in ordered_append.sql.in
-    ordered_append_join.sql.in transparent_decompress_chunk.sql.in
-    space_constraint.sql.in)
+    gapfill.sql.in ordered_append.sql.in ordered_append_join.sql.in
+    transparent_decompress_chunk.sql.in)
 
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   list(APPEND TEST_FILES_SHARED compress_unique_index.sql compression_dml.sql
@@ -21,7 +22,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
 endif()
 
 # this test was changing the contents of tables in shared_setup.sql thus causing
-# other dependent tests to fail. Hence runing this test in solo
+# other dependent tests to fail. Hence running this test in solo
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(APPEND SOLO_TESTS merge_dml.sql)
 endif()
@@ -29,7 +30,7 @@ endif()
 if(CMAKE_BUILD_TYPE MATCHES Debug)
   list(APPEND TEST_FILES_SHARED extension.sql timestamp_limits.sql
        with_clause_parser.sql)
-  list(APPEND TEST_TEMPLATES_SHARED constify_now.sql.in)
+  list(APPEND TEST_FILES_SHARED constify_now.sql)
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
 # Regression tests that vary with PostgreSQL version. Generated test files are

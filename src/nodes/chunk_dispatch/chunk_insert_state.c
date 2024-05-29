@@ -26,13 +26,13 @@
 #include <utils/rls.h>
 
 #include "compat/compat.h"
-#include "errors.h"
 #include "chunk_dispatch.h"
+#include "chunk_index.h"
 #include "chunk_insert_state.h"
 #include "debug_point.h"
-#include "ts_catalog/continuous_agg.h"
-#include "chunk_index.h"
+#include "errors.h"
 #include "indexing.h"
+#include "ts_catalog/continuous_agg.h"
 
 /* Just like ExecPrepareExpr except that it doesn't switch to the query memory context */
 static inline ExprState *
@@ -75,13 +75,8 @@ chunk_dispatch_has_returning(const ChunkDispatch *dispatch)
 static List *
 chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 {
-#if PG14_LT
-	ModifyTableState *mtstate = get_modifytable_state(dispatch);
-	return list_nth(get_modifytable(dispatch)->returningLists, mtstate->mt_whichplan);
-#else
 	Assert(list_length(get_modifytable(dispatch)->returningLists) == 1);
 	return linitial(get_modifytable(dispatch)->returningLists);
-#endif
 }
 
 OnConflictAction
@@ -149,9 +144,6 @@ create_chunk_result_relation_info(const ChunkDispatch *dispatch, Relation rel)
 	/* Copy options from the main table's (hypertable's) result relation info */
 	rri->ri_WithCheckOptions = rri_orig->ri_WithCheckOptions;
 	rri->ri_WithCheckOptionExprs = rri_orig->ri_WithCheckOptionExprs;
-#if PG14_LT
-	rri->ri_junkFilter = rri_orig->ri_junkFilter;
-#endif
 	rri->ri_projectReturning = rri_orig->ri_projectReturning;
 
 	rri->ri_FdwState = NULL;
@@ -223,75 +215,6 @@ translate_clause(List *inclause, TupleConversionMap *chunk_map, Index varno, Rel
 	return clause;
 }
 
-#if PG14_LT
-/*
- * adjust_hypertable_tlist - from Postgres source code `adjust_partition_tlist`
- *		Adjust the targetlist entries for a given chunk to account for
- *		attribute differences between hypertable and the chunk
- *
- * The expressions have already been fixed, but here we fix the list to make
- * target resnos match the chunk's attribute numbers.  This results in a
- * copy of the original target list in which the entries appear in resno
- * order, including both the existing entries (that may have their resno
- * changed in-place) and the newly added entries for columns that don't exist
- * in the parent.
- *
- * Scribbles on the input tlist's entries resno so be aware.
- */
-static List *
-adjust_hypertable_tlist(List *tlist, TupleConversionMap *map)
-{
-	List *new_tlist = NIL;
-	TupleDesc chunk_tupdesc = map->outdesc;
-	AttrNumber *attrMap = map->attrMap->attnums;
-	AttrNumber chunk_attrno;
-
-	for (chunk_attrno = 1; chunk_attrno <= chunk_tupdesc->natts; chunk_attrno++)
-	{
-		Form_pg_attribute att_tup = TupleDescAttr(chunk_tupdesc, chunk_attrno - 1);
-		TargetEntry *tle;
-
-		if (attrMap[chunk_attrno - 1] != InvalidAttrNumber)
-		{
-			Assert(!att_tup->attisdropped);
-
-			/*
-			 * Use the corresponding entry from the parent's tlist, adjusting
-			 * the resno the match the partition's attno.
-			 */
-			tle = (TargetEntry *) list_nth(tlist, attrMap[chunk_attrno - 1] - 1);
-			if (namestrcmp(&att_tup->attname, tle->resname) != 0)
-				elog(ERROR, "invalid translation of ON CONFLICT update statements");
-			tle->resno = chunk_attrno;
-		}
-		else
-		{
-			Const *expr;
-
-			/*
-			 * For a dropped attribute in the partition, generate a dummy
-			 * entry with resno matching the partition's attno.
-			 */
-			Assert(att_tup->attisdropped);
-			expr = makeConst(INT4OID,
-							 -1,
-							 InvalidOid,
-							 sizeof(int32),
-							 (Datum) 0,
-							 true, /* isnull */
-							 true /* byval */);
-			tle = makeTargetEntry((Expr *) expr,
-								  chunk_attrno,
-								  pstrdup(NameStr(att_tup->attname)),
-								  false);
-		}
-		new_tlist = lappend(new_tlist, tle);
-	}
-	return new_tlist;
-}
-#endif
-
-#if PG14_GE
 /*
  * adjust_chunk_colnos
  *		Adjust the list of UPDATE target column numbers to account for
@@ -322,7 +245,6 @@ adjust_chunk_colnos(List *colnos, ResultRelInfo *chunk_rri)
 
 	return new_colnos;
 }
-#endif
 
 /*
  * Setup ON CONFLICT state for a chunk.
@@ -349,9 +271,9 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 	memcpy(onconfl, hyper_rri->ri_onConflict, sizeof(OnConflictSetState));
 	chunk_rri->ri_onConflict = onconfl;
 
-#if PG14_GE && PG16_LT
+#if PG16_LT
 	chunk_rri->ri_RootToPartitionMap = map;
-#elif PG16_GE
+#else
 	chunk_rri->ri_RootToChildMap = map;
 	chunk_rri->ri_RootToChildMapValid = true;
 #endif
@@ -391,9 +313,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 	else
 	{
 		List *onconflset;
-#if PG14_GE
 		List *onconflcols;
-#endif
 
 		/*
 		 * Translate expressions in onConflictSet to account for
@@ -416,9 +336,6 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 									  hyper_rel,
 									  chunk_rel);
 
-#if PG14_LT
-		onconflset = adjust_hypertable_tlist(onconflset, state->hyper_to_chunk_map);
-#else
 		chunk_rri->ri_ChildToRootMap = chunk_map;
 		chunk_rri->ri_ChildToRootMapValid = true;
 
@@ -427,21 +344,12 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 			onconflcols = adjust_chunk_colnos(mt->onConflictCols, chunk_rri);
 		else
 			onconflcols = mt->onConflictCols;
-#endif
 
 		/* create the tuple slot for the UPDATE SET projection */
 		onconfl->oc_ProjSlot = table_slot_create(chunk_rel, NULL);
 		state->conflproj_slot = onconfl->oc_ProjSlot;
 
 		/* build UPDATE SET projection state */
-#if PG14_LT
-		ExprContext *econtext = hyper_rri->ri_onConflict->oc_ProjInfo->pi_exprContext;
-		onconfl->oc_ProjInfo = ExecBuildProjectionInfo(onconflset,
-													   econtext,
-													   state->conflproj_slot,
-													   NULL,
-													   RelationGetDescr(chunk_rel));
-#else
 		onconfl->oc_ProjInfo = ExecBuildUpdateProjection(onconflset,
 														 true,
 														 onconflcols,
@@ -449,7 +357,6 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 														 mtstate->ps.ps_ExprContext,
 														 onconfl->oc_ProjSlot,
 														 &mtstate->ps);
-#endif
 
 		Node *onconflict_where = mt->onConflictWhere;
 

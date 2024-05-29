@@ -41,14 +41,14 @@
 
 #include "chunk.h"
 
+#include "compat/compat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "cache.h"
 #include "chunk_index.h"
 #include "chunk_scan.h"
-#include "compat/compat.h"
 #include "cross_module_fn.h"
-#include "debug_point.h"
 #include "debug_assert.h"
+#include "debug_point.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
@@ -1040,7 +1040,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 									   const char *schema_name, const char *table_name,
 									   const char *prefix)
 {
-#if PG14_GE
 	chunk_insert_check_hook_type osm_chunk_insert_hook = ts_get_osm_chunk_insert_hook();
 
 	if (osm_chunk_insert_hook)
@@ -1080,7 +1079,6 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 						 "Hypertable has tiered data with time range that overlaps the insert")));
 		}
 	}
-#endif
 	/* Insert any new dimension slices into metadata */
 	ts_dimension_slice_insert_multi(cube->slices, cube->num_slices);
 
@@ -1120,11 +1118,7 @@ chunk_add_inheritance(Chunk *chunk, const Hypertable *ht)
 		.type = T_AlterTableStmt,
 		.cmds = list_make1(&altercmd),
 		.missing_ok = false,
-#if PG14_GE
 		.objtype = OBJECT_TABLE,
-#else
-		.relkind = OBJECT_TABLE,
-#endif
 		.relation = makeRangeVar((char *) NameStr(chunk->fd.schema_name),
 								 (char *) NameStr(chunk->fd.table_name),
 								 0),
@@ -2540,36 +2534,6 @@ ts_chunk_get_by_id(int32 id, bool fail_if_not_found)
 }
 
 /*
- * Number of chunks created after given chunk.
- * If chunk2.id > chunk1.id then chunk2 is created after chunk1
- */
-int
-ts_chunk_num_of_chunks_created_after(const Chunk *chunk)
-{
-	ScanKeyData scankey[1];
-
-	/*
-	 * Try to find chunks with a greater Id then a given chunk
-	 */
-	ScanKeyInit(&scankey[0],
-				Anum_chunk_idx_id,
-				BTGreaterStrategyNumber,
-				F_INT4GT,
-				Int32GetDatum(chunk->fd.id));
-
-	return chunk_scan_internal(CHUNK_ID_INDEX,
-							   scankey,
-							   1,
-							   NULL,
-							   NULL,
-							   NULL,
-							   0,
-							   ForwardScanDirection,
-							   AccessShareLock,
-							   CurrentMemoryContext);
-}
-
-/*
  * Simple scans provide lightweight ways to access chunk information without the
  * overhead of getting a full chunk (i.e., no extra metadata, like constraints,
  * are joined in). This function forms the basis of a number of lookup functions
@@ -2714,19 +2678,6 @@ ts_chunk_get_hypertable_id_by_reloid(Oid reloid)
 	}
 
 	return 0;
-}
-
-/*
- * Returns the compressed chunk id. The original chunk must exist.
- */
-int32
-ts_chunk_get_compressed_chunk_id(int32 chunk_id)
-{
-	FormData_chunk form;
-	PG_USED_FOR_ASSERTS_ONLY bool result =
-		chunk_simple_scan_by_id(chunk_id, &form, /* missing_ok = */ false);
-	Assert(result);
-	return form.compressed_chunk_id;
 }
 
 FormData_chunk
@@ -3385,34 +3336,19 @@ ts_chunk_set_partial(Chunk *chunk)
 bool
 ts_chunk_set_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_add_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
 ts_chunk_unset_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_chunk_clear_status(chunk, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 bool
 ts_chunk_is_frozen(Chunk *chunk)
 {
-#if PG14_GE
 	return ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN);
-#else
-	elog(ERROR, "freeze chunk supported only for PG14 or greater");
-	return false;
-#endif
 }
 
 /* only caller used to be ts_chunk_unset_frozen. This code was in PG14 block as we run into
@@ -3952,8 +3888,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			ts_chunk_drop(chunks + i, DROP_RESTRICT, log_level);
 	}
 	// if we have tiered chunks cascade drop to tiering layer as well
-#if PG14_GE
-
 	if (osm_chunk_id != INVALID_CHUNK_ID)
 	{
 		hypertable_drop_chunks_hook_type osm_drop_chunks_hook =
@@ -3977,7 +3911,6 @@ ts_chunk_do_drop_chunks(Hypertable *ht, int64 older_than, int64 newer_than, int3
 			}
 		}
 	}
-#endif
 
 	/* When dropping chunks for a given CAgg then force set the watermark */
 	if (is_materialization_hypertable)

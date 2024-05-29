@@ -1,1 +1,0 @@
-Implements: #6705 Add sparse minmax indexes for compressed columns that have uncompressed btree indexes

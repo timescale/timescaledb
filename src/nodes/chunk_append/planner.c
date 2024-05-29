@@ -20,12 +20,12 @@
 #include <optimizer/tlist.h>
 #include <parser/parsetree.h>
 
+#include "guc.h"
+#include "import/planner.h"
 #include "nodes/chunk_append/chunk_append.h"
 #include "nodes/chunk_append/transform.h"
 #include "nodes/hypertable_modify.h"
 #include "nodes/vector_agg.h"
-#include "import/planner.h"
-#include "guc.h"
 
 static Sort *make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOperators,
 					   Oid *collations, bool *nullsFirst);
@@ -120,7 +120,6 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	orig_tlist = ts_build_path_tlist(root, (Path *) path);
 	tlist = orig_tlist;
 
-#if PG14_GE
 	/*
 	 * If this is a child of HypertableModify we need to adjust
 	 * targetlists to not have any ROWID_VAR references as postgres
@@ -134,7 +133,6 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 	 */
 	if (root->parse->commandType != CMD_SELECT)
 		tlist = ts_replace_rowid_vars(root, tlist, rel->relid);
-#endif
 
 	cscan->scan.plan.targetlist = tlist;
 
@@ -399,9 +397,7 @@ ts_chunk_append_get_scan_plan(Plan *plan)
 		case T_TidScan:
 		case T_ValuesScan:
 		case T_WorkTableScan:
-#if PG14_GE
 		case T_TidRangeScan:
-#endif
 			return (Scan *) plan;
 			break;
 		case T_CustomScan:

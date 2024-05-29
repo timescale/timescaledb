@@ -5,6 +5,8 @@
 
 #include <postgres.h>
 
+#include "export.h"
+
 typedef struct ChunkSizingInfo
 {
 	Oid table_relid;

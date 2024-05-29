@@ -6,14 +6,14 @@
 #include <postgres.h>
 #include <access/xact.h>
 #include <catalog/namespace.h>
-#include <utils/builtins.h>
-#include <utils/lsyscache.h>
 #include <postmaster/bgworker.h>
 #include <storage/proc.h>
+#include <utils/builtins.h>
+#include <utils/lsyscache.h>
 
 #include "log.h"
-#include "scanner.h"
 #include "params.h"
+#include "scanner.h"
 #include "ts_catalog/catalog.h"
 #include "utils.h"
 

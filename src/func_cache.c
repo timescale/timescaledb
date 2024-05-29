@@ -21,12 +21,12 @@
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "utils.h"
 #include "cache.h"
-#include "func_cache.h"
-#include "extension.h"
 #include "estimate.h"
+#include "extension.h"
+#include "func_cache.h"
 #include "sort_transform.h"
+#include "utils.h"
 
 /*
  * func_cache - a cache for quick identification of, and access to, functions

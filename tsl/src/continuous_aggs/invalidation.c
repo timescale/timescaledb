@@ -4,36 +4,36 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/htup.h>
+#include <access/htup_details.h>
+#include <access/xact.h>
+#include <miscadmin.h>
+#include <nodes/makefuncs.h>
+#include <nodes/memnodes.h>
+#include <storage/lockdefs.h>
 #include <utils/builtins.h>
 #include <utils/memutils.h>
 #include <utils/palloc.h>
 #include <utils/snapmgr.h>
 #include <utils/tuplestore.h>
-#include <nodes/makefuncs.h>
-#include <nodes/memnodes.h>
-#include <storage/lockdefs.h>
-#include <access/htup_details.h>
-#include <access/htup.h>
-#include <access/xact.h>
-#include <miscadmin.h>
 
 #include <extension.h>
 #include <fmgr.h>
 #include <funcapi.h>
-#include <parser/parse_func.h>
-#include <scanner.h>
-#include <scan_iterator.h>
-#include <utils.h>
-#include <time_utils.h>
-#include <time_bucket.h>
 #include <hypertable_cache.h>
+#include <parser/parse_func.h>
+#include <scan_iterator.h>
+#include <scanner.h>
+#include <time_bucket.h>
+#include <time_utils.h>
+#include <utils.h>
 
 #include "compat/compat.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
 #include "invalidation.h"
 #include "refresh.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/continuous_agg.h"
 
 /*
  * Invalidation processing for continuous aggregates.

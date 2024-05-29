@@ -13,41 +13,41 @@
 #include <catalog/dependency.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
+#include <libpq-fe.h>
 #include <miscadmin.h>
 #include <nodes/makefuncs.h>
-#include <nodes/pg_list.h>
 #include <nodes/parsenodes.h>
+#include <nodes/pg_list.h>
 #include <parser/parse_func.h>
 #include <storage/lmgr.h>
 #include <trigger.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/fmgrprotos.h>
-#include <libpq-fe.h>
-#include <utils/snapmgr.h>
 #include <utils/inval.h>
+#include <utils/snapmgr.h>
 
 #include "compat/compat.h"
+#include "api.h"
 #include "cache.h"
 #include "chunk.h"
+#include "compression.h"
+#include "create.h"
 #include "debug_point.h"
-#include "errors.h"
 #include "error_utils.h"
+#include "errors.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/array_utils.h"
-#include "ts_catalog/continuous_agg.h"
-#include "ts_catalog/compression_settings.h"
-#include "ts_catalog/compression_chunk_size.h"
-#include "create.h"
-#include "api.h"
-#include "compression.h"
-#include "scanner.h"
 #include "scan_iterator.h"
+#include "scanner.h"
+#include "ts_catalog/array_utils.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/compression_settings.h"
+#include "ts_catalog/continuous_agg.h"
 #include "utils.h"
-#include "guc.h"
+#include "wal_utils.h"
 
 typedef struct CompressChunkCxt
 {
@@ -541,6 +541,8 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 		return;
 	}
 
+	write_logical_replication_msg_decompression_start();
+
 	ts_chunk_validate_chunk_status_for_operation(uncompressed_chunk, CHUNK_DECOMPRESS, true);
 	compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 
@@ -610,6 +612,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	LockRelationOid(compressed_chunk->table_id, AccessExclusiveLock);
 	ts_chunk_drop(compressed_chunk, DROP_RESTRICT, -1);
 	ts_cache_release(hcache);
+	write_logical_replication_msg_decompression_end();
 }
 
 /*
@@ -707,6 +710,8 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 {
 	Oid uncompressed_chunk_id = chunk->table_id;
 
+	write_logical_replication_msg_compression_start();
+
 	if (ts_chunk_is_compressed(chunk))
 	{
 		if (recompress)
@@ -720,11 +725,13 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 			{
 				decompress_chunk_impl(chunk, false);
 				compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
+				write_logical_replication_msg_compression_end();
 				return uncompressed_chunk_id;
 			}
 		}
 		if (!ts_chunk_needs_recompression(chunk))
 		{
+			write_logical_replication_msg_compression_end();
 			ereport((if_not_compressed ? NOTICE : ERROR),
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("chunk \"%s\" is already compressed", get_rel_name(chunk->table_id))));
@@ -745,6 +752,8 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 	{
 		uncompressed_chunk_id = compress_chunk_impl(chunk->hypertable_relid, chunk->table_id);
 	}
+
+	write_logical_replication_msg_compression_end();
 
 	return uncompressed_chunk_id;
 }

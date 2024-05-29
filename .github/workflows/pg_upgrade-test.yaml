@@ -1,0 +1,117 @@
+name: pg_upgrade test
+"on":
+  push:
+    branches:
+      - main
+      - prerelease_test
+  pull_request:
+
+jobs:
+  pg_upgrade_test:
+    name: pg_upgrade test from PG${{ matrix.pg_version_old }} to PG${{ matrix.pg_version_new }}
+    runs-on: 'ubuntu-latest'
+    strategy:
+      matrix:
+        include:
+          - pg_version_old: 14 # 14 to 15
+            pg_version_new: 15
+          - pg_version_old: 14 # 14 to 16
+            pg_version_new: 16
+          - pg_version_old: 15 # 15 to 16
+            pg_version_new: 16
+      fail-fast: false
+    env:
+      OUTPUT_DIR: ${{ github.workspace }}/pg_upgrade_test
+
+    steps:
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install pip postgresql-common libkrb5-dev
+
+      # Using e375302a until 1.10.1 get released including the following PR
+      # https://github.com/postgrespro/testgres/pull/125
+      - name: Checkout testgres
+        uses: actions/checkout@v4
+        with:
+          repository: 'postgrespro/testgres'
+          path: 'testgres'
+          ref: e375302a114cd4df3ceed54d6526f250c44c08e7
+
+      - name: Build and install testgres
+        run: |
+          cd testgres
+          python setup.py install --user
+
+      - name: Install PostgreSQL ${{ matrix.pg_version_old}} and ${{ matrix.pg_version_new }}
+        run: |
+          yes | sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+          echo "deb https://packagecloud.io/timescale/timescaledb/ubuntu/ $(lsb_release -c -s) main" | sudo tee /etc/apt/sources.list.d/timescaledb.list
+          wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | sudo apt-key add -
+          sudo apt-get update
+          sudo apt-get install -y \
+            postgresql-${{ matrix.pg_version_old }} postgresql-server-dev-${{ matrix.pg_version_old }} \
+            postgresql-${{ matrix.pg_version_new }} postgresql-server-dev-${{ matrix.pg_version_new }}
+          sudo apt-get install -y --no-install-recommends \
+            timescaledb-2-postgresql-${{ matrix.pg_version_old }} \
+            timescaledb-2-postgresql-${{ matrix.pg_version_new }}
+
+      - name: Checkout TimescaleDB
+        uses: actions/checkout@v4
+
+      - name: Build and install TimescaleDB on PostgreSQL ${{ matrix.pg_version_old}}
+        env:
+          BUILD_DIR: pg${{ matrix.pg_version_old }}
+        run: |
+          PATH="/usr/lib/postgresql/${{ matrix.pg_version_old }}/bin:$PATH"
+          ./bootstrap -DCMAKE_BUILD_TYPE=Release -DWARNINGS_AS_ERRORS=OFF -DASSERTIONS=ON -DLINTER=OFF -DGENERATE_DOWNGRADE_SCRIPT=OFF -DREGRESS_CHECKS=OFF -DTAP_CHECKS=OFF
+          make -j -C pg${{ matrix.pg_version_old }}
+          sudo make -j -C pg${{ matrix.pg_version_old }} install
+
+      - name: Build and install TimescaleDB on PostgreSQL ${{ matrix.pg_version_new}}
+        env:
+          BUILD_DIR: pg${{ matrix.pg_version_new }}
+        run: |
+          PATH="/usr/lib/postgresql/${{ matrix.pg_version_new }}/bin:$PATH"
+          ./bootstrap -DCMAKE_BUILD_TYPE=Release -DWARNINGS_AS_ERRORS=OFF -DASSERTIONS=ON -DLINTER=OFF -DGENERATE_DOWNGRADE_SCRIPT=OFF -DREGRESS_CHECKS=OFF -DTAP_CHECKS=OFF
+          make -j -C pg${{ matrix.pg_version_new }}
+          sudo make -j -C pg${{ matrix.pg_version_new }} install
+
+      - name: Run pg_upgrade test
+        env:
+          PGVERSIONOLD: ${{ matrix.pg_version_old }}
+          PGVERSIONNEW: ${{ matrix.pg_version_new }}
+          DIFFFILE: ${{ env.OUTPUT_DIR }}/upgrade_check.diff
+        run: |
+          scripts/test_pg_upgrade.py
+          diff -u \
+            "${OUTPUT_DIR}/post.pg${PGVERSIONOLD}.log" \
+            "${OUTPUT_DIR}/post.pg${PGVERSIONNEW}.log" | \
+            tee "${DIFFFILE}"
+          if [[ -s "${DIFFFILE}" ]]; then
+            echo "pg_upgrade test for ${PGVERSIONOLD} -> ${PGVERSIONNEW} failed"
+            exit 1
+          fi
+
+      - name: Show pg_upgrade diffs
+        if: always()
+        env:
+          DIFFFILE: ${{ env.OUTPUT_DIR }}/upgrade_check.diff
+          DIROLD: pg${{ matrix.pg_version_old }}
+          DIRNEW: pg${{ matrix.pg_version_new }}
+        run: |
+          cd ${OUTPUT_DIR}
+          cat ${DIFFFILE}
+          tar czf /tmp/pg_upgrade_artifacts.tgz \
+            ${DIFFFILE} \
+            ${OUTPUT_DIR}/*.log \
+            ${OUTPUT_DIR}/${DIROLD}/logs/* \
+            ${OUTPUT_DIR}/${DIRNEW}/logs/* \
+            ${OUTPUT_DIR}/${DIRNEW}/data/pg_upgrade_output.d/*
+
+      - name: Upload pg_upgrade logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pg_upgrade logs from ${{ matrix.pg_version_old }} to ${{ matrix.pg_version_new }}
+          path: /tmp/pg_upgrade_artifacts.tgz

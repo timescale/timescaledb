@@ -4,9 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include <math.h>
 #include <postgres.h>
 #include <catalog/pg_operator.h>
+#include <math.h>
 #include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
@@ -25,17 +25,17 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "compression/compression.h"
+#include "compression/create.h"
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
-#include "ts_catalog/array_utils.h"
-#include "import/planner.h"
 #include "import/allpaths.h"
-#include "compression/create.h"
-#include "compression/compression.h"
+#include "import/planner.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
+#include "ts_catalog/array_utils.h"
 #include "utils.h"
 
 static CustomPathMethods decompress_chunk_path_methods = {
@@ -195,7 +195,7 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 * already refers a compressed column, it is a bug. See
 			 * build_sortinfo().
 			 */
-			Assert(compressed_em != NULL);
+			Ensure(compressed_em, "corresponding equivalence member not found");
 
 			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
 
@@ -394,11 +394,8 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 					  .varattno = compressed_attno };
 		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
-	const double open_batches_estimated = estimate_num_groups_compat(root,
-																	 segmentby_groupexprs,
-																	 dcpath->custom_path.path.rows,
-																	 NULL,
-																	 NULL);
+	const double open_batches_estimated =
+		estimate_num_groups(root, segmentby_groupexprs, dcpath->custom_path.path.rows, NULL, NULL);
 	Assert(open_batches_estimated > 0);
 
 	/*
@@ -966,13 +963,12 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 			 */
 			if (batch_merge_path != NULL)
 			{
-				chunk_path = (Path *) create_merge_append_path_compat(root,
-																	  chunk_rel,
-																	  list_make2(batch_merge_path,
-																				 uncompressed_path),
-																	  root->query_pathkeys,
-																	  req_outer,
-																	  NIL);
+				chunk_path = (Path *) create_merge_append_path(root,
+															   chunk_rel,
+															   list_make2(batch_merge_path,
+																		  uncompressed_path),
+															   root->query_pathkeys,
+															   req_outer);
 			}
 			else
 				/*
@@ -982,16 +978,15 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * into a MergeAppend node later, at the chunk append level.
 				 */
 				chunk_path =
-					(Path *) create_append_path_compat(root,
-													   chunk_rel,
-													   list_make2(chunk_path, uncompressed_path),
-													   NIL /* partial paths */,
-													   root->query_pathkeys /* pathkeys */,
-													   req_outer,
-													   0,
-													   false,
-													   false,
-													   chunk_path->rows + uncompressed_path->rows);
+					(Path *) create_append_path(root,
+												chunk_rel,
+												list_make2(chunk_path, uncompressed_path),
+												NIL /* partial paths */,
+												root->query_pathkeys /* pathkeys */,
+												req_outer,
+												0,
+												false,
+												chunk_path->rows + uncompressed_path->rows);
 		}
 
 		/* Add useful sorted versions of the decompress path */
@@ -1075,17 +1070,16 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					path_list = list_make1(uncompressed_path);
 
 				/* Use a parallel aware append to handle non-partial paths properly */
-				path = (Path *) create_append_path_compat(root,
-														  chunk_rel,
-														  path_list,
-														  partial_path_list,
-														  NIL /* pathkeys */,
-														  req_outer,
-														  Max(path->parallel_workers,
-															  uncompressed_path->parallel_workers),
-														  true, /* parallel aware */
-														  NIL,
-														  path->rows + uncompressed_path->rows);
+				path = (Path *) create_append_path(root,
+												   chunk_rel,
+												   path_list,
+												   partial_path_list,
+												   NIL /* pathkeys */,
+												   req_outer,
+												   Max(path->parallel_workers,
+													   uncompressed_path->parallel_workers),
+												   true, /* parallel aware */
+												   path->rows + uncompressed_path->rows);
 			}
 
 			add_partial_path(chunk_rel, path);
@@ -1488,17 +1482,6 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
-		/*
-		 * We want to base our equivalence member on the hypertable equivalence
-		 * member, not on the uncompressed chunk one, because the latter is
-		 * marked as child itself. This is mostly relevant for PG16 where we
-		 * have to specify a parent for the newly created equivalence member.
-		 */
-		if (cur_em->em_is_child)
-		{
-			continue;
-		}
-
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
 		var = (Var *) cur_em->em_expr;
@@ -1507,6 +1490,13 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		if (!(var && IsA(var, Var)))
 			continue;
 
+		/*
+		 * We want to base our equivalence member on the hypertable equivalence
+		 * member, not on the uncompressed chunk one. We can't just check for
+		 * em_is_child though because the hypertable might be a child itself and not
+		 * a top-level EquivalenceMember. This is mostly relevant for PG16+ where
+		 * we have to specify a parent for the newly created equivalence member.
+		 */
 		if ((Index) var->varno != info->ht_rel->relid)
 			continue;
 

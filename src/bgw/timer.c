@@ -4,7 +4,9 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/xact.h>
 #include <miscadmin.h>
+#include <pgstat.h>
 #include <postmaster/bgworker.h>
 #include <storage/ipc.h>
 #include <storage/latch.h>
@@ -12,15 +14,13 @@
 #include <storage/proc.h>
 #include <storage/shmem.h>
 #include <utils/jsonb.h>
-#include <utils/timestamp.h>
-#include <utils/snapmgr.h>
 #include <utils/memutils.h>
-#include <access/xact.h>
-#include <pgstat.h>
+#include <utils/snapmgr.h>
+#include <utils/timestamp.h>
 
-#include "timer.h"
 #include "compat/compat.h"
 #include "config.h"
+#include "timer.h"
 
 #define MAX_TIMEOUT (5 * INT64CONST(1000))
 #define MILLISECS_PER_SEC INT64CONST(1000)
