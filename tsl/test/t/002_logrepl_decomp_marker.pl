@@ -49,10 +49,10 @@ sub discard_wal
 	);
 }
 
-# disable background jobs because they can scribble in our WAL
+# stop background jobs because they can scribble in our WAL
 run_queries(
 	qq/
-	SELECT public.alter_job(id::integer, scheduled=>false) FROM _timescaledb_config.bgw_job;
+	SELECT _timescaledb_functions.stop_background_workers();
 	/
 );
 
