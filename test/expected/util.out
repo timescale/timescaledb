@@ -16,3 +16,8 @@
  db_util_wizard=a*r*/0
 (10 rows)
 
+ extension_state 
+-----------------
+ created
+(1 row)
+
