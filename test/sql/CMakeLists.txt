@@ -18,8 +18,8 @@ set(TEST_FILES
     ddl.sql
     ddl_errors.sql
     ddl_extra.sql
-    delete.sql
     debug_utils.sql
+    delete.sql
     drop_extension.sql
     drop_hypertable.sql
     drop_rename_hypertable.sql
