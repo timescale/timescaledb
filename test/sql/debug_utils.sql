@@ -3,15 +3,12 @@
 -- LICENSE-APACHE for a copy of the license.
 
 \c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_debug.extension_state();
-
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 
-\set ON_ERROR_STOP 0
 SELECT _timescaledb_debug.extension_state();
-\set ON_ERROR_STOP 1
 
-\c :TEST_DBNAME :ROLE_SUPERUSER
+RESET ROLE;
+
 DO $$
 DECLARE
     module text;
