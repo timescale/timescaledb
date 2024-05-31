@@ -88,6 +88,9 @@ WHERE v3 > 10.0
 ORDER BY time,
     device_id;
 
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
+
 -- device_id constraint should be pushed down
 :PREFIX
 SELECT *
@@ -96,6 +99,8 @@ WHERE device_id = 1
 ORDER BY time,
     device_id
 LIMIT 10;
+
+RESET enable_sort;
 
 -- test IS NULL / IS NOT NULL
 :PREFIX
@@ -584,6 +589,9 @@ ORDER BY device_id;
 
 DROP INDEX tmp_idx CASCADE;
 
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
+
 --use the peer index
 :PREFIX_VERBOSE
 SELECT *
@@ -591,6 +599,8 @@ FROM :TEST_TABLE
 WHERE device_id_peer = 1
 ORDER BY device_id_peer,
     time;
+
+RESET enable_sort;
 
 :PREFIX_VERBOSE
 SELECT device_id_peer

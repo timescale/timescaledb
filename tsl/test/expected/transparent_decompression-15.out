@@ -476,6 +476,8 @@ ORDER BY time,
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk._ts_meta_min_3, compress_hyper_5_16_chunk._ts_meta_max_3, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk._ts_meta_min_1, compress_hyper_5_16_chunk._ts_meta_max_1, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk._ts_meta_min_2, compress_hyper_5_16_chunk._ts_meta_max_2, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
 (37 rows)
 
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
 -- device_id constraint should be pushed down
 :PREFIX
 SELECT *
@@ -505,6 +507,7 @@ LIMIT 10;
                            Filter: (device_id = 1)
 (17 rows)
 
+RESET enable_sort;
 -- test IS NULL / IS NOT NULL
 :PREFIX
 SELECT *
@@ -2071,6 +2074,8 @@ ORDER BY device_id;
 (15 rows)
 
 DROP INDEX tmp_idx CASCADE;
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
 --use the peer index
 :PREFIX_VERBOSE
 SELECT *
@@ -2103,6 +2108,7 @@ ORDER BY device_id_peer,
                      Index Cond: (compress_hyper_5_16_chunk.device_id_peer = 1)
 (21 rows)
 
+RESET enable_sort;
 :PREFIX_VERBOSE
 SELECT device_id_peer
 FROM :TEST_TABLE
@@ -3541,6 +3547,8 @@ ORDER BY time,
                      Rows Removed by Filter: 336
 (103 rows)
 
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
 -- device_id constraint should be pushed down
 :PREFIX
 SELECT *
@@ -3569,6 +3577,7 @@ LIMIT 10;
                            Filter: (device_id = 1)
 (16 rows)
 
+RESET enable_sort;
 -- test IS NULL / IS NOT NULL
 :PREFIX
 SELECT *
@@ -6247,6 +6256,8 @@ ORDER BY device_id;
 (39 rows)
 
 DROP INDEX tmp_idx CASCADE;
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
 --use the peer index
 :PREFIX_VERBOSE
 SELECT *
@@ -6305,6 +6316,7 @@ ORDER BY device_id_peer,
                Index Cond: (_hyper_2_12_chunk.device_id_peer = 1)
 (47 rows)
 
+RESET enable_sort;
 :PREFIX_VERBOSE
 SELECT device_id_peer
 FROM :TEST_TABLE
