@@ -6,6 +6,7 @@ set(TEST_FILES
     agg_partials_pushdown.sql
     bgw_security.sql
     bgw_policy.sql
+    bgw_job_ddl.sql
     cagg_deprecated_bucket_ng.sql
     cagg_errors.sql
     cagg_invalidation.sql
