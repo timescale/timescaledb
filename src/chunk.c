@@ -2034,6 +2034,17 @@ ts_chunk_show_chunks(PG_FUNCTION_ARGS)
 		Assert(ht != NULL);
 		time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
+		if (!time_dim)
+			time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+		if (time_dim && IS_CLOSED_DIMENSION(time_dim) && (!PG_ARGISNULL(1) || !PG_ARGISNULL(2)))
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("cannot specify \"older_than\" or \"newer_than\" for "
+							"\"closed\"-like partitioning types"),
+					 errhint("Use \"created_before\" and/or \"created_after\" which rely on the "
+							 "chunk creation time values.")));
+
 		if (time_dim)
 			time_type = ts_dimension_get_partition_type(time_dim);
 		else
@@ -2177,6 +2188,14 @@ get_chunks_in_time_range(Hypertable *ht, int64 older_than, int64 newer_than, Mem
 	start_strategy = (newer_than == PG_INT64_MIN) ? InvalidStrategy : BTGreaterEqualStrategyNumber;
 	end_strategy = (older_than == PG_INT64_MAX) ? InvalidStrategy : BTLessStrategyNumber;
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+
+	if (time_dim == NULL)
+		time_dim = hyperspace_get_closed_dimension(ht->space, 0);
+
+	Ensure(time_dim != NULL,
+		   "partitioning dimension not found for hypertable \"%s\".\"%s\"",
+		   NameStr(ht->fd.schema_name),
+		   NameStr(ht->fd.table_name));
 
 	oldcontext = MemoryContextSwitchTo(mctx);
 	chunks_find_all_in_range_limit(ht,
