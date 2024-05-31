@@ -392,7 +392,10 @@ ORDER BY device_id,
     v0,
     v1 DESC;
 
--- should not produce ordered path
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
+
+-- should not produce ordered path.
 :PREFIX_VERBOSE
 SELECT *
 FROM :TEST_TABLE
@@ -427,6 +430,8 @@ ORDER BY device_id DESC,
     v0,
     v1,
     time;
+
+RESET enable_sort;
 
 --
 -- test constraint exclusion
