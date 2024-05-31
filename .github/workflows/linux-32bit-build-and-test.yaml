@@ -46,6 +46,7 @@ jobs:
         DEBIAN_FRONTEND: noninteractive
         IGNORES: "append-* transparent_decompression-* transparent_decompress_chunk-* pg_dump telemetry"
         SKIPS: chunk_adaptive histogram_test-*
+        EXTENSIONS: "postgres_fdw test_decoding"
     strategy:
       fail-fast: false
       matrix:
@@ -106,16 +107,18 @@ jobs:
           --without-readline --without-zlib --without-libxml --enable-cassert \
           --enable-debug --with-llvm --without-icu LLVM_CONFIG=llvm-config-14 CFLAGS="-msse2"
         make -j $MAKE_JOBS
-        make -j $MAKE_JOBS -C src/test/isolation
-        make -j $MAKE_JOBS -C contrib/postgres_fdw
-        make -j $MAKE_JOBS -C contrib/test_decoding
+        for ext in ${EXTENSIONS}; do
+          make -j$(nproc) -C contrib/${ext}
+        done
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
         useradd postgres
-        make -C ~/$PG_SRC_DIR install
-        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
-        make -C ~/$PG_SRC_DIR/contrib/test_decoding install
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in ${EXTENSIONS}; do
+          make -C contrib/${ext} install
+        done
         chown -R postgres:postgres $HOME/$PG_INSTALL_DIR
         sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen
         locale-gen

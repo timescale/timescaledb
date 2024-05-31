@@ -1,2 +1,0 @@
-Fixes: #6911 Fix dropped chunk metadata removal in update script
-Thanks: @hongquan for reporting an issue with the update script
