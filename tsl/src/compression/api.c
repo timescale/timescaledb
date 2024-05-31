@@ -256,9 +256,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
 
-	Assert(time_dim != NULL);
-
-	if (time_dim->fd.compress_interval_length == 0)
+	if (!time_dim || time_dim->fd.compress_interval_length == 0)
 		return NULL;
 
 	Assert(current_chunk->cube->num_slices > 0);
