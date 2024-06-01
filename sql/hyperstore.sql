@@ -6,7 +6,7 @@ CREATE FUNCTION ts_hyperstore_handler(internal) RETURNS table_am_handler
 AS '@MODULE_PATHNAME@', 'ts_hyperstore_handler' LANGUAGE C;
 
 CREATE ACCESS METHOD hyperstore TYPE TABLE HANDLER ts_hyperstore_handler;
-COMMENT ON ACCESS METHOD hyperstore IS 'TimescaleDB columnar compression';
+COMMENT ON ACCESS METHOD hyperstore IS 'Storage engine using hybrid row/columnar compression';
 
 CREATE FUNCTION ts_hsproxy_handler(internal) RETURNS index_am_handler
 AS '@MODULE_PATHNAME@', 'ts_hsproxy_handler' LANGUAGE C;
