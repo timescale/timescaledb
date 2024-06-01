@@ -4,9 +4,6 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#ifndef COMPRESSION_ATTR_CAPTURE_H_
-#define COMPRESSION_ATTR_CAPTURE_H_
+#pragma once
 
 extern void _attr_capture_init(void);
-
-#endif /* COMPRESSION_ATTR_CAPTURE_H_ */
