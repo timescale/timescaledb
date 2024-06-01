@@ -27,7 +27,7 @@ set(PRE_INSTALL_FUNCTION_FILES
 set(SOURCE_FILES
     hypertable.sql
     chunk.sql
-    compression.sql
+    hyperstore.sql
     ddl_internal.sql
     util_time.sql
     util_internal_table_ddl.sql
