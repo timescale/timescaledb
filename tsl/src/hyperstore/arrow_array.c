@@ -5,6 +5,7 @@
  */
 
 #include <postgres.h>
+#include <access/tupmacs.h>
 #include <utils/datum.h>
 
 #include "arrow_array.h"
@@ -274,44 +275,19 @@ static NullableDatum
 arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int64 index)
 {
 	const int typlen = get_typlen(typid);
+	const bool typbyval = get_typbyval(typid);
 	const uint64 *restrict validity = array->buffers[0];
 	const char *restrict values = array->buffers[1];
+
+	Assert(typlen > 0);
 
 	if (!arrow_row_is_valid(validity, index))
 		return (NullableDatum){ .isnull = true };
 
-	Assert(typlen > 0 && typlen <= 8);
-
-	/*
-	 * We read the bytes into an integer variable and then transform it to a
-	 * datum. For 32-bit systems, UInt64GetDatum will allocate room for the
-	 * integer using palloc(), so make sure that the current memory context
-	 * outlives the need for the value.
-	 *
-	 * Also note that we use unsigned integers to avoid conversions between
-	 * signed and unsigned values when converting to datum (which is an
-	 * unsigned value).
-	 */
-	Datum datum;
-	switch (typlen)
-	{
-		case sizeof(uint8):
-			datum = UInt8GetDatum(((uint8 *) values)[index]);
-			break;
-		case sizeof(uint16):
-			datum = UInt16GetDatum(((uint16 *) values)[index]);
-			break;
-		case sizeof(uint32):
-			datum = UInt32GetDatum(((uint32 *) values)[index]);
-			break;
-		case sizeof(uint64):
-			datum = UInt64GetDatum(((uint64 *) values)[index]);
-			break;
-		default:
-			ereport(ERROR,
-					errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					errmsg("not supporting reading fixed-length values of length %d", typlen));
-	}
+	/* In order to handle fixed-length values of arbitrary size that are byref
+	 * and byval, we use fetch_all() rather than rolling our own. This is
+	 * taken from utils/adt/rangetypes.c */
+	Datum datum = fetch_att(&values[index * typlen], typbyval, typlen);
 
 	TS_DEBUG_LOG("retrieved fixlen value %s row " INT64_FORMAT " from offset " INT64_FORMAT
 				 " in memory context %s",
@@ -326,8 +302,7 @@ arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int64 index)
 NullableDatum
 arrow_get_datum(ArrowArray *array, Oid typid, int64 index)
 {
-	const int typlen = get_typlen(typid);
-	if (typlen == TYPLEN_VARLEN)
+	if (get_typlen(typid) == TYPLEN_VARLEN)
 		return arrow_get_datum_varlen(array, typid, index);
 	else
 		return arrow_get_datum_fixlen(array, typid, index);

@@ -63,3 +63,14 @@ select setseed(1);
 \set the_aggregate sum((value->:'a_name')::int)
 \set the_clause ((value->:'a_name')::numeric >= 0.5) and ((value->:'a_name')::numeric <= 0.6)
 \ir include/hyperstore_type_table.sql
+
+-- Test that we can use NAME type for a field and compare with a
+-- constant value. This is a fixed-size type with a size > 8 and we
+-- will try to use a scan key for this.
+\set a_name temp
+\set the_table test_name
+\set the_type name
+\set the_generator gen_random_uuid()::name
+\set the_aggregate count(*)
+\set the_clause value = :'my_uuid'
+\ir include/hyperstore_type_table.sql
