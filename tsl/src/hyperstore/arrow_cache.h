@@ -33,8 +33,7 @@
  *      +-+ +-+     +-+
  */
 
-#ifndef COMPRESSION_ARROW_CACHE_H_
-#define COMPRESSION_ARROW_CACHE_H_
+#pragma once
 
 #include <postgres.h>
 
@@ -63,5 +62,3 @@ extern void arrow_column_cache_init(ArrowColumnCache *acache, MemoryContext mcxt
 extern void arrow_column_cache_release(ArrowColumnCache *acache);
 extern ArrowArray **arrow_column_cache_read_many(ArrowTupleTableSlot *aslot, unsigned int natts);
 extern ArrowArray **arrow_column_cache_read_one(ArrowTupleTableSlot *aslot, AttrNumber attno);
-
-#endif /* COMPRESSION_ARROW_CACHE_H_ */

@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef PG_ARROW_TUPTABLE_H
-#define PG_ARROW_TUPTABLE_H
+#pragma once
 
 #include <postgres.h>
 #include <access/attnum.h>
@@ -319,5 +318,3 @@ extern void arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *att
 extern void arrow_slot_set_index_attrs(TupleTableSlot *slot, Bitmapset *attrs);
 
 extern Datum tsl_is_compressed_tid(PG_FUNCTION_ARGS);
-
-#endif /* PG_ARROW_TUPTABLE_H */
