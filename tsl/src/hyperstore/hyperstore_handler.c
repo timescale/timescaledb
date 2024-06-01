@@ -68,7 +68,7 @@ static Tuplesortstate *create_tuplesort_for_compress(const HyperstoreInfo *hsinf
 													 const TupleDesc tupdesc);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
-												 * transcation */
+												 * transaction */
 
 #define HYPERSTORE_AM_INFO_SIZE(natts)                                                             \
 	(sizeof(HyperstoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
@@ -1000,7 +1000,7 @@ hyperstore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot
  * distinct "compressed" TIDs may decode to the same TID, i.e., they reference
  * the same compressed tuple in the TAM's compressed relation, and the heapAM
  * method for index_delete_tuples() expects only unique TIDs. Therefore, it is
- * necesssary to deduplicate TIDs before calling the heapAM method on the
+ * necessary to deduplicate TIDs before calling the heapAM method on the
  * compressed relation and then restore the result array of decoded delTIDs
  * after the method returns. Note that the returned delTID array might be
  * smaller than the input delTID array since only the TIDs that are safe to
@@ -2551,7 +2551,7 @@ hyperstore_xact_event(XactEvent event, void *arg)
 	}
 
 	/*
-	 * Cleanup in case of aborted transcation. Need not explicitly check for
+	 * Cleanup in case of aborted transaction. Need not explicitly check for
 	 * abort since the states should only exist if it is an abort.
 	 */
 	if (cleanup_relids != NIL)
