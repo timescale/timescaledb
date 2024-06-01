@@ -68,7 +68,7 @@ match_relvar(Expr *expr, Index relid)
  * Remaining qualifiers will be used as filters for the ColumnarScan.
  */
 static ScanKey
-extract_scan_keys(const HyperstoreInfo *caminfo, Scan *scan, int *num_keys, List **scankey_quals)
+extract_scan_keys(const HyperstoreInfo *hsinfo, Scan *scan, int *num_keys, List **scankey_quals)
 {
 	ListCell *lc;
 	ScanKey scankeys = palloc0(sizeof(ScanKeyData) * list_length(scan->plan.qual));
@@ -137,7 +137,7 @@ extract_scan_keys(const HyperstoreInfo *caminfo, Scan *scan, int *num_keys, List
 				}
 
 				bool is_segmentby =
-					caminfo->columns[AttrNumberGetAttrOffset(relvar->varattno)].is_segmentby;
+					hsinfo->columns[AttrNumberGetAttrOffset(relvar->varattno)].is_segmentby;
 				if (argfound && is_segmentby)
 				{
 					TypeCacheEntry *tce =
@@ -706,7 +706,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	ColumnarScanState *cstate = (ColumnarScanState *) state;
 	Scan *scan = (Scan *) state->ss.ps.plan;
 	Relation rel = state->ss.ss_currentRelation;
-	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
 	/* The CustomScan state always creates a scan slot of type TTSOpsVirtual,
 	 * even if one sets scan->scanrelid to a valid index to indicate scan of a
@@ -726,7 +726,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	ExecInitResultTypeTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
 	state->ss.ps.qual = ExecInitQual(scan->plan.qual, (PlanState *) state);
-	cstate->scankeys = extract_scan_keys(caminfo, scan, &cstate->nscankeys, &cstate->scankey_quals);
+	cstate->scankeys = extract_scan_keys(hsinfo, scan, &cstate->nscankeys, &cstate->scankey_quals);
 
 	/* Constify stable expressions in vectorized predicates. */
 	cstate->have_constant_false_vectorized_qual = false;
@@ -972,7 +972,7 @@ is_not_runtime_constant(Node *node)
  * commuted copy. If not, return NULL.
  */
 static Node *
-make_vectorized_qual(Node *qual, const HyperstoreInfo *caminfo)
+make_vectorized_qual(Node *qual, const HyperstoreInfo *hsinfo)
 {
 	/*
 	 * Currently we vectorize some "Var op Const" binary predicates,
@@ -1045,7 +1045,7 @@ make_vectorized_qual(Node *qual, const HyperstoreInfo *caminfo)
 	 */
 
 	const ColumnCompressionSettings *column =
-		&caminfo->columns[AttrNumberGetAttrOffset(var->varattno)];
+		&hsinfo->columns[AttrNumberGetAttrOffset(var->varattno)];
 
 	Assert(column->attnum == var->varattno);
 
@@ -1102,7 +1102,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
 	Relation relation = RelationIdGetRelation(rte->relid);
-	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
+	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
 	List *vectorized_quals = NIL;
 	List *nonvectorized_quals = NIL;
 	ListCell *lc;
@@ -1110,7 +1110,7 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	foreach (lc, scan_clauses)
 	{
 		Node *source_qual = lfirst(lc);
-		Node *vectorized_qual = make_vectorized_qual(source_qual, caminfo);
+		Node *vectorized_qual = make_vectorized_qual(source_qual, hsinfo);
 
 		if (vectorized_qual)
 		{

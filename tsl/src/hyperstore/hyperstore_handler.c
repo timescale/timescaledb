@@ -48,6 +48,7 @@
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
 
+#include "arrow_cache.h"
 #include "arrow_tts.h"
 #include "compression/api.h"
 #include "compression/compression.h"
@@ -63,13 +64,13 @@
 
 static const TableAmRoutine hyperstore_methods;
 static void convert_to_hyperstore_finish(Oid relid);
-static Tuplesortstate *create_tuplesort_for_compress(const HyperstoreInfo *caminfo,
+static Tuplesortstate *create_tuplesort_for_compress(const HyperstoreInfo *hsinfo,
 													 const TupleDesc tupdesc);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transcation */
 
-#define COMPRESSION_AM_INFO_SIZE(natts)                                                            \
+#define HYPERSTORE_AM_INFO_SIZE(natts)                                                             \
 	(sizeof(HyperstoreInfo) + (sizeof(ColumnCompressionSettings) * (natts)))
 
 static int32
@@ -131,31 +132,28 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 {
 	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
 
-	HyperstoreInfo *caminfo;
+	HyperstoreInfo *hsinfo;
 	CompressionSettings *settings;
 	TupleDesc tupdesc = RelationGetDescr(rel);
 
 	/* Anything put in rel->rd_amcache must be a single memory chunk
 	 * palloc'd in CacheMemoryContext since PostgreSQL expects to be able
 	 * to free it with a single pfree(). */
-	caminfo = MemoryContextAllocZero(CacheMemoryContext, COMPRESSION_AM_INFO_SIZE(tupdesc->natts));
-	caminfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
-	caminfo->compressed_relid = InvalidOid;
-	caminfo->num_columns = tupdesc->natts;
-	caminfo->hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
+	hsinfo = MemoryContextAllocZero(CacheMemoryContext, HYPERSTORE_AM_INFO_SIZE(tupdesc->natts));
+	hsinfo->relation_id = get_chunk_id_from_relid(rel->rd_id);
+	hsinfo->compressed_relid = InvalidOid;
+	hsinfo->num_columns = tupdesc->natts;
+	hsinfo->hypertable_id = ts_chunk_get_hypertable_id_by_reloid(rel->rd_id);
 
-	/* Only optionally include information about the compressed chunk because
-	 * it might not exist when this cache is built. The information will be
-	 * added the next time the function is called instead. */
-	FormData_chunk form = ts_chunk_get_formdata(caminfo->relation_id);
-	caminfo->compressed_relation_id = form.compressed_chunk_id;
+	FormData_chunk form = ts_chunk_get_formdata(hsinfo->relation_id);
+	hsinfo->compressed_relation_id = form.compressed_chunk_id;
 
 	/* Create compressed chunk and set the created flag if it does not
 	 * exist. */
 	if (compressed_relation_created)
-		*compressed_relation_created = (caminfo->compressed_relation_id == 0);
+		*compressed_relation_created = (hsinfo->compressed_relation_id == 0);
 
-	if (caminfo->compressed_relation_id == 0)
+	if (hsinfo->compressed_relation_id == 0)
 	{
 		/* Consider if we want to make it simpler to create the compressed
 		 * table by just considering a normal side-relation with no strong
@@ -175,7 +173,7 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 
 		Chunk *c_chunk = create_compress_chunk(ht_compressed, chunk, InvalidOid);
 
-		caminfo->compressed_relation_id = c_chunk->fd.id;
+		hsinfo->compressed_relation_id = c_chunk->fd.id;
 		ts_chunk_set_compressed_chunk(chunk, c_chunk->fd.id);
 
 		if (create_chunk_constraints)
@@ -186,22 +184,22 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 		}
 	}
 
-	caminfo->compressed_relid = ts_chunk_get_relid(caminfo->compressed_relation_id, false);
-	caminfo->count_cattno =
-		get_attnum(caminfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
+	hsinfo->compressed_relid = ts_chunk_get_relid(hsinfo->compressed_relation_id, false);
+	hsinfo->count_cattno =
+		get_attnum(hsinfo->compressed_relid, COMPRESSION_COLUMN_METADATA_COUNT_NAME);
 
-	Assert(caminfo->compressed_relation_id > 0 && OidIsValid(caminfo->compressed_relid));
-	Assert(caminfo->count_cattno != InvalidAttrNumber);
-	settings = ts_compression_settings_get(caminfo->compressed_relid);
+	Assert(hsinfo->compressed_relation_id > 0 && OidIsValid(hsinfo->compressed_relid));
+	Assert(hsinfo->count_cattno != InvalidAttrNumber);
+	settings = ts_compression_settings_get(hsinfo->compressed_relid);
 
 	Ensure(settings,
 		   "no compression settings for relation %s",
 		   get_rel_name(RelationGetRelid(rel)));
 
-	for (int i = 0; i < caminfo->num_columns; i++)
+	for (int i = 0; i < hsinfo->num_columns; i++)
 	{
 		const Form_pg_attribute attr = &tupdesc->attrs[i];
-		ColumnCompressionSettings *colsettings = &caminfo->columns[i];
+		ColumnCompressionSettings *colsettings = &hsinfo->columns[i];
 
 		if (attr->attisdropped)
 		{
@@ -222,11 +220,11 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 		colsettings->is_orderby = orderby_pos > 0;
 
 		if (colsettings->is_segmentby)
-			caminfo->num_segmentby += 1;
+			hsinfo->num_segmentby += 1;
 
 		if (colsettings->is_orderby)
 		{
-			caminfo->num_orderby += 1;
+			hsinfo->num_orderby += 1;
 			colsettings->orderby_desc =
 				ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
 			colsettings->nulls_first =
@@ -234,19 +232,19 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 		}
 
 		if (colsettings->is_segmentby || colsettings->is_orderby)
-			caminfo->num_keys += 1;
+			hsinfo->num_keys += 1;
 
-		if (OidIsValid(caminfo->compressed_relid))
-			colsettings->cattnum = get_attnum(caminfo->compressed_relid, attname);
+		if (OidIsValid(hsinfo->compressed_relid))
+			colsettings->cattnum = get_attnum(hsinfo->compressed_relid, attname);
 		else
 			colsettings->cattnum = InvalidAttrNumber;
 	}
 
-	Assert(caminfo->num_segmentby == ts_array_length(settings->fd.segmentby));
-	Assert(caminfo->num_orderby == ts_array_length(settings->fd.orderby));
-	Ensure(caminfo->relation_id > 0, "invalid chunk ID");
+	Assert(hsinfo->num_segmentby == ts_array_length(settings->fd.segmentby));
+	Assert(hsinfo->num_orderby == ts_array_length(settings->fd.orderby));
+	Ensure(hsinfo->relation_id > 0, "invalid chunk ID");
 
-	return caminfo;
+	return hsinfo;
 }
 
 HyperstoreInfo *
@@ -261,15 +259,15 @@ RelationGetHyperstoreInfo(Relation rel)
 }
 
 static void
-build_segment_and_orderby_bms(const HyperstoreInfo *caminfo, Bitmapset **segmentby,
+build_segment_and_orderby_bms(const HyperstoreInfo *hsinfo, Bitmapset **segmentby,
 							  Bitmapset **orderby)
 {
 	*segmentby = NULL;
 	*orderby = NULL;
 
-	for (int i = 0; i < caminfo->num_columns; i++)
+	for (int i = 0; i < hsinfo->num_columns; i++)
 	{
-		const ColumnCompressionSettings *colsettings = &caminfo->columns[i];
+		const ColumnCompressionSettings *colsettings = &hsinfo->columns[i];
 
 		if (colsettings->is_segmentby)
 			*segmentby = bms_add_member(*segmentby, colsettings->attnum);
@@ -280,7 +278,7 @@ build_segment_and_orderby_bms(const HyperstoreInfo *caminfo, Bitmapset **segment
 }
 
 /* ------------------------------------------------------------------------
- * Slot related callbacks for compression AM
+ * Slot related callbacks for Hyperstore
  * ------------------------------------------------------------------------
  */
 static const TupleTableSlotOps *
@@ -292,24 +290,19 @@ hyperstore_slot_callbacks(Relation relation)
 #define FEATURE_NOT_SUPPORTED                                                                      \
 	ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("%s not supported", __func__)))
 
-#define FUNCTION_DOES_NOTHING                                                                      \
-	ereport(WARNING,                                                                               \
-			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),                                               \
-			 errmsg("%s does not do anything yet", __func__)))
+#define pgstat_count_hyperstore_scan(rel) pgstat_count_heap_scan(rel)
 
-#define pgstat_count_compression_scan(rel) pgstat_count_heap_scan(rel)
+#define pgstat_count_hyperstore_getnext(rel) pgstat_count_heap_getnext(rel)
 
-#define pgstat_count_compression_getnext(rel) pgstat_count_heap_getnext(rel)
-
-typedef struct CompressionParallelScanDescData
+typedef struct HyperstoreParallelScanDescData
 {
 	ParallelBlockTableScanDescData pscandesc;
 	ParallelBlockTableScanDescData cpscandesc;
-} CompressionParallelScanDescData;
+} HyperstoreParallelScanDescData;
 
-typedef struct CompressionParallelScanDescData *CompressionParallelScanDesc;
+typedef struct HyperstoreParallelScanDescData *HyperstoreParallelScanDesc;
 
-typedef struct CompressionScanDescData
+typedef struct HyperstoreScanDescData
 {
 	TableScanDescData rs_base;
 	TableScanDesc uscan_desc; /* scan descriptor for non-compressed relation */
@@ -320,15 +313,15 @@ typedef struct CompressionScanDescData
 	int32 compressed_row_count;
 	bool compressed_read_done;
 	bool reset;
-} CompressionScanDescData;
+} HyperstoreScanDescData;
 
-typedef struct CompressionScanDescData *CompressionScanDesc;
+typedef struct HyperstoreScanDescData *HyperstoreScanDesc;
 
 /*
  * Initialization common for beginscan and rescan.
  */
 static void
-initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
+initscan(HyperstoreScanDesc scan, ScanKey keys, int nkeys)
 {
 	int nvalidkeys = 0;
 
@@ -346,15 +339,15 @@ initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 	 */
 	if (NULL != keys && nkeys > 0)
 	{
-		const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(scan->rs_base.rs_rd);
+		const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(scan->rs_base.rs_rd);
 
 		for (int i = 0; i < nkeys; i++)
 		{
 			const ScanKey key = &keys[i];
 
-			for (int j = 0; j < caminfo->num_columns; j++)
+			for (int j = 0; j < hsinfo->num_columns; j++)
 			{
-				const ColumnCompressionSettings *column = &caminfo->columns[j];
+				const ColumnCompressionSettings *column = &hsinfo->columns[j];
 
 				if (column->is_segmentby && key->sk_attno == column->attnum)
 				{
@@ -373,7 +366,7 @@ initscan(CompressionScanDesc scan, ScanKey keys, int nkeys)
 
 	/* Use the TableScanDescData's scankeys to store the transformed compression scan keys */
 	if (scan->rs_base.rs_flags & SO_TYPE_SEQSCAN)
-		pgstat_count_compression_scan(scan->rs_base.rs_rd);
+		pgstat_count_hyperstore_scan(scan->rs_base.rs_rd);
 }
 
 #ifdef TS_DEBUG
@@ -402,9 +395,9 @@ static TableScanDesc
 hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey keys,
 					 ParallelTableScanDesc parallel_scan, uint32 flags)
 {
-	CompressionScanDesc scan;
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
-	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) parallel_scan;
+	HyperstoreScanDesc scan;
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+	HyperstoreParallelScanDesc cpscan = (HyperstoreParallelScanDesc) parallel_scan;
 
 	RelationIncrementReferenceCount(relation);
 
@@ -413,14 +406,14 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 				 RelationGetRelationName(relation),
 				 parallel_scan);
 
-	scan = palloc0(sizeof(CompressionScanDescData));
+	scan = palloc0(sizeof(HyperstoreScanDescData));
 	scan->rs_base.rs_rd = relation;
 	scan->rs_base.rs_snapshot = snapshot;
 	scan->rs_base.rs_nkeys = nkeys;
 	scan->rs_base.rs_key = nkeys > 0 ? palloc0(sizeof(ScanKeyData) * nkeys) : NULL;
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
-	scan->compressed_rel = table_open(caminfo->compressed_relid, AccessShareLock);
+	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	scan->returned_noncompressed_count = 0;
 	scan->returned_compressed_count = 0;
 	scan->compressed_row_count = 0;
@@ -473,7 +466,7 @@ static void
 hyperstore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_strat,
 				  bool allow_sync, bool allow_pagemode)
 {
-	CompressionScanDesc scan = (CompressionScanDesc) sscan;
+	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->reset = true;
@@ -491,7 +484,7 @@ hyperstore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_
 static void
 hyperstore_endscan(TableScanDesc sscan)
 {
-	CompressionScanDesc scan = (CompressionScanDesc) sscan;
+	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
 
 	RelationDecrementReferenceCount(sscan->rs_rd);
 	table_endscan(scan->cscan_desc);
@@ -518,7 +511,7 @@ hyperstore_endscan(TableScanDesc sscan)
 static bool
 hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
 {
-	CompressionScanDesc scan = (CompressionScanDesc) sscan;
+	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
 	TupleTableSlot *child_slot;
 
 	TS_DEBUG_LOG("relid: %d, relation: %s, reset: %s, compressed_read_done: %s",
@@ -571,7 +564,7 @@ hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableS
 	}
 
 	scan->returned_compressed_count++;
-	pgstat_count_compression_getnext(sscan->rs_rd);
+	pgstat_count_hyperstore_getnext(sscan->rs_rd);
 
 	return true;
 }
@@ -579,7 +572,7 @@ hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableS
 static Size
 hyperstore_parallelscan_estimate(Relation rel)
 {
-	return sizeof(CompressionParallelScanDescData);
+	return sizeof(HyperstoreParallelScanDescData);
 }
 
 /*
@@ -590,18 +583,18 @@ hyperstore_parallelscan_estimate(Relation rel)
 static Size
 hyperstore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 {
-	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	HyperstoreParallelScanDesc cpscan = (HyperstoreParallelScanDesc) pscan;
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_initialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
 	rel->rd_tableam = oldtam;
 
-	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	table_block_parallelscan_initialize(crel, (ParallelTableScanDesc) &cpscan->cpscandesc);
 	table_close(crel, NoLock);
 
-	return sizeof(CompressionParallelScanDescData);
+	return sizeof(HyperstoreParallelScanDescData);
 }
 
 /*
@@ -611,14 +604,14 @@ hyperstore_parallelscan_initialize(Relation rel, ParallelTableScanDesc pscan)
 static void
 hyperstore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 {
-	CompressionParallelScanDesc cpscan = (CompressionParallelScanDesc) pscan;
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	HyperstoreParallelScanDesc cpscan = (HyperstoreParallelScanDesc) pscan;
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	table_block_parallelscan_reinitialize(rel, (ParallelTableScanDesc) &cpscan->pscandesc);
 	rel->rd_tableam = oldtam;
 
-	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	table_block_parallelscan_reinitialize(crel, (ParallelTableScanDesc) &cpscan->cpscandesc);
 	table_close(crel, NoLock);
 }
@@ -626,7 +619,7 @@ hyperstore_parallelscan_reinitialize(Relation rel, ParallelTableScanDesc pscan)
 static void
 hyperstore_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
 {
-	CompressionScanDesc scan = (CompressionScanDesc) sscan;
+	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
 
 	if (is_compressed_tid(tid))
 	{
@@ -683,16 +676,16 @@ typedef struct IndexFetchComprData
 } IndexFetchComprData;
 
 /* ------------------------------------------------------------------------
- * Index Scan Callbacks for compression AM
+ * Index Scan Callbacks for Hyperstore
  * ------------------------------------------------------------------------
  */
 static IndexFetchTableData *
 hyperstore_index_fetch_begin(Relation rel)
 {
 	IndexFetchComprData *cscan = palloc0(sizeof(IndexFetchComprData));
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
-	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	cscan->segindex = SEGMENTBY_INDEX_UNKNOWN;
 	cscan->return_count = 0;
 	cscan->h_base.rel = rel;
@@ -758,7 +751,7 @@ is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
 	if (cscan->segindex == SEGMENTBY_INDEX_UNKNOWN)
 	{
 		ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-		const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(cscan->h_base.rel);
+		const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(cscan->h_base.rel);
 		int16 attno = -1;
 
 		if (bms_is_empty(aslot->index_attrs))
@@ -766,7 +759,7 @@ is_segmentby_index_scan(IndexFetchComprData *cscan, TupleTableSlot *slot)
 
 		while ((attno = bms_next_member(aslot->index_attrs, attno)) >= 0)
 		{
-			if (!caminfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
+			if (!hsinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
 				return false;
 		}
 
@@ -901,7 +894,7 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 }
 
 /* ------------------------------------------------------------------------
- * Callbacks for non-modifying operations on individual tuples for compression AM
+ * Callbacks for non-modifying operations on individual tuples for Hyperstore
  * ------------------------------------------------------------------------
  */
 
@@ -929,8 +922,8 @@ hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsh
 	else
 	{
 		ItemPointerData decoded_tid;
-		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
-		Relation child_rel = table_open(caminfo->compressed_relid, AccessShareLock);
+		HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+		Relation child_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 		TupleTableSlot *child_slot =
 			arrow_slot_get_compressed_slot(slot, RelationGetDescr(child_rel));
 
@@ -951,7 +944,7 @@ hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsh
 static bool
 hyperstore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 {
-	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
+	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
 	ItemPointerData ctid;
 
 	if (!is_compressed_tid(tid))
@@ -970,12 +963,12 @@ hyperstore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 static bool
 hyperstore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot snapshot)
 {
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 	bool result;
 
 	if (is_compressed_tid(&slot->tts_tid))
 	{
-		Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+		Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
 		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, NULL);
 		result = crel->rd_tableam->tuple_satisfies_snapshot(crel, child_slot, snapshot);
 		table_close(crel, AccessShareLock);
@@ -996,10 +989,10 @@ hyperstore_tuple_satisfies_snapshot(Relation rel, TupleTableSlot *slot, Snapshot
  * The Index AM asks the Table AM about which given index tuples (as
  * referenced by TID) are safe to delete. Given that the array of TIDs to
  * delete ("delTIDs") may reference either the compressed or non-compressed
- * relation within the compression TAM, it is necessary to split the
- * information in the TM_IndexDeleteOp in two: one for each relation. Then the
- * operation can be relayed to the standard heapAM method to do the heavy
- * lifting for each relation.
+ * relation within Hyperstore, it is necessary to split the information in the
+ * TM_IndexDeleteOp in two: one for each relation. Then the operation can be
+ * relayed to the standard heapAM method to do the heavy lifting for each
+ * relation.
  *
  * In order to call the heapAM method on the compressed relation, it is
  * necessary to first "decode" the compressed TIDs to "normal" TIDs that
@@ -1020,7 +1013,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 {
 	TM_IndexDeleteOp noncompr_delstate = *delstate;
 	TM_IndexDeleteOp compr_delstate = *delstate;
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 	/* Hash table setup for TID deduplication */
 	typedef struct TidEntry
 	{
@@ -1164,7 +1157,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 	if (compr_delstate.ndeltids > 0 && (total_knowndeletable_compressed > 0 || delstate->bottomup))
 	{
 		/* Assume RowExclusivelock since this involves deleting tuples */
-		Relation compr_rel = table_open(caminfo->compressed_relid, RowExclusiveLock);
+		Relation compr_rel = table_open(hsinfo->compressed_relid, RowExclusiveLock);
 
 		xid_compr = compr_rel->rd_tableam->index_delete_tuples(compr_rel, &compr_delstate);
 
@@ -1230,7 +1223,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 }
 
 /* ----------------------------------------------------------------------------
- *  Functions for manipulations of physical tuples for compression AM.
+ *  Functions for manipulations of physical tuples for Hyperstore.
  * ----------------------------------------------------------------------------
  */
 
@@ -1358,11 +1351,11 @@ hyperstore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, Tup
 
 	if (is_compressed_tid(tid))
 	{
-		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
+		HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
 		/* SELECT FOR UPDATE takes RowShareLock, so assume this
 		 * lockmode. Another option to consider is take same lock as currently
 		 * held on the non-compressed relation */
-		Relation crel = table_open(caminfo->compressed_relid, RowShareLock);
+		Relation crel = table_open(hsinfo->compressed_relid, RowShareLock);
 		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(crel));
 		ItemPointerData decoded_tid;
 
@@ -1418,7 +1411,7 @@ hyperstore_finish_bulk_insert(Relation rel, int options)
 }
 
 /* ------------------------------------------------------------------------
- * DDL related callbacks for compression AM.
+ * DDL related callbacks for Hyperstore.
  * ------------------------------------------------------------------------
  */
 
@@ -1474,9 +1467,9 @@ static Oid
 compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *xid_cutoff,
 					   MultiXactId *multi_cutoff)
 {
-	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 	TupleDesc tupdesc = RelationGetDescr(rel);
-	Oid old_compressed_relid = caminfo->compressed_relid;
+	Oid old_compressed_relid = hsinfo->compressed_relid;
 	CompressionSettings *settings = ts_compression_settings_get(old_compressed_relid);
 	Relation old_compressed_rel = table_open(old_compressed_relid, AccessExclusiveLock);
 #if PG15_GE
@@ -1565,7 +1558,7 @@ compress_and_swap_heap(Relation rel, Tuplesortstate *tuplesort, TransactionId *x
  * for Heap. However, instead of "rewriting" tuples into the new heap (while
  * at the same time handling freezing and visibility), Hyperstore will
  * compress all the data and write it to a new compressed relation. Since the
- * compression is based on the legacy compression implementation, visibility
+ * compression is based on the previous compression implementation, visibility
  * of recently deleted tuples and freezing of tuples is not correctly handled,
  * at least not for higher isolation levels than read committed. Changes to
  * handle higher isolation levels should be considered in a future update of
@@ -1584,9 +1577,9 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 									 double *num_tuples, double *tups_vacuumed,
 									 double *tups_recently_dead)
 {
-	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(OldHyperstore);
+	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(OldHyperstore);
 	TupleDesc tupdesc = RelationGetDescr(OldHyperstore);
-	CompressionScanDesc cscan;
+	HyperstoreScanDesc cscan;
 	HeapScanDesc chscan;
 	HeapScanDesc uhscan;
 	Tuplesortstate *tuplesort;
@@ -1610,7 +1603,7 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 				 errmsg("cannot cluster a hyperstore table"),
 				 errdetail("A hyperstore table is already ordered by compression.")));
 
-	tuplesort = create_tuplesort_for_compress(caminfo, tupdesc);
+	tuplesort = create_tuplesort_for_compress(hsinfo, tupdesc);
 
 	/* In scan-and-sort mode and also VACUUM FULL, set phase */
 	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_SEQ_SCAN_HEAP);
@@ -1618,7 +1611,7 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 	/* This will scan via the Hyperstore callbacks, getting tuples from both
 	 * compressed and non-compressed relations */
 	tscan = table_beginscan(OldHyperstore, SnapshotAny, 0, (ScanKey) NULL);
-	cscan = (CompressionScanDesc) tscan;
+	cscan = (HyperstoreScanDesc) tscan;
 	chscan = (HeapScanDesc) cscan->cscan_desc;
 	uhscan = (HeapScanDesc) cscan->uscan_desc;
 	slot = table_slot_create(OldHyperstore, NULL);
@@ -1799,18 +1792,18 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 static void
 hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
-	HyperstoreInfo *caminfo;
+	HyperstoreInfo *hsinfo;
 
 	if (ts_is_hypertable(RelationGetRelid(rel)))
 		return;
 
-	caminfo = RelationGetHyperstoreInfo(rel);
+	hsinfo = RelationGetHyperstoreInfo(rel);
 
 	LOCKMODE lmode =
 		(params->options & VACOPT_FULL) ? AccessExclusiveLock : ShareUpdateExclusiveLock;
 
 	/* Vacuum the compressed relation */
-	Relation crel = vacuum_open_relation(caminfo->compressed_relid,
+	Relation crel = vacuum_open_relation(hsinfo->compressed_relid,
 										 NULL,
 										 params->options,
 										 params->log_min_duration >= 0,
@@ -1847,7 +1840,7 @@ static bool
 hyperstore_scan_analyze_next_block(TableScanDesc scan, BlockNumber blockno,
 								   BufferAccessStrategy bstrategy)
 {
-	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
+	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
 	HeapScanDesc uhscan = (HeapScanDesc) cscan->uscan_desc;
 
 	/* If blockno is past the blocks in the non-compressed relation, we should
@@ -1895,7 +1888,7 @@ static bool
 hyperstore_scan_analyze_next_tuple(TableScanDesc scan, TransactionId OldestXmin, double *liverows,
 								   double *deadrows, TupleTableSlot *slot)
 {
-	CompressionScanDescData *cscan = (CompressionScanDescData *) scan;
+	HyperstoreScanDescData *cscan = (HyperstoreScanDescData *) scan;
 	HeapScanDesc chscan = (HeapScanDesc) cscan->cscan_desc;
 	uint16 tuple_index;
 	bool result;
@@ -2140,9 +2133,9 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	if (ts_is_hypertable(relation->rd_id))
 		return 0.0;
 
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
 
-	Relation crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	IndexCallbackState icstate = {
 		.callback = callback,
 		.orig_state = callback_state,
@@ -2161,13 +2154,13 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	};
 	IndexInfo iinfo = *indexInfo;
 
-	build_segment_and_orderby_bms(caminfo, &icstate.segmentby_cols, &icstate.orderby_cols);
+	build_segment_and_orderby_bms(hsinfo, &icstate.segmentby_cols, &icstate.orderby_cols);
 
 	/* Translate index attribute numbers for the compressed relation */
 	for (int i = 0; i < indexInfo->ii_NumIndexAttrs; i++)
 	{
 		const AttrNumber attno = indexInfo->ii_IndexAttrNumbers[i];
-		const AttrNumber cattno = caminfo->columns[AttrNumberGetAttrOffset(attno)].cattnum;
+		const AttrNumber cattno = hsinfo->columns[AttrNumberGetAttrOffset(attno)].cattnum;
 
 		iinfo.ii_IndexAttrNumbers[i] = cattno;
 		icstate.arrow_columns[i] = NULL;
@@ -2181,7 +2174,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	/* Include the count column in the callback. It is needed to know the
 	 * uncompressed tuple count in case of building an index on the segmentby
 	 * column. */
-	iinfo.ii_IndexAttrNumbers[iinfo.ii_NumIndexAttrs++] = caminfo->count_cattno;
+	iinfo.ii_IndexAttrNumbers[iinfo.ii_NumIndexAttrs++] = hsinfo->count_cattno;
 	/* Check uniqueness on compressed */
 	iinfo.ii_Unique = false;
 	iinfo.ii_ExclusionOps = NULL;
@@ -2236,7 +2229,7 @@ hyperstore_index_validate_scan(Relation compressionRelation, Relation indexRelat
 }
 
 /* ------------------------------------------------------------------------
- * Miscellaneous callbacks for the compression AM
+ * Miscellaneous callbacks for the Hyperstore
  * ------------------------------------------------------------------------
  */
 static bool
@@ -2253,7 +2246,7 @@ hyperstore_relation_toast_am(Relation rel)
 }
 
 /* ------------------------------------------------------------------------
- * Planner related callbacks for the compression AM
+ * Planner related callbacks for the Hyperstore
  * ------------------------------------------------------------------------
  */
 
@@ -2279,10 +2272,10 @@ hyperstore_relation_size(Relation rel, ForkNumber forkNumber)
 	if (hyper_id == 0)
 		return ubytes;
 
-	HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
 	/* For ANALYZE, need to return sum for both relations. */
-	Relation crel = try_relation_open(caminfo->compressed_relid, AccessShareLock);
+	Relation crel = try_relation_open(hsinfo->compressed_relid, AccessShareLock);
 
 	if (crel == NULL)
 		return ubytes;
@@ -2320,7 +2313,7 @@ hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber 
 	BlockNumber relallvisible;
 	Relation crel;
 
-	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	rel->rd_tableam->relation_estimate_size(rel, attr_widths, pages, tuples, allvisfrac);
@@ -2330,7 +2323,7 @@ hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber 
 	 * non-compressed relation which also doesn't have the same number of
 	 * attribute (columns). If we pass NULL it will compute the estimate
 	 * instead. */
-	crel = table_open(caminfo->compressed_relid, AccessShareLock);
+	crel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	crel->rd_tableam->relation_estimate_size(crel, NULL, &cpages, &ctuples, &callvisfrac);
 	table_close(crel, NoLock);
 
@@ -2366,7 +2359,7 @@ hyperstore_fetch_toast_slice(Relation toastrel, Oid valueid, int32 attrsize, int
 }
 
 /* ------------------------------------------------------------------------
- * Executor related callbacks for the compression AM
+ * Executor related callbacks for the Hyperstore
  * ------------------------------------------------------------------------
  */
 
@@ -2386,7 +2379,7 @@ hyperstore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate
 }
 
 static Tuplesortstate *
-create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tupdesc)
+create_tuplesort_for_compress(const HyperstoreInfo *hsinfo, const TupleDesc tupdesc)
 {
 	/*
 	 * We compress the existing non-compressed data in the table when moving
@@ -2397,16 +2390,16 @@ create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tup
 	 * state they are and deal with compression as part of the normal
 	 * procedure.
 	 */
-	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * caminfo->num_keys);
-	Oid *sort_operators = palloc0(sizeof(*sort_operators) * caminfo->num_keys);
-	Oid *sort_collations = palloc0(sizeof(*sort_collations) * caminfo->num_keys);
-	bool *nulls_first = palloc0(sizeof(*nulls_first) * caminfo->num_keys);
+	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * hsinfo->num_keys);
+	Oid *sort_operators = palloc0(sizeof(*sort_operators) * hsinfo->num_keys);
+	Oid *sort_collations = palloc0(sizeof(*sort_collations) * hsinfo->num_keys);
+	bool *nulls_first = palloc0(sizeof(*nulls_first) * hsinfo->num_keys);
 	int segmentby_pos = 0;
 	int orderby_pos = 0;
 
-	for (int i = 0; i < caminfo->num_columns; i++)
+	for (int i = 0; i < hsinfo->num_columns; i++)
 	{
-		const ColumnCompressionSettings *column = &caminfo->columns[i];
+		const ColumnCompressionSettings *column = &hsinfo->columns[i];
 		const Form_pg_attribute attr = &tupdesc->attrs[i];
 
 		Assert(attr->attnum == column->attnum);
@@ -2426,7 +2419,7 @@ create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tup
 			}
 			else if (column->is_orderby)
 			{
-				sort_index = caminfo->num_segmentby + orderby_pos++;
+				sort_index = hsinfo->num_segmentby + orderby_pos++;
 				sort_op = !column->orderby_desc ? tentry->lt_opr : tentry->gt_opr;
 			}
 
@@ -2443,7 +2436,7 @@ create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tup
 	}
 
 	return tuplesort_begin_heap(tupdesc,
-								caminfo->num_keys,
+								hsinfo->num_keys,
 								sort_keys,
 								sort_operators,
 								sort_collations,
@@ -2454,7 +2447,7 @@ create_tuplesort_for_compress(const HyperstoreInfo *caminfo, const TupleDesc tup
 }
 
 /*
- * Convert a table to compression AM.
+ * Convert a table to Hyperstore.
  *
  * Need to setup the conversion state used to compress the data.
  */
@@ -2464,7 +2457,7 @@ convert_to_hyperstore(Oid relid)
 	Relation relation = table_open(relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	bool compress_chunk_created;
-	HyperstoreInfo *caminfo =
+	HyperstoreInfo *hsinfo =
 		lazy_build_hyperstore_info_cache(relation, true, false, &compress_chunk_created);
 
 	if (!compress_chunk_created)
@@ -2472,14 +2465,14 @@ convert_to_hyperstore(Oid relid)
 		/* A compressed relation already exists, so converting from legacy
 		 * compression. It is only necessary to create the proxy vacuum
 		 * index. */
-		create_proxy_vacuum_index(relation, caminfo->compressed_relid);
+		create_proxy_vacuum_index(relation, hsinfo->compressed_relid);
 		table_close(relation, AccessShareLock);
 		return;
 	}
 
 	MemoryContext oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
 	ConversionState *state = palloc0(sizeof(ConversionState));
-	state->tuplesortstate = create_tuplesort_for_compress(caminfo, tupdesc);
+	state->tuplesortstate = create_tuplesort_for_compress(hsinfo, tupdesc);
 	Assert(state->tuplesortstate);
 	state->relid = relid;
 	conversionstate = state;
@@ -2489,7 +2482,7 @@ convert_to_hyperstore(Oid relid)
 
 /*
  * List of relation IDs used to clean up the compressed relation when
- * converting from compression TAM to another TAM (typically heap).
+ * converting from Hyperstore to another TAM (typically heap).
  */
 static List *cleanup_relids = NIL;
 
@@ -2645,7 +2638,7 @@ convert_to_hyperstore_finish(Oid relid)
 }
 
 /*
- * Convert the chunk away from compression AM to another table access method.
+ * Convert the chunk away from Hyperstore to another table access method.
  * When this happens it is necessary to cleanup metadata.
  */
 static void
@@ -2654,7 +2647,7 @@ convert_from_hyperstore(Oid relid)
 	int32 chunk_id = get_chunk_id_from_relid(relid);
 	ts_compression_chunk_size_delete(chunk_id);
 
-	/* Need to truncate the compressed relation after converting from compression TAM */
+	/* Need to truncate the compressed relation after converting from Hyperstore */
 	TS_WITH_MEMORY_CONTEXT(CurTransactionContext,
 						   { cleanup_relids = lappend_oid(cleanup_relids, relid); });
 }
@@ -2677,8 +2670,8 @@ hyperstore_alter_access_method_finish(Oid relid, bool to_other_am)
 	if (to_other_am)
 		cleanup_compression_relations();
 
-	/* Finishing the conversion to compression TAM is handled in
-	 * the finish_bulk_insert callback */
+	/* Finishing the conversion to Hyperstore is handled in the
+	 * finish_bulk_insert callback */
 }
 
 /*
@@ -2688,13 +2681,13 @@ hyperstore_alter_access_method_finish(Oid relid, bool to_other_am)
  * Indexes on segmentby columns are optimized to store only one index
  * reference per segment instead of one per value in each segment. This relies
  * on "unwrapping" the segment during scanning. However, with an
- * IndexOnlyScan, the Hyperstore TAM's index_fetch_tuple() is not be called to
- * fetch the heap tuple (since the scan returns directly from the index), and
- * there is no opportunity to unwrap the tuple. Therefore, turn IndexOnlyScans
- * into regular IndexScans on segmentby indexes.
+ * IndexOnlyScan, Hyperstore's index_fetch_tuple() is not be called to fetch
+ * the heap tuple (since the scan returns directly from the index), and there
+ * is no opportunity to unwrap the tuple. Therefore, turn IndexOnlyScans into
+ * regular IndexScans on segmentby indexes.
  */
 static void
-convert_index_only_scans(const HyperstoreInfo *caminfo, List *pathlist)
+convert_index_only_scans(const HyperstoreInfo *hsinfo, List *pathlist)
 {
 	ListCell *lc;
 
@@ -2713,7 +2706,7 @@ convert_index_only_scans(const HyperstoreInfo *caminfo, List *pathlist)
 			{
 				const AttrNumber attno = indkeys->values[i];
 
-				if (!caminfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
+				if (!hsinfo->columns[AttrNumberGetAttrOffset(attno)].is_segmentby)
 				{
 					is_segmentby_index = false;
 					break;
@@ -2735,14 +2728,14 @@ hyperstore_set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht)
 {
 	const RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
 	Relation relation = table_open(rte->relid, AccessShareLock);
-	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
-	convert_index_only_scans(caminfo, rel->pathlist);
-	convert_index_only_scans(caminfo, rel->partial_pathlist);
+	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+	convert_index_only_scans(hsinfo, rel->pathlist);
+	convert_index_only_scans(hsinfo, rel->partial_pathlist);
 	table_close(relation, AccessShareLock);
 }
 
 /* ------------------------------------------------------------------------
- * Definition of the compression table access method.
+ * Definition of the Hyperstore table access method.
  * ------------------------------------------------------------------------
  */
 
