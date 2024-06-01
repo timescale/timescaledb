@@ -2,8 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set ECHO queries
-
 \ir include/setup_hyperstore.sql
 
 -- We disable columnar scan for these tests since we have a dedicated
