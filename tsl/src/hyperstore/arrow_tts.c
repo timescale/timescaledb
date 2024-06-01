@@ -54,20 +54,20 @@ arrow_slot_get_attribute_offset_map(TupleTableSlot *slot)
 	/* Get the mappings from the relation cache, but put them in the slot's
 	 * memory context since the cache might become invalidated and rebuilt. */
 	const Relation rel = RelationIdGetRelation(relid);
-	const HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(rel);
+	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
-	for (int i = 0; i < caminfo->num_columns; i++)
+	for (int i = 0; i < hsinfo->num_columns; i++)
 	{
-		if (caminfo->columns[i].is_dropped)
+		if (hsinfo->columns[i].is_dropped)
 		{
 			Assert(TupleDescAttr(tupdesc, i)->attisdropped);
 			aslot->attrs_offset_map[i] = -1;
 		}
 		else
 		{
-			Assert(caminfo->columns[i].attnum == TupleDescAttr(tupdesc, i)->attnum);
-			Assert(caminfo->columns[i].cattnum != InvalidAttrNumber);
-			aslot->attrs_offset_map[i] = AttrNumberGetAttrOffset(caminfo->columns[i].cattnum);
+			Assert(hsinfo->columns[i].attnum == TupleDescAttr(tupdesc, i)->attnum);
+			Assert(hsinfo->columns[i].cattnum != InvalidAttrNumber);
+			aslot->attrs_offset_map[i] = AttrNumberGetAttrOffset(hsinfo->columns[i].cattnum);
 		}
 	}
 
