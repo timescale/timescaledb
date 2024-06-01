@@ -10,10 +10,8 @@
 #include <nodes/parsenodes.h>
 
 #include "ts_catalog/catalog.h"
-#include <chunk.h>
-
-#include "compat/compat.h"
 #include "with_clause_parser.h"
+#include <chunk.h>
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
