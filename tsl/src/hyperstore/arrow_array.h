@@ -4,8 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#ifndef HYPERSTORE_ARROW_ARRAY_H_
-#define HYPERSTORE_ARROW_ARRAY_H_
+#pragma once
 
 #include <postgres.h>
 
@@ -20,5 +19,3 @@ extern ArrowArray *default_decompress_all(Datum compressed, Oid element_type,
 
 #define TYPLEN_VARLEN (-1)
 #define TYPLEN_CSTRING (-2)
-
-#endif /* HYPERSTORE_ARROW_ARRAY_H_ */
