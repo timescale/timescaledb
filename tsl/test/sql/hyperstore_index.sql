@@ -19,6 +19,9 @@ on (att.attrelid=ind.indrelid and att.attnum=ind.indkey[0])
 inner join show_chunks(:'hypertable') ch on (ch = att.attrelid)
 order by chunk, index;
 
+-- To get stable plans
+set max_parallel_workers_per_gather to 0;
+
 -- save some reference data from an index (only) scan
 explain (costs off)
 select location_id, count(*) into orig from :hypertable
@@ -88,8 +91,6 @@ select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2
 select twist_chunk(show_chunks(:'hypertable'));
 
 vacuum analyze :hypertable;
-
-set max_parallel_workers_per_gather to 0;
 
 -- Test sequence scan
 set enable_indexscan to off;
