@@ -2,8 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set ECHO queries
-
 \ir include/hyperstore_helpers.sql
 
 create table readings(
