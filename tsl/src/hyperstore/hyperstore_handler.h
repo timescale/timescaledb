@@ -3,8 +3,7 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
-#ifndef TIMESCALEDB_TSL_HYPERSTORE_HANDLER_H
-#define TIMESCALEDB_TSL_HYPERSTORE_HANDLER_H
+#pragma once
 
 #include <postgres.h>
 #include <access/tableam.h>
@@ -63,5 +62,3 @@ typedef struct HyperstoreInfo
 } HyperstoreInfo;
 
 extern HyperstoreInfo *RelationGetHyperstoreInfo(Relation rel);
-
-#endif /* TIMESCALEDB_TSL_HYPERSTORE_HANDLER_H */
