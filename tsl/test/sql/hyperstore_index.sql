@@ -2,8 +2,6 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
-\set ECHO queries
-
 \ir include/setup_hyperstore.sql
 
 -- Redefine the indexes to include one value field in the index and
