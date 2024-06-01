@@ -4,8 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#ifndef HYPERSTORE_ARROW_ARRAY_H_
-#define HYPERSTORE_ARROW_ARRAY_H_
+#pragma once
 
 #include <postgres.h>
 
@@ -21,5 +20,3 @@ extern void arrow_release_buffers(ArrowArray *array);
 
 #define TYPLEN_VARLEN (-1)
 #define TYPLEN_CSTRING (-2)
-
-#endif /* HYPERSTORE_ARROW_ARRAY_H_ */
