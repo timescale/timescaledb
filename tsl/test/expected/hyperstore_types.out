@@ -484,3 +484,77 @@ where lhs.created_at is null or rhs.created_at is null;
 
 drop table test_jsonb;
 drop table test_jsonb_saved;
+-- Test that we can use NAME type for a field and compare with a
+-- constant value. This is a fixed-size type with a size > 8 and we
+-- will try to use a scan key for this.
+\set a_name temp
+\set the_table test_name
+\set the_type name
+\set the_generator gen_random_uuid()::name
+\set the_aggregate count(*)
+\set the_clause value = :'my_uuid'
+\ir include/hyperstore_type_table.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set ECHO queries
+create table test_name(created_at timestamptz not null unique, value name);
+select create_hypertable('test_name', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (13,t)
+(1 row)
+
+alter table test_name set (
+      timescaledb.compress,
+      timescaledb.compress_segmentby = '',
+      timescaledb.compress_orderby = 'created_at'
+);
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert some data to produce at least two chunks.
+\set ECHO queries
+insert into test_name(created_at, value)
+select t, gen_random_uuid()::name
+from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
+-- Save away the table so that we can make sure that a hyperstore
+-- table and a heap table produce the same result.
+create table :saved_table as select * from :the_table;
+-- Compress the rows in the hyperstore.
+select twist_chunk(show_chunks(:'the_table'));
+               twist_chunk                
+------------------------------------------
+ _timescaledb_internal._hyper_13_37_chunk
+ _timescaledb_internal._hyper_13_38_chunk
+ _timescaledb_internal._hyper_13_39_chunk
+(3 rows)
+
+-- This part of the include file will run a query with the aggregate
+-- provided by the including file and test that using a hyperstore
+-- with compressed rows and a normal table produces the same result
+-- for the query with the given aggregate.
+\set ECHO queries
+with
+  lhs as (
+      select date_trunc('hour', created_at) as created_at,
+      	     count(*) as "count(*)"
+      from test_name where (value='e0317dfc-77cd-46da-a4e9-8626ce49ccad') group by date_trunc('hour', created_at)
+  ),
+  rhs as (
+      select date_trunc('hour', created_at) as created_at,
+      	     count(*) as "count(*)"
+      from test_name_saved where (value='e0317dfc-77cd-46da-a4e9-8626ce49ccad') group by date_trunc('hour', created_at)
+  )
+select lhs.*, rhs.*
+from lhs full join rhs using (created_at)
+where lhs.created_at is null or rhs.created_at is null;
+ created_at | count(*) | created_at | count(*) 
+------------+----------+------------+----------
+(0 rows)
+
+drop table test_name;
+drop table test_name_saved;
