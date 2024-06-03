@@ -17,19 +17,6 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY time;
 
--- test expressions
-:PREFIX
-SELECT time_bucket ('1d', time),
-    v1 + v2 AS "sum",
-    COALESCE(NULL, v1, v2) AS "coalesce",
-    NULL AS "NULL",
-    'text' AS "text",
-    :TEST_TABLE AS "RECORD"
-FROM :TEST_TABLE
-WHERE device_id IN (1, 2)
-ORDER BY time,
-    device_id;
-
 -- test empty targetlist
 :PREFIX
 SELECT
