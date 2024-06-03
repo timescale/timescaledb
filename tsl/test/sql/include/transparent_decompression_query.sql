@@ -74,22 +74,16 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ;
 
-RESET enable_sort;
-
 --
 -- test qual pushdown
 --
 -- v3 is not segment by or order by column so should not be pushed down
-
 :PREFIX_VERBOSE
 SELECT *
 FROM :TEST_TABLE
 WHERE v3 > 10.0
 ORDER BY time,
     device_id;
-
--- These plans are flaky between MergeAppend and Sort over Append.
-SET enable_sort TO OFF;
 
 -- device_id constraint should be pushed down
 :PREFIX
@@ -443,13 +437,15 @@ RESET enable_sort;
 --
 -- test plan time exclusion
 -- first chunk should be excluded
-
+-- This plan is flaky between MergeAppend and Sort over Append.
+SET enable_sort TO off;
 :PREFIX
 SELECT *
 FROM :TEST_TABLE
 WHERE time > '2000-01-08'
 ORDER BY time,
     device_id;
+RESET enable_sort;
 
 -- test runtime exclusion
 -- first chunk should be excluded
