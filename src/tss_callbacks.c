@@ -21,8 +21,8 @@
 
 #include <postgres.h>
 
-#include <fmgr.h>
 #include <executor/instrument.h>
+#include <fmgr.h>
 #include <utils/elog.h>
 
 #include "guc.h"

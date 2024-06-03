@@ -7,8 +7,8 @@
 #include <postgres.h>
 #include <access/htup_details.h>
 #include <access/tupmacs.h>
-#include <catalog/pg_aggregate.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_aggregate.h>
 #include <catalog/pg_type.h>
 #include <common/base64.h>
 #include <funcapi.h>
@@ -19,14 +19,14 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "compression/array.h"
+#include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
+#include "compression/datum_serialize.h"
 #include "compression/dictionary.h"
+#include "compression/dictionary_hash.h"
 #include "compression/simple8b_rle.h"
 #include "compression/simple8b_rle_bitmap.h"
-#include "compression/array.h"
-#include "compression/dictionary_hash.h"
-#include "compression/datum_serialize.h"
-#include "compression/arrow_c_data_interface.h"
 
 /*
  * A compression bitmap is stored as

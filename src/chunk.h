@@ -8,14 +8,13 @@
 #include <postgres.h>
 #include <access/htup.h>
 #include <access/tupdesc.h>
-#include <utils/hsearch.h>
 #include <foreign/foreign.h>
+#include <utils/hsearch.h>
 
-#include "export.h"
-#include "ts_catalog/catalog.h"
 #include "chunk_constraint.h"
-#include "hypertable.h"
 #include "export.h"
+#include "hypertable.h"
+#include "ts_catalog/catalog.h"
 
 #define INVALID_CHUNK_ID 0
 #define IS_OSM_CHUNK(chunk) ((chunk)->fd.osm_chunk == true)

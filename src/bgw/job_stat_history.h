@@ -5,9 +5,9 @@
  */
 #pragma once
 
-#include "ts_catalog/catalog.h"
 #include "job.h"
 #include "job_stat.h"
+#include "ts_catalog/catalog.h"
 
 #define INVALID_BGW_JOB_STAT_HISTORY_ID 0
 

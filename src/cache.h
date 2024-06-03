@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include <utils/memutils.h>
 #include <utils/hsearch.h>
+#include <utils/memutils.h>
 
 #include "export.h"
 

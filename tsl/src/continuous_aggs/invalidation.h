@@ -7,8 +7,8 @@
 
 #include <postgres.h>
 
-#include "ts_catalog/continuous_agg.h"
 #include "continuous_aggs/materialize.h"
+#include "ts_catalog/continuous_agg.h"
 
 /*
  * Invalidation.

@@ -13,8 +13,8 @@
 #include <utils/resowner.h>
 
 #include "guc.h"
-#include "job_stat_history.h"
 #include "job_stat.h"
+#include "job_stat_history.h"
 #include "jsonb_utils.h"
 #include "scanner.h"
 #include "time_bucket.h"

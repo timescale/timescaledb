@@ -3,14 +3,14 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-TIMESCALE for a copy of the license.
  */
+#include <compat/compat.h>
 #include <postgres.h>
+#include <executor/spi.h>
 #include <fmgr.h>
+#include <lib/stringinfo.h>
 #include <scan_iterator.h>
 #include <scanner.h>
 #include <time_utils.h>
-#include <compat/compat.h>
-#include <executor/spi.h>
-#include <lib/stringinfo.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/palloc.h>
@@ -19,10 +19,10 @@
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
-#include "ts_catalog/continuous_agg.h"
-#include "ts_catalog/continuous_aggs_watermark.h"
 #include "debug_assert.h"
 #include "materialize.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/continuous_aggs_watermark.h"
 
 #define CHUNKIDFROMRELID "chunk_id_from_relid"
 #define CONTINUOUS_AGG_CHUNK_ID_COL_NAME "chunk_id"

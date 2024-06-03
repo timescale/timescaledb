@@ -10,13 +10,13 @@
 #include <catalog/pg_aggregate.h>
 #include <catalog/pg_type.h>
 #include <common/base64.h>
+#include <funcapi.h>
+#include <lib/stringinfo.h>
 #include <utils/builtins.h>
+#include <utils/date.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
-#include <utils/date.h>
-#include <funcapi.h>
-#include <lib/stringinfo.h>
 
 #include <utils.h>
 

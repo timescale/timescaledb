@@ -47,8 +47,8 @@
 #include "compat/compat.h"
 #include "chunk.h"
 #include "cross_module_fn.h"
-#include "extension_constants.h"
 #include "extension.h"
+#include "extension_constants.h"
 #include "guc.h"
 #include "hypertable.h"
 #include "hypertable_restrict_info.h"
@@ -911,8 +911,8 @@ should_order_append(PlannerInfo *root, RelOptInfo *rel, Hypertable *ht, List *jo
  * Get chunks from restrict info.
  *
  * If appends are returned in order appends_ordered on rel->fdw_private is set to true.
- * To make verifying pathkeys easier in set_rel_pathlist the attno of the column ordered by
- * is
+ * To make verifying pathkeys easier in set_rel_pathlist the hypertable attno of the column
+ * ordered by is stored in rel->fdw_private.
  * If the hypertable uses space partitioning the nested oids are stored in nested_oids
  * on rel->fdw_private when appends are ordered.
  */

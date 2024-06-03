@@ -8,23 +8,23 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
+#include <miscadmin.h>
 #include <utils/builtins.h>
-#include <utils/timestamp.h>
 #include <utils/lsyscache.h>
 #include <utils/syscache.h>
-#include <miscadmin.h>
+#include <utils/timestamp.h>
 
 #include <compat/compat.h>
 #include <dimension.h>
 #include <hypertable_cache.h>
 #include <jsonb_utils.h>
 
-#include "bgw_policy/job_api.h"
-#include "bgw_policy/job.h"
-#include "bgw_policy/reorder_api.h"
-#include "bgw/job_stat.h"
 #include "bgw/job.h"
+#include "bgw/job_stat.h"
 #include "bgw/timer.h"
+#include "bgw_policy/job.h"
+#include "bgw_policy/job_api.h"
+#include "bgw_policy/reorder_api.h"
 #include "errors.h"
 #include "guc.h"
 #include "hypertable.h"

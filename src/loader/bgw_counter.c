@@ -7,13 +7,13 @@
 #include <postgres.h>
 
 #include <miscadmin.h>
-#include <storage/lwlock.h>
-#include <utils/hsearch.h>
-#include <storage/spin.h>
-#include <storage/shmem.h>
 #include <storage/ipc.h>
 #include <storage/latch.h>
+#include <storage/lwlock.h>
+#include <storage/shmem.h>
+#include <storage/spin.h>
 #include <utils/guc.h>
+#include <utils/hsearch.h>
 
 #include "bgw_counter.h"
 #include "extension_constants.h"

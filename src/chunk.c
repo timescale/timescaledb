@@ -5,8 +5,8 @@
  */
 #include <postgres.h>
 
-#include <access/htup_details.h>
 #include <access/htup.h>
+#include <access/htup_details.h>
 #include <access/reloptions.h>
 #include <access/tupdesc.h>
 #include <access/xact.h>
@@ -41,23 +41,23 @@
 
 #include "chunk.h"
 
+#include "compat/compat.h"
 #include "bgw_policy/chunk_stats.h"
 #include "cache.h"
 #include "chunk_index.h"
 #include "chunk_scan.h"
-#include "compat/compat.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "debug_point.h"
+#include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "dimension.h"
 #include "errors.h"
 #include "export.h"
 #include "extension.h"
 #include "hypercube.h"
-#include "hypertable_cache.h"
 #include "hypertable.h"
+#include "hypertable_cache.h"
 #include "osm_callbacks.h"
 #include "partitioning.h"
 #include "process_utility.h"

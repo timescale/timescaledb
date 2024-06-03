@@ -15,20 +15,20 @@
 #include <hypertable_cache.h>
 
 #include "bgw/job.h"
-#include "ts_catalog/continuous_agg.h"
-#include "chunk.h"
-#include "retention_api.h"
-#include "errors.h"
-#include "hypertable.h"
-#include "dimension.h"
-#include "policy_utils.h"
-#include "utils.h"
-#include "guc.h"
-#include "jsonb_utils.h"
-#include "bgw_policy/job.h"
-#include "bgw_policy/policies_v2.h"
 #include "bgw/job_stat.h"
 #include "bgw/timer.h"
+#include "bgw_policy/job.h"
+#include "bgw_policy/policies_v2.h"
+#include "chunk.h"
+#include "dimension.h"
+#include "errors.h"
+#include "guc.h"
+#include "hypertable.h"
+#include "jsonb_utils.h"
+#include "policy_utils.h"
+#include "retention_api.h"
+#include "ts_catalog/continuous_agg.h"
+#include "utils.h"
 
 Datum
 policy_retention_proc(PG_FUNCTION_ARGS)

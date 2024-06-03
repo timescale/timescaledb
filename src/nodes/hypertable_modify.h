@@ -6,8 +6,8 @@
 #pragma once
 
 #include <postgres.h>
-#include <nodes/execnodes.h>
 #include <foreign/fdwapi.h>
+#include <nodes/execnodes.h>
 
 #include "hypertable.h"
 #include "import/ht_hypertable_modify.h"

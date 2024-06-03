@@ -5,6 +5,7 @@
  */
 #include <postgres.h>
 
+#include <unistd.h>
 #include <access/xact.h>
 #include <catalog/pg_authid.h>
 #include <executor/execdebug.h>
@@ -21,7 +22,6 @@
 #include <storage/procarray.h>
 #include <storage/sinvaladt.h>
 #include <tcop/tcopprot.h>
-#include <unistd.h>
 #include <utils/acl.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
@@ -31,16 +31,16 @@
 #include <utils/syscache.h>
 #include <utils/timestamp.h>
 
+#include "compat/compat.h"
+#include "bgw/scheduler.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/policy.h"
-#include "bgw/scheduler.h"
-#include "compat/compat.h"
 #include "config.h"
 #include "cross_module_fn.h"
 #include "debug_assert.h"
 #include "extension.h"
-#include "job_stat.h"
 #include "job.h"
+#include "job_stat.h"
 #include "jsonb_utils.h"
 #include "license_guc.h"
 #include "scan_iterator.h"

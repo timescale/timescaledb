@@ -17,9 +17,9 @@
 #include <utils/snapmgr.h>
 
 #include "debug_point.h"
+#include "hypertable.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
-#include "hypertable.h"
 
 static void
 cagg_watermark_init_scan_by_mat_hypertable_id(ScanIterator *iterator, const int32 mat_hypertable_id)

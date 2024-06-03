@@ -65,7 +65,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Run codespell
         run: |
-          find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.sh" \) \
+          find . -type f \( -name "*.c" -or -name "*.h" -or -name "*.yaml" -or -name "*.yml" -or -name "*.sh" -or -name "*.cmake" -or -name "*.py" -or -name "*.pl" -or -name "CMakeLists.txt" \) \
             -exec codespell -I .github/codespell-ignore-words {} \+
 
   cc_checks:
@@ -107,8 +107,24 @@ jobs:
             psutil pygithub pglast
           pip list
           pip list --user
+
+      # Using e375302a until 1.10.1 get released including the following PR
+      # https://github.com/postgrespro/testgres/pull/125
+      - name: Checkout testgres
+        uses: actions/checkout@v4
+        with:
+          repository: 'postgrespro/testgres'
+          path: 'testgres'
+          ref: e375302a114cd4df3ceed54d6526f250c44c08e7
+
+      - name: Build and install testgres
+        run: |
+          cd testgres
+          python setup.py install --user
+
       - name: Checkout source
         uses: actions/checkout@v4
+
       - name: Run prospector
         run: |
           find . -type f -name "*.py" -print -exec prospector {} + -exec black {} +

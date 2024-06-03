@@ -23,15 +23,15 @@
 
 #include "cross_module_fn.h"
 #include "debug_assert.h"
+#include "estimate.h"
+#include "extension_constants.h"
+#include "gapfill.h"
+#include "import/planner.h"
+#include "nodes/chunk_append/chunk_append.h"
+#include "nodes/print.h"
 #include "partialize.h"
 #include "planner.h"
-#include "gapfill.h"
-#include "nodes/print.h"
-#include "extension_constants.h"
 #include "utils.h"
-#include "estimate.h"
-#include "nodes/chunk_append/chunk_append.h"
-#include "import/planner.h"
 
 #define TS_PARTIALFN "partialize_agg"
 

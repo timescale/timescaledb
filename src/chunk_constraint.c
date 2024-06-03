@@ -7,10 +7,10 @@
 #include <access/heapam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
+#include <catalog/heap.h>
 #include <catalog/indexing.h>
 #include <catalog/objectaddress.h>
 #include <catalog/pg_constraint.h>
-#include <catalog/heap.h>
 #include <commands/tablecmds.h>
 #include <funcapi.h>
 #include <nodes/makefuncs.h>
@@ -19,26 +19,26 @@
 #include <utils/hsearch.h>
 #include <utils/lsyscache.h>
 #include <utils/palloc.h>
-#include <utils/relcache.h>
 #include <utils/rel.h>
+#include <utils/relcache.h>
 #include <utils/syscache.h>
 
 #include "compat/compat.h"
-#include "export.h"
-#include "scanner.h"
-#include "scan_iterator.h"
+#include "chunk.h"
 #include "chunk_constraint.h"
 #include "chunk_index.h"
 #include "constraint.h"
 #include "debug_assert.h"
-#include "dimension_vector.h"
 #include "dimension_slice.h"
-#include "hypercube.h"
-#include "chunk.h"
-#include "hypertable.h"
+#include "dimension_vector.h"
 #include "errors.h"
-#include "process_utility.h"
+#include "export.h"
+#include "hypercube.h"
+#include "hypertable.h"
 #include "partitioning.h"
+#include "process_utility.h"
+#include "scan_iterator.h"
+#include "scanner.h"
 
 #define DEFAULT_EXTRA_CONSTRAINTS_SIZE 4
 

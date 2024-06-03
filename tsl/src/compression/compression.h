@@ -9,14 +9,14 @@
 #include <executor/tuptable.h>
 #include <fmgr.h>
 #include <lib/stringinfo.h>
-#include <utils/relcache.h>
 #include <nodes/execnodes.h>
+#include <utils/relcache.h>
 
 typedef struct BulkInsertStateData *BulkInsertState;
 
 #include "compat/compat.h"
-#include "nodes/decompress_chunk/detoaster.h"
 #include "hypertable.h"
+#include "nodes/decompress_chunk/detoaster.h"
 #include "segment_meta.h"
 #include "ts_catalog/compression_settings.h"
 

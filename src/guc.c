@@ -4,17 +4,17 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
-#include <utils/guc.h>
-#include <utils/varlena.h>
-#include <utils/regproc.h>
-#include <parser/parse_func.h>
 #include <miscadmin.h>
+#include <parser/parse_func.h>
+#include <utils/guc.h>
+#include <utils/regproc.h>
+#include <utils/varlena.h>
 
-#include "guc.h"
-#include "extension.h"
-#include "license_guc.h"
 #include "config.h"
+#include "extension.h"
+#include "guc.h"
 #include "hypertable_cache.h"
+#include "license_guc.h"
 #ifdef USE_TELEMETRY
 #include "telemetry/telemetry.h"
 #endif
@@ -71,7 +71,7 @@ bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
-TSDLLEXPORT bool ts_guc_enable_decompression_logrep_markers = false;
+TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
 bool ts_guc_enable_vectorized_aggregation = true;
@@ -476,13 +476,12 @@ _guc_init(void)
 							 NULL,
 							 NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_decompression_logrep_markers"),
-							 "Enable logical replication markers for decompression ops",
-							 "Enable the generation of logical replication markers in the "
-							 "WAL stream to mark the start and end of decompressions (for insert, "
-							 "update, and delete operations)",
-							 &ts_guc_enable_decompression_logrep_markers,
-							 false,
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_compression_wal_markers"),
+							 "Enable WAL markers for compression ops",
+							 "Enable the generation of markers in the WAL stream which mark the "
+							 "start and end of compression operations",
+							 &ts_guc_enable_compression_wal_markers,
+							 true,
 							 PGC_SIGHUP,
 							 0,
 							 NULL,

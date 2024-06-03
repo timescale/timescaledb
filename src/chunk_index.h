@@ -6,9 +6,9 @@
 #pragma once
 
 #include <postgres.h>
+#include <fmgr.h>
 #include <nodes/execnodes.h>
 #include <nodes/parsenodes.h>
-#include <fmgr.h>
 #include <utils/relcache.h>
 
 #include "compat/compat.h"

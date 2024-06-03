@@ -5,11 +5,11 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
+#include <catalog/pg_collation.h>
+#include <commands/extension.h>
 #include <fmgr.h>
 #include <miscadmin.h>
-#include <commands/extension.h>
 #include <storage/ipc.h>
-#include <catalog/pg_collation.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
@@ -17,22 +17,22 @@
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
+#include "bgw_policy/policy.h"
 #include "config.h"
-#include "version.h"
-#include "guc.h"
-#include "telemetry.h"
-#include "ts_catalog/metadata.h"
-#include "telemetry_metadata.h"
-#include "hypertable.h"
 #include "extension.h"
-#include "net/http.h"
+#include "functions.h"
+#include "guc.h"
+#include "hypertable.h"
 #include "jsonb_utils.h"
 #include "license_guc.h"
-#include "bgw_policy/policy.h"
-#include "ts_catalog/compression_chunk_size.h"
-#include "stats.h"
-#include "functions.h"
+#include "net/http.h"
 #include "replication.h"
+#include "stats.h"
+#include "telemetry.h"
+#include "telemetry_metadata.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/metadata.h"
+#include "version.h"
 
 #include "cross_module_fn.h"
 

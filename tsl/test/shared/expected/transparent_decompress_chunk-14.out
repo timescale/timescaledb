@@ -398,7 +398,8 @@ QUERY PLAN
                ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk
                      Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                      ->  Parallel Seq Scan on compress_hyper_X_X_chunk
-(8 rows)
+                           Filter: ((_ts_meta_max_1 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
+(9 rows)
 
 --functions not yet optimized
 :PREFIX_NO_VERBOSE SELECT * FROM :TEST_TABLE WHERE time < now() ORDER BY time, device_id LIMIT 10;
@@ -1039,3 +1040,27 @@ EXECUTE param_prep (1);
 
 DEALLOCATE param_prep;
 RESET plan_cache_mode;
+-- test hypertable being non-toplevel equivalence member #6925
+CREATE TABLE i6925_t1(observed timestamptz not null, queryid int8, total_exec_time int8);
+CREATE TABLE i6925_t2(LIKE i6925_t1);
+SELECT table_name FROM create_hypertable('i6925_t1', 'observed');
+ table_name 
+ i6925_t1
+(1 row)
+
+ALTER TABLE i6925_t1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'queryid');
+NOTICE:  default order by for hypertable "i6925_t1" is set to "observed DESC"
+INSERT INTO i6925_t1 SELECT '2020-01-01', 1, 1;
+SELECT count(compress_chunk(chunk_name)) FROM show_chunks('i6925_t1') chunk_name;
+ count 
+     1
+(1 row)
+
+SELECT queryid, lag(total_exec_time) OVER (PARTITION BY queryid) FROM (SELECT * FROM i6925_t1 UNION ALL SELECT * FROM i6925_t2) q;
+ queryid | lag 
+---------+-----
+       1 |    
+(1 row)
+
+DROP TABLE i6925_t1;
+DROP TABLE i6925_t2;

@@ -29,8 +29,8 @@
 #include "compat/compat.h"
 #include "constraint_aware_append.h"
 #include "debug_assert.h"
-#include "nodes/chunk_append/transform.h"
 #include "guc.h"
+#include "nodes/chunk_append/transform.h"
 #include "utils.h"
 
 /*
