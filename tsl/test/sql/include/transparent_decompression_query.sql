@@ -320,12 +320,15 @@ LIMIT 10;
 --
 -- should not produce ordered path
 
+-- This plan is flaky between MergeAppend over Sorts and Sort over Append
+SET enable_sort TO off;
 :PREFIX_VERBOSE
 SELECT *
 FROM :TEST_TABLE
 WHERE time > '2000-01-08'
 ORDER BY time,
     device_id;
+RESET enable_sort;
 
 -- should produce ordered path
 :PREFIX_VERBOSE
