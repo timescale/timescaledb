@@ -46,6 +46,23 @@ WHERE device_id < 0;
 SELECT 1
 FROM :TEST_TABLE;
 
+-- The following plans are flaky between MergeAppend or Sort + Append.
+SET enable_sort = off;
+
+-- test expressions
+:PREFIX
+SELECT time_bucket ('1d', time),
+    v1 + v2 AS "sum",
+    COALESCE(NULL, v1, v2) AS "coalesce",
+    NULL AS "NULL",
+    'text' AS "text",
+    :TEST_TABLE AS "RECORD"
+FROM :TEST_TABLE
+WHERE device_id IN (1, 2)
+ORDER BY time,
+    device_id
+;
+
 -- test constraints not present in targetlist
 :PREFIX
 SELECT v1
@@ -86,6 +103,8 @@ WHERE device_id = 1
 ORDER BY time,
     device_id
 LIMIT 10;
+
+RESET enable_sort;
 
 -- test IS NULL / IS NOT NULL
 :PREFIX
@@ -311,12 +330,15 @@ LIMIT 10;
 --
 -- should not produce ordered path
 
+-- This plan is flaky between MergeAppend over Sorts and Sort over Append
+SET enable_sort TO off;
 :PREFIX_VERBOSE
 SELECT *
 FROM :TEST_TABLE
 WHERE time > '2000-01-08'
 ORDER BY time,
     device_id;
+RESET enable_sort;
 
 -- should produce ordered path
 :PREFIX_VERBOSE
@@ -382,7 +404,10 @@ ORDER BY device_id,
     v0,
     v1 DESC;
 
--- should not produce ordered path
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
+
+-- should not produce ordered path.
 :PREFIX_VERBOSE
 SELECT *
 FROM :TEST_TABLE
@@ -423,13 +448,13 @@ ORDER BY device_id DESC,
 --
 -- test plan time exclusion
 -- first chunk should be excluded
-
 :PREFIX
 SELECT *
 FROM :TEST_TABLE
 WHERE time > '2000-01-08'
 ORDER BY time,
     device_id;
+RESET enable_sort;
 
 -- test runtime exclusion
 -- first chunk should be excluded
@@ -569,6 +594,9 @@ ORDER BY device_id;
 
 DROP INDEX tmp_idx CASCADE;
 
+-- These plans are flaky between MergeAppend and Sort over Append.
+SET enable_sort TO OFF;
+
 --use the peer index
 :PREFIX_VERBOSE
 SELECT *
@@ -576,6 +604,8 @@ FROM :TEST_TABLE
 WHERE device_id_peer = 1
 ORDER BY device_id_peer,
     time;
+
+RESET enable_sort;
 
 :PREFIX_VERBOSE
 SELECT device_id_peer
@@ -611,6 +641,9 @@ WHERE device_id IN (
         VALUES (1));
 
 --with multiple values can get a semi-join or nested loop depending on seq_page_cost.
+SET enable_hashjoin TO OFF;
+SET enable_mergejoin TO OFF;
+
 :PREFIX_VERBOSE
 SELECT device_id_peer
 FROM :TEST_TABLE
@@ -618,6 +651,8 @@ WHERE device_id IN (
         VALUES (1),
             (2));
 
+RESET enable_hashjoin;
+RESET enable_mergejoin;
 SET seq_page_cost = 100;
 
 -- loop/row counts of this query is different on windows so we run it without analyze
