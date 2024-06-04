@@ -832,7 +832,7 @@ ts_dimension_slice_delete_by_id(int32 dimension_slice_id, bool delete_constraint
 	ItemPointerData tid;
 	/* lock the tuple entry in the catalog table */
 	bool found = lock_dimension_slice_tuple(dimension_slice_id, &tid, &form);
-	Ensure(found, "dimension slice id %d not found", form.id);
+	Ensure(found, "dimension slice id %d not found", dimension_slice_id);
 
 	dimension_slice_delete_catalog_tuple(&tid);
 	return true;
