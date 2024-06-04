@@ -138,6 +138,19 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time ASC, x3 DESC, x4 DESC LIMIT 10; --
 :PREFIX
 SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
 
+-- test append with join column in orderby
+-- #6975
+
+CREATE TABLE join_table (
+	x1 integer,
+	y1 float);
+
+INSERT INTO join_table VALUES (1, 1.0), (2,2.0);
+
+:PREFIX
+SELECT * FROM test1 t1 JOIN join_table jt ON t1.x1 = jt.x1
+ORDER BY t1.x1, jt.y1;
+
 ---------------------------------------------------------------------------
 -- test queries without ordered append, but still eligible for sort pushdown
 ---------------------------------------------------------------------------
