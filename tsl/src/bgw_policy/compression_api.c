@@ -25,6 +25,7 @@
 #include "jsonb_utils.h"
 #include "policy_utils.h"
 #include "utils.h"
+#include <utils/elog.h>
 
 /* Default max runtime is unlimited for compress chunks */
 #define DEFAULT_MAX_RUNTIME                                                                        \
@@ -157,7 +158,7 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 								Interval *default_schedule_interval,
 								bool user_defined_schedule_interval, bool if_not_exists,
 								bool fixed_schedule, TimestampTz initial_start,
-								const char *timezone)
+								const char *timezone, const char *compress_using)
 {
 	NameData application_name;
 	NameData proc_name, proc_schema, check_schema, check_name, owner;
@@ -281,6 +282,12 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 		}
 	}
 
+	if (compress_using != NULL && strcmp(compress_using, "heap") != 0 &&
+		strcmp(compress_using, "hyperstore") != 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
+
 	/* insert a new job into jobs table */
 	namestrcpy(&application_name, "Compression Policy");
 	namestrcpy(&proc_name, POLICY_COMPRESSION_PROC_NAME);
@@ -294,6 +301,10 @@ policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_datum,
 	pushJsonbValue(&parse_state, WJB_BEGIN_OBJECT, NULL);
 	ts_jsonb_add_int32(parse_state, POL_COMPRESSION_CONF_KEY_HYPERTABLE_ID, hypertable->fd.id);
 	validate_compress_after_type(dim, partitioning_type, compress_after_type);
+
+	if (NULL != compress_using)
+		ts_jsonb_add_str(parse_state, POL_COMPRESSION_CONF_KEY_COMPRESS_USING, compress_using);
+
 	switch (compress_after_type)
 	{
 		case INTERVALOID:
@@ -395,6 +406,7 @@ policy_compression_add(PG_FUNCTION_ARGS)
 	text *timezone = PG_ARGISNULL(5) ? NULL : PG_GETARG_TEXT_PP(5);
 	char *valid_timezone = NULL;
 	Interval *created_before = PG_GETARG_INTERVAL_P(6);
+	Name compress_using = PG_ARGISNULL(7) ? NULL : PG_GETARG_NAME(7);
 
 	ts_feature_flag_check(FEATURE_POLICY);
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -427,7 +439,9 @@ policy_compression_add(PG_FUNCTION_ARGS)
 											 if_not_exists,
 											 fixed_schedule,
 											 initial_start,
-											 valid_timezone);
+											 valid_timezone,
+											 compress_using ? NameStr(*compress_using) : NULL);
+
 	if (!TIMESTAMP_NOT_FINITE(initial_start))
 	{
 		int32 job_id = DatumGetInt32(retval);
