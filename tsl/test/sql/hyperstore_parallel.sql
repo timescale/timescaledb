@@ -39,7 +39,7 @@ select device_id, count(*) into orig_chunk from :chunk1 group by device_id;
 -----------------------
 -- Enable hyperstore --
 -----------------------
-select twist_chunk(show_chunks(:'hypertable'));
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
 
 -- Show count without parallel plan and without ColumnarScan
 set timescaledb.enable_columnarscan=false;

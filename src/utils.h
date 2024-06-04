@@ -388,5 +388,6 @@ ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid v
 extern TSDLLEXPORT void ts_get_rel_info_by_name(const char *relnamespace, const char *relname,
 												Oid *relid, Oid *amoid, char *relkind);
 extern TSDLLEXPORT void ts_get_rel_info(Oid relid, Oid *amoid, char *relkind);
+extern TSDLLEXPORT Oid ts_get_rel_am(Oid relid);
 extern TSDLLEXPORT bool ts_is_hypercore_am(Oid amoid);
 extern TSDLLEXPORT Jsonb *ts_errdata_to_jsonb(ErrorData *edata, Name proc_schema, Name proc_name);
