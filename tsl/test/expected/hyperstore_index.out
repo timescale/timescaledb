@@ -13,15 +13,6 @@ set role :ROLE_DEFAULT_PERM_USER;
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Alternative function to compress_chunk that uses the table access
--- method to compress a chunk.
-create or replace function twist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method hyperstore', chunk);
-    return chunk;
-end
-$$;
 create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
 as $$
 begin
@@ -317,8 +308,8 @@ select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2
  Wed Jun 08 16:57:50 2022 PDT |           1 |    2
 (1 row)
 
-select twist_chunk(show_chunks(:'hypertable'));
-              twist_chunk               
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+             compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
@@ -401,7 +392,7 @@ $$, :'hypertable'));
                      ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_1_6_chunk (actual rows=N loops=N)
                            Index Cond: ((device_id >= 10) AND (device_id <= 20))
  Arrays read from cache: N
- Arrays decompressed: 998
+ Arrays decompressed: 1000
 (32 rows)
 
 select explain_anonymize(format($$

@@ -5,15 +5,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Alternative function to compress_chunk that uses the table access
--- method to compress a chunk.
-create or replace function twist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method hyperstore', chunk);
-    return chunk;
-end
-$$;
 create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
 as $$
 begin
@@ -112,6 +103,8 @@ where rel='test2'::regclass;
 insert into test2 (created_at, location_id, device_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
 from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
+-- Save the count for test2 for later comparison
+select count(*) as orig_test2_count from test2 \gset
 -- All chunks should use the hyperstore access method
 select * from amrels
 where relparent='test2'::regclass;
@@ -181,6 +174,7 @@ where relparent='test3'::regclass;
 (1 row)
 
 \set ON_ERROR_STOP 0
+-- Cannot create hyperstore if missing compression settings
 alter table :chunk set access method hyperstore;
 ERROR:  hypertable "test3" is missing compression settings
 \set ON_ERROR_STOP 1
@@ -195,6 +189,24 @@ select * from amrels where rel=:'chunk'::regclass;
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3
 (1 row)
 
+-- Try same thing with compress_chunk()
+alter table :chunk set access method heap;
+SELECT compress_chunk(:'chunk', compress_using => 'hyperstore');
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_4_13_chunk
+(1 row)
+
+-- Check that chunk is using hyperstore
+select relname, amname
+  from show_chunks('test3') as chunk
+  join pg_class on (pg_class.oid = chunk)
+  join pg_am on (relam = pg_am.oid);
+      relname      |   amname   
+-------------------+------------
+ _hyper_4_13_chunk | hyperstore
+(1 row)
+
 -- Test setting same access method again
 alter table :chunk set access method hyperstore;
 -- Create a second chunk
@@ -204,7 +216,7 @@ select * from amrels where relparent='test3'::regclass;
                    rel                   |   amname   | relparent 
 -----------------------------------------+------------+-----------
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3
- _timescaledb_internal._hyper_4_15_chunk | heap       | test3
+ _timescaledb_internal._hyper_4_16_chunk | heap       | test3
 (2 rows)
 
 -- Set hyperstore on hypertable
@@ -216,8 +228,8 @@ select * from amrels where relparent='test3'::regclass;
                    rel                   |   amname   | relparent 
 -----------------------------------------+------------+-----------
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3
- _timescaledb_internal._hyper_4_15_chunk | heap       | test3
- _timescaledb_internal._hyper_4_16_chunk | hyperstore | test3
+ _timescaledb_internal._hyper_4_16_chunk | heap       | test3
+ _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3
 (3 rows)
 
 -- Test that we can DDL on a hypertable that is not a Hyperstore but
@@ -246,14 +258,14 @@ alter table :chunk set access method hyperstore;
 select * from amrels where relparent='test4'::regclass;
                    rel                   |   amname   | relparent 
 -----------------------------------------+------------+-----------
- _timescaledb_internal._hyper_6_18_chunk | hyperstore | test4
- _timescaledb_internal._hyper_6_19_chunk | heap       | test4
+ _timescaledb_internal._hyper_6_19_chunk | hyperstore | test4
+ _timescaledb_internal._hyper_6_20_chunk | heap       | test4
 (2 rows)
 
 -- test that alter table on the hypertable works
 alter table test4 add column magic int;
 \d :chunk
-          Table "_timescaledb_internal._hyper_6_18_chunk"
+          Table "_timescaledb_internal._hyper_6_19_chunk"
  Column |           Type           | Collation | Nullable | Default 
 --------+--------------------------+-----------+----------+---------
  time   | timestamp with time zone |           | not null | 
@@ -261,7 +273,7 @@ alter table test4 add column magic int;
  temp   | double precision         |           |          | 
  magic  | integer                  |           |          | 
 Indexes:
-    "_hyper_6_18_chunk_test4_time_idx" btree ("time" DESC)
+    "_hyper_6_19_chunk_test4_time_idx" btree ("time" DESC)
 Check constraints:
     "constraint_10" CHECK ("time" >= 'Wed May 25 17:00:00 2022 PDT'::timestamp with time zone AND "time" < 'Wed Jun 01 17:00:00 2022 PDT'::timestamp with time zone)
 Inherits: test4
@@ -310,7 +322,7 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                       0 |                        0 |                          0
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_16_chunk | hyperstore | test3     |                       0 |                        0 |                          0
+ _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3     |                       0 |                        0 |                          0
 (8 rows)
 
 -- Decompress hyperstores to check that stats are removed
@@ -326,7 +338,7 @@ select untwist_chunk(rel)
  _timescaledb_internal._hyper_1_9_chunk
  _timescaledb_internal._hyper_1_11_chunk
  _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_16_chunk
+ _timescaledb_internal._hyper_4_17_chunk
 (8 rows)
 
 -- All stats should be removed
@@ -339,9 +351,9 @@ from compressed_rel_size_stats;
 
 -- Create hyperstores again and check that compression size stats are
 -- updated showing compressed data
-select twist_chunk(ch)
+select compress_chunk(ch, compress_using => 'hyperstore')
 from show_chunks('test2') ch;
-               twist_chunk               
+             compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_3_chunk
@@ -351,13 +363,13 @@ from show_chunks('test2') ch;
  _timescaledb_internal._hyper_1_11_chunk
 (6 rows)
 
-select twist_chunk(ch)
+select compress_chunk(ch, compress_using => 'hyperstore')
 from show_chunks('test3') ch;
-               twist_chunk               
+             compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_15_chunk
  _timescaledb_internal._hyper_4_16_chunk
+ _timescaledb_internal._hyper_4_17_chunk
 (3 rows)
 
 -- Save the stats for later comparison. Exclude the amname column
@@ -380,8 +392,8 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                  120960 |                      127 |                        127
  _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                   22321 |                       30 |                         30
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_15_chunk | hyperstore | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_16_chunk | hyperstore | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3     |                       1 |                        1 |                          1
 (9 rows)
 
 -- Convert back to heap and compress the old way to compare
@@ -398,13 +410,14 @@ from show_chunks('test2') ch;
  _timescaledb_internal._hyper_1_11_chunk
 (6 rows)
 
-select compress_chunk(untwist_chunk(ch))
+-- Using compress_using => NULL should be the same as "heap"
+select compress_chunk(untwist_chunk(ch), compress_using => NULL)
 from show_chunks('test3') ch;
              compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_4_13_chunk
- _timescaledb_internal._hyper_4_15_chunk
  _timescaledb_internal._hyper_4_16_chunk
+ _timescaledb_internal._hyper_4_17_chunk
 (3 rows)
 
 select * from compressed_rel_size_stats order by rel;
@@ -417,8 +430,8 @@ select * from compressed_rel_size_stats order by rel;
  _timescaledb_internal._hyper_1_9_chunk  | heap   | test2     |                  120960 |                      127 |                        127
  _timescaledb_internal._hyper_1_11_chunk | heap   | test2     |                   22321 |                       30 |                         30
  _timescaledb_internal._hyper_4_13_chunk | heap   | test3     |                       1 |                        1 |                          1
- _timescaledb_internal._hyper_4_15_chunk | heap   | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_16_chunk | heap   | test3     |                       1 |                        1 |                          1
+ _timescaledb_internal._hyper_4_17_chunk | heap   | test3     |                       1 |                        1 |                          1
 (9 rows)
 
 -- Check that stats are the same for hyperstore and now with
@@ -435,4 +448,359 @@ select * from saved_stats;
  rel | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 -----+-----------+-------------------------+--------------------------+----------------------------
 (0 rows)
+
+-- Try migration to hyperstore directly from compressed heap. Run in a
+-- transaction block to make sure changes are visible to following
+-- commands.
+begin;
+-- Check pg_am dependencies for the chunks. Since they are using heap
+-- AM, there should be no dependencies as heap AM is always present.
+select dep.objid::regclass, am.amname
+from show_chunks('test2') ch
+join pg_depend dep on (ch = dep.objid)
+join pg_am am on (dep.refobjid = am.oid);
+ objid | amname 
+-------+--------
+(0 rows)
+
+-- Use DEBUG2 to show that migration path is invoked
+set client_min_messages=DEBUG1;
+with chunks as (
+	 select ch from show_chunks('test2') ch offset 1
+)
+select compress_chunk(ch, compress_using => 'hyperstore') from chunks;
+LOG:  statement: with chunks as (
+	 select ch from show_chunks('test2') ch offset 1
+)
+select compress_chunk(ch, compress_using => 'hyperstore') from chunks;
+DEBUG:  migrating table "_hyper_1_3_chunk" to hyperstore
+DEBUG:  building index "_hyper_1_3_chunk_test2_device_id_created_at_idx" on table "_hyper_1_3_chunk" serially
+DEBUG:  index "_hyper_1_3_chunk_test2_device_id_created_at_idx" can safely use deduplication
+DEBUG:  building index "_hyper_1_3_chunk_test2_created_at_idx" on table "_hyper_1_3_chunk" serially
+DEBUG:  index "_hyper_1_3_chunk_test2_created_at_idx" can safely use deduplication
+DEBUG:  migrating table "_hyper_1_5_chunk" to hyperstore
+DEBUG:  building index "_hyper_1_5_chunk_test2_device_id_created_at_idx" on table "_hyper_1_5_chunk" serially
+DEBUG:  index "_hyper_1_5_chunk_test2_device_id_created_at_idx" can safely use deduplication
+DEBUG:  building index "_hyper_1_5_chunk_test2_created_at_idx" on table "_hyper_1_5_chunk" serially
+DEBUG:  index "_hyper_1_5_chunk_test2_created_at_idx" can safely use deduplication
+DEBUG:  migrating table "_hyper_1_7_chunk" to hyperstore
+DEBUG:  building index "_hyper_1_7_chunk_test2_device_id_created_at_idx" on table "_hyper_1_7_chunk" serially
+DEBUG:  index "_hyper_1_7_chunk_test2_device_id_created_at_idx" can safely use deduplication
+DEBUG:  building index "_hyper_1_7_chunk_test2_created_at_idx" on table "_hyper_1_7_chunk" serially
+DEBUG:  index "_hyper_1_7_chunk_test2_created_at_idx" can safely use deduplication
+DEBUG:  migrating table "_hyper_1_9_chunk" to hyperstore
+DEBUG:  building index "_hyper_1_9_chunk_test2_device_id_created_at_idx" on table "_hyper_1_9_chunk" serially
+DEBUG:  index "_hyper_1_9_chunk_test2_device_id_created_at_idx" can safely use deduplication
+DEBUG:  building index "_hyper_1_9_chunk_test2_created_at_idx" on table "_hyper_1_9_chunk" serially
+DEBUG:  index "_hyper_1_9_chunk_test2_created_at_idx" can safely use deduplication
+DEBUG:  migrating table "_hyper_1_11_chunk" to hyperstore
+DEBUG:  building index "_hyper_1_11_chunk_test2_device_id_created_at_idx" on table "_hyper_1_11_chunk" serially
+DEBUG:  index "_hyper_1_11_chunk_test2_device_id_created_at_idx" can safely use deduplication
+DEBUG:  building index "_hyper_1_11_chunk_test2_created_at_idx" on table "_hyper_1_11_chunk" serially
+DEBUG:  index "_hyper_1_11_chunk_test2_created_at_idx" can safely use deduplication
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+(5 rows)
+
+-- Test direct migration of the remaining chunk via SET ACCESS
+-- METHOD. Add some uncompressed data to test migration with partially
+-- compressed chunks.
+select ch as alter_chunk from show_chunks('test2') ch limit 1 \gset
+LOG:  statement: select ch as alter_chunk from show_chunks('test2') ch limit 1 
+insert into :alter_chunk values ('2022-06-01 10:00', 4, 4, 4.0, 4.0);
+LOG:  statement: insert into _timescaledb_internal._hyper_1_1_chunk values ('2022-06-01 10:00', 4, 4, 4.0, 4.0);
+alter table :alter_chunk set access method hyperstore;
+LOG:  statement: alter table _timescaledb_internal._hyper_1_1_chunk set access method hyperstore;
+DEBUG:  migrating table "_hyper_1_1_chunk" to hyperstore
+DEBUG:  building index "_hyper_1_1_chunk_test2_device_id_created_at_idx" on table "_hyper_1_1_chunk" serially
+DEBUG:  index "_hyper_1_1_chunk_test2_device_id_created_at_idx" can safely use deduplication
+DEBUG:  building index "_hyper_1_1_chunk_test2_created_at_idx" on table "_hyper_1_1_chunk" serially
+DEBUG:  index "_hyper_1_1_chunk_test2_created_at_idx" can safely use deduplication
+reset client_min_messages;
+LOG:  statement: reset client_min_messages;
+-- Check pg_am dependencies for the chunks. Since they are using heap
+-- AM, there should be no dependencies as heap AM is always present.
+select dep.objid::regclass, am.amname
+from show_chunks('test2') ch
+join pg_depend dep on (ch = dep.objid)
+join pg_am am on (dep.refobjid = am.oid);
+                  objid                  |   amname   
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_1_1_chunk  | hyperstore
+ _timescaledb_internal._hyper_1_3_chunk  | hyperstore
+ _timescaledb_internal._hyper_1_5_chunk  | hyperstore
+ _timescaledb_internal._hyper_1_7_chunk  | hyperstore
+ _timescaledb_internal._hyper_1_9_chunk  | hyperstore
+ _timescaledb_internal._hyper_1_11_chunk | hyperstore
+(6 rows)
+
+-- All chunks should use hyperstore and have rel_size_stats
+select * from compressed_rel_size_stats
+where amname = 'hyperstore' order by rel;
+                   rel                   |   amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+-----------------------------------------+------------+-----------+-------------------------+--------------------------+----------------------------
+ _timescaledb_internal._hyper_1_1_chunk  | hyperstore | test2     |                   12240 |                       20 |                         20
+ _timescaledb_internal._hyper_1_3_chunk  | hyperstore | test2     |                  120960 |                      128 |                        128
+ _timescaledb_internal._hyper_1_5_chunk  | hyperstore | test2     |                  120960 |                      127 |                        127
+ _timescaledb_internal._hyper_1_7_chunk  | hyperstore | test2     |                  120960 |                      129 |                        129
+ _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                  120960 |                      127 |                        127
+ _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                   22321 |                       30 |                         30
+(6 rows)
+
+-- Check that query plan is now ColumnarScan and that all data, except
+-- the one uncompressed row, is still compressed after migration
+explain (costs off)
+select _timescaledb_debug.is_compressed_tid(ctid) from test2
+where not _timescaledb_debug.is_compressed_tid(ctid);
+                               QUERY PLAN                               
+------------------------------------------------------------------------
+ Result
+   ->  Custom Scan (ChunkAppend) on test2
+         Chunks excluded during startup: 0
+         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
+               Filter: (NOT _timescaledb_debug.is_compressed_tid(ctid))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_3_chunk
+               Filter: (NOT _timescaledb_debug.is_compressed_tid(ctid))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_5_chunk
+               Filter: (NOT _timescaledb_debug.is_compressed_tid(ctid))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_7_chunk
+               Filter: (NOT _timescaledb_debug.is_compressed_tid(ctid))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_9_chunk
+               Filter: (NOT _timescaledb_debug.is_compressed_tid(ctid))
+         ->  Custom Scan (ColumnarScan) on _hyper_1_11_chunk
+               Filter: (NOT _timescaledb_debug.is_compressed_tid(ctid))
+(15 rows)
+
+select _timescaledb_debug.is_compressed_tid(ctid) from test2
+where not _timescaledb_debug.is_compressed_tid(ctid);
+ is_compressed_tid 
+-------------------
+ f
+(1 row)
+
+-- Check that the table still returns the correct count. Account for
+-- the one uncompressed row inserted.
+select count(*)=(:orig_test2_count + 1) as count_as_expected from test2;
+ count_as_expected 
+-------------------
+ t
+(1 row)
+
+commit;
+\set ON_ERROR_STOP 0
+-- Trying to convert a hyperstore to a hyperstore should be an error
+-- if if_not_compressed is false and the hyperstore is fully
+-- compressed.
+select compress_chunk(ch, compress_using => 'hyperstore', if_not_compressed => false)
+from show_chunks('test2') ch;
+ERROR:  chunk "_hyper_1_1_chunk" is already compressed
+-- Compressing using something different than "hyperstore" or "heap"
+-- should not be allowed
+select compress_chunk(ch, compress_using => 'non_existing_am')
+from show_chunks('test2') ch;
+ERROR:  can only compress using "heap" or "hyperstore"
+\set ON_ERROR_STOP 1
+-- Compressing from hyperstore with compress_using=>heap should lead
+-- to recompression of hyperstore with a notice.
+select compress_chunk(ch, compress_using => 'heap')
+from show_chunks('test2') ch;
+NOTICE:  cannot compress hyperstore "_hyper_1_1_chunk" using heap, recompressing instead
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
+NOTICE:  cannot compress hyperstore "_hyper_1_3_chunk" using heap, recompressing instead
+NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+NOTICE:  cannot compress hyperstore "_hyper_1_5_chunk" using heap, recompressing instead
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  cannot compress hyperstore "_hyper_1_7_chunk" using heap, recompressing instead
+NOTICE:  chunk "_hyper_1_7_chunk" is already compressed
+NOTICE:  cannot compress hyperstore "_hyper_1_9_chunk" using heap, recompressing instead
+NOTICE:  chunk "_hyper_1_9_chunk" is already compressed
+NOTICE:  cannot compress hyperstore "_hyper_1_11_chunk" using heap, recompressing instead
+NOTICE:  chunk "_hyper_1_11_chunk" is already compressed
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+(6 rows)
+
+-- Compressing a hyperstore without specifying compress_using should
+-- lead to recompression. First check that :chunk is a hyperstore.
+select ch as chunk from show_chunks('test2') ch limit 1 \gset
+select * from compressed_rel_size_stats
+where amname = 'hyperstore' and rel = :'chunk'::regclass;
+                  rel                   |   amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+----------------------------------------+------------+-----------+-------------------------+--------------------------+----------------------------
+ _timescaledb_internal._hyper_1_1_chunk | hyperstore | test2     |                   12240 |                       20 |                         20
+(1 row)
+
+insert into :chunk values ('2022-06-01 10:01', 6, 6, 6.0, 6.0);
+select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
+ ctid  
+-------
+ (0,2)
+(1 row)
+
+select compress_chunk(:'chunk');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
+       ctid       
+------------------
+ (2147483730,214)
+(1 row)
+
+-- Compressing a hyperstore with compress_using=>hyperstore should
+-- also lead to recompression
+insert into :chunk values ('2022-06-01 11:02', 7, 7, 7.0, 7.0);
+select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
+ ctid  
+-------
+ (0,3)
+(1 row)
+
+select compress_chunk(:'chunk', compress_using => 'hyperstore');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
+       ctid       
+------------------
+ (2147483737,152)
+(1 row)
+
+-- Convert all hyperstores back to heap
+select untwist_chunk(rel) ch
+  from compressed_rel_size_stats
+  where amname = 'hyperstore'
+  order by ch;
+                   ch                    
+-----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_7_chunk
+ _timescaledb_internal._hyper_1_9_chunk
+ _timescaledb_internal._hyper_1_11_chunk
+(6 rows)
+
+-- Test that it is possible to convert multiple hyperstores in the
+-- same transaction. The goal is to check that all the state is
+-- cleaned up between two or more commands in same transaction.
+select ch as chunk2 from show_chunks('test2') ch offset 1 limit 1 \gset
+start transaction;
+select compress_chunk(:'chunk', compress_using => 'hyperstore');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+(1 row)
+
+select compress_chunk(:'chunk2', compress_using => 'hyperstore');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_3_chunk
+(1 row)
+
+commit;
+select * from compressed_rel_size_stats
+where amname = 'hyperstore' and relparent = 'test2'::regclass
+order by rel;
+                  rel                   |   amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+----------------------------------------+------------+-----------+-------------------------+--------------------------+----------------------------
+ _timescaledb_internal._hyper_1_1_chunk | hyperstore | test2     |                   12243 |                       20 |                         20
+ _timescaledb_internal._hyper_1_3_chunk | hyperstore | test2     |                  120960 |                      128 |                        128
+(2 rows)
+
+-- Test that we can compress old way using compress_using=>heap
+select ch as chunk3 from show_chunks('test2') ch offset 2 limit 1 \gset
+select compress_chunk(:'chunk3', compress_using => 'heap');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+(1 row)
+
+select * from compressed_rel_size_stats
+where amname = 'heap' and relparent = 'test2'::regclass
+order by rel;
+                  rel                   | amname | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
+----------------------------------------+--------+-----------+-------------------------+--------------------------+----------------------------
+ _timescaledb_internal._hyper_1_5_chunk | heap   | test2     |                  120960 |                      127 |                        127
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- If we call compress_chunk with compress_using=>'heap' on a
+-- heap-compressed chunk, it should lead to an error if
+-- if_not_compressed is false. The commands below are all equivalent
+-- in this case.
+select compress_chunk(:'chunk3', compress_using => 'heap', if_not_compressed=>false);
+ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+select compress_chunk(:'chunk3', compress_using => NULL, if_not_compressed=>false);
+ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+select compress_chunk(:'chunk3', if_not_compressed=>false);
+ERROR:  chunk "_hyper_1_5_chunk" is already compressed
+\set ON_ERROR_STOP 1
+-- For a heap-compressed chunk, these should all be equivalent and
+-- should not do anything when there is nothing to recompress. A
+-- notice should be raised instead of an error.
+select compress_chunk(:'chunk3', compress_using => 'heap');
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+(1 row)
+
+select compress_chunk(:'chunk3', compress_using => NULL);
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+(1 row)
+
+select compress_chunk(:'chunk3');
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+(1 row)
+
+-- Insert new data to create a "partially compressed" chunk. Note that
+-- it is not possible to insert directly into the chunk because that
+-- doesn't properly update the partially compressed state.
+insert into test2 values ('2022-06-15 16:00', 8, 8, 8.0, 8.0);
+select * from only :chunk3;
+          created_at          | location_id | device_id | temp | humidity 
+------------------------------+-------------+-----------+------+----------
+ Wed Jun 15 16:00:00 2022 PDT |           8 |         8 |    8 |        8
+(1 row)
+
+select compress_chunk(:'chunk3', compress_using => 'heap');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_5_chunk
+(1 row)
+
+-- The tuple should no longer be in the non-compressed chunk
+select * from only :chunk3;
+ created_at | location_id | device_id | temp | humidity 
+------------+-------------+-----------+------+----------
+(0 rows)
+
+-- But the tuple is returned in a query without ONLY
+select * from :chunk3 where created_at = '2022-06-15 16:00' and device_id = 8;
+          created_at          | location_id | device_id | temp | humidity 
+------------------------------+-------------+-----------+------+----------
+ Wed Jun 15 16:00:00 2022 PDT |           8 |         8 |    8 |        8
+(1 row)
 
