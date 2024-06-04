@@ -681,28 +681,6 @@ create_toast_table(CreateStmt *stmt, Oid chunk_oid)
 	NewRelationCreateToastTable(chunk_oid, toast_options);
 }
 
-/*
- * Get the access method name for a relation.
- */
-static char *
-get_am_name_for_rel(Oid relid)
-{
-	HeapTuple tuple;
-	Form_pg_class cform;
-	Oid amoid;
-
-	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
-
-	if (!HeapTupleIsValid(tuple))
-		elog(ERROR, "cache lookup failed for relation %u", relid);
-
-	cform = (Form_pg_class) GETSTRUCT(tuple);
-	amoid = cform->relam;
-	ReleaseSysCache(tuple);
-
-	return get_am_name(amoid);
-}
-
 static void
 copy_hypertable_acl_to_relid(const Hypertable *ht, const Oid owner_id, const Oid relid)
 {
@@ -755,7 +733,7 @@ ts_chunk_create_table(const Chunk *chunk, const Hypertable *ht, const char *tabl
 		.base.options =
 			(chunk->relkind == RELKIND_RELATION) ? ts_get_reloptions(ht->main_table_relid) : NIL,
 		.base.accessMethod = (chunk->relkind == RELKIND_RELATION) ?
-								 get_am_name_for_rel(chunk->hypertable_relid) :
+								 get_am_name(ts_get_rel_am(chunk->hypertable_relid)) :
 								 NULL,
 	};
 	Oid uid, saved_uid;

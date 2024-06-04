@@ -225,7 +225,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  cagg_migrate(regclass,boolean,boolean)
  chunk_compression_stats(regclass)
  chunks_detailed_size(regclass)
- compress_chunk(regclass,boolean,boolean)
+ compress_chunk(regclass,boolean,boolean,name)
  create_hypertable(regclass,_timescaledb_internal.dimension_info,boolean,boolean,boolean)
  create_hypertable(regclass,name,name,integer,name,name,anyelement,boolean,boolean,regproc,boolean,text,regproc,regproc)
  decompress_chunk(regclass,boolean)
