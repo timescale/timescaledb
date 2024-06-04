@@ -971,6 +971,23 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 															   req_outer);
 			}
 			else
+			{
+				/* Check all pathkey components can be satisfied by current chunk */
+				List *pathkeys = NIL;
+				ListCell *lc;
+				foreach (lc, root->query_pathkeys)
+				{
+					PathKey *pathkey = (PathKey *) lfirst(lc);
+					EquivalenceClass *pathkey_ec = pathkey->pk_eclass;
+
+					Expr *em_expr = find_em_expr_for_rel(pathkey_ec, chunk_rel);
+
+					/* No em expression found for our rel */
+					if (!em_expr)
+						break;
+
+					pathkeys = lappend(pathkeys, pathkey);
+				}
 				/*
 				 * Ideally, we would like for this to be a MergeAppend path.
 				 * However, accumulate_append_subpath will cut out MergeAppend
@@ -982,23 +999,24 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 												chunk_rel,
 												list_make2(chunk_path, uncompressed_path),
 												NIL /* partial paths */,
-												root->query_pathkeys /* pathkeys */,
+												pathkeys,
 												req_outer,
 												0,
 												false,
 												chunk_path->rows + uncompressed_path->rows);
+			}
 		}
 
 		/* Add useful sorted versions of the decompress path */
 		add_chunk_sorted_paths(root, chunk_rel, ht, ht_relid, chunk_path, compressed_path);
 
-		/* this has to go after the path is copied for the ordered path since path can get freed in
-		 * add_path */
+		/* this has to go after the path is copied for the ordered path since path can get freed
+		 * in add_path */
 		add_path(chunk_rel, chunk_path);
 	}
 
-	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be freed
-	 * if it's planned */
+	/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
+	 * freed if it's planned */
 	compressed_rel->pathlist = NIL;
 	/* create parallel paths */
 	if (compressed_rel->consider_parallel)
@@ -1047,9 +1065,9 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 				/*
 				 * All children of an append path are required to have the same parameterization
-				 * so we reparameterize here when we couldn't get a path with the parameterization
-				 * we need. Reparameterization should always succeed here since uncompressed_path
-				 * should always be a scan.
+				 * so we reparameterize here when we couldn't get a path with the
+				 * parameterization we need. Reparameterization should always succeed here since
+				 * uncompressed_path should always be a scan.
 				 */
 				if (!bms_equal(req_outer, PATH_REQ_OUTER(uncompressed_path)))
 				{
@@ -1084,8 +1102,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 
 			add_partial_path(chunk_rel, path);
 		}
-		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't be
-		 * freed if it's planned */
+		/* the chunk_rel now owns the paths, remove them from the compressed_rel so they can't
+		 * be freed if it's planned */
 		compressed_rel->partial_pathlist = NIL;
 	}
 	/* Remove the compressed_rel from the simple_rel_array to prevent it from
@@ -1796,10 +1814,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 	{
 		/* Almost the same functionality as ts_create_plain_partial_paths.
 		 *
-		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose a
-		 * parallel plan for decompression. If no partial path is present for a single chunk,
-		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a non-parallel
-		 * plan (even if there are a few bigger chunks).
+		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose
+		 * a parallel plan for decompression. If no partial path is present for a single chunk,
+		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a
+		 * non-parallel plan (even if there are a few bigger chunks).
 		 */
 		int parallel_workers = compute_parallel_worker(compressed_rel,
 													   compressed_rel->pages,

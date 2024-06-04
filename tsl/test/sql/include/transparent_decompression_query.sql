@@ -635,6 +635,9 @@ WHERE device_id IN (
         VALUES (1));
 
 --with multiple values can get a semi-join or nested loop depending on seq_page_cost.
+SET enable_hashjoin TO OFF;
+SET enable_mergejoin TO OFF;
+
 :PREFIX_VERBOSE
 SELECT device_id_peer
 FROM :TEST_TABLE
@@ -642,6 +645,8 @@ WHERE device_id IN (
         VALUES (1),
             (2));
 
+RESET enable_hashjoin;
+RESET enable_mergejoin;
 SET seq_page_cost = 100;
 
 -- loop/row counts of this query is different on windows so we run it without analyze

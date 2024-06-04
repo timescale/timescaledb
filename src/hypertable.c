@@ -2598,7 +2598,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	slice->fd.range_start = range_start_internal;
 	slice->fd.range_end = range_end_internal;
-	ts_dimension_slice_update_by_id(dimension_slice_id, &slice->fd);
+	ts_dimension_slice_range_update(slice);
 
 	PG_RETURN_BOOL(overlap);
 }

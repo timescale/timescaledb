@@ -2219,6 +2219,8 @@ WHERE device_id IN (
 (19 rows)
 
 --with multiple values can get a semi-join or nested loop depending on seq_page_cost.
+SET enable_hashjoin TO OFF;
+SET enable_mergejoin TO OFF;
 :PREFIX_VERBOSE
 SELECT device_id_peer
 FROM :TEST_TABLE
@@ -2250,6 +2252,8 @@ WHERE device_id IN (
                Output: "*VALUES*".column1
 (21 rows)
 
+RESET enable_hashjoin;
+RESET enable_mergejoin;
 SET seq_page_cost = 100;
 -- loop/row counts of this query is different on windows so we run it without analyze
 :PREFIX_NO_ANALYZE
@@ -6421,6 +6425,8 @@ WHERE device_id IN (
 (16 rows)
 
 --with multiple values can get a semi-join or nested loop depending on seq_page_cost.
+SET enable_hashjoin TO OFF;
+SET enable_mergejoin TO OFF;
 :PREFIX_VERBOSE
 SELECT device_id_peer
 FROM :TEST_TABLE
@@ -6466,13 +6472,14 @@ WHERE device_id IN (
                      Output: compress_hyper_6_21_chunk._ts_meta_count, compress_hyper_6_21_chunk._ts_meta_sequence_num, compress_hyper_6_21_chunk.device_id, compress_hyper_6_21_chunk.device_id_peer, compress_hyper_6_21_chunk._ts_meta_min_3, compress_hyper_6_21_chunk._ts_meta_max_3, compress_hyper_6_21_chunk."time", compress_hyper_6_21_chunk._ts_meta_min_1, compress_hyper_6_21_chunk._ts_meta_max_1, compress_hyper_6_21_chunk.v0, compress_hyper_6_21_chunk._ts_meta_min_2, compress_hyper_6_21_chunk._ts_meta_max_2, compress_hyper_6_21_chunk.v1, compress_hyper_6_21_chunk.v2, compress_hyper_6_21_chunk.v3
          ->  Seq Scan on _timescaledb_internal._hyper_2_12_chunk (actual rows=336 loops=1)
                Output: _hyper_2_12_chunk.device_id_peer, _hyper_2_12_chunk.device_id
-   ->  Hash (actual rows=2 loops=1)
+   ->  Materialize (actual rows=2 loops=8640)
          Output: "*VALUES*".column1
-         Buckets: 1024  Batches: 1 
          ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
                Output: "*VALUES*".column1
 (42 rows)
 
+RESET enable_hashjoin;
+RESET enable_mergejoin;
 SET seq_page_cost = 100;
 -- loop/row counts of this query is different on windows so we run it without analyze
 :PREFIX_NO_ANALYZE
