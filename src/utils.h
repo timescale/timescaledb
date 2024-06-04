@@ -390,3 +390,4 @@ ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid v
 
 TSDLLEXPORT bool ts_relation_uses_hyperstore(Oid relid);
 TSDLLEXPORT bool ts_should_use_transparent_decompression(const struct Hypertable *ht, Oid relid);
+TSDLLEXPORT Oid ts_get_rel_am(Oid relid);

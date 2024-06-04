@@ -95,7 +95,7 @@ explain (costs off)
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
 
-select twist_chunk(show_chunks(:'hypertable'));
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
 
 vacuum analyze :hypertable;
 

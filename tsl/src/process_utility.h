@@ -10,5 +10,5 @@
 
 extern void tsl_process_altertable_cmd(Hypertable *ht, const AlterTableCmd *cmd);
 extern void tsl_process_rename_cmd(Oid relid, Cache *hcache, const RenameStmt *stmt);
-extern void tsl_ddl_command_start(ProcessUtilityArgs *args);
+extern DDLResult tsl_ddl_command_start(ProcessUtilityArgs *args);
 extern void tsl_ddl_command_end(EventTriggerData *command);
