@@ -656,6 +656,15 @@ SELECT
   time_bucket('3 month', time, '2000-02-01'::timestamptz) AS "3m origin"
 FROM generate_series('1990-01-03'::timestamptz,'1990-06-03'::timestamptz,'1month'::interval) time;
 
+-- origin with time component
+SELECT
+  time,
+  time_bucket('1 day',   time) AS "1d",
+  time_bucket('1 month', time) AS "1m",
+  time_bucket('1 day',   time, '2000-02-01 01:05:00'::timestamptz) AS "1d origin",
+  time_bucket('1 month', time, '2000-02-01 01:05:00'::timestamptz) AS "1m origin"
+FROM generate_series('1990-01-03'::timestamptz,'1990-06-03'::timestamptz,'1month'::interval) time;
+
 ---------------------------------------
 --- Test time_bucket with timezones ---
 ---------------------------------------

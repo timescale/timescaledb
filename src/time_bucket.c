@@ -217,21 +217,31 @@ ts_timestamp_bucket(PG_FUNCTION_ARGS)
 
 		DateADT date = DatumGetDateADT(DirectFunctionCall1(timestamp_date, PG_GETARG_DATUM(1)));
 		if (origin != DEFAULT_ORIGIN)
+		{
 			origin_date =
 				DatumGetDateADT(DirectFunctionCall1(timestamp_date, TimestampGetDatum(origin)));
+		}
 
 		date = bucket_month(interval->month, date, origin_date);
 
-		PG_RETURN_DATUM(DirectFunctionCall1(date_timestamp, DateADTGetDatum(date)));
+		result = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, DateADTGetDatum(date)));
+
+		if (origin != DEFAULT_ORIGIN)
+		{
+			TimeADT origin_time =
+				DatumGetTimeADT(DirectFunctionCall1(timestamp_time, TimestampGetDatum(origin)));
+			if (origin_time > 0)
+				result += origin_time;
+		}
 	}
 	else
 	{
 		int64 period = get_interval_period_timestamp_units(interval);
 
 		TIME_BUCKET_TS(period, timestamp, result, origin);
-
-		PG_RETURN_TIMESTAMP(result);
 	}
+
+	PG_RETURN_TIMESTAMP(result);
 }
 
 TS_FUNCTION_INFO_V1(ts_timestamp_offset_bucket);
@@ -279,21 +289,31 @@ ts_timestamptz_bucket(PG_FUNCTION_ARGS)
 
 		DateADT date = DatumGetDateADT(DirectFunctionCall1(timestamp_date, PG_GETARG_DATUM(1)));
 		if (origin != DEFAULT_ORIGIN)
+		{
 			origin_date =
 				DatumGetDateADT(DirectFunctionCall1(timestamp_date, TimestampTzGetDatum(origin)));
+		}
 
 		date = bucket_month(interval->month, date, origin_date);
 
-		PG_RETURN_DATUM(DirectFunctionCall1(date_timestamp, DateADTGetDatum(date)));
+		result = DatumGetTimestamp(DirectFunctionCall1(date_timestamp, DateADTGetDatum(date)));
+
+		if (origin != DEFAULT_ORIGIN)
+		{
+			TimeADT origin_time =
+				DatumGetTimeADT(DirectFunctionCall1(timestamp_time, TimestampGetDatum(origin)));
+			if (origin_time > 0)
+				result += origin_time;
+		}
 	}
 	else
 	{
 		int64 period = get_interval_period_timestamp_units(interval);
 
 		TIME_BUCKET_TS(period, timestamp, result, origin);
-
-		PG_RETURN_TIMESTAMPTZ(result);
 	}
+
+	PG_RETURN_TIMESTAMPTZ(result);
 }
 
 TS_FUNCTION_INFO_V1(ts_timestamptz_offset_bucket);
