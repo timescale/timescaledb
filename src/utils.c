@@ -1770,3 +1770,22 @@ ts_should_use_transparent_decompression(const Hypertable *ht, Oid relid)
 
 	return ts_guc_enable_transparent_decompression > 0;
 }
+
+Oid
+ts_get_rel_am(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid amoid;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	amoid = cform->relam;
+	ReleaseSysCache(tuple);
+
+	return amoid;
+}

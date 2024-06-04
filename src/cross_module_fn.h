@@ -90,7 +90,7 @@ typedef struct CrossModuleFunctions
 	PGFunction reorder_chunk;
 	PGFunction move_chunk;
 
-	void (*ddl_command_start)(ProcessUtilityArgs *args);
+	DDLResult (*ddl_command_start)(ProcessUtilityArgs *args);
 	void (*ddl_command_end)(EventTriggerData *trigdata);
 
 	/* Vectorized queries */
