@@ -1,0 +1,2 @@
+Fixes: #6976 Fix removal of metadata function and update script
+Thanks: @gugu for reporting the issue with catalog corruption due to update
