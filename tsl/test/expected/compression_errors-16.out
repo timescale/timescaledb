@@ -527,7 +527,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1000 config must have compress_after or compress_created_before
-CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 48 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 49 at RAISE
 SELECT remove_compression_policy('test_table_int');
  remove_compression_policy 
 ---------------------------
@@ -549,7 +549,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1001 config must have hypertable_id
-CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 29 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 30 at RAISE
 UPDATE _timescaledb_config.bgw_job
 SET config = NULL
 WHERE id = :compressjob_id;
@@ -562,7 +562,7 @@ SELECT config FROM _timescaledb_config.bgw_job WHERE id = :compressjob_id;
 --should fail
 CALL run_job(:compressjob_id);
 ERROR:  job 1001 has null config
-CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 24 at RAISE
+CONTEXT:  PL/pgSQL function _timescaledb_functions.policy_compression(integer,jsonb) line 25 at RAISE
 -- test ADD COLUMN IF NOT EXISTS
 CREATE TABLE metric (time TIMESTAMPTZ NOT NULL, val FLOAT8 NOT NULL, dev_id INT4 NOT NULL);
 SELECT create_hypertable('metric', 'time', 'dev_id', 10);
