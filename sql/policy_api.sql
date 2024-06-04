@@ -52,7 +52,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_compression_policy(
     schedule_interval INTERVAL = NULL,
     initial_start TIMESTAMPTZ = NULL,
     timezone TEXT = NULL,
-    compress_created_before INTERVAL = NULL
+    compress_created_before INTERVAL = NULL,
+    compress_using NAME = NULL
 )
 RETURNS INTEGER
 AS '@MODULE_PATHNAME@', 'ts_policy_compression_add'
@@ -93,7 +94,8 @@ CREATE OR REPLACE FUNCTION timescaledb_experimental.add_policies(
     refresh_start_offset "any" = NULL,
     refresh_end_offset "any" = NULL,
     compress_after "any" = NULL,
-    drop_after "any" = NULL)
+    drop_after "any" = NULL,
+    compress_using NAME = NULL)
 RETURNS BOOL
 AS '@MODULE_PATHNAME@', 'ts_policies_add'
 LANGUAGE C VOLATILE;
