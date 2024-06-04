@@ -4,7 +4,7 @@
 
 \ir include/setup_hyperstore.sql
 
-select twist_chunk(:'chunk1');
+alter table :chunk1 set access method hyperstore;
 
 -- check that all chunks are compressed
 select chunk_name, compression_status from chunk_compression_stats(:'hypertable');

@@ -18,7 +18,7 @@
 
 #include "arrow_tts.h"
 #include "attr_capture.h"
-#include "utils.h"
+#include <utils.h>
 
 struct CaptureAttributesContext
 {

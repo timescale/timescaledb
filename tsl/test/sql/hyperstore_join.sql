@@ -41,7 +41,7 @@ alter table the_hyperstore set (
       timescaledb.compress_segmentby = '',
       timescaledb.compress_orderby = 'updated_at desc'
 );
-select twist_chunk(show_chunks('the_hyperstore'));
+select compress_chunk(show_chunks('the_hyperstore'), compress_using => 'hyperstore');
 
 vacuum analyze the_hyperstore;
 

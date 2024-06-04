@@ -9,7 +9,7 @@
 -- TODO(#1068) Parallel sequence scan does not work
 set max_parallel_workers_per_gather to 0;
 
-select twist_chunk(show_chunks(:'hypertable'));
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
 
 -- Check that all chunks are compressed
 select chunk_name, compression_status from chunk_compression_stats(:'hypertable');
