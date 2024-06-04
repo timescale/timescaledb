@@ -1799,6 +1799,25 @@ ts_get_rel_info_by_name(const char *relnamespace, const char *relname, Oid *reli
 	ReleaseSysCache(tuple);
 }
 
+Oid
+ts_get_rel_am(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid amoid;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	amoid = cform->relam;
+	ReleaseSysCache(tuple);
+
+	return amoid;
+}
+
 static Oid hypercore_amoid = InvalidOid;
 
 bool

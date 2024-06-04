@@ -40,7 +40,7 @@ end;
 $$
 language plpgsql;
 
-select twist_chunk(show_chunks(:'hypertable'));
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
 
 -- Compare executing the function with a cursor with a query fetching
 -- the same data directly from the hypertable.

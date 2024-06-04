@@ -5,15 +5,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Alternative function to compress_chunk that uses the table access
--- method to compress a chunk.
-create or replace function twist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method hyperstore', chunk);
-    return chunk;
-end
-$$;
 create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
 as $$
 begin
@@ -88,8 +79,8 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hyperstore.
-select twist_chunk(show_chunks(:'the_table'));
-              twist_chunk               
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+             compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
@@ -160,8 +151,8 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hyperstore.
-select twist_chunk(show_chunks(:'the_table'));
-              twist_chunk               
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+             compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_3_7_chunk
  _timescaledb_internal._hyper_3_8_chunk
@@ -231,8 +222,8 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hyperstore.
-select twist_chunk(show_chunks(:'the_table'));
-               twist_chunk               
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+             compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_5_13_chunk
  _timescaledb_internal._hyper_5_14_chunk
@@ -304,8 +295,8 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hyperstore.
-select twist_chunk(show_chunks(:'the_table'));
-               twist_chunk               
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+             compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_7_19_chunk
  _timescaledb_internal._hyper_7_20_chunk
@@ -377,8 +368,8 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hyperstore.
-select twist_chunk(show_chunks(:'the_table'));
-               twist_chunk               
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+             compress_chunk              
 -----------------------------------------
  _timescaledb_internal._hyper_9_25_chunk
  _timescaledb_internal._hyper_9_26_chunk
@@ -451,8 +442,8 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hyperstore.
-select twist_chunk(show_chunks(:'the_table'));
-               twist_chunk                
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+              compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_11_31_chunk
  _timescaledb_internal._hyper_11_32_chunk
@@ -525,8 +516,8 @@ from generate_series('2022-06-01'::timestamp, '2022-06-10', '1 minute') t;
 -- table and a heap table produce the same result.
 create table :saved_table as select * from :the_table;
 -- Compress the rows in the hyperstore.
-select twist_chunk(show_chunks(:'the_table'));
-               twist_chunk                
+select compress_chunk(show_chunks(:'the_table'), compress_using => 'hyperstore');
+              compress_chunk              
 ------------------------------------------
  _timescaledb_internal._hyper_13_37_chunk
  _timescaledb_internal._hyper_13_38_chunk

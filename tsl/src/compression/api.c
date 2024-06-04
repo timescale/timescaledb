@@ -21,13 +21,17 @@
 #include <nodes/parsenodes.h>
 #include <nodes/pg_list.h>
 #include <parser/parse_func.h>
+#include <postgres_ext.h>
 #include <storage/lmgr.h>
+#include <storage/lockdefs.h>
+#include <tcop/utility.h>
 #include <trigger.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/fmgrprotos.h>
 #include <utils/inval.h>
 #include <utils/snapmgr.h>
+#include <utils/syscache.h>
 
 #include "compat/compat.h"
 #include "api.h"
@@ -41,10 +45,9 @@
 #include "errors.h"
 #include "hypercube.h"
 #include "hyperstore/hyperstore_handler.h"
+#include "hyperstore/utils.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "scanner.h"
-
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "ts_catalog/array_utils.h"
@@ -744,19 +747,104 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(chunk_relid);
 }
 
+static Oid
+set_access_method(Oid relid, const char *amname)
+{
+#if PG15_GE
+	AlterTableCmd cmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_SetAccessMethod,
+		.name = pstrdup(amname),
+	};
+	bool to_hyperstore = strcmp(amname, "hyperstore") == 0;
+	Oid amoid = ts_get_rel_am(relid);
+
+	/* Setting the same access method is a no-op */
+	if (amoid == get_am_oid(amname, false))
+		return relid;
+
+	hyperstore_alter_access_method_begin(relid, !to_hyperstore);
+	AlterTableInternal(relid, list_make1(&cmd), false);
+	hyperstore_alter_access_method_finish(relid, !to_hyperstore);
+
+#else
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("compression using hyperstore is not supported")));
+#endif
+	return relid;
+}
+
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	const char *compress_using = PG_ARGISNULL(3) ? NULL : NameStr(*PG_GETARG_NAME(3));
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	bool rel_is_hyperstore =
+		(get_table_am_oid("hyperstore", false) == ts_get_rel_am(uncompressed_chunk_id));
+	bool arg_is_heap = false;
+	bool arg_is_hyperstore = false;
+	bool is_hyperstore_recompression = false;
 
-	uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+	if (compress_using != NULL)
+	{
+		if (strcmp(compress_using, "heap") == 0)
+			arg_is_heap = true;
+		else if (strcmp(compress_using, "hyperstore") == 0)
+			arg_is_hyperstore = true;
+	}
+
+	if (ts_chunk_is_compressed(chunk) && !rel_is_hyperstore && arg_is_hyperstore)
+	{
+		/* Do quick migration to hyperstore of already compressed data by
+		 * simply changing the access method to hyperstore in pg_am. */
+		hyperstore_set_am(uncompressed_chunk_id);
+		PG_RETURN_OID(uncompressed_chunk_id);
+	}
+
+	/* Check for recompression of hyperstore */
+	if (rel_is_hyperstore && arg_is_heap)
+	{
+		/*
+		 * If the chunk is already a hyperstore we recompress it even if
+		 * compress_using=>heap.
+		 */
+		elog(NOTICE,
+			 "cannot compress hyperstore \"%s\" using heap, recompressing instead",
+			 get_rel_name(uncompressed_chunk_id));
+		is_hyperstore_recompression = true;
+	}
+	else if (rel_is_hyperstore && (arg_is_hyperstore || NULL == compress_using))
+		is_hyperstore_recompression = true;
+
+	if (compress_using == NULL || arg_is_heap || is_hyperstore_recompression)
+	{
+		/* If compress_chunk() is called on an already compressed heap, or, a
+		 * hyperstore with compress_using=>'hyperstore', then this is a
+		 * recompression. */
+		uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+	}
+	else if (arg_is_hyperstore)
+	{
+		if (!if_not_compressed && rel_is_hyperstore)
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("chunk \"%s\" is already a hyperstore",
+							get_rel_name(uncompressed_chunk_id))));
+
+		set_access_method(uncompressed_chunk_id, compress_using);
+	}
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -1444,15 +1532,15 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 * the compressed rel. */
 	if (uncompressed_chunk_rel->rd_tableam == hyperstore_routine())
 	{
-#if PG14_GE
 		ReindexParams params = {
 			.options = 0,
 			.tablespaceOid = InvalidOid,
 		};
 
-		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, &params);
+#if PG17_GE
+		reindex_relation(NULL, RelationGetRelid(uncompressed_chunk_rel), 0, &params);
 #else
-		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, 0);
+		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, &params);
 #endif
 	}
 

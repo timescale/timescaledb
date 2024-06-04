@@ -11,15 +11,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
--- Alternative function to compress_chunk that uses the table access
--- method to compress a chunk.
-create or replace function twist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method hyperstore', chunk);
-    return chunk;
-end
-$$;
 create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
 as $$
 begin
@@ -99,8 +90,8 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  limit 1 offset 1 \gset
 -- TODO(#1068) Parallel sequence scan does not work
 set max_parallel_workers_per_gather to 0;
-select twist_chunk(show_chunks(:'hypertable'));
-              twist_chunk               
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+             compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_2_chunk
