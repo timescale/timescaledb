@@ -126,6 +126,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_join.sql
     hyperstore_scans.sql
     hyperstore_columnar.sql
+    hyperstore_policy.sql
     hyperstore_types.sql
     hyperstore_update.sql
     hyperstore_vacuum.sql

@@ -26,5 +26,5 @@ Datum policy_compression_add_internal(Oid user_rel_oid, Datum compress_after_dat
 									  Interval *default_schedule_interval,
 									  bool user_defined_schedule_interval, bool if_not_exists,
 									  bool fixed_schedule, TimestampTz initial_start,
-									  const char *timezone);
+									  const char *timezone, const char *compress_using);
 bool policy_compression_remove_internal(Oid user_rel_oid, bool if_exists);

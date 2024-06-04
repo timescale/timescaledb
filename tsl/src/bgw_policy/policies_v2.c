@@ -232,8 +232,10 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 											if_exists,
 											false,
 											DT_NOBEGIN,
-											NULL);
+											NULL,
+											all_policies.compress->compress_using);
 	}
+
 	if (all_policies.retention && all_policies.retention->create_policy)
 	{
 		if (all_policies.is_alter_policy)
@@ -304,9 +306,12 @@ policies_add(PG_FUNCTION_ARGS)
 	}
 	if (!PG_ARGISNULL(4))
 	{
-		compression_policy tmp = { .create_policy = true,
-								   .compress_after = PG_GETARG_DATUM(4),
-								   .compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4) };
+		compression_policy tmp = {
+			.create_policy = true,
+			.compress_after = PG_GETARG_DATUM(4),
+			.compress_after_type = get_fn_expr_argtype(fcinfo->flinfo, 4),
+			.compress_using = PG_ARGISNULL(6) ? NULL : NameStr(*PG_GETARG_NAME(6)),
+		};
 		comp = tmp;
 		all_policies.compress = &comp;
 	}
