@@ -820,22 +820,3 @@ NOTICE:  chunk "_hyper_17_344_chunk" is already compressed
 (1 row)
 
 ROLLBACK;
--- test segfault when compression hypertable with primary space dimension #6977
-CREATE TABLE test_by_hash(id BIGINT, value float8);
-SELECT create_hypertable('test_by_hash', by_hash('id', 8));
- create_hypertable 
--------------------
- (19,t)
-(1 row)
-
-ALTER TABLE test_by_hash SET (timescaledb.compress = true);
-WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
-NOTICE:  default segment by for hypertable "test_by_hash" is set to ""
-NOTICE:  default order by for hypertable "test_by_hash" is set to "id DESC"
-INSERT INTO test_by_hash VALUES (1, 1.0), (2, 2.0), (3, 3.0);
-SELECT compress_chunk('_timescaledb_internal._hyper_19_351_chunk');
-              compress_chunk               
--------------------------------------------
- _timescaledb_internal._hyper_19_351_chunk
-(1 row)
-

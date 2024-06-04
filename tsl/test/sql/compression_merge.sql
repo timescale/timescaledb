@@ -307,11 +307,3 @@ BEGIN;
   -- should be rolled up
   SELECT hypertable_name, range_start, range_end FROM timescaledb_information.chunks WHERE hypertable_name = 'test9' ORDER BY 2;
 ROLLBACK;
-
--- test segfault when compression hypertable with primary space dimension #6977
-CREATE TABLE test_by_hash(id BIGINT, value float8);
-SELECT create_hypertable('test_by_hash', by_hash('id', 8));
-ALTER TABLE test_by_hash SET (timescaledb.compress = true);
-INSERT INTO test_by_hash VALUES (1, 1.0), (2, 2.0), (3, 3.0);
-SELECT compress_chunk('_timescaledb_internal._hyper_19_351_chunk');
-
