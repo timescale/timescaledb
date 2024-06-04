@@ -877,6 +877,31 @@ SELECT * FROM test1 ORDER BY x1, x2, x5, time, x3 DESC LIMIT 10;
                ->  Seq Scan on _hyper_3_7_chunk (actual rows=1 loops=1)
 (12 rows)
 
+-- test append with join column in orderby
+-- #6975
+CREATE TABLE join_table (
+	x1 integer,
+	y1 float);
+INSERT INTO join_table VALUES (1, 1.0), (2,2.0);
+:PREFIX
+SELECT * FROM test1 t1 JOIN join_table jt ON t1.x1 = jt.x1
+ORDER BY t1.x1, jt.y1;
+                                               QUERY PLAN                                               
+--------------------------------------------------------------------------------------------------------
+ Sort (actual rows=4 loops=1)
+   Sort Key: t1_1.x1, jt.y1
+   Sort Method: quicksort 
+   ->  Hash Join (actual rows=4 loops=1)
+         Hash Cond: (jt.x1 = t1_1.x1)
+         ->  Seq Scan on join_table jt (actual rows=2 loops=1)
+         ->  Hash (actual rows=5 loops=1)
+               Buckets: 4096  Batches: 1 
+               ->  Append (actual rows=5 loops=1)
+                     ->  Custom Scan (DecompressChunk) on _hyper_3_7_chunk t1_1 (actual rows=4 loops=1)
+                           ->  Seq Scan on compress_hyper_4_8_chunk (actual rows=3 loops=1)
+                     ->  Seq Scan on _hyper_3_7_chunk t1_1 (actual rows=1 loops=1)
+(12 rows)
+
 ---------------------------------------------------------------------------
 -- test queries without ordered append, but still eligible for sort pushdown
 ---------------------------------------------------------------------------
