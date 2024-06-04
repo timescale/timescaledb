@@ -17,7 +17,6 @@ FROM :TEST_TABLE
 WHERE device_id = 1
 ORDER BY time;
 
-
 -- test empty targetlist
 :PREFIX
 SELECT
@@ -56,28 +55,26 @@ ORDER BY time,
 SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1
-;
+ORDER BY v1;
 
 -- test order not present in targetlist
 :PREFIX
 SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1
-;
+ORDER BY v1;
 
 -- test column with all NULL
 :PREFIX
 SELECT v3
 FROM :TEST_TABLE
-WHERE device_id = 1
-;
+WHERE device_id = 1;
 
 --
 -- test qual pushdown
 --
 -- v3 is not segment by or order by column so should not be pushed down
+
 :PREFIX_VERBOSE
 SELECT *
 FROM :TEST_TABLE
@@ -433,15 +430,11 @@ ORDER BY device_id DESC,
     v1,
     time;
 
-RESET enable_sort;
-
 --
 -- test constraint exclusion
 --
 -- test plan time exclusion
 -- first chunk should be excluded
--- This plan is flaky between MergeAppend and Sort over Append.
-SET enable_sort TO off;
 :PREFIX
 SELECT *
 FROM :TEST_TABLE

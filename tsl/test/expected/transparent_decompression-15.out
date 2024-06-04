@@ -355,8 +355,7 @@ ORDER BY time,
 SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1
-;
+ORDER BY v1;
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Sort (actual rows=1728 loops=1)
@@ -381,8 +380,7 @@ ORDER BY v1
 SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1
-;
+ORDER BY v1;
                                        QUERY PLAN                                        
 -----------------------------------------------------------------------------------------
  Sort (actual rows=1728 loops=1)
@@ -406,8 +404,7 @@ ORDER BY v1
 :PREFIX
 SELECT v3
 FROM :TEST_TABLE
-WHERE device_id = 1
-;
+WHERE device_id = 1;
                                     QUERY PLAN                                     
 -----------------------------------------------------------------------------------
  Append (actual rows=1728 loops=1)
@@ -1566,14 +1563,11 @@ ORDER BY device_id DESC,
                      Filter: (compress_hyper_5_16_chunk._ts_meta_max_3 > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (16 rows)
 
-RESET enable_sort;
 --
 -- test constraint exclusion
 --
 -- test plan time exclusion
 -- first chunk should be excluded
--- This plan is flaky between MergeAppend and Sort over Append.
-SET enable_sort TO off;
 :PREFIX
 SELECT *
 FROM :TEST_TABLE
@@ -2229,28 +2223,34 @@ WHERE device_id IN (
             (2));
                                                                                                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                                                                                                         
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Hash Semi Join (actual rows=3456 loops=1)
+ Nested Loop (actual rows=3456 loops=1)
    Output: _hyper_1_1_chunk.device_id_peer
-   Hash Cond: (_hyper_1_1_chunk.device_id = "*VALUES*".column1)
-   ->  Append (actual rows=8640 loops=1)
-         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=3600 loops=1)
+   ->  Unique (actual rows=2 loops=1)
+         Output: "*VALUES*".column1
+         ->  Sort (actual rows=2 loops=1)
+               Output: "*VALUES*".column1
+               Sort Key: "*VALUES*".column1
+               Sort Method: quicksort 
+               ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
+                     Output: "*VALUES*".column1
+   ->  Append (actual rows=1728 loops=2)
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_1_chunk (actual rows=720 loops=2)
                Output: _hyper_1_1_chunk.device_id_peer, _hyper_1_1_chunk.device_id
                Bulk Decompression: false
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=5 loops=1)
+               ->  Index Scan using compress_hyper_5_15_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_5_15_chunk (actual rows=1 loops=2)
                      Output: compress_hyper_5_15_chunk._ts_meta_count, compress_hyper_5_15_chunk._ts_meta_sequence_num, compress_hyper_5_15_chunk.device_id, compress_hyper_5_15_chunk.device_id_peer, compress_hyper_5_15_chunk._ts_meta_min_3, compress_hyper_5_15_chunk._ts_meta_max_3, compress_hyper_5_15_chunk."time", compress_hyper_5_15_chunk._ts_meta_min_1, compress_hyper_5_15_chunk._ts_meta_max_1, compress_hyper_5_15_chunk.v0, compress_hyper_5_15_chunk._ts_meta_min_2, compress_hyper_5_15_chunk._ts_meta_max_2, compress_hyper_5_15_chunk.v1, compress_hyper_5_15_chunk.v2, compress_hyper_5_15_chunk.v3
-         ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=3360 loops=1)
+                     Index Cond: (compress_hyper_5_15_chunk.device_id = "*VALUES*".column1)
+         ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk (actual rows=672 loops=2)
                Output: _hyper_1_2_chunk.device_id_peer, _hyper_1_2_chunk.device_id
-         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=1680 loops=1)
+               Filter: ("*VALUES*".column1 = _hyper_1_2_chunk.device_id)
+               Rows Removed by Filter: 2688
+         ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_1_3_chunk (actual rows=336 loops=2)
                Output: _hyper_1_3_chunk.device_id_peer, _hyper_1_3_chunk.device_id
                Bulk Decompression: false
-               ->  Seq Scan on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=5 loops=1)
+               ->  Index Scan using compress_hyper_5_16_chunk_device_id_device_id_peer__ts_meta_idx on _timescaledb_internal.compress_hyper_5_16_chunk (actual rows=1 loops=2)
                      Output: compress_hyper_5_16_chunk._ts_meta_count, compress_hyper_5_16_chunk._ts_meta_sequence_num, compress_hyper_5_16_chunk.device_id, compress_hyper_5_16_chunk.device_id_peer, compress_hyper_5_16_chunk._ts_meta_min_3, compress_hyper_5_16_chunk._ts_meta_max_3, compress_hyper_5_16_chunk."time", compress_hyper_5_16_chunk._ts_meta_min_1, compress_hyper_5_16_chunk._ts_meta_max_1, compress_hyper_5_16_chunk.v0, compress_hyper_5_16_chunk._ts_meta_min_2, compress_hyper_5_16_chunk._ts_meta_max_2, compress_hyper_5_16_chunk.v1, compress_hyper_5_16_chunk.v2, compress_hyper_5_16_chunk.v3
-   ->  Hash (actual rows=2 loops=1)
-         Output: "*VALUES*".column1
-         Buckets: 1024  Batches: 1 
-         ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-               Output: "*VALUES*".column1
-(21 rows)
+                     Index Cond: (compress_hyper_5_16_chunk.device_id = "*VALUES*".column1)
+(27 rows)
 
 RESET enable_hashjoin;
 RESET enable_mergejoin;
@@ -3364,8 +3364,7 @@ ORDER BY time,
 SELECT v1
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1
-;
+ORDER BY v1;
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
  Sort (actual rows=1728 loops=1)
@@ -3387,8 +3386,7 @@ ORDER BY v1
 SELECT v2
 FROM :TEST_TABLE
 WHERE device_id = 1
-ORDER BY v1
-;
+ORDER BY v1;
                                         QUERY PLAN                                        
 ------------------------------------------------------------------------------------------
  Sort (actual rows=1728 loops=1)
@@ -3409,8 +3407,7 @@ ORDER BY v1
 :PREFIX
 SELECT v3
 FROM :TEST_TABLE
-WHERE device_id = 1
-;
+WHERE device_id = 1;
                                      QUERY PLAN                                     
 ------------------------------------------------------------------------------------
  Append (actual rows=1728 loops=1)
@@ -5492,14 +5489,11 @@ ORDER BY device_id DESC,
                Filter: (_hyper_2_12_chunk."time" > 'Sat Jan 08 00:00:00 2000 PST'::timestamp with time zone)
 (34 rows)
 
-RESET enable_sort;
 --
 -- test constraint exclusion
 --
 -- test plan time exclusion
 -- first chunk should be excluded
--- This plan is flaky between MergeAppend and Sort over Append.
-SET enable_sort TO off;
 :PREFIX
 SELECT *
 FROM :TEST_TABLE
@@ -6435,9 +6429,10 @@ WHERE device_id IN (
             (2));
                                                                                                                                                                                                                                                                                                          QUERY PLAN                                                                                                                                                                                                                                                                                                         
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- Hash Semi Join (actual rows=3456 loops=1)
+ Nested Loop Semi Join (actual rows=3456 loops=1)
    Output: _hyper_2_4_chunk.device_id_peer
-   Hash Cond: (_hyper_2_4_chunk.device_id = "*VALUES*".column1)
+   Join Filter: (_hyper_2_4_chunk.device_id = "*VALUES*".column1)
+   Rows Removed by Join Filter: 12096
    ->  Append (actual rows=8640 loops=1)
          ->  Custom Scan (DecompressChunk) on _timescaledb_internal._hyper_2_4_chunk (actual rows=720 loops=1)
                Output: _hyper_2_4_chunk.device_id_peer, _hyper_2_4_chunk.device_id
