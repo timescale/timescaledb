@@ -4709,8 +4709,8 @@ timescaledb_ddl_command_start(PlannedStmt *pstmt, const char *query_string, bool
 	 * standard process utility hook to maintain proper invocation
 	 * order of sql_drop and ddl_command_end triggers.
 	 */
-	if (ts_cm_functions->ddl_command_start)
-		ts_cm_functions->ddl_command_start(&args);
+	if (ts_cm_functions->ddl_command_start && result == DDL_CONTINUE)
+		result = ts_cm_functions->ddl_command_start(&args);
 
 	/*
 	 * We need to run tsl-side ddl_command_start hook before

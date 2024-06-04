@@ -17,13 +17,16 @@
 #include "compression/create.h"
 #include "continuous_aggs/create.h"
 #include "hyperstore/hyperstore_handler.h"
+#include "hyperstore/utils.h"
 #include "hypertable_cache.h"
 #include "process_utility.h"
 #include "ts_catalog/continuous_agg.h"
 
-void
+DDLResult
 tsl_ddl_command_start(ProcessUtilityArgs *args)
 {
+	DDLResult result = DDL_CONTINUE;
+
 	switch (nodeTag(args->parsetree))
 	{
 		case T_AlterTableStmt:
@@ -53,14 +56,26 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 						 * again. */
 						if (is_hyperstore == to_hyperstore)
 							break;
-
 						/* Here we know that we are either moving to or from a
 						 * hyperstore. Check that it is on a chunk or
 						 * hypertable. */
 						Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 						if (chunk)
+						{
+							/* Check if we can do quick migration */
+							if (!is_hyperstore && ts_chunk_is_compressed(chunk))
+							{
+								hyperstore_set_am(relid);
+								/* Skip this command in the alter table
+								 * statement since we process it via quick
+								 * migration */
+								stmt->cmds = foreach_delete_current(stmt->cmds, lc);
+								continue;
+							}
+
 							hyperstore_alter_access_method_begin(relid, !to_hyperstore);
+						}
 						else if (!ts_is_hypertable(relid))
 							ereport(ERROR,
 									errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -68,6 +83,7 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 										   stmt->relation->relname),
 									errdetail("Hyperstore access method is only supported on "
 											  "hypertables and chunks."));
+
 						break;
 					}
 #endif
@@ -76,11 +92,17 @@ tsl_ddl_command_start(ProcessUtilityArgs *args)
 				}
 			}
 
+			/* If there are no commands left, then there is no point in
+			 * processing the alter table statement */
+			if (stmt->cmds == NIL)
+				result = DDL_DONE;
 			break;
 		}
 		default:
 			break;
 	}
+
+	return result;
 }
 
 /* AlterTableCmds that need tsl side processing invoke this function

@@ -6,7 +6,7 @@
 
 -- Compress the chunks and check that the counts are the same
 select location_id, count(*) into orig from :hypertable GROUP BY location_id;
-select twist_chunk(show_chunks(:'hypertable'));
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
 select location_id, count(*) into comp from :hypertable GROUP BY location_id;
 select * from orig join comp using (location_id) where orig.count != comp.count;
 drop table orig, comp;

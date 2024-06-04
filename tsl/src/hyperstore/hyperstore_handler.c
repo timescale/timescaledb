@@ -38,6 +38,7 @@
 #include <storage/lmgr.h>
 #include <storage/lockdefs.h>
 #include <storage/off.h>
+#include <storage/procarray.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/hsearch.h>
@@ -516,13 +517,18 @@ hyperstore_endscan(TableScanDesc sscan)
 	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
 
 	RelationDecrementReferenceCount(sscan->rs_rd);
-	table_endscan(scan->cscan_desc);
+	if (scan->cscan_desc)
+		table_endscan(scan->cscan_desc);
 	table_close(scan->compressed_rel, AccessShareLock);
 
 	Relation relation = sscan->rs_rd;
-	const TableAmRoutine *oldtam = switch_to_heapam(relation);
-	relation->rd_tableam->scan_end(scan->uscan_desc);
-	relation->rd_tableam = oldtam;
+
+	if (scan->uscan_desc)
+	{
+		const TableAmRoutine *oldtam = switch_to_heapam(relation);
+		relation->rd_tableam->scan_end(scan->uscan_desc);
+		relation->rd_tableam = oldtam;
+	}
 
 	TS_DEBUG_LOG("scanned " INT64_FORMAT " tuples (" INT64_FORMAT " compressed, " INT64_FORMAT
 				 " noncompressed) in rel %s",
@@ -2421,6 +2427,11 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 								  IndexBuildCallback callback, void *callback_state,
 								  TableScanDesc scan)
 {
+	HyperstoreInfo *hsinfo;
+	TransactionId OldestXmin;
+	bool need_unregister_snapshot = false;
+	Snapshot snapshot;
+
 	/*
 	 * We can be called from ProcessUtility with a hypertable because we need
 	 * to process all ALTER TABLE commands in the list to set options
@@ -2432,9 +2443,73 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	if (ts_is_hypertable(relation->rd_id))
 		return 0.0;
 
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
-	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
+	hsinfo = RelationGetHyperstoreInfo(relation);
+
+	/*
+	 * In accordance with the heapam implementation, setup the scan
+	 * descriptor. Do it here instead of letting the heapam handler do it
+	 * since we want a hyperstore scan descriptor that includes the state for
+	 * both the non-compressed and compressed relations.
+	 *
+	 * Prepare for scan of the base relation. In a normal index build, we use
+	 * SnapshotAny because we must retrieve all tuples and do our own time
+	 * qual checks (because we have to index RECENTLY_DEAD tuples). In a
+	 * concurrent build, or during bootstrap, we take a regular MVCC snapshot
+	 * and index whatever's live according to that.
+	 *
+	 * Hyperstore is not used during bootstrap so skip that check.
+	 */
+	OldestXmin = InvalidTransactionId;
+
+	/* okay to ignore lazy VACUUMs here */
+	if (!indexInfo->ii_Concurrent)
+	{
+#if PG14_LT
+		OldestXmin = GetOldestXmin(relation, PROCARRAY_FLAGS_VACUUM);
+#else
+		OldestXmin = GetOldestNonRemovableTransactionId(relation);
+#endif
+	}
+
+	if (!scan)
+	{
+		/*
+		 * Serial index build.
+		 *
+		 * Must begin our own heap scan in this case.  We may also need to
+		 * register a snapshot whose lifetime is under our direct control.
+		 */
+		if (!TransactionIdIsValid(OldestXmin))
+		{
+			snapshot = RegisterSnapshot(GetTransactionSnapshot());
+			need_unregister_snapshot = true;
+		}
+		else
+			snapshot = SnapshotAny;
+
+		scan = table_beginscan_strat(relation,	  /* relation */
+									 snapshot,	  /* snapshot */
+									 0,			  /* number of keys */
+									 NULL,		  /* scan key */
+									 true,		  /* buffer access strategy OK */
+									 allow_sync); /* syncscan OK? */
+	}
+	else
+	{
+		/*
+		 * Parallel index build.
+		 *
+		 * Parallel case never registers/unregisters own snapshot.  Snapshot
+		 * is taken from parallel heap scan, and is SnapshotAny or an MVCC
+		 * snapshot, based on same criteria as serial case.
+		 */
+		Assert(allow_sync);
+		snapshot = scan->rs_snapshot;
+	}
+
+	HyperstoreScanDescData *hscan = (HyperstoreScanDescData *) scan;
 	EState *estate = CreateExecutorState();
+	Relation crel = hscan->compressed_rel;
 	IndexBuildCallbackState icstate = {
 		.callback = callback,
 		.orig_state = callback_state,
@@ -2575,9 +2650,13 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 											 numblocks,
 											 hyperstore_index_build_callback,
 											 &icstate,
-											 scan);
+											 hscan->cscan_desc);
 
-	table_close(crel, NoLock);
+	/* Heap's index_build_range_scan() ended the scan, so set the scan
+	 * descriptor to NULL here in order to not try to close it again in our
+	 * own table_endscan(). */
+	hscan->cscan_desc = NULL;
+
 	FreeExecutorState(icstate.estate);
 	ExecDropSingleTupleTableSlot(icstate.slot);
 	MemoryContextDelete(icstate.decompression_mcxt);
@@ -2596,8 +2675,16 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 																	numblocks,
 																	callback,
 																	callback_state,
-																	scan);
+																	hscan->uscan_desc);
+	/* Heap's index_build_range_scan() should have ended the scan, so set the
+	 * scan descriptor to NULL here in order to not try to close it again in
+	 * our own table_endscan(). */
+	hscan->uscan_desc = NULL;
 	relation->rd_tableam = oldtam;
+	table_endscan(scan);
+
+	if (need_unregister_snapshot)
+		UnregisterSnapshot(snapshot);
 
 	return icstate.ntuples;
 }
