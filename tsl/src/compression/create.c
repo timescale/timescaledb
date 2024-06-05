@@ -487,6 +487,9 @@ add_time_to_order_by_if_not_included(OrderBySettings obs, ArrayType *segmentby, 
 	bool found = false;
 
 	time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	if (!time_dim)
+		return obs;
+
 	time_col_name = get_attname(ht->main_table_relid, time_dim->column_attno, false);
 
 	if (ts_array_is_member(obs.orderby, time_col_name))
@@ -750,6 +753,9 @@ static bool
 update_compress_chunk_time_interval(Hypertable *ht, WithClauseResult *with_clause_options)
 {
 	const Dimension *time_dim = hyperspace_get_open_dimension(ht->space, 0);
+	if (!time_dim)
+		return false;
+
 	Interval *compress_interval =
 		ts_compress_hypertable_parse_chunk_time_interval(with_clause_options, ht);
 	if (!compress_interval)
