@@ -1685,12 +1685,6 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	bool create_default_indexes = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
 	bool if_not_exists = PG_ARGISNULL(3) ? false : PG_GETARG_BOOL(3);
 	bool migrate_data = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
-	const int origin_paramnum = 5;
-	bool origin_isnull = PG_ARGISNULL(5);
-	dim_info->interval_origin_isnull = origin_isnull;
-	dim_info->interval_origin = origin_isnull ? 0 : PG_GETARG_DATUM(5);
-	dim_info->interval_origin_type =
-		origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, origin_paramnum);
 
 	/*
 	 * We do not support closed (hash) dimensions for the main partitioning
@@ -1711,7 +1705,10 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	/*
 	 * Fill in the rest of the info.
 	 */
+	AttrNumber colattr = get_attnum(table_relid, NameStr(dim_info->colname));
 	dim_info->table_relid = table_relid;
+	dim_info->coltype = get_atttype(table_relid, colattr);
+	ts_dimension_info_set_defaults(dim_info);
 
 	return ts_hypertable_create_internal(fcinfo,
 										 table_relid,

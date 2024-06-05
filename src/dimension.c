@@ -160,6 +160,12 @@ dimension_type(TupleInfo *ti)
 		return DIMENSION_TYPE_CLOSED;
 
 	if (!slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		slot_attisnull(ti->slot, Anum_dimension_interval) &&
+		slot_attisnull(ti->slot, Anum_dimension_num_slices))
+		return DIMENSION_TYPE_OPEN;
+
+	if (slot_attisnull(ti->slot, Anum_dimension_interval_length) &&
+		!slot_attisnull(ti->slot, Anum_dimension_interval) &&
 		slot_attisnull(ti->slot, Anum_dimension_num_slices))
 		return DIMENSION_TYPE_OPEN;
 
@@ -292,8 +298,34 @@ create_range_datum(FunctionCallInfo fcinfo, DimensionSlice *slice)
 static DimensionSlice *
 calculate_open_range_default(const Dimension *dim, int64 value)
 {
-	int64 range_start, range_end;
+	int64 range_start = 0, range_end = 0;
 	Oid dimtype = ts_dimension_get_partition_type(dim);
+
+	if (dim->calendar_based)
+	{
+		int tz;
+		struct pg_tm tt, *tm = &tt;
+		pg_tz *attimezone = session_timezone;
+		fsec_t fsec;
+
+		if (timestamp2tm(value, &tz, tm, &fsec, NULL, attimezone) != 0)
+			ereport(ERROR,
+					(errcode(ERRCODE_DATETIME_VALUE_OUT_OF_RANGE),
+					 errmsg("timestamp out of range")));
+
+		// Hack to produce monthly chunks. Should check with interval to see
+		// it is really month-based.
+		tt.tm_hour = 0;
+		tt.tm_sec = 0;
+		tt.tm_min = 0;
+		tt.tm_mday = 0;
+
+		tm2timestamp(tm, fsec, &tz, &range_start);
+		tt.tm_mon = tt.tm_mon + dim->fd.interval.month; // TODO mod 12
+		tm2timestamp(tm, fsec, &tz, &range_end);
+
+		return ts_dimension_slice_create(dim->fd.id, range_start, range_end);
+	}
 
 	if (value < 0)
 	{
@@ -855,7 +887,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 			values[AttrNumberGetAttrOffset(Anum_dimension_interval)] = IntervalPGetDatum(interval);
 			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval_length)] = true;
 			values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
-				TimestampTzGetDatum(interval_length);
+				TimestampTzGetDatum(interval_origin);
 		}
 		else
 		{
@@ -864,7 +896,7 @@ dimension_insert_relation(Relation rel, int32 hypertable_id, Name colname, Oid c
 				Int64GetDatum(interval_length);
 			nulls[AttrNumberGetAttrOffset(Anum_dimension_interval)] = true;
 			values[AttrNumberGetAttrOffset(Anum_dimension_interval_origin)] =
-				Int64GetDatum(interval_length);
+				Int64GetDatum(interval_origin);
 		}
 
 		values[AttrNumberGetAttrOffset(Anum_dimension_aligned)] = BoolGetDatum(true);
@@ -1384,8 +1416,7 @@ ts_dimension_info_create_open(Oid table_relid, Name column_name, Datum interval,
 		.coltype = coltype,
 		.interval_datum = interval,
 		.interval_type = interval_type,
-		.interval_origin =
-			interval_origin_isnull ? open_dim_default_calendar_origin(coltype) : interval_origin,
+		.interval_origin = interval_origin_isnull ? 0 : interval_origin,
 		.interval_origin_isnull = interval_origin_isnull,
 		.interval_origin_type = interval_origin_type,
 		.partitioning_func = partitioning_func,
@@ -1638,6 +1669,31 @@ dimension_create_datum(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_gen
 	return HeapTupleGetDatum(tuple);
 }
 
+void
+ts_dimension_info_set_defaults(DimensionInfo *info)
+{
+	if (info->type == DIMENSION_TYPE_OPEN)
+	{
+		AttrNumber attnum = get_attnum(info->table_relid, NameStr(info->colname));
+		Oid atttype = get_atttype(info->table_relid, attnum);
+
+		if (info->interval_origin_isnull)
+		{
+			info->interval_origin_type = atttype;
+			info->interval_origin = open_dim_default_calendar_origin(atttype);
+			info->interval_origin_isnull = false;
+			elog(NOTICE, "set interval_datum default");
+		}
+		else
+		{
+			/* TODO: coerce origin_type to column type */
+			Ensure(info->interval_origin_type == atttype,
+				   "origin must have the same as type as column \"%s\"",
+				   NameStr(info->colname));
+		}
+	}
+}
+
 /*
  * Add a new dimension to a hypertable.
  *
@@ -1691,6 +1747,7 @@ ts_dimension_add_internal(FunctionCallInfo fcinfo, DimensionInfo *info, bool is_
 				 errmsg("cannot omit both the number of partitions and the interval")));
 
 	ts_dimension_info_validate(info);
+	ts_dimension_info_set_defaults(info);
 
 	if (!info->skip)
 	{
@@ -1760,6 +1817,7 @@ Datum
 ts_dimension_add(PG_FUNCTION_ARGS)
 {
 	bool origin_isnull = PG_ARGISNULL(6);
+	Name colname = PG_ARGISNULL(1) ? NULL : PG_GETARG_NAME(1);
 	DimensionInfo info = {
 		.type = PG_ARGISNULL(2) ? DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED,
 		.table_relid = PG_GETARG_OID(0),
@@ -1776,8 +1834,11 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 
-	if (!PG_ARGISNULL(1))
-		namestrcpy(&info.colname, NameStr(*PG_GETARG_NAME(1)));
+	if (NULL == colname)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("column_name cannot be NULL")));
+
+	namestrcpy(&info.colname, NameStr(*colname));
 
 	if (PG_ARGISNULL(0))
 		ereport(ERROR,
@@ -1903,8 +1964,11 @@ Datum
 ts_dimension_add_general(PG_FUNCTION_ARGS)
 {
 	DimensionInfo *info = NULL;
+	Oid relid = PG_GETARG_OID(0);
 	GETARG_NOTNULL_POINTER(info, 1, "dimension", DimensionInfo);
-	info->table_relid = PG_GETARG_OID(0);
+	AttrNumber colattr = get_attnum(relid, NameStr(info->colname));
+	info->coltype = get_atttype(relid, colattr);
+	info->table_relid = relid;
 	if (PG_GETARG_BOOL(2))
 		info->if_not_exists = true;
 	return ts_dimension_add_internal(fcinfo, info, true);

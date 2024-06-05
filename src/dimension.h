@@ -160,6 +160,7 @@ extern TSDLLEXPORT DimensionInfo *ts_dimension_info_create_closed(Oid table_reli
 																  regproc partitioning_func);
 
 extern void ts_dimension_info_validate(DimensionInfo *info);
+extern void ts_dimension_info_set_defaults(DimensionInfo *info);
 extern int32 ts_dimension_add_from_info(DimensionInfo *info);
 extern void ts_dimensions_rename_schema_name(const char *old_name, const char *new_name);
 extern TSDLLEXPORT void ts_dimension_update(const Hypertable *ht, const NameData *dimname,

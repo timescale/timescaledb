@@ -51,8 +51,7 @@ CREATE OR REPLACE FUNCTION @extschema@.create_hypertable(
     dimension               _timescaledb_internal.dimension_info,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE,
-    migrate_data            BOOLEAN = FALSE,
-	origin                  ANYELEMENT = NULL::timestamptz
+    migrate_data            BOOLEAN = FALSE
 ) RETURNS TABLE(hypertable_id INT, created BOOL) AS '@MODULE_PATHNAME@', 'ts_hypertable_create_general' LANGUAGE C VOLATILE;
 
 -- Set adaptive chunking. To disable, set chunk_target_size => 'off'.
@@ -135,7 +134,8 @@ CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
     number_partitions       INTEGER = NULL,
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,
     partitioning_func       REGPROC = NULL,
-    if_not_exists           BOOLEAN = FALSE
+    if_not_exists           BOOLEAN = FALSE,
+	origin                  ANYELEMENT = NULL::timestamptz
 ) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
 
@@ -159,7 +159,7 @@ CREATE OR REPLACE FUNCTION @extschema@.by_hash(column_name NAME, number_partitio
 CREATE OR REPLACE FUNCTION @extschema@.by_range(column_name NAME,
                                                 partition_interval ANYELEMENT = NULL::bigint,
                                                 partition_func regproc = NULL,
-												partition_origin TIMESTAMPTZ = NULL)
+												partition_origin "any" = NULL::TIMESTAMPTZ)
     RETURNS _timescaledb_internal.dimension_info LANGUAGE C
     AS '@MODULE_PATHNAME@', 'ts_range_dimension';
 
