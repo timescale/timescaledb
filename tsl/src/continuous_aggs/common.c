@@ -96,11 +96,6 @@ function_allowed_in_cagg_definition(Oid funcid)
 	if (finfo->allowed_in_cagg_definition)
 		return true;
 
-	/* Allow creation of CAggs with deprecated bucket function in debug builds for testing purposes
-	 */
-	if (ts_guc_debug_allow_cagg_with_deprecated_funcs && IS_DEPRECATED_TIME_BUCKET_NG_FUNC(finfo))
-		return true;
-
 	return false;
 }
 
@@ -251,31 +246,10 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 				continue;
 			}
 
-			/* Do we have a bucketing function that is not allowed in the CAgg definition?
-			 *
-			 * This is only validated upon creation. If an older TSDB version has allowed us to use
-			 * the function and it's now removed from the list of allowed functions, we should not
-			 * error out (e.g., materialized_only setting is changed on a CAgg that uses the
-			 * deprecated time_bucket_ng function). */
+			/* Do we have a bucketing function that is not allowed in the CAgg definition? */
 			if (!function_allowed_in_cagg_definition(fe->funcid))
 			{
-				if (IS_DEPRECATED_TIME_BUCKET_NG_FUNC(finfo))
-				{
-					if (is_cagg_create)
-					{
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("experimental bucket functions are not supported inside a "
-										"CAgg "
-										"definition"),
-								 errhint("Use a function from the %s schema instead.",
-										 FUNCTIONS_SCHEMA_NAME)));
-					}
-				}
-				else
-				{
-					continue;
-				}
+				continue;
 			}
 
 			if (found)
@@ -977,11 +951,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	 */
 	Ensure(OidIsValid(bucket_info.bf->bucket_function), "unable to find valid bucket function");
 
-	/* Ignore time_bucket_ng in this check, since offset and origin were allowed in the past */
-	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bucket_info.bf->bucket_function);
-	Ensure(func_info != NULL, "bucket function is not found in function cache");
-	bool is_time_bucket_ng = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
-
 	/*
 	 * Some time_bucket variants using variable-sized buckets and custom origin/offset values are
 	 * not behaving correctly. To prevent misaligned buckets, these variants are blocked at the
@@ -1000,8 +969,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	 *		2000-01-01 00:00:00+00              <--- Should be 2000-01-01 01:05:00+00
 	 *		(1 row)
 	 */
-	if (time_bucket_info_has_fixed_width(&bucket_info) == false && time_offset_or_origin_set &&
-		!is_time_bucket_ng)
+	if (time_bucket_info_has_fixed_width(&bucket_info) == false && time_offset_or_origin_set)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

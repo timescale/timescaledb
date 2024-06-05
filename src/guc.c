@@ -99,7 +99,6 @@ char *ts_last_tune_time = NULL;
 char *ts_last_tune_version = NULL;
 
 bool ts_guc_debug_require_batch_sorted_merge = false;
-bool ts_guc_debug_allow_cagg_with_deprecated_funcs = false;
 
 #ifdef TS_DEBUG
 bool ts_shutdown_bgw = false;
@@ -841,17 +840,6 @@ _guc_init(void)
 							 /* short_desc= */ "require batch sorted merge in DecompressChunk node",
 							 /* long_desc= */ "this is for debugging purposes",
 							 /* valueAddr= */ &ts_guc_debug_require_batch_sorted_merge,
-							 /* bootValue= */ false,
-							 /* context= */ PGC_USERSET,
-							 /* flags= */ 0,
-							 /* check_hook= */ NULL,
-							 /* assign_hook= */ NULL,
-							 /* show_hook= */ NULL);
-
-	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("debug_allow_cagg_with_deprecated_funcs"),
-							 /* short_desc= */ "allow new caggs using time_bucket_ng",
-							 /* long_desc= */ "this is for debugging/testing purposes",
-							 /* valueAddr= */ &ts_guc_debug_allow_cagg_with_deprecated_funcs,
 							 /* bootValue= */ false,
 							 /* context= */ PGC_USERSET,
 							 /* flags= */ 0,

@@ -1377,9 +1377,8 @@ ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 	FuncInfo *func_info = ts_func_cache_get(bucket_function);
 	Ensure(func_info != NULL, "unable to get function info for Oid %d", bucket_function);
 
-	/* The function has to be a currently allowed function or one of the deprecated bucketing
-	 * functions */
-	Assert(func_info->allowed_in_cagg_definition || IS_DEPRECATED_TIME_BUCKET_NG_FUNC(func_info));
+	/* The function has to be a currently allowed function */
+	Assert(func_info->allowed_in_cagg_definition);
 
 	Oid first_bucket_arg = func_info->arg_types[0];
 
@@ -1387,8 +1386,7 @@ ts_continuous_agg_bucket_on_interval(Oid bucket_function)
 }
 
 /*
- * Calls the desired time bucket function depending on the arguments. If the experimental flag is
- * set on ContinuousAggsBucketFunction, one of time_bucket_ng() versions is used. This is a common
+ * Calls the desired time bucket function depending on the arguments. This is a common
  * procedure used by ts_compute_* below.
  */
 static Datum
@@ -1396,85 +1394,42 @@ generic_time_bucket(const ContinuousAggsBucketFunction *bf, Datum timestamp)
 {
 	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bf->bucket_function);
 	Ensure(func_info != NULL, "unable to get bucket function for Oid %d", bf->bucket_function);
-	bool is_experimental = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
 
-	if (!is_experimental)
+	if (bf->bucket_time_timezone != NULL)
 	{
-		if (bf->bucket_time_timezone != NULL)
-		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-			{
-				/* using default origin */
-				return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-			else
-			{
-				/* custom origin specified */
-				return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone),
-										   TimestampTzGetDatum(bf->bucket_time_origin));
-			}
-		}
-
 		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
 		{
 			/* using default origin */
-			return DirectFunctionCall2(ts_timestamp_bucket,
+			return DirectFunctionCall3(ts_timestamptz_timezone_bucket,
 									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp);
+									   timestamp,
+									   CStringGetTextDatum(bf->bucket_time_timezone));
 		}
 		else
 		{
 			/* custom origin specified */
-			return DirectFunctionCall3(ts_timestamp_bucket,
+			return DirectFunctionCall4(ts_timestamptz_timezone_bucket,
 									   IntervalPGetDatum(bf->bucket_time_width),
 									   timestamp,
+									   CStringGetTextDatum(bf->bucket_time_timezone),
 									   TimestampTzGetDatum(bf->bucket_time_origin));
 		}
 	}
+
+	if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
+	{
+		/* using default origin */
+		return DirectFunctionCall2(ts_timestamp_bucket,
+								   IntervalPGetDatum(bf->bucket_time_width),
+								   timestamp);
+	}
 	else
 	{
-		if (bf->bucket_time_timezone != NULL)
-		{
-			if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-			{
-				/* using default origin */
-				return DirectFunctionCall3(ts_time_bucket_ng_timezone,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-			else
-			{
-				/* custom origin specified */
-				return DirectFunctionCall4(ts_time_bucket_ng_timezone_origin,
-										   IntervalPGetDatum(bf->bucket_time_width),
-										   timestamp,
-										   TimestampTzGetDatum(bf->bucket_time_origin),
-										   CStringGetTextDatum(bf->bucket_time_timezone));
-			}
-		}
-
-		if (TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
-		{
-			/* using default origin */
-			return DirectFunctionCall2(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp);
-		}
-		else
-		{
-			/* custom origin specified */
-			return DirectFunctionCall3(ts_time_bucket_ng_timestamp,
-									   IntervalPGetDatum(bf->bucket_time_width),
-									   timestamp,
-									   TimestampTzGetDatum(bf->bucket_time_origin));
-		}
+		/* custom origin specified */
+		return DirectFunctionCall3(ts_timestamp_bucket,
+								   IntervalPGetDatum(bf->bucket_time_width),
+								   timestamp,
+								   TimestampTzGetDatum(bf->bucket_time_origin));
 	}
 }
 
