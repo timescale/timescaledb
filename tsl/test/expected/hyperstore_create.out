@@ -5,13 +5,6 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-create or replace function untwist_chunk(chunk regclass) returns regclass language plpgsql
-as $$
-begin
-    execute format('alter table %s set access method heap', chunk);
-    return chunk;
-end
-$$;
 -- Function to run an explain analyze with and do replacements on the
 -- emitted plan. This is intended to be used when the structure of the
 -- plan is important, but not the specific chunks scanned nor the
@@ -326,10 +319,10 @@ select * from compressed_rel_size_stats order by rel;
 (8 rows)
 
 -- Decompress hyperstores to check that stats are removed
-select untwist_chunk(rel)
+select decompress_chunk(rel)
   from compressed_rel_size_stats
   where amname = 'hyperstore';
-              untwist_chunk              
+            decompress_chunk             
 -----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
  _timescaledb_internal._hyper_1_3_chunk
@@ -398,7 +391,7 @@ select * from compressed_rel_size_stats order by rel;
 
 -- Convert back to heap and compress the old way to compare
 -- compression size stats
-select compress_chunk(untwist_chunk(ch))
+select compress_chunk(decompress_chunk(ch))
 from show_chunks('test2') ch;
              compress_chunk              
 -----------------------------------------
@@ -411,7 +404,7 @@ from show_chunks('test2') ch;
 (6 rows)
 
 -- Using compress_using => NULL should be the same as "heap"
-select compress_chunk(untwist_chunk(ch), compress_using => NULL)
+select compress_chunk(decompress_chunk(ch), compress_using => NULL)
 from show_chunks('test3') ch;
              compress_chunk              
 -----------------------------------------
@@ -682,7 +675,7 @@ select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
 (1 row)
 
 -- Convert all hyperstores back to heap
-select untwist_chunk(rel) ch
+select decompress_chunk(rel) ch
   from compressed_rel_size_stats
   where amname = 'hyperstore'
   order by ch;
