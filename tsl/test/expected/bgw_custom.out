@@ -696,26 +696,9 @@ $$ LANGUAGE PLPGSQL;
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc,
 initial_start => :'time_zero'::timestamptz) as job_id_int \gset
 NOTICE:  I print a message, and then I return least(1,2)
--- drop the registered check function, verify that alter_job will work and print a warning that
--- the check is being skipped due to the check function missing
-ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
-select job_id, schedule_interval, config, check_config from alter_job(:job_id, schedule_interval => '1 hour');
-WARNING:  function public.test_config_check_func(config jsonb) not found, skipping config validation for job 1008
- job_id | schedule_interval | config |         check_config          
---------+-------------------+--------+-------------------------------
-   1008 | @ 1 hour          | {}     | public.test_config_check_func
-(1 row)
-
-DROP FUNCTION test_config_check_func_returns_int;
-select job_id, schedule_interval, config, check_config from alter_job(:job_id_int, config => '{"field":"value"}');
-WARNING:  function public.test_config_check_func_returns_int(config jsonb) not found, skipping config validation for job 1009
- job_id | schedule_interval |       config       |               check_config                
---------+-------------------+--------------------+-------------------------------------------
-   1009 | @ 5 secs          | {"field": "value"} | public.test_config_check_func_returns_int
-(1 row)
-
 -- rename the check function and then call alter_job to register the new name
-select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'renamed_func'::regproc);
+ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'renamed_func'::regproc, schedule_interval => '1 hour');
 NOTICE:  This message will get printed for both NULL and not NULL config
  job_id | schedule_interval | config |    check_config     
 --------+-------------------+--------+---------------------
@@ -728,6 +711,16 @@ NOTICE:  This message will get printed for both NULL and not NULL config
  job_id | schedule_interval | config |    check_config     
 --------+-------------------+--------+---------------------
    1008 | @ 1 hour          | {}     | public.renamed_func
+(1 row)
+
+-- drop the registered check function, verify that alter_job will work and print a warning that
+-- the check is being skipped due to the check function missing
+DROP FUNCTION test_config_check_func_returns_int;
+select job_id, schedule_interval, config, check_config from alter_job(:job_id_int, config => '{"field":"value"}');
+WARNING:  function public.test_config_check_func_returns_int(config jsonb) not found, skipping config validation for job 1009
+ job_id | schedule_interval |       config       |               check_config                
+--------+-------------------+--------------------+-------------------------------------------
+   1009 | @ 5 secs          | {"field": "value"} | public.test_config_check_func_returns_int
 (1 row)
 
 -- do not drop the current check function but register a new one

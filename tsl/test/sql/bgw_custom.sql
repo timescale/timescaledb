@@ -422,17 +422,17 @@ $$ LANGUAGE PLPGSQL;
 select add_job('test_proc_with_check', '5 secs', config => '{}', check_config => 'test_config_check_func_returns_int'::regproc,
 initial_start => :'time_zero'::timestamptz) as job_id_int \gset
 
+-- rename the check function and then call alter_job to register the new name
+ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'renamed_func'::regproc, schedule_interval => '1 hour');
+-- run alter again, should get a config check
+select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
+
 -- drop the registered check function, verify that alter_job will work and print a warning that
 -- the check is being skipped due to the check function missing
-ALTER FUNCTION test_config_check_func RENAME TO renamed_func;
-select job_id, schedule_interval, config, check_config from alter_job(:job_id, schedule_interval => '1 hour');
 DROP FUNCTION test_config_check_func_returns_int;
 select job_id, schedule_interval, config, check_config from alter_job(:job_id_int, config => '{"field":"value"}');
 
--- rename the check function and then call alter_job to register the new name
-select job_id, schedule_interval, config, check_config from alter_job(:job_id, check_config => 'renamed_func'::regproc);
--- run alter again, should get a config check
-select job_id, schedule_interval, config, check_config from alter_job(:job_id, config => '{}');
 -- do not drop the current check function but register a new one
 CREATE OR REPLACE FUNCTION substitute_check_func(config jsonb) RETURNS VOID
 AS $$
