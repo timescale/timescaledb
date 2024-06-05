@@ -185,7 +185,7 @@ where amname = 'hyperstore' and numrows_pre_compression is null;
 select * from compressed_rel_size_stats order by rel;
 
 -- Decompress hyperstores to check that stats are removed
-select untwist_chunk(rel)
+select decompress_chunk(rel)
   from compressed_rel_size_stats
   where amname = 'hyperstore';
 
@@ -215,10 +215,10 @@ select * from compressed_rel_size_stats order by rel;
 
 -- Convert back to heap and compress the old way to compare
 -- compression size stats
-select compress_chunk(untwist_chunk(ch))
+select compress_chunk(decompress_chunk(ch))
 from show_chunks('test2') ch;
 -- Using compress_using => NULL should be the same as "heap"
-select compress_chunk(untwist_chunk(ch), compress_using => NULL)
+select compress_chunk(decompress_chunk(ch), compress_using => NULL)
 from show_chunks('test3') ch;
 
 select * from compressed_rel_size_stats order by rel;
@@ -324,7 +324,7 @@ select compress_chunk(:'chunk', compress_using => 'hyperstore');
 select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
 
 -- Convert all hyperstores back to heap
-select untwist_chunk(rel) ch
+select decompress_chunk(rel) ch
   from compressed_rel_size_stats
   where amname = 'hyperstore'
   order by ch;
