@@ -49,6 +49,11 @@ BEGIN
         USING _timescaledb_catalog.chunk_constraint
         WHERE dimension_slice.id = chunk_constraint.dimension_slice_id
         AND chunk_constraint.chunk_id = _chunk_id
+        AND NOT EXISTS (
+            SELECT FROM _timescaledb_catalog.chunk_constraint cc
+            WHERE cc.chunk_id <> _chunk_id
+            AND cc.dimension_slice_id = dimension_slice.id
+        )
         RETURNING _timescaledb_catalog.dimension_slice.id
     )
     DELETE FROM _timescaledb_catalog.chunk_constraint
