@@ -162,8 +162,6 @@ where n in (1, 3)
 
 VACUUM ANALYZE metrics;
 
-VACUUM ANALYZE metrics;
-
 -- compress some chunks on space partitioned hypertable
 -- we compress all chunks of first time slice, none of second, and 2 of the last time slice
 
