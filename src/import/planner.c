@@ -387,10 +387,9 @@ ts_make_sort(Plan *lefttree, int numCols, AttrNumber *sortColIdx, Oid *sortOpera
 	node->collations = collations;
 	node->nullsFirst = nullsFirst;
 
-	fprintf(stderr, "ts make sort\n");
-	mybt();
-	my_print(node);
-
+//	fprintf(stderr, "ts make sort\n");
+//	mybt();
+//	my_print(node);
 
 	return node;
 }

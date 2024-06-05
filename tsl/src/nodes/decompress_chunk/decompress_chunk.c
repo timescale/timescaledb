@@ -4,9 +4,9 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include <math.h>
 #include <postgres.h>
 #include <catalog/pg_operator.h>
+#include <math.h>
 #include <miscadmin.h>
 #include <nodes/bitmapset.h>
 #include <nodes/makefuncs.h>
@@ -25,17 +25,17 @@
 #include <planner.h>
 
 #include "compat/compat.h"
+#include "compression/compression.h"
+#include "compression/create.h"
 #include "cross_module_fn.h"
 #include "custom_type_cache.h"
 #include "debug_assert.h"
-#include "ts_catalog/array_utils.h"
-#include "import/planner.h"
 #include "import/allpaths.h"
-#include "compression/create.h"
-#include "compression/compression.h"
+#include "import/planner.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/planner.h"
 #include "nodes/decompress_chunk/qual_pushdown.h"
+#include "ts_catalog/array_utils.h"
 #include "utils.h"
 
 static CustomPathMethods decompress_chunk_path_methods = {
@@ -394,11 +394,8 @@ cost_batch_sorted_merge(PlannerInfo *root, CompressionInfo *compression_info,
 					  .varattno = compressed_attno };
 		segmentby_groupexprs = lappend(segmentby_groupexprs, var);
 	}
-	const double open_batches_estimated = estimate_num_groups_compat(root,
-																	 segmentby_groupexprs,
-																	 dcpath->custom_path.path.rows,
-																	 NULL,
-																	 NULL);
+	const double open_batches_estimated =
+		estimate_num_groups(root, segmentby_groupexprs, dcpath->custom_path.path.rows, NULL, NULL);
 	Assert(open_batches_estimated > 0);
 
 	/*
@@ -701,8 +698,8 @@ make_chunk_sorted_path(PlannerInfo *root, RelOptInfo *chunk_rel, Hypertable *ht,
 	Path *sorted_path = (Path *)
 		create_sort_path(root, chunk_rel, (Path *) path_copy, useful_pathkeys, root->limit_tuples);
 
-//	fprintf(stderr, "made useful sorted path:\n");
-//	my_print(sorted_path);
+	//	fprintf(stderr, "made useful sorted path:\n");
+	//	my_print(sorted_path);
 
 	return sorted_path;
 }
@@ -1036,16 +1033,15 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * MergeAppend paths if some child paths have pathkeys, so
 				 * here it is enough to create a plain Append path.
 				 */
-				path = (Path *) create_append_path_compat(root,
-														  chunk_rel,
-														  list_make2(path, uncompressed_path),
-														  NIL /* partial paths */,
-														  NIL, // path->pathkeys,
-														  req_outer,
-														  0,
-														  false,
-														  false,
-														  path->rows + uncompressed_path->rows);
+				path = (Path *) create_append_path(root,
+												   chunk_rel,
+												   list_make2(path, uncompressed_path),
+												   NIL /* partial paths */,
+												   NIL, // path->pathkeys,
+												   req_outer,
+												   0,
+												   false,
+												   path->rows + uncompressed_path->rows);
 				add_path(chunk_rel, path);
 			}
 		}
@@ -1124,17 +1120,16 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 					path_list = list_make1(uncompressed_path);
 
 				/* Use a parallel aware append to handle non-partial paths properly */
-				path = (Path *) create_append_path_compat(root,
-														  chunk_rel,
-														  path_list,
-														  partial_path_list,
-														  NIL /* pathkeys */,
-														  req_outer,
-														  Max(path->parallel_workers,
-															  uncompressed_path->parallel_workers),
-														  true, /* parallel aware */
-														  NIL,
-														  path->rows + uncompressed_path->rows);
+				path = (Path *) create_append_path(root,
+												   chunk_rel,
+												   path_list,
+												   partial_path_list,
+												   NIL /* pathkeys */,
+												   req_outer,
+												   Max(path->parallel_workers,
+													   uncompressed_path->parallel_workers),
+												   true, /* parallel aware */
+												   path->rows + uncompressed_path->rows);
 			}
 
 			add_partial_path(chunk_rel, path);
