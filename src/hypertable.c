@@ -1678,6 +1678,16 @@ ts_hypertable_create_general(PG_FUNCTION_ARGS)
 	bool migrate_data = PG_ARGISNULL(4) ? false : PG_GETARG_BOOL(4);
 
 	/*
+	 * We do not support closed (hash) dimensions for the main partitioning
+	 * column. Check that first. The behavior then becomes consistent with the
+	 * earlier "ts_hypertable_create_time_prev" implementation.
+	 */
+	if (IS_CLOSED_DIMENSION(dim_info))
+		ereport(ERROR,
+				(errmsg("cannot partition using a closed dimension on primary column"),
+				 errhint("Use range partitioning on the primary column.")));
+
+	/*
 	 * Current implementation requires to provide a valid chunk sizing function
 	 * that is being used to populate hypertable catalog information.
 	 */

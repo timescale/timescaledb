@@ -903,7 +903,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	 *       change part_dimension->fd.column_type to partitioning_type
 	 *       below, along with any other fallout.
 	 */
-	if (part_dimension->partitioning != NULL)
+	if (part_dimension == NULL || part_dimension->partitioning != NULL)
 	{
 		ts_cache_release(hcache);
 		ereport(ERROR,
