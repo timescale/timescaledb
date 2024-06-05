@@ -14,8 +14,8 @@
  */
 
 #include <postgres.h>
-#include <lib/stringinfo.h>
 #include "compression/compression.h"
+#include <lib/stringinfo.h>
 
 #include <fmgr.h>
 

@@ -10,8 +10,8 @@
 #include <access/htup_details.h>
 #include <catalog/pg_type.h>
 #include <fmgr.h>
-#include <libpq/pqformat.h>
 #include <lib/stringinfo.h>
+#include <libpq/pqformat.h>
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
@@ -19,16 +19,16 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
+#include "test_utils.h"
 #include "ts_catalog/catalog.h"
 #include <export.h>
-#include "test_utils.h"
 
 #include "compression/array.h"
 #include "compression/arrow_c_data_interface.h"
-#include "compression/dictionary.h"
-#include "compression/gorilla.h"
 #include "compression/deltadelta.h"
+#include "compression/dictionary.h"
 #include "compression/float_utils.h"
+#include "compression/gorilla.h"
 #include "compression/segment_meta.h"
 
 #define TEST_ELEMENTS 1015

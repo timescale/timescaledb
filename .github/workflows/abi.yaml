@@ -21,11 +21,9 @@ jobs:
   config:
     runs-on: ubuntu-latest
     outputs:
-      pg13_abi_min: ${{ steps.config.outputs.pg13_abi_min }}
       pg14_abi_min: ${{ steps.config.outputs.pg14_abi_min }}
       pg15_abi_min: ${{ steps.config.outputs.pg15_abi_min }}
       pg16_abi_min: ${{ steps.config.outputs.pg16_abi_min }}
-      pg13_latest: ${{ steps.config.outputs.pg13_latest }}
       pg14_latest: ${{ steps.config.outputs.pg14_latest }}
       pg15_latest: ${{ steps.config.outputs.pg15_latest }}
       pg16_latest: ${{ steps.config.outputs.pg16_latest }}
@@ -45,17 +43,9 @@ jobs:
       fail-fast: false
       matrix:
         dir: [ "forward", "backward" ]
-        pg: [ 13, 14, 15 ]
+        pg: [ 14, 15, 16 ]
         os: [ windows-2019 ]
         include:
-          - dir: backward
-            pg: 13
-            builder: ${{ fromJson(needs.config.outputs.pg13_latest) }}-alpine3.18
-            tester: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}-alpine
-          - dir: forward
-            pg: 13
-            builder: ${{ fromJson(needs.config.outputs.pg13_abi_min ) }}-alpine
-            tester: ${{ fromJson(needs.config.outputs.pg13_latest) }}-alpine3.18
           - dir: backward
             pg: 14
             builder: ${{ fromJson(needs.config.outputs.pg14_latest) }}-alpine3.18

@@ -7,9 +7,9 @@
 #include <utils/jsonb.h>
 #include <utils/numeric.h>
 
+#include "dimension_vector.h"
 #include "export.h"
 #include "hypercube.h"
-#include "dimension_vector.h"
 
 /*
  * A hypercube represents the partition bounds of a hypertable chunk.

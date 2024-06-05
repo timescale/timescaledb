@@ -10,216 +10,262 @@ use Test::More;
 plan skip_all => "PostgreSQL version < 14" if $ENV{PG_VERSION_MAJOR} < 14;
 
 # This test checks the creation of logical replication messages
-# used to mark the start and end of inserts happening as a result
-# of a (partial) decompression.
+# used to mark the start and end of activity happening as a result
+# compression/decompression.
 
 # Publishing node
-my $publisher =
-  TimescaleNode->create('publisher', allows_streaming => 'logical');
+my $db = TimescaleNode->create('publisher', allows_streaming => 'logical');
 
-# Subscribing node
-my $subscriber =
-  TimescaleNode->create('subscriber', allows_streaming => 'logical');
+sub run_queries
+{
+	foreach my $query (@_)
+	{
+		$db->safe_psql('postgres', $query);
+	}
+}
 
-# Setup test structures
-$publisher->safe_psql(
-	'postgres',
-	qq(
-        CREATE TABLE test (ts timestamptz NOT NULL PRIMARY KEY , val INT);
-        SELECT create_hypertable('test', 'ts', chunk_time_interval := INTERVAL '1day');
-    )
+sub query_generates_wal
+{
+	my $description  = shift @_;
+	my $query        = shift @_;
+	my $expected_wal = shift @_;
+
+	$db->safe_psql('postgres', $query);
+	my $result = $db->safe_psql('postgres',
+		qq/SELECT data FROM pg_logical_slot_get_changes('slot', NULL, NULL);/
+	);
+	$result =~ s/\s+creation_time.*//g
+	  ; # creation_time is non-deterministic, so strip it from wal (it's always the final column)
+	$result =~ s/(BEGIN|COMMIT) \d+/$1/g
+	  ; # BEGIN/COMMIT statements contain the statement number, which we don't care about
+
+	is($result, $expected_wal, $description);
+}
+
+sub discard_wal
+{
+	$db->safe_psql('postgres',
+		qq/SELECT data FROM pg_logical_slot_get_changes('slot', NULL, NULL);/
+	);
+}
+
+# stop background jobs because they can scribble in our WAL
+run_queries(
+	qq/
+	SELECT _timescaledb_functions.stop_background_workers();
+	/
 );
 
-# To kick off replication we need to fake the setup of a hypertable
-$subscriber->safe_psql('postgres',
-	"CREATE TABLE _timescaledb_internal._hyper_1_1_chunk (ts timestamptz NOT NULL PRIMARY KEY , val INT)"
+run_queries(
+	qq/
+	CREATE TABLE metrics(time timestamptz, device_id bigint, value float8);
+	SELECT create_hypertable('metrics', 'time');
+	ALTER TABLE metrics REPLICA IDENTITY FULL;
+	ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id');
+	SELECT 'init' FROM pg_create_logical_replication_slot('slot', 'test_decoding');
+	/
 );
 
-# Initial data insert and preparation of the internal chunk tables
-$publisher->safe_psql(
-	'postgres',
-	qq(
-        INSERT INTO test
-        SELECT s.s, (random() * 100)::INT
-        FROM generate_series('2023-01-01'::timestamptz, '2023-01-02'::timestamptz, INTERVAL '3 hour') s;
-    )
+query_generates_wal(
+	"insert into plain chunk",
+	qq/INSERT INTO metrics VALUES ('2023-07-01T00:00:00Z', 1, 1.0);/,
+	qq(BEGIN
+table _timescaledb_catalog.dimension_slice: INSERT: id[integer]:1 dimension_id[integer]:1 range_start[bigint]:1687996800000000 range_end[bigint]:1688601600000000
+table _timescaledb_catalog.chunk: INSERT: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:null dropped[boolean]:false status[integer]:0 osm_chunk[boolean]:false
+table _timescaledb_catalog.chunk_constraint: INSERT: chunk_id[integer]:1 dimension_slice_id[integer]:1 constraint_name[name]:'constraint_1' hypertable_constraint_name[name]:null
+table _timescaledb_catalog.chunk_index: INSERT: chunk_id[integer]:1 index_name[name]:'_hyper_1_1_chunk_metrics_time_idx' hypertable_id[integer]:1 hypertable_index_name[name]:'metrics_time_idx'
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
+COMMIT)
 );
 
-# Setup logical replication
-my $publisher_connstr = $publisher->connstr . ' dbname=postgres';
-$publisher->safe_psql('postgres',
-	"CREATE PUBLICATION tap_pub FOR TABLE _timescaledb_internal._hyper_1_1_chunk"
-);
-$subscriber->safe_psql('postgres',
-	"CREATE SUBSCRIPTION tap_sub CONNECTION '$publisher_connstr' PUBLICATION tap_pub WITH (binary = true)"
-);
-
-# Wait for catchup and disable consumption of additional messages
-$publisher->wait_for_catchup('tap_sub');
-$subscriber->safe_psql('postgres', "ALTER SUBSCRIPTION tap_sub DISABLE");
-$publisher->poll_query_until(
-	'postgres',
-	"SELECT COUNT(*) FROM pg_catalog.pg_replication_slots WHERE slot_name = 'tap_sub' AND active='f'",
-	1);
-
-# Enable marker generation through GUC
-$publisher->append_conf('postgresql.conf',
-	'timescaledb.enable_decompression_logrep_markers=true');
-$publisher->reload();
-
-# Compress chunks and consume replication stream explicitly
-$publisher->safe_psql(
-	'postgres',
-	qq(
-        ALTER TABLE test SET (timescaledb.compress);
-        SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);
-    )
-);
-$publisher->safe_psql(
-	'postgres',
-	qq(
-        SELECT pg_logical_slot_get_binary_changes('tap_sub', NULL, NULL,
-            'proto_version', '1',
-            'publication_names', 'tap_pub',
-            'messages', 'true'
-        );
-    )
+query_generates_wal(
+	"compress chunk",
+	qq(SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
+	qq(BEGIN
+message: transactional: 1 prefix: ::timescaledb-compression-start, sz: 0 content:
+table _timescaledb_catalog.chunk: INSERT: id[integer]:2 hypertable_id[integer]:2 schema_name[name]:'_timescaledb_internal' table_name[name]:'compress_hyper_2_2_chunk' compressed_chunk_id[integer]:null dropped[boolean]:false status[integer]:0 osm_chunk[boolean]:false
+table _timescaledb_catalog.compression_settings: INSERT: relid[regclass]:'_timescaledb_internal.compress_hyper_2_2_chunk' segmentby[text[]]:'{device_id}' orderby[text[]]:'{time}' orderby_desc[boolean[]]:'{f}' orderby_nullsfirst[boolean[]]:'{f}'
+table _timescaledb_internal.compress_hyper_2_2_chunk: INSERT: _ts_meta_count[integer]:1 _ts_meta_sequence_num[integer]:10 device_id[bigint]:1 _ts_meta_min_1[timestamp with time zone]:'2023-06-30 17:00:00-07' _ts_meta_max_1[timestamp with time zone]:'2023-06-30 17:00:00-07' "time"[_timescaledb_internal.compressed_data]:'BAAAAqJgYhxAAAAComBiHEAAAAAAAQAAAAEAAAAAAAAADgAFRMDEOIAA' value[_timescaledb_internal.compressed_data]:'AwA/8AAAAAAAAAAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEAAAABAAAAAAAAAAEAAAAAAAAAAQAAAAEGAAAAAAAAAAIAAAABAAAAAQAAAAAAAAAEAAAAAAAAAAoAAAABCgAAAAAAAAP/'
+table _timescaledb_catalog.compression_chunk_size: INSERT: chunk_id[integer]:1 compressed_chunk_id[integer]:2 uncompressed_heap_size[bigint]:8192 uncompressed_toast_size[bigint]:0 uncompressed_index_size[bigint]:16384 compressed_heap_size[bigint]:16384 compressed_toast_size[bigint]:8192 compressed_index_size[bigint]:16384 numrows_pre_compression[bigint]:1 numrows_post_compression[bigint]:1 numrows_frozen_immediately[bigint]:1
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:2 dropped[boolean]:false status[integer]:1 osm_chunk[boolean]:false
+message: transactional: 1 prefix: ::timescaledb-compression-end, sz: 0 content:
+COMMIT)
 );
 
-# Create a new entry which forces a decompression to happen
-$publisher->safe_psql('postgres',
-	"INSERT INTO test VALUES ('2023-01-01 00:10:00', 5555)");
-
-# Retrieve the replication log messages
-my $result = $publisher->safe_psql(
-	'postgres',
-	qq(
-        SELECT get_byte(data, 0)
-        FROM pg_logical_slot_peek_binary_changes('tap_sub', NULL, NULL,
-            'proto_version', '1',
-            'publication_names', 'tap_pub',
-            'messages', 'true'
-        );
-    )
+query_generates_wal(
+	"decompress chunk",
+	qq(SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
+	qq(BEGIN
+message: transactional: 1 prefix: ::timescaledb-decompression-start, sz: 0 content:
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_catalog.compression_chunk_size: DELETE: chunk_id[integer]:1
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:null dropped[boolean]:false status[integer]:0 osm_chunk[boolean]:false
+table _timescaledb_catalog.compression_settings: DELETE: relid[regclass]:'_timescaledb_internal.compress_hyper_2_2_chunk'
+table _timescaledb_catalog.chunk: DELETE: id[integer]:2
+message: transactional: 1 prefix: ::timescaledb-decompression-end, sz: 0 content:
+COMMIT)
 );
 
-# Test: BEGIN, MESSAGE (start marker), RELATION, ... INSERT (decompression inserts x6) ..., MESSAGE (end marker), INSERT, COMMIT
-is( $result,
-	qq(66
-77
-82
-73
-73
-73
-73
-73
-73
-77
-73
-67),
-	'messages on slot meet expectation <<BEGIN, MESSAGE (start marker), RELATION, ... INSERT (decompression inserts x6) ..., MESSAGE (end marker), INSERT, COMMIT>>'
+run_queries(
+	qq(SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);)
+);
+discard_wal();
+
+query_generates_wal(
+	"recompress chunk (NOOP)",
+	qq(SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
+	qq(BEGIN
+message: transactional: 1 prefix: ::timescaledb-compression-start, sz: 0 content:
+message: transactional: 1 prefix: ::timescaledb-compression-end, sz: 0 content:
+COMMIT),);
+
+query_generates_wal(
+	"insert into uncompressed chunk",
+	qq(INSERT INTO metrics VALUES ('2023-07-01T01:00:00Z', 1, 1.0);),
+	qq(BEGIN
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 18:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:3 dropped[boolean]:false status[integer]:9 osm_chunk[boolean]:false
+COMMIT),);
+
+query_generates_wal(
+	"recompress chunk",
+	qq(SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
+	qq(BEGIN
+message: transactional: 1 prefix: ::timescaledb-compression-start, sz: 0 content:
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:3 dropped[boolean]:false status[integer]:1 osm_chunk[boolean]:false
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 18:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_internal.compress_hyper_2_3_chunk: DELETE: (no-tuple-data)
+table _timescaledb_internal.compress_hyper_2_3_chunk: INSERT: _ts_meta_count[integer]:2 _ts_meta_sequence_num[integer]:10 device_id[bigint]:1 _ts_meta_min_1[timestamp with time zone]:'2023-06-30 17:00:00-07' _ts_meta_max_1[timestamp with time zone]:'2023-06-30 18:00:00-07' "time"[_timescaledb_internal.compressed_data]:'BAAAAqJhOK/kAAAAAADWk6QAAAAAAgAAAAIAAAAAAAAA7gAFRMDEOIAAAAVEvxcRN/8=' value[_timescaledb_internal.compressed_data]:'AwA/8AAAAAAAAAAAAAIAAAABAAAAAAAAAAEAAAAAAAAAAwAAAAIAAAABAAAAAAAAAAEAAAAAAAAAAwAAAAEMAAAAAAAAD8IAAAACAAAAAQAAAAAAAAAEAAAAAAAAAAoAAAABCgAAAAAAAAP/'
+message: transactional: 1 prefix: ::timescaledb-compression-end, sz: 0 content:
+COMMIT)
 );
 
-# Get initial message entry
-$result = $publisher->safe_psql(
-	'postgres',
-	qq(
-        SELECT get_byte(data, 1), encode(substr(data, 11, 33), 'escape')
-        FROM pg_logical_slot_peek_binary_changes('tap_sub', NULL, NULL,
-            'proto_version', '1',
-            'publication_names', 'tap_pub',
-            'messages', 'true'
-        )
-        OFFSET 1 LIMIT 1;
-    )
-);
-is( $result,
-	qq(1|::timescaledb-decompression-start),
-	'first entry is decompression marker start message');
+query_generates_wal(
+	"insert into uncompressed chunk 2",
+	qq(INSERT INTO metrics VALUES ('2023-07-01T02:00:00Z', 1, 1.0);),
+	qq(BEGIN
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 19:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:3 dropped[boolean]:false status[integer]:9 osm_chunk[boolean]:false
+COMMIT),);
 
-# Get second message entry
-$result = $publisher->safe_psql(
-	'postgres',
-	qq(
-        SELECT get_byte(data, 1), encode(substr(data, 11, 31), 'escape')
-        FROM pg_logical_slot_peek_binary_changes('tap_sub', NULL, NULL,
-            'proto_version', '1',
-            'publication_names', 'tap_pub',
-            'messages', 'true'
-        )
-        OFFSET 9 LIMIT 1;
-    )
-);
-is( $result,
-	qq(1|::timescaledb-decompression-end),
-	'10th entry is decompression marker end message');
+query_generates_wal(
+	"update rows in uncompressed and compressed chunk",
+	qq(UPDATE metrics SET value = 22 WHERE time IN ('2023-07-01T00:00:00Z', '2023-07-01T02:00:00Z');),
+	qq(BEGIN
+message: transactional: 1 prefix: ::timescaledb-decompression-start, sz: 0 content:
+table _timescaledb_internal.compress_hyper_2_3_chunk: DELETE: (no-tuple-data)
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 18:00:00-07' device_id[bigint]:1 value[double precision]:1
+message: transactional: 1 prefix: ::timescaledb-decompression-end, sz: 0 content:
+table _timescaledb_internal._hyper_1_1_chunk: UPDATE: old-key: "time"[timestamp with time zone]:'2023-06-30 19:00:00-07' device_id[bigint]:1 value[double precision]:1 new-tuple: "time"[timestamp with time zone]:'2023-06-30 19:00:00-07' device_id[bigint]:1 value[double precision]:22
+table _timescaledb_internal._hyper_1_1_chunk: UPDATE: old-key: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1 new-tuple: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:22
+COMMIT),);
 
-# Get last insert entry to check it is the user executed insert (and value is 5555 or 35353535 in hex)
-$result = $publisher->safe_psql(
-	'postgres',
-	qq(
-        SELECT get_byte(data, 0), encode(substring(data from 41 for 44), 'hex')
-        FROM pg_logical_slot_peek_binary_changes('tap_sub', NULL, NULL,
-            'proto_version', '1',
-            'publication_names', 'tap_pub',
-            'messages', 'true'
-        )
-        OFFSET 10 LIMIT 1;
-    )
+query_generates_wal(
+	"compress chunk after update",
+	qq(SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
+	qq(BEGIN
+message: transactional: 1 prefix: ::timescaledb-compression-start, sz: 0 content:
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:3 dropped[boolean]:false status[integer]:1 osm_chunk[boolean]:false
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 18:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 19:00:00-07' device_id[bigint]:1 value[double precision]:22
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:22
+table _timescaledb_internal.compress_hyper_2_3_chunk: INSERT: _ts_meta_count[integer]:3 _ts_meta_sequence_num[integer]:10 device_id[bigint]:1 _ts_meta_min_1[timestamp with time zone]:'2023-06-30 17:00:00-07' _ts_meta_max_1[timestamp with time zone]:'2023-06-30 19:00:00-07' "time"[_timescaledb_internal.compressed_data]:'BAAAAqJiD0OIAAAAAADWk6QAAAAAAwAAAAMAAAAAAAAB7gAFRMDEOIAAAAVEvxcRN/8AAAAAAAAAAA==' value[_timescaledb_internal.compressed_data]:'AwBANgAAAAAAAAAAAAMAAAABAAAAAAAAAAEAAAAAAAAABwAAAAMAAAABAAAAAAAAAAEAAAAAAAAABwAAAAESAAAAAAAAEEEAAAADAAAAAQAAAAAAAAAEAAAAAAAADu4AAAABKgAAA/4/+OAb'
+message: transactional: 1 prefix: ::timescaledb-compression-end, sz: 0 content:
+COMMIT)
 );
-is($result, qq(73|35353535), '11th entry is an insert message');
+
+query_generates_wal(
+	"insert into uncompressed chunk 3",
+	qq(INSERT INTO metrics VALUES ('2023-07-01T03:00:00Z', 1, 1.0);),
+	qq(BEGIN
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 20:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:3 dropped[boolean]:false status[integer]:9 osm_chunk[boolean]:false
+COMMIT),);
+
+query_generates_wal(
+	"delete row in compressed chunk",
+	qq(DELETE FROM metrics WHERE time IN ('2023-07-01T00:00:00Z', '2023-07-01T03:00:00Z');),
+	qq(BEGIN
+message: transactional: 1 prefix: ::timescaledb-decompression-start, sz: 0 content:
+table _timescaledb_internal.compress_hyper_2_3_chunk: DELETE: (no-tuple-data)
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:22
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 18:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 19:00:00-07' device_id[bigint]:1 value[double precision]:22
+message: transactional: 1 prefix: ::timescaledb-decompression-end, sz: 0 content:
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 20:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:22
+COMMIT)
+);
+
+# switch to PK on time for insert with PK decompression test
+run_queries(
+	qq/
+    SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+    DELETE FROM metrics;
+    ALTER TABLE metrics SET (timescaledb.compress = false);
+    ALTER TABLE metrics REPLICA IDENTITY DEFAULT;
+    ALTER TABLE metrics ADD PRIMARY KEY (time);
+    ALTER TABLE metrics SET (timescaledb.compress = true, timescaledb.compress_orderby = 'time', timescaledb.compress_segmentby = 'device_id');
+    INSERT INTO metrics VALUES('2023-07-01T00:00:00Z', 1, 1.0), ('2023-07-01T12:00:00Z', 1, 2.0);
+    SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+    /
+);
+
+discard_wal();
+
+query_generates_wal(
+	"insert into compressed chunk with pk forces decompression",
+	qq/INSERT INTO metrics VALUES ('2023-07-01 01:00:00', 1, 5555);/,
+	qq/BEGIN
+message: transactional: 1 prefix: ::timescaledb-decompression-start, sz: 0 content:
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 05:00:00-07' device_id[bigint]:1 value[double precision]:2
+table _timescaledb_internal.compress_hyper_3_4_chunk: DELETE: (no-tuple-data)
+message: transactional: 1 prefix: ::timescaledb-decompression-end, sz: 0 content:
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 01:00:00-07' device_id[bigint]:1 value[double precision]:5555
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:4 dropped[boolean]:false status[integer]:9 osm_chunk[boolean]:false
+COMMIT/
+);
 
 # Disable marker generation through GUC
-$publisher->append_conf('postgresql.conf',
-	'timescaledb.enable_decompression_logrep_markers=false');
-$publisher->reload();
+$db->append_conf('postgresql.conf',
+	'timescaledb.enable_compression_wal_markers=false');
+$db->reload();
 
-# Compress chunks and consume replication stream explicitly
-$publisher->safe_psql('postgres',
-	"CALL recompress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE)"
-);
-$publisher->safe_psql(
-	'postgres',
-	qq(
-        SELECT pg_logical_slot_get_binary_changes('tap_sub', NULL, NULL,
-            'proto_version', '1',
-            'publication_names', 'tap_pub',
-            'messages', 'true'
-        );
-    )
+query_generates_wal(
+	"compress chunk after disabling markers",
+	qq(SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
+	qq(BEGIN
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:4 dropped[boolean]:false status[integer]:1 osm_chunk[boolean]:false
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07'
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-07-01 05:00:00-07'
+table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-07-01 01:00:00-07'
+table _timescaledb_internal.compress_hyper_3_4_chunk: INSERT: _ts_meta_count[integer]:3 _ts_meta_sequence_num[integer]:10 device_id[bigint]:1 _ts_meta_min_1[timestamp with time zone]:'2023-06-30 17:00:00-07' _ts_meta_max_1[timestamp with time zone]:'2023-07-01 05:00:00-07' "time"[_timescaledb_internal.compressed_data]:'BAAAAqJqcQfwAAAAAANaTpAAAAAAAwAAAAMAAAAAAAAO7gAFRMDEOIAAAAVEs1r+P/8AAAAGtJ0f/w==' value[_timescaledb_internal.compressed_data]:'AwBAAAAAAAAAAAAAAAMAAAABAAAAAAAAAAEAAAAAAAAABwAAAAMAAAABAAAAAAAAAAEAAAAAAAAABwAAAAESAAAAAAAAgEIAAAADAAAAAQAAAAAAAAAFAAAAAAAAQuoAAAABMQABa2f9Fs//'
+COMMIT)
 );
 
-# Create a new entry which forces a decompression to happen
-$publisher->safe_psql('postgres',
-	"INSERT INTO test VALUES ('2023-01-01 00:11:00', 5555)");
-
-# Retrieve the replication log messages
-$result = $publisher->safe_psql(
-	'postgres',
-	qq(
-        SELECT get_byte(data, 0)
-        FROM pg_logical_slot_peek_binary_changes('tap_sub', NULL, NULL,
-            'proto_version', '1',
-            'publication_names', 'tap_pub',
-            'messages', 'true'
-        );
-    )
+query_generates_wal(
+	"decompress chunk after disabling markers",
+	qq(SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
+	qq(BEGIN
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 01:00:00-07' device_id[bigint]:1 value[double precision]:5555
+table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 05:00:00-07' device_id[bigint]:1 value[double precision]:2
+table _timescaledb_catalog.compression_chunk_size: DELETE: chunk_id[integer]:1
+table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:null dropped[boolean]:false status[integer]:0 osm_chunk[boolean]:false
+table _timescaledb_catalog.compression_settings: DELETE: relid[regclass]:'_timescaledb_internal.compress_hyper_3_4_chunk'
+table _timescaledb_catalog.chunk: DELETE: id[integer]:4
+COMMIT)
 );
 
-# Test: BEGIN, RELATION, ... INSERT (decompression inserts x7) ..., INSERT, COMMIT
-is( $result,
-	qq(66
-82
-73
-73
-73
-73
-73
-73
-73
-73
-67),
-	'messages on slot meet expectation <<BEGIN, RELATION, ... INSERT (decompression inserts x7) ..., INSERT, COMMIT>>'
+# re-enable background jobs
+run_queries(
+	qq/
+	SELECT public.alter_job(id::integer, scheduled=>true) FROM _timescaledb_config.bgw_job;
+	/
 );
+
+pass();
 
 done_testing();

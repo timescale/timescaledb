@@ -5,9 +5,9 @@
  */
 #include <postgres.h>
 #include <catalog/pg_type.h>
-#include <utils/date.h>
 #include <fmgr.h>
 #include <funcapi.h>
+#include <utils/date.h>
 
 #include <time_utils.h>
 #include <utils.h>

@@ -15,7 +15,11 @@ set(TEST_FILES
     constraint.sql
     copy.sql
     copy_where.sql
+    cursor.sql
+    ddl.sql
     ddl_errors.sql
+    ddl_extra.sql
+    delete.sql
     debug_utils.sql
     drop_extension.sql
     drop_hypertable.sql
@@ -49,23 +53,22 @@ set(TEST_FILES
     tablespace.sql
     triggers.sql
     truncate.sql
+    trusted_extension.sql
+    update.sql
     upsert.sql
     util.sql
     vacuum.sql
+    vacuum_parallel.sql
     version.sql
     license.sql)
 
 set(TEST_TEMPLATES
     append.sql.in
     cluster.sql.in
-    cursor.sql.in
-    ddl.sql.in
-    delete.sql.in
     histogram_test.sql.in
     insert.sql.in
     plan_hashagg.sql.in
     rowsecurity.sql.in
-    update.sql.in
     parallel.sql.in
     partitionwise.sql.in
     plan_expand_hypertable.sql.in
@@ -114,25 +117,15 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "13"))
-  list(APPEND TEST_FILES trusted_extension.sql vacuum_parallel.sql)
-endif()
-
-if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
-  list(APPEND TEST_FILES ddl_extra.sql)
-endif()
-
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   list(APPEND TEST_FILES merge.sql)
   list(APPEND TEST_TEMPLATES ts_merge.sql.in)
 endif()
 
-# pg_dump_unprivileged.sql was fixed by an upstream change to pg_dump in 13.14,
-# 14.11, 15.6, and 16.2
-if(((${PG_VERSION_MAJOR} EQUAL "13") AND (${PG_VERSION_MINOR} GREATER_EQUAL "14"
+# pg_dump_unprivileged.sql was fixed by an upstream change to pg_dump in 14.11,
+# 15.6, and 16.2
+if(((${PG_VERSION_MAJOR} EQUAL "14") AND (${PG_VERSION_MINOR} GREATER_EQUAL "11"
                                          ))
-   OR ((${PG_VERSION_MAJOR} EQUAL "14") AND (${PG_VERSION_MINOR} GREATER_EQUAL
-                                             "11"))
    OR ((${PG_VERSION_MAJOR} EQUAL "15") AND (${PG_VERSION_MINOR} GREATER_EQUAL
                                              "6"))
    OR ((${PG_VERSION_MAJOR} EQUAL "16") AND (${PG_VERSION_MINOR} GREATER_EQUAL

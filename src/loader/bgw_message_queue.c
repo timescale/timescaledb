@@ -5,15 +5,15 @@
  */
 #include <postgres.h>
 
+#include <access/xact.h>
 #include <miscadmin.h>
+#include <pgstat.h>
 #include <storage/lwlock.h>
-#include <storage/shmem.h>
 #include <storage/proc.h>
 #include <storage/procarray.h>
 #include <storage/shm_mq.h>
-#include <access/xact.h>
+#include <storage/shmem.h>
 #include <storage/spin.h>
-#include <pgstat.h>
 
 #include "../compat/compat.h"
 

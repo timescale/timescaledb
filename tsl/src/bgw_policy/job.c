@@ -9,6 +9,7 @@
 #include <catalog/namespace.h>
 #include <catalog/pg_type.h>
 #include <commands/defrem.h>
+#include <extension.h>
 #include <funcapi.h>
 #include <hypertable_cache.h>
 #include <nodes/makefuncs.h>
@@ -20,21 +21,20 @@
 #include <utils/builtins.h>
 #include <utils/lsyscache.h>
 #include <utils/portal.h>
-#include <utils/syscache.h>
 #include <utils/snapmgr.h>
+#include <utils/syscache.h>
 #include <utils/timestamp.h>
-#include <extension.h>
 
-#include "bgw/timer.h"
+#include "compat/compat.h"
 #include "bgw/job.h"
 #include "bgw/job_stat.h"
+#include "bgw/timer.h"
 #include "bgw_policy/chunk_stats.h"
 #include "bgw_policy/compression_api.h"
 #include "bgw_policy/continuous_aggregate_api.h"
 #include "bgw_policy/policy_utils.h"
 #include "bgw_policy/reorder_api.h"
 #include "bgw_policy/retention_api.h"
-#include "compat/compat.h"
 #include "compression/api.h"
 #include "continuous_aggs/materialize.h"
 #include "continuous_aggs/refresh.h"
@@ -45,13 +45,13 @@
 
 #include "tsl/src/chunk.h"
 
-#include "config.h"
-#include "errors.h"
-#include "job.h"
 #include "chunk.h"
+#include "config.h"
 #include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
+#include "errors.h"
+#include "job.h"
 #include "reorder.h"
 #include "utils.h"
 
@@ -591,11 +591,7 @@ job_execute(BgwJob *job)
 		PortalContext = portal->portalContext;
 
 		StartTransactionCommand();
-#if (PG13 && PG_VERSION_NUM >= 130004) || PG14_GE
 		EnsurePortalSnapshotExists();
-#else
-		PushActiveSnapshot(GetTransactionSnapshot());
-#endif
 	}
 
 #ifdef USE_TELEMETRY

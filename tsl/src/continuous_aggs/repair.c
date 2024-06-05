@@ -87,7 +87,7 @@ cagg_rebuild_view_definition(ContinuousAgg *agg, Hypertable *mat_ht, bool force_
 	RemoveRangeTableEntries(direct_query);
 
 	/*
-	 * If there is a join in CAggs then rebuild it definitley,
+	 * If there is a join in CAggs then rebuild it definitely,
 	 * because v2.10.0 has created the definition with missing structs.
 	 *
 	 * Removed the check for direct_query->jointree != NULL because
@@ -251,61 +251,6 @@ tsl_cagg_try_repair(PG_FUNCTION_ARGS)
 	PG_RETURN_VOID();
 }
 
-typedef struct
-{
-	/* Input parameter */
-	int32 mat_hypertable_id;
-
-	/* Output parameter */
-	Oid bucket_fuction;
-} CaggQueryWalkerContext;
-
-/* Process the CAgg query and find all used (usually one) time_bucket functions. It returns
- * InvalidOid is no or more than one bucket function is found. */
-static bool
-cagg_query_walker(Node *node, CaggQueryWalkerContext *context)
-{
-	if (node == NULL)
-		return false;
-
-	if (IsA(node, FuncExpr))
-	{
-		FuncExpr *func_expr = castNode(FuncExpr, node);
-
-		/* Is the used function a bucket function?
-		 * We can not call ts_func_cache_get_bucketing_func at this point, since
-		 */
-		FuncInfo *func_info = ts_func_cache_get_bucketing_func(func_expr->funcid);
-		if (func_info != NULL)
-		{
-			/* First bucket function found */
-			if (!OidIsValid(context->bucket_fuction))
-			{
-				context->bucket_fuction = func_expr->funcid;
-			}
-			else
-			{
-				/* Got multiple bucket functions. Should never happen because this is checked during
-				 * CAgg query validation.
-				 */
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("found multiple time_bucket functions in CAgg definition for "
-								"mat_ht_id: %d",
-								context->mat_hypertable_id)));
-				pg_unreachable();
-			}
-		}
-	}
-	else if (IsA(node, Query))
-	{
-		Query *query = castNode(Query, node);
-		return query_tree_walker(query, cagg_query_walker, context, 0);
-	}
-
-	return expression_tree_walker(node, cagg_query_walker, context);
-}
-
 /* Get the Oid of the direct view of the CAgg. We cannot use the TimescaleDB internal
  * functions such as ts_continuous_agg_find_by_mat_hypertable_id() at this point since this
  * function can be called during an extension upgrade and ts_catalog_get() does not work.
@@ -398,6 +343,7 @@ Datum
 continuous_agg_get_bucket_function(PG_FUNCTION_ARGS)
 {
 	const int32 mat_hypertable_id = PG_GETARG_INT32(0);
+	Oid funcid = InvalidOid;
 
 	/* Get the user view query of the user defined CAGG.  */
 	Oid direct_view_oid = get_direct_view_oid(mat_hypertable_id);
@@ -410,12 +356,39 @@ continuous_agg_get_bucket_function(PG_FUNCTION_ARGS)
 	Assert(direct_query != NULL);
 	Assert(direct_query->commandType == CMD_SELECT);
 
-	/* Process the query and collect function information */
-	CaggQueryWalkerContext context = { 0 };
-	context.mat_hypertable_id = mat_hypertable_id;
-	context.bucket_fuction = InvalidOid;
+	ListCell *l;
+	bool found = false;
+	foreach (l, direct_query->groupClause)
+	{
+		SortGroupClause *sgc = lfirst_node(SortGroupClause, l);
+		TargetEntry *tle = get_sortgroupclause_tle(sgc, direct_query->targetList);
 
-	cagg_query_walker((Node *) direct_query, &context);
+		if (IsA(tle->expr, FuncExpr))
+		{
+			FuncExpr *fe = ((FuncExpr *) tle->expr);
 
-	PG_RETURN_DATUM(ObjectIdGetDatum(context.bucket_fuction));
+			/* Filter any non bucketing functions */
+			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
+			if (finfo == NULL)
+				continue;
+
+			Assert(finfo->is_bucketing_func);
+
+			funcid = fe->funcid;
+			found = true;
+			break;
+		}
+	}
+
+	if (!found)
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("time_bucket function not found in CAgg definition for "
+						"mat_ht_id: %d",
+						mat_hypertable_id)));
+		pg_unreachable();
+	}
+
+	PG_RETURN_DATUM(ObjectIdGetDatum(funcid));
 }

@@ -8,8 +8,8 @@
 #include <postgres.h>
 #include <nodes/pg_list.h>
 
-#include "ts_catalog/catalog.h"
 #include "hypertable.h"
+#include "ts_catalog/catalog.h"
 
 typedef struct ChunkConstraint
 {

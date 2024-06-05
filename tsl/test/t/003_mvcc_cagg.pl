@@ -150,7 +150,7 @@ for (my $iteration = 0; $iteration < 10; $iteration++)
 				elsif ($cagg_id != $current_cagg)
 				{
 					diag(
-						"Got watermarks for differnt CAGGs, this test can not handle this ($cagg_id / $current_cagg)\n"
+						"Got watermarks for different CAGGs, this test can not handle this ($cagg_id / $current_cagg)\n"
 					);
 					fail();
 					BAIL_OUT();

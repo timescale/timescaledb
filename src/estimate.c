@@ -4,14 +4,14 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_type.h>
 #include <optimizer/optimizer.h>
 #include <parser/parse_oper.h>
-#include <catalog/pg_type.h>
 #include <utils/selfuncs.h>
 
 #include "compat/compat.h"
-#include "func_cache.h"
 #include "estimate.h"
+#include "func_cache.h"
 #include "import/planner.h"
 #include "utils.h"
 
@@ -235,7 +235,7 @@ ts_estimate_group(PlannerInfo *root, double path_rows)
 
 	/* multiply by default estimates */
 	if (new_group_expr != NIL)
-		d_num_groups *= estimate_num_groups_compat(root, new_group_expr, path_rows, NULL, NULL);
+		d_num_groups *= estimate_num_groups(root, new_group_expr, path_rows, NULL, NULL);
 
 	if (d_num_groups > path_rows)
 		return INVALID_ESTIMATE;

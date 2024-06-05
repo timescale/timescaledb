@@ -3,21 +3,21 @@
  * Please see the included NOTICE for copyright information and
  * LICENSE-APACHE for a copy of the license.
  */
-#include <stdlib.h>
 #include <unistd.h>
 #include <postgres.h>
-#include <fmgr.h>
-#include <catalog/pg_type.h>
 #include <access/htup_details.h>
+#include <catalog/pg_type.h>
+#include <fmgr.h>
+#include <stdlib.h>
 #include <utils/builtins.h>
+#include <utils/datum.h>
 #include <utils/fmgroids.h>
 #include <utils/lsyscache.h>
-#include <utils/datum.h>
 #include <utils/uuid.h>
 
+#include "scanner.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/metadata.h"
-#include "scanner.h"
 #include "uuid.h"
 
 #include "compat/compat.h"

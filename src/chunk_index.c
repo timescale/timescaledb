@@ -27,13 +27,13 @@
 #include <utils/rel.h>
 #include <utils/syscache.h>
 
+#include "chunk.h"
 #include "chunk_index.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
-#include "ts_catalog/catalog.h"
-#include "scanner.h"
 #include "scan_iterator.h"
-#include "chunk.h"
+#include "scanner.h"
+#include "ts_catalog/catalog.h"
 
 static bool chunk_index_insert(int32 chunk_id, const char *chunk_index, int32 hypertable_id,
 							   const char *hypertable_index);

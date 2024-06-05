@@ -5,11 +5,11 @@
  */
 #include <postgres.h>
 #include <access/xact.h>
+#include <catalog/pg_collation.h>
+#include <commands/extension.h>
 #include <fmgr.h>
 #include <miscadmin.h>
-#include <commands/extension.h>
 #include <storage/ipc.h>
-#include <catalog/pg_collation.h>
 #include <utils/builtins.h>
 #include <utils/json.h>
 #include <utils/jsonb.h>
@@ -17,22 +17,22 @@
 #include <utils/snapmgr.h>
 
 #include "compat/compat.h"
+#include "bgw_policy/policy.h"
 #include "config.h"
-#include "version.h"
-#include "guc.h"
-#include "telemetry.h"
-#include "ts_catalog/metadata.h"
-#include "telemetry_metadata.h"
-#include "hypertable.h"
 #include "extension.h"
-#include "net/http.h"
+#include "functions.h"
+#include "guc.h"
+#include "hypertable.h"
 #include "jsonb_utils.h"
 #include "license_guc.h"
-#include "bgw_policy/policy.h"
-#include "ts_catalog/compression_chunk_size.h"
-#include "stats.h"
-#include "functions.h"
+#include "net/http.h"
 #include "replication.h"
+#include "stats.h"
+#include "telemetry.h"
+#include "telemetry_metadata.h"
+#include "ts_catalog/compression_chunk_size.h"
+#include "ts_catalog/metadata.h"
+#include "version.h"
 
 #include "cross_module_fn.h"
 
@@ -438,8 +438,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"SELECT ("
 		"	CASE "
 		"		WHEN j.proc_schema = \'_timescaledb_functions\' AND j.proc_name ~ "
-		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_error_"
-		"retention)$\' "
+		"\'^policy_(retention|compression|reorder|refresh_continuous_aggregate|telemetry|job_stat_"
+		"history_retention)$\' "
 		"		THEN j.proc_name::TEXT "
 		"		ELSE \'user_defined_action\' "
 		"	END"
@@ -455,8 +455,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		"FROM "
 		"	_timescaledb_internal.bgw_job_stat s "
 		"	JOIN _timescaledb_config.bgw_job j on j.id = s.job_id "
-		"GROUP BY "
-		"job_type";
+		"GROUP BY job_type "
+		"ORDER BY job_type";
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");

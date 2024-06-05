@@ -6,11 +6,11 @@
 #pragma once
 
 #include <postgres.h>
-#include <funcapi.h>
 #include <access/tupconvert.h>
+#include <funcapi.h>
 
-#include "chunk.h"
 #include "cache.h"
+#include "chunk.h"
 #include "cross_module_fn.h"
 
 typedef struct TSCopyMultiInsertBuffer TSCopyMultiInsertBuffer;

@@ -21,9 +21,9 @@
 /* needed for getting database list*/
 #include <access/heapam.h>
 #include <access/htup_details.h>
+#include <access/xact.h>
 #include <catalog/pg_database.h>
 #include <utils/snapmgr.h>
-#include <access/xact.h>
 
 /* and checking db list for whether we're in a template*/
 #include <utils/syscache.h>
@@ -45,10 +45,10 @@
 
 #include "../compat/compat.h"
 #include "../extension_constants.h"
-#include "loader.h"
 #include "bgw_counter.h"
-#include "bgw_message_queue.h"
 #include "bgw_launcher.h"
+#include "bgw_message_queue.h"
+#include "loader.h"
 
 #define BGW_DB_SCHEDULER_FUNCNAME "ts_bgw_scheduler_main"
 #define BGW_ENTRYPOINT_FUNCNAME "ts_bgw_db_scheduler_entrypoint"

@@ -5,14 +5,14 @@
  */
 #include <postgres.h>
 #include <fmgr.h>
-#include <utils/timestamp.h>
 #include <utils/lsyscache.h>
+#include <utils/timestamp.h>
 
-#include "export.h"
+#include "bgw/job.h"
 #include "cross_module_fn.h"
+#include "export.h"
 #include "guc.h"
 #include "license_guc.h"
-#include "bgw/job.h"
 
 #define CROSSMODULE_WRAPPER(func)                                                                  \
 	TS_FUNCTION_INFO_V1(ts_##func);                                                                \

@@ -554,6 +554,18 @@ CREATE MATERIALIZED VIEW cagg_bigint_offset2
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
 SELECT * FROM _timescaledb_catalog.continuous_aggs_bucket_function ORDER BY 1 DESC LIMIT 1;
+
+-- mess with the bucket_func signature to make sure it will raise an exception
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+\set ON_ERROR_STOP 0
+BEGIN;
+UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';
+-- should error because function does not exist
+CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL);
+ROLLBACK;
+\set ON_ERROR_STOP 1
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
 DROP MATERIALIZED VIEW cagg_bigint_offset2;
 
 -- Test invalid bucket definitions

@@ -4,6 +4,7 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+
 #include <access/heapam.h>
 #include <access/htup_details.h>
 #include <access/relscan.h>
@@ -28,6 +29,7 @@
 #include <nodes/memnodes.h>
 #include <nodes/parsenodes.h>
 #include <nodes/value.h>
+#include <parser/parse_coerce.h>
 #include <parser/parse_func.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
@@ -36,36 +38,36 @@
 #include <utils/memutils.h>
 #include <utils/snapmgr.h>
 #include <utils/syscache.h>
-#include <parser/parse_coerce.h>
 
 #include "hypertable.h"
-#include "ts_catalog/compression_settings.h"
-#include "ts_catalog/catalog.h"
-#include "ts_catalog/metadata.h"
-#include "hypercube.h"
-#include "dimension.h"
+
+#include "compat/compat.h"
+#include "bgw_policy/policy.h"
 #include "chunk.h"
 #include "chunk_adaptive.h"
-#include "subspace_store.h"
-#include "hypertable_cache.h"
-#include "trigger.h"
-#include "scanner.h"
+#include "copy.h"
+#include "cross_module_fn.h"
+#include "debug_assert.h"
+#include "dimension.h"
 #include "dimension_slice.h"
 #include "dimension_vector.h"
-#include "indexing.h"
-#include "guc.h"
-#include "errors.h"
-#include "copy.h"
-#include "utils.h"
-#include "bgw_policy/policy.h"
-#include "ts_catalog/continuous_agg.h"
-#include "license_guc.h"
-#include "cross_module_fn.h"
-#include "scan_iterator.h"
-#include "debug_assert.h"
-#include "osm_callbacks.h"
 #include "error_utils.h"
-#include "compat/compat.h"
+#include "errors.h"
+#include "guc.h"
+#include "hypercube.h"
+#include "hypertable_cache.h"
+#include "indexing.h"
+#include "license_guc.h"
+#include "osm_callbacks.h"
+#include "scan_iterator.h"
+#include "scanner.h"
+#include "subspace_store.h"
+#include "trigger.h"
+#include "ts_catalog/catalog.h"
+#include "ts_catalog/compression_settings.h"
+#include "ts_catalog/continuous_agg.h"
+#include "ts_catalog/metadata.h"
+#include "utils.h"
 
 Oid
 ts_rel_get_owner(Oid relid)
@@ -654,7 +656,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 			ts_hypertable_drop(compressed_hypertable, DROP_RESTRICT);
 	}
 
-#if PG14_GE
 	hypertable_drop_hook_type osm_htdrop_hook = ts_get_osm_hypertable_drop_hook();
 	/* Invoke the OSM callback if set */
 	if (osm_htdrop_hook)
@@ -665,7 +666,6 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 		osm_htdrop_hook(NameStr(*schema_name), NameStr(*table_name));
 	}
-#endif
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
@@ -929,29 +929,6 @@ ts_hypertable_get_by_name(const char *schema, const char *name)
 	hypertable_scan(schema, name, hypertable_tuple_found, &ht, AccessShareLock);
 
 	return ht;
-}
-
-void
-ts_hypertable_scan_by_name(ScanIterator *iterator, const char *schema, const char *name)
-{
-	iterator->ctx.index = catalog_get_index(ts_catalog_get(), HYPERTABLE, HYPERTABLE_NAME_INDEX);
-
-	/* both cannot be NULL inputs */
-	Assert(name != NULL || schema != NULL);
-
-	if (name)
-		ts_scan_iterator_scan_key_init(iterator,
-									   Anum_hypertable_name_idx_table,
-									   BTEqualStrategyNumber,
-									   F_NAMEEQ,
-									   CStringGetDatum(name));
-
-	if (schema)
-		ts_scan_iterator_scan_key_init(iterator,
-									   Anum_hypertable_name_idx_schema,
-									   BTEqualStrategyNumber,
-									   F_NAMEEQ,
-									   CStringGetDatum(schema));
 }
 
 Hypertable *
@@ -1443,43 +1420,6 @@ insert_blocker_trigger_add(Oid relid)
 		elog(ERROR, "could not create insert blocker trigger");
 
 	return objaddr.objectId;
-}
-
-TS_FUNCTION_INFO_V1(ts_hypertable_insert_blocker_trigger_add);
-
-/*
- * This function is exposed to drop the old blocking trigger on legacy hypertables.
- * We can't do it from SQL code, because internal triggers cannot be dropped from SQL.
- * After the legacy internal trigger is dropped, we add the new, visible trigger.
- *
- * In case the hypertable's root table has data in it, we bail out with an
- * error instructing the user to fix the issue first.
- */
-Datum
-ts_hypertable_insert_blocker_trigger_add(PG_FUNCTION_ARGS)
-{
-	Oid relid = PG_GETARG_OID(0);
-
-	ts_hypertable_permissions_check(relid, GetUserId());
-
-	if (ts_table_has_tuples(relid, AccessShareLock))
-		ereport(ERROR,
-				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
-				 errmsg("hypertable \"%s\" has data in the root table", get_rel_name(relid)),
-				 errdetail("Migrate the data from the root table to chunks before running the "
-						   "UPDATE again."),
-				 errhint("Data can be migrated as follows:\n"
-						 "> BEGIN;\n"
-						 "> SET timescaledb.restoring = 'off';\n"
-						 "> INSERT INTO \"%1$s\" SELECT * FROM ONLY \"%1$s\";\n"
-						 "> SET timescaledb.restoring = 'on';\n"
-						 "> TRUNCATE ONLY \"%1$s\";\n"
-						 "> SET timescaledb.restoring = 'off';\n"
-						 "> COMMIT;",
-						 get_rel_name(relid))));
-
-	/* Add the new trigger */
-	PG_RETURN_OID(insert_blocker_trigger_add(relid));
 }
 
 static Datum
@@ -2658,7 +2598,7 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	slice->fd.range_start = range_start_internal;
 	slice->fd.range_end = range_end_internal;
-	ts_dimension_slice_update_by_id(dimension_slice_id, &slice->fd);
+	ts_dimension_slice_range_update(slice);
 
 	PG_RETURN_BOOL(overlap);
 }

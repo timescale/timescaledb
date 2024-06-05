@@ -14,12 +14,12 @@
 #include <utils/rel.h>
 
 #include "annotations.h"
-#include "timer_mock.h"
-#include "log.h"
-#include "scanner.h"
-#include "ts_catalog/catalog.h"
-#include "params.h"
 #include "bgw/launcher_interface.h"
+#include "log.h"
+#include "params.h"
+#include "scanner.h"
+#include "timer_mock.h"
+#include "ts_catalog/catalog.h"
 
 static List *bgw_handles = NIL;
 

@@ -32,9 +32,9 @@
 
 #include <math.h>
 
+#include "compat/compat.h"
 #include "allpaths.h"
 #include "chunk.h"
-#include "compat/compat.h"
 #include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
@@ -214,14 +214,6 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		if (IS_DUMMY_REL(child_rel))
 			continue;
 
-			/* Bubble up childrel's partitioned children. */
-#if PG14_LT
-		if (parent_rel->part_scheme)
-			parent_rel->partitioned_child_rels =
-				list_concat(parent_rel->partitioned_child_rels,
-							list_copy(child_rel->partitioned_child_rels));
-#endif
-
 		/*
 		 * Child is live, so add it to the live_childrels list for use below.
 		 */
@@ -328,16 +320,8 @@ set_dummy_rel_pathlist(RelOptInfo *rel)
 
 	/* Set up the dummy path */
 	add_path(rel,
-			 (Path *) create_append_path_compat(NULL,
-												rel,
-												NIL,
-												NIL,
-												NIL,
-												rel->lateral_relids,
-												0,
-												false,
-												NIL,
-												-1));
+			 (Path *)
+				 create_append_path(NULL, rel, NIL, NIL, NIL, rel->lateral_relids, 0, false, -1));
 
 	/*
 	 * We set the cheapest-path fields immediately, just in case they were
@@ -534,19 +518,6 @@ ts_set_append_rel_size(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEn
 	check_stack_depth();
 
 	Assert(IS_SIMPLE_REL(rel));
-
-	/*
-	 * Initialize partitioned_child_rels to contain this RT index.
-	 *
-	 * Note that during the set_append_rel_pathlist() phase, we will bubble up
-	 * the indexes of partitioned relations that appear down in the tree, so
-	 * that when we've created Paths for all the children, the root
-	 * partitioned table's list will contain all such indexes.
-	 */
-#if PG14_LT
-	if (rte->relkind == RELKIND_PARTITIONED_TABLE)
-		rel->partitioned_child_rels = list_make1_int(rti);
-#endif
 
 	/*
 	 * If this is a partitioned baserel, set the consider_partitionwise_join

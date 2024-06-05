@@ -4,10 +4,10 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include <c.h>
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/htup_details.h>
+#include <c.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_collation.h>
 #include <catalog/pg_type.h>
@@ -21,19 +21,19 @@
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/datum.h>
-#include <utils/memutils.h>
 #include <utils/lsyscache.h>
-#include <utils/timestamp.h>
+#include <utils/memutils.h>
 #include <utils/syscache.h>
+#include <utils/timestamp.h>
 #include <utils/typcache.h>
 
-#include <annotations.h>
 #include <compat/compat.h>
 #include "gapfill.h"
 #include "gapfill_internal.h"
-#include "locf.h"
 #include "interpolate.h"
+#include "locf.h"
 #include "time_bucket.h"
+#include <annotations.h>
 
 typedef enum GapFillBoundary
 {
@@ -654,9 +654,11 @@ gapfill_advance_timestamp(GapFillState *state)
 		case TIMESTAMPTZOID:
 			/*
 			 * To be consistent with time_bucket we do UTC bucketing unless
-			 * a different timezone got explicitly passed to the function.
+			 * a different timezone got explicitly passed to the function
+			 * and we are bucketing by non-fixed intervals.
 			 */
-			if (state->have_timezone)
+			if (state->have_timezone &&
+				(state->next_offset->day != 0 || state->next_offset->month != 0))
 			{
 				bool isnull;
 				/* TODO: optimize by constifying and caching the datum if possible */

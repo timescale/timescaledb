@@ -40,3 +40,7 @@ extern TSDLLEXPORT bool ts_is_chunk_append_plan(Plan *plan);
 extern Scan *ts_chunk_append_get_scan_plan(Plan *plan);
 
 void _chunk_append_init(void);
+
+extern TSDLLEXPORT List *ts_constify_restrictinfos(PlannerInfo *root, List *restrictinfos);
+extern TSDLLEXPORT List *ts_constify_restrictinfo_params(PlannerInfo *root, EState *state,
+														 List *restrictinfos);

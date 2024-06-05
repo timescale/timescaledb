@@ -11,7 +11,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     strategy:
       matrix:
-        pg: [13, 14, 15, 16]
+        pg: [14, 15, 16]
       fail-fast: false
     env:
       PG_VERSION: ${{ matrix.pg }}

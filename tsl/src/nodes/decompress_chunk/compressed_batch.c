@@ -162,7 +162,7 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 	CompressionColumnDescription *column_description = &dcontext->compressed_chunk_columns[i];
 	CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 	column_values->arrow = NULL;
-	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
+	const AttrNumber attr = AttrNumberGetAttrOffset(column_description->custom_scan_attno);
 	column_values->output_value = &compressed_batch_current_tuple(batch_state)->tts_values[attr];
 	column_values->output_isnull = &compressed_batch_current_tuple(batch_state)->tts_isnull[attr];
 	const int value_bytes = get_typlen(column_description->typid);
@@ -179,10 +179,14 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 		 */
 		column_values->decompression_type = DT_Scalar;
 
-		*column_values->output_value =
-			getmissingattr(dcontext->decompressed_slot->tts_tupleDescriptor,
-						   column_description->output_attno,
-						   column_values->output_isnull);
+		/*
+		 * We might use a custom targetlist-based scan tuple which has no
+		 * default values, so the default values are fetched from the
+		 * uncompressed chunk tuple descriptor.
+		 */
+		*column_values->output_value = getmissingattr(dcontext->uncompressed_chunk_tdesc,
+													  column_description->uncompressed_chunk_attno,
+													  column_values->output_isnull);
 		return;
 	}
 
@@ -399,9 +403,33 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	for (; column_index < dcontext->num_data_columns; column_index++)
 	{
 		column_description = &dcontext->compressed_chunk_columns[column_index];
-		if (column_description->output_attno == var->varattno)
+		if (var->varno == INDEX_VAR)
 		{
-			break;
+			/*
+			 * Reference into custom scan tlist, happens when we are using a
+			 * non-default custom scan tuple.
+			 */
+			if (column_description->custom_scan_attno == var->varattno)
+			{
+				break;
+			}
+		}
+		else
+		{
+			/*
+			 * Reference into uncompressed chunk tuple.
+			 *
+			 * Note that this is somewhat redundant, because this branch is
+			 * taken when we do not use a custom scan tuple, and in this case
+			 * the custom scan attno is the same as the uncompressed chunk attno,
+			 * so the above branch would do as well. This difference might
+			 * become relevant in the future, if we stop outputting the
+			 * columns that are needed only for the vectorized quals.
+			 */
+			if (column_description->uncompressed_chunk_attno == var->varattno)
+			{
+				break;
+			}
 		}
 	}
 	Ensure(column_index < dcontext->num_data_columns,
@@ -734,8 +762,8 @@ compressed_batch_lazy_init(DecompressContext *dcontext, DecompressBatchState *ba
 	batch_state->per_batch_context = create_per_batch_mctx(dcontext);
 	Assert(batch_state->per_batch_context != NULL);
 
-	/* Get a reference to the output TupleTableSlot */
-	TupleTableSlot *decompressed_slot = dcontext->decompressed_slot;
+	/* Get a reference to the decompressed scan TupleTableSlot */
+	TupleTableSlot *decompressed_slot = dcontext->custom_scan_slot;
 
 	/*
 	 * This code follows Postgres' MakeTupleTableSlot().
@@ -832,7 +860,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 				Assert(i < dcontext->num_data_columns);
 				CompressedColumnValues *column_values = &batch_state->compressed_columns[i];
 				column_values->decompression_type = DT_Scalar;
-				AttrNumber attr = AttrNumberGetAttrOffset(column_description->output_attno);
+				AttrNumber attr = AttrNumberGetAttrOffset(column_description->custom_scan_attno);
 				Datum *output_value = &decompressed_tuple->tts_values[attr];
 				bool *output_isnull = &decompressed_tuple->tts_isnull[attr];
 				column_values->output_value = output_value;

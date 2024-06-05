@@ -9,15 +9,6 @@ include(ScriptFiles)
 # There still needs to be an entry here to build an update script for that
 # version. Thus, for every new release, an entry should be added here.
 set(MOD_FILES
-    updates/2.1.0--2.1.1.sql
-    updates/2.1.1--2.2.0.sql
-    updates/2.2.0--2.2.1.sql
-    updates/2.2.1--2.3.0.sql
-    updates/2.3.0--2.3.1.sql
-    updates/2.3.1--2.4.0.sql
-    updates/2.4.0--2.4.1.sql
-    updates/2.4.1--2.4.2.sql
-    updates/2.4.2--2.5.0.sql
     updates/2.5.0--2.5.1.sql
     updates/2.5.1--2.5.2.sql
     updates/2.5.2--2.6.0.sql
@@ -46,7 +37,8 @@ set(MOD_FILES
     updates/2.13.1--2.14.0.sql
     updates/2.14.0--2.14.1.sql
     updates/2.14.1--2.14.2.sql
-    updates/2.14.2--2.15.0.sql)
+    updates/2.14.2--2.15.0.sql
+    updates/2.15.0--2.15.1.sql)
 
 # The downgrade file to generate a downgrade script for the current version, as
 # specified in version.config
@@ -55,11 +47,6 @@ set(CURRENT_REV_FILE reverse-dev.sql)
 # downgrade from one version to its previous version since we do not support
 # skipping versions when downgrading.
 set(OLD_REV_FILES
-    2.3.1--2.3.0.sql
-    2.4.0--2.3.1.sql
-    2.4.1--2.4.0.sql
-    2.4.2--2.4.1.sql
-    2.5.0--2.4.2.sql
     2.5.1--2.5.0.sql
     2.5.2--2.5.1.sql
     2.6.0--2.5.2.sql
@@ -87,7 +74,9 @@ set(OLD_REV_FILES
     2.13.1--2.13.0.sql
     2.14.0--2.13.1.sql
     2.14.1--2.14.0.sql
-    2.14.2--2.14.1.sql)
+    2.14.2--2.14.1.sql
+    2.15.0--2.14.2.sql
+    2.15.1--2.15.0.sql)
 
 set(MODULE_PATHNAME "$libdir/timescaledb-${PROJECT_VERSION_MOD}")
 set(LOADER_PATHNAME "$libdir/timescaledb")

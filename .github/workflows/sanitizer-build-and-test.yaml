@@ -48,6 +48,8 @@ env:
     log_exe_name=true print_suppressions=false exitcode=27
 
   IGNORES: "bgw_db_scheduler bgw_db_scheduler_fixed"
+
+  EXTENSIONS: "postgres_fdw test_decoding"
 jobs:
   config:
     runs-on: ubuntu-latest
@@ -121,20 +123,24 @@ jobs:
         ./configure --prefix=$HOME/$PG_INSTALL_DIR --enable-debug --enable-cassert \
           --with-openssl --without-readline --without-zlib --without-libxml
         make -j$(nproc)
-        make -j$(nproc) -C src/test/isolation
-        make -j$(nproc) -C contrib/postgres_fdw
+        for ext in ${EXTENSIONS}; do
+          make -j$(nproc) -C contrib/${ext}
+        done
 
     - name: Upload config.log
       if: always() && steps.cache-postgresql.outputs.cache-hit != 'true'
       uses: actions/upload-artifact@v4
       with:
-        name: config.log for PostgreSQL ${{ matrix.os }} ${{ matrix.name }} ${{ matrix.pg }}
+        name: config.log for PostgreSQL ${{ matrix.os }} ${{ env.name }} ${{ matrix.pg }}
         path: ~/${{ env.PG_SRC_DIR }}/config.log
 
     - name: Install PostgreSQL ${{ matrix.pg }}
       run: |
-        make -C ~/$PG_SRC_DIR install
-        make -C ~/$PG_SRC_DIR/contrib/postgres_fdw install
+        cd ~/$PG_SRC_DIR
+        make install
+        for ext in ${EXTENSIONS}; do
+          make -C contrib/${ext} install
+        done
         ~/$PG_INSTALL_DIR/bin/pg_config --version
 
     - name: Build TimescaleDB
@@ -149,8 +155,7 @@ jobs:
       run: |
         set -o pipefail
         # IGNORE some test since they fail under ASAN.
-        make -k -C build installcheck SKIPS="${{matrix.skips_version}}" \
-          IGNORES="${IGNORES} ${{matrix.ignores_version}}" \
+        make -k -C build installcheck IGNORES="${IGNORES}" \
           PSQL="${HOME}/${PG_INSTALL_DIR}/bin/psql" | tee installcheck.log
 
     - name: Show regression diffs

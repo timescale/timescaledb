@@ -98,7 +98,7 @@ parse_segment_collist(char *inpstr, Hypertable *hypertable)
 
 	PG_TRY();
 	{
-		parsed = raw_parser_compat(buf.data);
+		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
 	}
 	PG_CATCH();
 	{
@@ -200,7 +200,7 @@ ts_compress_parse_order_collist(char *inpstr, Hypertable *hypertable)
 
 	PG_TRY();
 	{
-		parsed = raw_parser_compat(buf.data);
+		parsed = raw_parser(buf.data, RAW_PARSE_DEFAULT);
 	}
 	PG_CATCH();
 	{

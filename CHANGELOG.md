@@ -4,10 +4,35 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
-## 2.15.0 (2024-05-06)
+## 2.15.1 (2024-05-28)
+
+This release contains bug fixes since the 2.15.0 release.
+Best practice is to upgrade at the next available opportunity.
+
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+If you are migrating from TimescaleDB v2.15.0, no changes are required.
+
+**Bugfixes**
+* #6540: Segmentation fault when you backfill data using COPY into a compressed chunk.
+* #6858: `BEFORE UPDATE` trigger not working correctly.
+* #6908: Fix `time_bucket_gapfill()` with timezone behaviour around daylight savings time (DST) switches.
+* #6911: Fix dropped chunk metadata removal in the update script.
+* #6940: Fix `pg_upgrade` failure by removing `regprocedure` from the catalog table.
+* #6957: Fix then `segfault` in UNION queries that contain ordering on compressed chunks.
+
+**Thanks**
+* @DiAifU, @kiddhombre and @intermittentnrg for reporting the issues with gapfill and daylight saving time.
+* @edgarzamora for reporting the issue with update triggers.
+* @hongquan for reporting the issue with the update script.
+* @iliastsa and @SystemParadox for reporting the issue with COPY into a compressed chunk.
+
+## 2.15.0 (2024-05-08)
 
 This release contains performance improvements and bug fixes since
-the 2.14.2 release. We recommend that you upgrade at the next
+the 2.14.2 release. Best practice is to upgrade at the next
 available opportunity.
 
 In addition, it includes these noteworthy features:
@@ -23,50 +48,52 @@ In addition, it includes these noteworthy features:
 * Recommend users to [migrate their old Continuous Aggregate format to the new one](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/migrate/) because it support will be completely removed in next releases prevent them to migrate.
 * This is the last release supporting PostgreSQL 13.
 
-**For on-premise users and this release only**, you will need to run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql) after running `ALTER EXTENSION`. More details can be found in the pull request [#6786](https://github.com/timescale/timescaledb/pull/6797).
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
 
 **Features**
-* #6382 Support for time_bucket with origin and offset in CAggs
-* #6696 Improve defaults for compression segment_by and order_by
-* #6705 Add sparse minmax indexes for compressed columns that have uncompressed btree indexes
-* #6754 Allow DROP CONSTRAINT on compressed hypertables
-* #6767 Add metadata table `_timestaledb_internal.bgw_job_stat_history` for tracking job execution history
-* #6798 Prevent usage of deprecated time_bucket_ng in CAgg definition
-* #6810 Add telemetry for access methods
-* #6811 Remove no longer relevant timescaledb.allow_install_without_preload GUC
-* #6837 Add migration path for CAggs using time_bucket_ng
-* #6865 Update the watermark when truncating a CAgg
+* #6382: Support for `time_bucket` with `origin` and `offset` in CAggs.
+* #6696: Improve defaults for compression `segment_by` and `order_by`.
+* #6705: Add sparse minmax indexes for compressed columns that have uncompressed btree indexes.
+* #6754: Allow `DROP CONSTRAINT` on compressed hypertables.
+* #6767: Add metadata table `_timestaledb_internal.bgw_job_stat_history` for tracking job execution history.
+* #6798: Prevent usage of deprecated `time_bucket_ng` in CAgg definition.
+* #6810: Add telemetry for access methods.
+* #6811: Remove no longer relevant `timescaledb.allow_install_without_preload` GUC.
+* #6837: Add migration path for CAggs using `time_bucket_ng`.
+* #6865: Update the watermark when truncating a CAgg.
 
 **Bugfixes**
-* #6617 Fix error in show_chunks
-* #6621 Remove metadata when dropping chunks
-* #6677 Fix snapshot usage in CAgg invalidation scanner
-* #6698 Define meaning of 0 retries for jobs as no retries
-* #6717 Fix handling of compressed tables with primary or unique index in COPY path
-* #6726 Fix constify cagg_watermark using window function when querying a CAgg
-* #6729 Fix NULL start value handling in CAgg refresh
-* #6732 Fix CAgg migration with custom timezone / date format settings
-* #6752 Remove custom autovacuum setting from compressed chunks
-* #6770 Fix plantime chunk exclusion for OSM chunk
-* #6789 Fix deletes with subqueries and compression
-* #6796 Fix a crash involving a view on a hypertable
-* #6797 Fix foreign key constraint handling on compressed hypertables
-* #6816 Fix handling of chunks with no contraints
-* #6820 Fix a crash when the ts_hypertable_insert_blocker was called directly
-* #6849 Use non-orderby compressed metadata in compressed DML
-* #6867 Clean up compression settings when deleting compressed cagg
-* #6869 Fix compressed DML with constraints of form value OP column
-* #6870 Fix bool expression pushdown for queries on compressed chunks
+* #6617: Fix error in show_chunks.
+* #6621: Remove metadata when dropping chunks.
+* #6677: Fix snapshot usage in CAgg invalidation scanner.
+* #6698: Define meaning of 0 retries for jobs as no retries.
+* #6717: Fix handling of compressed tables with primary or unique index in COPY path.
+* #6726: Fix constify cagg_watermark using window function when querying a CAgg.
+* #6729: Fix NULL start value handling in CAgg refresh.
+* #6732: Fix CAgg migration with custom timezone / date format settings.
+* #6752: Remove custom autovacuum setting from compressed chunks.
+* #6770: Fix plantime chunk exclusion for OSM chunk.
+* #6789: Fix deletes with subqueries and compression.
+* #6796: Fix a crash involving a view on a hypertable.
+* #6797: Fix foreign key constraint handling on compressed hypertables.
+* #6816: Fix handling of chunks with no contraints.
+* #6820: Fix a crash when the ts_hypertable_insert_blocker was called directly.
+* #6849: Use non-orderby compressed metadata in compressed DML.
+* #6867: Clean up compression settings when deleting compressed cagg.
+* #6869: Fix compressed DML with constraints of form value OP column.
+* #6870: Fix bool expression pushdown for queries on compressed chunks.
 
 **Thanks**
-* @brasic for reporting a crash when the ts_hypertable_insert_blocker was called directly
-* @bvanelli for reporting an issue with the jobs retry count
-* @djzurawsk For reporting error when dropping chunks
+* @brasic for reporting a crash when the ts_hypertable_insert_blocker was called directly.
+* @bvanelli for reporting an issue with the jobs retry count.
+* @djzurawsk for reporting error when dropping chunks.
 * @Dzuzepppe for reporting an issue with DELETEs using subquery on compressed chunk working incorrectly.
-* @hongquan For reporting a 'timestamp out of range' error during CAgg migrations
-* @kevcenteno for reporting an issue with the show_chunks API showing incorrect output when 'created_before/created_after' was used with time-partitioned columns.
-* @mahipv For starting working on the job history PR
-* @rovo89 For reporting constify cagg_watermark not working using window function when querying a CAgg
+* @hongquan for reporting a `timestamp out of range` error during CAgg migrations.
+* @kevcenteno for reporting an issue with the show_chunks API showing incorrect output when `created_before/created_after` was used with time-partitioned columns.
+* @mahipv for starting working on the job history PR.
+* @rovo89 for reporting constify cagg_watermark not working using window function when querying a CAgg.
 
 ## 2.14.2 (2024-02-20)
 

@@ -1040,3 +1040,27 @@ EXECUTE param_prep (1);
 
 DEALLOCATE param_prep;
 RESET plan_cache_mode;
+-- test hypertable being non-toplevel equivalence member #6925
+CREATE TABLE i6925_t1(observed timestamptz not null, queryid int8, total_exec_time int8);
+CREATE TABLE i6925_t2(LIKE i6925_t1);
+SELECT table_name FROM create_hypertable('i6925_t1', 'observed');
+ table_name 
+ i6925_t1
+(1 row)
+
+ALTER TABLE i6925_t1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'queryid');
+NOTICE:  default order by for hypertable "i6925_t1" is set to "observed DESC"
+INSERT INTO i6925_t1 SELECT '2020-01-01', 1, 1;
+SELECT count(compress_chunk(chunk_name)) FROM show_chunks('i6925_t1') chunk_name;
+ count 
+     1
+(1 row)
+
+SELECT queryid, lag(total_exec_time) OVER (PARTITION BY queryid) FROM (SELECT * FROM i6925_t1 UNION ALL SELECT * FROM i6925_t2) q;
+ queryid | lag 
+---------+-----
+       1 |    
+(1 row)
+
+DROP TABLE i6925_t1;
+DROP TABLE i6925_t2;

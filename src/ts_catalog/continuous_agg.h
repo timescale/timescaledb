@@ -9,11 +9,11 @@
 #include <catalog/pg_type.h>
 #include <nodes/parsenodes.h>
 
-#include "ts_catalog/catalog.h"
 #include "chunk.h"
+#include "ts_catalog/catalog.h"
 
-#include "with_clause_parser.h"
 #include "compat/compat.h"
+#include "with_clause_parser.h"
 
 #define CAGGINVAL_TRIGGER_NAME "ts_cagg_invalidation_trigger"
 
@@ -86,6 +86,7 @@ typedef struct ContinuousAggsBucketFunction
 	 * situations since PostgreSQL protects the bucket_function from deletion until the CAgg is
 	 * defined. */
 	Oid bucket_function;
+	Oid bucket_width_type; /* type of bucket_width */
 
 	/* Is the interval of the bucket fixed? */
 	bool bucket_fixed_interval;
@@ -146,15 +147,6 @@ typedef enum ContinuousAggHypertableStatus
 	HypertableIsRawTable = 2,
 	HypertableIsMaterializationAndRaw = HypertableIsMaterialization | HypertableIsRawTable,
 } ContinuousAggHypertableStatus;
-
-typedef struct ContinuousAggMatOptions
-{
-	bool verbose;
-	bool within_single_transaction;
-	bool process_only_invalidation;
-	int64 invalidate_prior_to_time; /* exclusive, if not bucketed, the last invalidation bucket will
-									   cover this point */
-} ContinuousAggMatOptions;
 
 typedef struct CaggsInfoData
 {

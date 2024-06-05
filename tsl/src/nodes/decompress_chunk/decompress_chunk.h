@@ -46,11 +46,6 @@ typedef struct CompressionInfo
 
 } CompressionInfo;
 
-typedef struct ColumnCompressionInfo
-{
-	bool bulk_decompression_possible;
-} DecompressChunkColumnCompression;
-
 typedef struct DecompressChunkPath
 {
 	CustomPath custom_path;
