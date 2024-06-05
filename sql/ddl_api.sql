@@ -135,8 +135,7 @@ CREATE OR REPLACE FUNCTION @extschema@.add_dimension(
     number_partitions       INTEGER = NULL,
     chunk_time_interval     ANYELEMENT = NULL::BIGINT,
     partitioning_func       REGPROC = NULL,
-    if_not_exists           BOOLEAN = FALSE,
-	origin                  TIMESTAMPTZ = NULL
+    if_not_exists           BOOLEAN = FALSE
 ) RETURNS TABLE(dimension_id INT, schema_name NAME, table_name NAME, column_name NAME, created BOOL)
 AS '@MODULE_PATHNAME@', 'ts_dimension_add' LANGUAGE C VOLATILE;
 
@@ -159,7 +158,8 @@ CREATE OR REPLACE FUNCTION @extschema@.by_hash(column_name NAME, number_partitio
 
 CREATE OR REPLACE FUNCTION @extschema@.by_range(column_name NAME,
                                                 partition_interval ANYELEMENT = NULL::bigint,
-                                                partition_func regproc = NULL)
+                                                partition_func regproc = NULL,
+												partition_origin TIMESTAMPTZ = NULL)
     RETURNS _timescaledb_internal.dimension_info LANGUAGE C
     AS '@MODULE_PATHNAME@', 'ts_range_dimension';
 

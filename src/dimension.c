@@ -1759,6 +1759,7 @@ TS_FUNCTION_INFO_V1(ts_dimension_add_general);
 Datum
 ts_dimension_add(PG_FUNCTION_ARGS)
 {
+	bool origin_isnull = PG_ARGISNULL(6);
 	DimensionInfo info = {
 		.type = PG_ARGISNULL(2) ? DIMENSION_TYPE_OPEN : DIMENSION_TYPE_CLOSED,
 		.table_relid = PG_GETARG_OID(0),
@@ -1768,6 +1769,9 @@ ts_dimension_add(PG_FUNCTION_ARGS)
 		.interval_type = PG_ARGISNULL(3) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3),
 		.partitioning_func = PG_ARGISNULL(4) ? InvalidOid : PG_GETARG_OID(4),
 		.if_not_exists = PG_ARGISNULL(5) ? false : PG_GETARG_BOOL(5),
+		.interval_origin_isnull = origin_isnull,
+		.interval_origin = origin_isnull ? 0 : PG_GETARG_DATUM(6),
+		.interval_origin_type = origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 6),
 	};
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
@@ -1861,7 +1865,7 @@ make_dimension_info(Name colname, DimensionType dimtype)
 Datum
 ts_hash_dimension(PG_FUNCTION_ARGS)
 {
-	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
+	Ensure(PG_NARGS() > 2, "expected at least 3 arguments, invoked with %d arguments", PG_NARGS());
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_CLOSED);
@@ -1880,13 +1884,18 @@ ts_hash_dimension(PG_FUNCTION_ARGS)
 Datum
 ts_range_dimension(PG_FUNCTION_ARGS)
 {
-	Ensure(PG_NARGS() > 2, "expected at most 3 arguments, invoked with %d arguments", PG_NARGS());
+	Ensure(PG_NARGS() > 2, "expected at least 3 arguments, invoked with %d arguments", PG_NARGS());
 	Name column_name;
 	GETARG_NOTNULL_NULLABLE(column_name, 0, "column_name", NAME);
 	DimensionInfo *info = make_dimension_info(column_name, DIMENSION_TYPE_OPEN);
 	info->interval_datum = PG_ARGISNULL(1) ? Int32GetDatum(-1) : PG_GETARG_DATUM(1);
 	info->interval_type = PG_ARGISNULL(1) ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 1);
 	info->partitioning_func = PG_ARGISNULL(2) ? InvalidOid : PG_GETARG_OID(2);
+	info->interval_origin_isnull = PG_ARGISNULL(3);
+	info->interval_origin = info->interval_origin_isnull ? 0 : PG_GETARG_DATUM(3);
+	info->interval_origin_type =
+		info->interval_origin_isnull ? InvalidOid : get_fn_expr_argtype(fcinfo->flinfo, 3);
+
 	PG_RETURN_POINTER(info);
 }
 
