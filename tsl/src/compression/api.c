@@ -912,6 +912,7 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 	chunk_id = uncompressed_chunk->fd.id;
 
@@ -921,7 +922,9 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	if (!ht->fd.compressed_hypertable_id)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
 
-	if (!ts_chunk_is_compressed(uncompressed_chunk))
+	if (ts_is_hypercore_am(uncompressed_chunk->amoid))
+		set_access_method(uncompressed_chunk_id, "heap");
+	else if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -929,8 +932,8 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 		PG_RETURN_NULL();
 	}
-
-	decompress_chunk_impl(uncompressed_chunk, if_compressed);
+	else
+		decompress_chunk_impl(uncompressed_chunk, if_compressed);
 
 	/*
 	 * Post decompression regular DML can happen into this chunk. So, we update
