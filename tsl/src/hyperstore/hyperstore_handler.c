@@ -127,6 +127,22 @@ create_proxy_vacuum_index(Relation rel, Oid compressed_relid)
 					  true);
 }
 
+static void
+create_compression_relation_size_stats(int32 chunk_id, Oid relid, int32 compress_chunk_id,
+									   Oid compress_relid, RelationSize *before_size,
+									   int64 num_rows_pre, int64 num_rows_post,
+									   int64 num_rows_frozen)
+{
+	RelationSize after_size = ts_relation_size_impl(compress_relid);
+	compression_chunk_size_catalog_insert(chunk_id,
+										  before_size,
+										  compress_chunk_id,
+										  &after_size,
+										  num_rows_pre,
+										  num_rows_post,
+										  num_rows_frozen);
+}
+
 static HyperstoreInfo *
 lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 								 bool create_chunk_constraints, bool *compressed_relation_created)
@@ -182,6 +198,15 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 			ts_chunk_constraints_create(ht_compressed, c_chunk);
 			ts_trigger_create_all_on_chunk(c_chunk);
 			create_proxy_vacuum_index(rel, c_chunk->table_id);
+			RelationSize before_size = ts_relation_size_impl(RelationGetRelid(rel));
+			create_compression_relation_size_stats(hsinfo->relation_id,
+												   RelationGetRelid(rel),
+												   hsinfo->compressed_relation_id,
+												   c_chunk->table_id,
+												   &before_size,
+												   0,
+												   0,
+												   0);
 		}
 	}
 
@@ -252,7 +277,10 @@ HyperstoreInfo *
 RelationGetHyperstoreInfo(Relation rel)
 {
 	if (NULL == rel->rd_amcache)
-		rel->rd_amcache = lazy_build_hyperstore_info_cache(rel, false, true, NULL);
+		rel->rd_amcache = lazy_build_hyperstore_info_cache(rel,
+														   false /* missing_compressed_ok */,
+														   true /* create constraints */,
+														   NULL /* compressed rel created */);
 
 	Assert(rel->rd_amcache && OidIsValid(((HyperstoreInfo *) rel->rd_amcache)->compressed_relid));
 
@@ -1231,6 +1259,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 typedef struct ConversionState
 {
 	Oid relid;
+	RelationSize before_size;
 	Tuplesortstate *tuplesortstate;
 } ConversionState;
 
@@ -2616,8 +2645,10 @@ convert_to_hyperstore(Oid relid)
 	Relation relation = table_open(relid, AccessShareLock);
 	TupleDesc tupdesc = RelationGetDescr(relation);
 	bool compress_chunk_created;
-	HyperstoreInfo *hsinfo =
-		lazy_build_hyperstore_info_cache(relation, true, false, &compress_chunk_created);
+	HyperstoreInfo *hsinfo = lazy_build_hyperstore_info_cache(relation,
+															  true /* missing_compressed_ok */,
+															  false /* create constraints */,
+															  &compress_chunk_created);
 
 	if (!compress_chunk_created)
 	{
@@ -2631,6 +2662,7 @@ convert_to_hyperstore(Oid relid)
 
 	MemoryContext oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
 	ConversionState *state = palloc0(sizeof(ConversionState));
+	state->before_size = ts_relation_size_impl(relid);
 	state->tuplesortstate = create_tuplesort_for_compress(hsinfo, tupdesc);
 	Assert(state->tuplesortstate);
 	state->relid = relid;
@@ -2772,17 +2804,6 @@ convert_to_hyperstore_finish(Oid relid)
 	tuplesort_end(conversionstate->tuplesortstate);
 	conversionstate->tuplesortstate = NULL;
 
-	/* Update compression statistics */
-	RelationSize before_size = ts_relation_size_impl(chunk->table_id);
-	RelationSize after_size = ts_relation_size_impl(c_chunk->table_id);
-	compression_chunk_size_catalog_insert(chunk->fd.id,
-										  &before_size,
-										  c_chunk->fd.id,
-										  &after_size,
-										  row_compressor.rowcnt_pre_compression,
-										  row_compressor.num_compressed_rows,
-										  row_compressor.num_compressed_rows);
-
 	/* Copy chunk constraints (including fkey) to compressed chunk.
 	 * Do this after compressing the chunk to avoid holding strong, unnecessary locks on the
 	 * referenced table during compression.
@@ -2793,6 +2814,17 @@ convert_to_hyperstore_finish(Oid relid)
 
 	table_close(relation, NoLock);
 	table_close(compressed_rel, NoLock);
+
+	/* Update compression statistics */
+	create_compression_relation_size_stats(chunk->fd.id,
+										   chunk->table_id,
+										   c_chunk->fd.id,
+										   c_chunk->table_id,
+										   &conversionstate->before_size,
+										   row_compressor.rowcnt_pre_compression,
+										   row_compressor.num_compressed_rows,
+										   row_compressor.num_compressed_rows);
+
 	conversionstate = NULL;
 }
 
