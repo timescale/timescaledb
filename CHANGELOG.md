@@ -4,6 +4,27 @@
 `psql` with the `-X` flag to prevent any `.psqlrc` commands from
 accidentally triggering the load of a previous DB version.**
 
+## 2.15.2 (2024-06-07)
+
+This release contains bug fixes since the 2.15.1 release. Best
+practice is to upgrade at the next available opportunity.
+
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
+
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+If you are migrating from TimescaleDB v2.15.0 or v2.15.1, no changes are required.
+
+**Bugfixes**
+* #6975: Fix sort pushdown for partially compressed chunks.
+* #6976: Fix removal of metadata function and update script.
+* #6978: Fix segfault in `compress_chunk` with a primary space partition.
+* #6993: Disallow hash partitioning on primary column.
+
+**Thanks**
+* @gugu for reporting the issue with catalog corruption due to update.
+* @srieding for reporting an issue with partially compressed chunks and ordering on joined columns.
+
 ## 2.15.1 (2024-05-28)
 
 This release contains bug fixes since the 2.15.0 release.
