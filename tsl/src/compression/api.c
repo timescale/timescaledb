@@ -43,6 +43,7 @@
 #include "scanner.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
@@ -453,6 +454,26 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	int insert_options = new_compressed_chunk ? HEAP_INSERT_FROZEN : 0;
 
 	before_size = ts_relation_size_impl(cxt.srcht_chunk->table_id);
+
+	/*
+	 * Calculate and add the column dimension ranges for the src chunk. This has to
+	 * be done before the compression. In case of recompression, the logic will get the
+	 * min/max entries for the uncompressed portion and reconcile and update the existing
+	 * entry for ht/chunk/column combination. This case handles:
+	 *
+	 * * INSERTs into uncompressed chunk
+	 * * UPDATEs into uncompressed chunk
+	 *
+	 * In case of DELETEs, the entries won't exist in the uncompressed chunk, but since
+	 * we are deleting, we will stay within the earlier computed max/min range. This
+	 * means that the chunk will not get pruned for a larger range of values. This will
+	 * work ok enough if only a few of the compressed chunks get DELETEs down the line.
+	 * In the future, we can look at computing min/max entries in the compressed chunk
+	 * using the batch metadata and then recompute the range to handle DELETE cases.
+	 */
+	if (cxt.srcht->range_space)
+		ts_chunk_column_stats_calculate(cxt.srcht, cxt.srcht_chunk);
+
 	cstat = compress_chunk(cxt.srcht_chunk->table_id, compress_ht_chunk->table_id, insert_options);
 
 	after_size = ts_relation_size_impl(compress_ht_chunk->table_id);
@@ -761,11 +782,13 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
+	int32 chunk_id;
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	chunk_id = uncompressed_chunk->fd.id;
 
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
 	ts_hypertable_permissions_check(ht->main_table_relid, GetUserId());
@@ -783,6 +806,12 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	}
 
 	decompress_chunk_impl(uncompressed_chunk, if_compressed);
+
+	/*
+	 * Post decompression regular DML can happen into this chunk. So, we update
+	 * chunk_column_stats entries for this chunk to min/max entries now.
+	 */
+	ts_chunk_column_stats_reset_by_chunk_id(chunk_id);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -1103,6 +1132,26 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	/* TODO: Take RowExclusive locks instead of AccessExclusive */
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
+
+	/*
+	 * Calculate and add the column dimension ranges for the src chunk. This has to
+	 * be done before the compression. In case of recompression, the logic will get the
+	 * min/max entries for the uncompressed portion and reconcile and update the existing
+	 * entry for ht/chunk/column combination. This case handles:
+	 *
+	 * * INSERTs into uncompressed chunk
+	 * * UPDATEs into uncompressed chunk
+	 *
+	 * In case of DELETEs, the entries won't exist in the uncompressed chunk, but since
+	 * we are deleting, we will stay within the earlier computed max/min range. This
+	 * means that the chunk will not get pruned for a larger range of values. This will
+	 * work ok enough if only a few of the compressed chunks get DELETEs down the line.
+	 * In the future, we can look at computing min/max entries in the compressed chunk
+	 * using the batch metadata and then recompute the range to handle DELETE cases.
+	 */
+	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
+	if (ht->range_space)
+		ts_chunk_column_stats_calculate(ht, uncompressed_chunk);
 
 	/*************** tuplesort state *************************/
 	Tuplesortstate *segment_tuplesortstate;

@@ -64,6 +64,7 @@
 #include "subspace_store.h"
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/metadata.h"
@@ -247,6 +248,9 @@ ts_hypertable_from_tupleinfo(const TupleInfo *ti)
 	h->chunk_cache =
 		ts_subspace_store_init(h->space, ti->mctx, ts_guc_max_cached_chunks_per_hypertable);
 	h->chunk_sizing_func = get_chunk_sizing_func_oid(&h->fd);
+
+	h->range_space =
+		ts_chunk_column_stats_range_space_scan(h->fd.id, h->main_table_relid, ti->mctx);
 
 	return h;
 }
@@ -644,6 +648,11 @@ hypertable_tuple_delete(TupleInfo *ti, void *data)
 
 	/* Also remove any policy argument / job that uses this hypertable */
 	ts_bgw_policy_delete_by_hypertable_id(hypertable_id);
+
+	/* Also remove any rows in _timescaledb_catalog.chunk_column_stats corresponding to this
+	 * hypertable
+	 */
+	ts_chunk_column_stats_delete_by_hypertable_id(hypertable_id);
 
 	/* Remove any dependent continuous aggs */
 	ts_continuous_agg_drop_hypertable_callback(hypertable_id);
