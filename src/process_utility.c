@@ -44,6 +44,7 @@
 #include "compat/compat.h"
 #include "annotations.h"
 #include "chunk.h"
+#include "chunk_column_stats.h"
 #include "chunk_index.h"
 #include "compression_with_clause.h"
 #include "copy.h"
@@ -2234,6 +2235,7 @@ static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
 	int i;
+	bool dropped;
 
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
@@ -2246,6 +2248,9 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 	}
+
+	/* Delete dimension range entries on this column, if any.  */
+	ts_chunk_column_stats_drop(ht, cmd->name, &dropped);
 }
 
 /*

@@ -10,6 +10,11 @@
 
 #include "chunk_constraint.h"
 
+/* Put DIMENSION_SLICE_MAXVALUE point in same slice as DIMENSION_SLICE_MAXVALUE-1, always */
+/* This avoids the problem with coord < range_end where coord and range_end is an int64 */
+#define REMAP_LAST_COORDINATE(coord)                                                               \
+	(((coord) == DIMENSION_SLICE_MAXVALUE) ? DIMENSION_SLICE_MAXVALUE - 1 : (coord))
+
 #define DIMENSION_SLICE_MAXVALUE ((int64) PG_INT64_MAX)
 #define DIMENSION_SLICE_MINVALUE ((int64) PG_INT64_MIN)
 
