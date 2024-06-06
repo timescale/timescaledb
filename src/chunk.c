@@ -66,6 +66,7 @@
 #include "time_utils.h"
 #include "trigger.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_chunk_size.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
@@ -1089,6 +1090,9 @@ chunk_create_from_hypercube_after_lock(const Hypertable *ht, Hypercube *cube,
 													  prefix,
 													  get_next_chunk_id());
 
+	/* Insert any new chunk column stats entries into the catalog */
+	ts_chunk_column_stats_insert(ht, chunk);
+
 	chunk_add_constraints(chunk);
 	chunk_insert_into_metadata_after_lock(chunk);
 	chunk_create_table_constraints(ht, chunk);
@@ -1386,6 +1390,29 @@ ts_chunk_create_for_point(const Hypertable *ht, const Point *p, bool *found, con
 	return chunk;
 }
 
+static void
+scan_add_chunk_context(ChunkScanCtx *ctx, int32 chunk_id, List *dimension_vecs, List **l_chunk_ids)
+{
+	bool found = false;
+	ChunkScanEntry *entry = hash_search(ctx->htab, &chunk_id, HASH_ENTER, &found);
+	if (!found)
+	{
+		entry->stub = NULL;
+		entry->num_dimension_constraints = 0;
+	}
+
+	entry->num_dimension_constraints++;
+
+	/*
+	 * A chunk is complete when we've found slices for all required dimensions,
+	 * i.e., a complete subspace.
+	 */
+	if (entry->num_dimension_constraints == list_length(dimension_vecs))
+	{
+		*l_chunk_ids = lappend_int(*l_chunk_ids, entry->chunk_id);
+	}
+}
+
 /*
  * Find the chunks that belong to the subspace identified by the given dimension
  * vectors. We might be restricting only some dimensions, so this subspace is
@@ -1406,6 +1433,30 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 	foreach (lc, dimension_vecs)
 	{
 		const DimensionVec *vec = lfirst(lc);
+
+		/*
+		 * If it's an entry of type DIMENSION_TYPE_STATS then we need to get
+		 * the chunks using the _timescaledb_catalog.chunk_column_stats catalog.
+		 */
+		Assert(vec->dri != NULL);
+		if (vec->dri->dimension->type == DIMENSION_TYPE_STATS)
+		{
+			ListCell *lc;
+			List *range_chunk_ids;
+
+			Assert(vec->num_slices == 0);
+			range_chunk_ids = ts_chunk_column_stats_get_chunk_ids_by_scan(vec->dri);
+
+			/* add these chunks to the context appropriately. */
+			foreach (lc, range_chunk_ids)
+			{
+				int32 chunk_id = lfirst_int(lc);
+
+				scan_add_chunk_context(&ctx, chunk_id, dimension_vecs, &chunk_ids);
+			}
+			continue;
+		}
+
 		/*
 		 * We shouldn't see a dimension with zero matching dimension slices.
 		 * That would mean that no chunks match at all, this should have been
@@ -1428,31 +1479,13 @@ ts_chunk_id_find_in_subspace(Hypertable *ht, List *dimension_vecs)
 				int32 current_chunk_id = DatumGetInt32(datum);
 				Assert(current_chunk_id != INVALID_CHUNK_ID);
 
-				bool found = false;
-				ChunkScanEntry *entry =
-					hash_search(ctx.htab, &current_chunk_id, HASH_ENTER, &found);
-				if (!found)
-				{
-					entry->stub = NULL;
-					entry->num_dimension_constraints = 0;
-				}
-
 				/*
 				 * We have only the dimension constraints here, because we're searching
 				 * by dimension slice id.
 				 */
 				Assert(!slot_attisnull(ts_scan_iterator_slot(&iterator),
 									   Anum_chunk_constraint_dimension_slice_id));
-				entry->num_dimension_constraints++;
-
-				/*
-				 * A chunk is complete when we've found slices for all required dimensions,
-				 * i.e., a complete subspace.
-				 */
-				if (entry->num_dimension_constraints == list_length(dimension_vecs))
-				{
-					chunk_ids = lappend_int(chunk_ids, entry->chunk_id);
-				}
+				scan_add_chunk_context(&ctx, current_chunk_id, dimension_vecs, &chunk_ids);
 			}
 		}
 	}
@@ -2880,6 +2913,9 @@ chunk_tuple_delete(TupleInfo *ti, DropBehavior behavior, bool preserve_chunk_cat
 	/* Delete any row in bgw_policy_chunk-stats corresponding to this chunk */
 	ts_bgw_policy_chunk_stats_delete_by_chunk_id(form.id);
 
+	/* Delete any rows in _timescaledb_catalog.chunk_column_stats corresponding to this chunk */
+	ts_chunk_column_stats_delete_by_chunk_id(form.id);
+
 	if (form.compressed_chunk_id != INVALID_CHUNK_ID)
 	{
 		Chunk *compressed_chunk = ts_chunk_get_by_id(form.compressed_chunk_id, false);
@@ -3344,8 +3380,19 @@ ts_chunk_set_unordered(Chunk *chunk)
 bool
 ts_chunk_set_partial(Chunk *chunk)
 {
+	bool set_status;
+
 	Assert(ts_chunk_is_compressed(chunk));
-	return ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+	set_status = ts_chunk_add_status(chunk, CHUNK_STATUS_COMPRESSED_PARTIAL);
+
+	/*
+	 * If the status was set then convert the corresponding
+	 * _timescaledb_catalog.chunk_column_stats entries "INVALID".
+	 */
+	if (set_status)
+		ts_chunk_column_stats_set_invalid(chunk->fd.hypertable_id, chunk->fd.id);
+
+	return set_status;
 }
 
 /* No inserts, updates, and deletes are permitted on a frozen chunk.
@@ -3411,6 +3458,7 @@ ts_chunk_clear_status(Chunk *chunk, int32 status)
 static bool
 ts_chunk_add_status(Chunk *chunk, int32 status)
 {
+	bool status_set = false;
 	if (ts_flags_are_set_32(chunk->fd.status, CHUNK_STATUS_FROZEN))
 	{
 		/* chunk in frozen state cannot be modified */
@@ -3449,9 +3497,12 @@ ts_chunk_add_status(Chunk *chunk, int32 status)
 
 	/* Row-level locks are released at transaction end or during savepoint rollback */
 	if (old_status != form.status)
+	{
 		chunk_update_catalog_tuple(&tid, &form);
+		status_set = true;
+	}
 
-	return true;
+	return status_set;
 }
 
 /*Assume permissions are already checked */
