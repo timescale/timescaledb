@@ -1,2 +1,0 @@
-Fixes: #6975 Fix sort pushdown for partially compressed chunks
-Thanks: @srieding for reporting an issue with partially compressed chunks and ordering on joined columns
