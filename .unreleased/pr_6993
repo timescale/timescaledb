@@ -1,1 +1,0 @@
-Fixes: #6993 Disallow hash partitioning on primary column 
