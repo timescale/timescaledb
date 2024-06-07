@@ -47,6 +47,7 @@
 #define PG15_GE (PG_VERSION_NUM >= 150000)
 #define PG16_LT (PG_VERSION_NUM < 160000)
 #define PG16_GE (PG_VERSION_NUM >= 160000)
+#define PG17_LT (PG_VERSION_NUM < 170000)
 
 #if !(is_supported_pg_version(PG_VERSION_NUM))
 #error "Unsupported PostgreSQL version"
@@ -763,5 +764,27 @@ error_severity(int elevel)
 	}
 
 	return prefix;
+}
+#endif
+
+#if PG17_LT
+/*
+ * Backport of RestrictSearchPath() from PG17
+ *
+ * We skip the check for IsBootstrapProcessingMode() since it creates problems
+ * on Windows builds and we don't need it for our use case.
+ */
+#include <utils/guc.h>
+static inline void
+RestrictSearchPath(void)
+{
+	set_config_option("search_path",
+					  "pg_catalog, pg_temp",
+					  PGC_USERSET,
+					  PGC_S_SESSION,
+					  GUC_ACTION_SAVE,
+					  true,
+					  0,
+					  false);
 }
 #endif
