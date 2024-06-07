@@ -397,3 +397,16 @@ SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.g
 SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_segmentby_defaults';
 RESET timescaledb.compression_segmentby_default_function;
 RESET timescaledb.compression_orderby_default_function;
+-- test search_path quoting
+SET search_path TO '';
+CREATE TABLE public.t1 (time timestamptz NOT NULL, segment_value text NOT NULL);
+SELECT public.create_hypertable('public.t1', 'time');
+ create_hypertable 
+-------------------
+ (13,public,t1,t)
+(1 row)
+
+ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "t1" is set to ""
+RESET search_path;
