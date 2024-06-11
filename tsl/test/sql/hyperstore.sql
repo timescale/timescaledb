@@ -12,14 +12,14 @@ CREATE TABLE readings(
        humidity float
 );
 
-SELECT create_hypertable('readings', 'time');
+SELECT create_hypertable('readings', by_range('time', '1d'::interval));
 -- Disable incremental sort to make tests stable
 SET enable_incremental_sort = false;
 SELECT setseed(1);
 
 INSERT INTO readings (time, location, device, temp, humidity)
 SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
-FROM generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
+FROM generate_series('2022-06-01'::timestamptz, '2022-07-01'::timestamptz, '5m') t;
 
 ALTER TABLE readings SET (
 	  timescaledb.compress,
@@ -311,7 +311,7 @@ WHERE format('%I.%I', chunk_schema, chunk_name)::regclass = :'chunk'::regclass;
 -- mapping.
 CREATE TEMP TABLE sample_readings AS
 SELECT * FROM readings
-WHERE time BETWEEN '2022-06-01 00:00:01' AND '2022-06-01 00:00:10'::timestamptz;
+WHERE time BETWEEN '2022-06-01 00:00:00' AND '2022-06-01 00:10:00'::timestamptz;
 
 SELECT count(*) FROM sample_readings;
 
@@ -328,15 +328,15 @@ JOIN sample_readings s USING (time, location, device, temp, humidity);
 -- test recompression
 INSERT INTO :chunk (time, location, device, temp, humidity, pressure)
 SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100, random() * 30
-FROM generate_series('2022-06-01 00:06:14'::timestamptz, '2022-06-01 16:59', '5s') t;
+FROM generate_series('2022-06-01 00:06:15'::timestamptz, '2022-06-01 17:00', '5m') t;
 
 -- Check that new data is returned
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
 -- Want to check that index scans work after recompression, so the
 -- query should be an index scan.
 EXPLAIN (verbose, costs off)
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
 -- Show counts in compressed chunk prior to recompression
 SELECT sum(_ts_meta_count) FROM :cchunk;
@@ -345,21 +345,21 @@ CALL recompress_chunk(:'chunk');
 -- Data should be returned even after recompress, but now from the
 -- compressed relation. Still using index scan.
 EXPLAIN (verbose, costs off)
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
 -- Drop column and add again
 ALTER TABLE readings DROP COLUMN pressure;
 
 EXPLAIN (verbose, costs off)
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
 ALTER TABLE readings ADD COLUMN pressure float;
 
 EXPLAIN (verbose, costs off)
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
-SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:14'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
+SELECT * FROM :chunk WHERE time = '2022-06-01 00:06:15'::timestamptz;
 
 \set ON_ERROR_STOP 0
 -- Can't recompress twice without new non-compressed rows
