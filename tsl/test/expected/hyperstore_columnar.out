@@ -73,7 +73,7 @@ select setseed(1);
 
 insert into readings (time, location, device, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 alter table readings SET (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'time',
@@ -96,9 +96,9 @@ $$, :'chunk'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: (device < 4)
          Vectorized Filter: (location = 2)
-         Rows Removed by Filter: 27
+         Rows Removed by Filter: 16
  Arrays read from cache: N
- Arrays decompressed: 3
+ Arrays decompressed: 9
 (7 rows)
 
 -- Save away all data from the chunk so that we can compare.
@@ -129,7 +129,7 @@ $$, :'chunk'));
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Vectorized Filter: (humidity > '110'::double precision)
-         Rows Removed by Filter: 12240
+         Rows Removed by Filter: 204
  Arrays read from cache: N
  Arrays decompressed: 30
 (6 rows)
@@ -150,7 +150,7 @@ $$, :'chunk'));
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Vectorized Filter: (humidity > '50'::double precision)
-         Rows Removed by Filter: 6081
+         Rows Removed by Filter: 87
  Arrays read from cache: N
  Arrays decompressed: 30
 (6 rows)
@@ -160,7 +160,7 @@ from (select count(*) from :chunk where humidity > 50) lhs,
      (select count(*) from saved where humidity > 50) rhs;
  count | count 
 -------+-------
-  6159 |  6159
+   117 |   117
 (1 row)
 
 with
@@ -183,7 +183,7 @@ $$, :'chunk'));
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Filter: (temp > '50'::numeric)
-         Rows Removed by Filter: 12240
+         Rows Removed by Filter: 204
  Arrays read from cache: N
  Arrays decompressed: 30
 (6 rows)
@@ -203,7 +203,7 @@ $$, :'chunk'));
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Filter: (temp > '20'::numeric)
-         Rows Removed by Filter: 6119
+         Rows Removed by Filter: 98
  Arrays read from cache: N
  Arrays decompressed: 30
 (6 rows)
@@ -213,7 +213,7 @@ from (select count(*) from :chunk where temp > 20) lhs,
      (select count(*) from saved where temp > 20) rhs;
  count | count 
 -------+-------
-  6121 |  6121
+   106 |   106
 (1 row)
 
 with
@@ -230,21 +230,21 @@ where lhs.metric_id is null or rhs.metric_id is null;
 -- types together.
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select count(*) from :chunk where humidity > 40 and temp > 20;
-                                   QUERY PLAN                                    
----------------------------------------------------------------------------------
+                                  QUERY PLAN                                   
+-------------------------------------------------------------------------------
  Aggregate (actual rows=1 loops=1)
-   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=3684 loops=1)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=72 loops=1)
          Filter: (temp > '20'::numeric)
-         Rows Removed by Filter: 8556
+         Rows Removed by Filter: 132
          Vectorized Filter: (humidity > '40'::double precision)
- Arrays read from cache: 7289
+ Arrays read from cache: 105
  Arrays decompressed: 60
 (7 rows)
 
 select count(*) from :chunk where humidity > 40 and temp > 20;
  count 
 -------
-  3684
+    72
 (1 row)
 
 select lhs.count, rhs.count
@@ -252,7 +252,7 @@ from (select count(*) from :chunk where humidity > 40 and temp > 20) lhs,
      (select count(*) from saved where humidity > 40 and temp > 20) rhs;
  count | count 
 -------+-------
-  3684 |  3684
+    72 |    72
 (1 row)
 
 -- test scans with clasues that are vectorizable, non-vectorizable,
@@ -265,7 +265,7 @@ $$, :'chunk'));
  Aggregate (actual rows=N loops=N)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Filter: (temp > '20'::numeric)
-         Rows Removed by Filter: 289
+         Rows Removed by Filter: 3
          Scankey: (device = 3)
          Vectorized Filter: (humidity > '40'::double precision)
  Arrays read from cache: N
@@ -275,7 +275,7 @@ $$, :'chunk'));
 select count(*) from :chunk where humidity > 40 and temp > 20 and device = 3;
  count 
 -------
-   135
+     2
 (1 row)
 
 select lhs.count, rhs.count from
@@ -283,7 +283,7 @@ select lhs.count, rhs.count from
   (select count(*) from saved where humidity > 40 and temp > 20 and device = 3) as rhs;
  count | count 
 -------+-------
-   135 |   135
+     2 |     2
 (1 row)
 
 -- test that columnar scan can be turned off
@@ -299,7 +299,7 @@ $$, :'chunk'));
          Sort Method: top-N heapsort 
          ->  Seq Scan on _hyper_I_N_chunk (actual rows=N loops=N)
                Filter: (device < 4)
-               Rows Removed by Filter: 10991
+               Rows Removed by Filter: 184
  Arrays read from cache: N
  Arrays decompressed: 96
 (9 rows)
