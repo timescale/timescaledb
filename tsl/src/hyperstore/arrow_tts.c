@@ -309,8 +309,9 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 		ExecClearTuple(aslot->noncompressed_slot);
 
 		/* Set total row count */
-		aslot->total_row_count = slot_getattr(child_slot, aslot->count_attnum, &isnull);
+		Datum d = slot_getattr(child_slot, aslot->count_attnum, &isnull);
 		Assert(!isnull);
+		aslot->total_row_count = DatumGetInt32(d);
 	}
 
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
