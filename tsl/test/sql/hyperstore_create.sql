@@ -60,7 +60,7 @@ where rel='test2'::regclass;
 -- This will create new chunks for the hypertable
 insert into test2 (created_at, location_id, device_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 
 -- Save the count for test2 for later comparison
 select count(*) as orig_test2_count from test2 \gset

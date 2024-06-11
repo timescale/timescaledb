@@ -116,7 +116,7 @@ where rel='test2'::regclass;
 -- This will create new chunks for the hypertable
 insert into test2 (created_at, location_id, device_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 -- Save the count for test2 for later comparison
 select count(*) as orig_test2_count from test2 \gset
 -- All chunks should use the hyperstore access method
@@ -399,12 +399,12 @@ from compressed_rel_size_stats;
 select * from compressed_rel_size_stats order by rel;
                    rel                   |   amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 -----------------------------------------+------------+-----------+-------------------------+--------------------------+----------------------------
- _timescaledb_internal._hyper_1_1_chunk  | hyperstore | test2     |                   12240 |                       20 |                         20
- _timescaledb_internal._hyper_1_3_chunk  | hyperstore | test2     |                  120960 |                      128 |                        128
- _timescaledb_internal._hyper_1_5_chunk  | hyperstore | test2     |                  120960 |                      127 |                        127
- _timescaledb_internal._hyper_1_7_chunk  | hyperstore | test2     |                  120960 |                      129 |                        129
- _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                  120960 |                      127 |                        127
- _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                   22321 |                       30 |                         30
+ _timescaledb_internal._hyper_1_1_chunk  | hyperstore | test2     |                     204 |                       10 |                         10
+ _timescaledb_internal._hyper_1_3_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_5_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_7_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                     373 |                       10 |                         10
  _timescaledb_internal._hyper_4_13_chunk | hyperstore | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_16_chunk | hyperstore | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_17_chunk | hyperstore | test3     |                       1 |                        1 |                          1
@@ -437,12 +437,12 @@ from show_chunks('test3') ch;
 select * from compressed_rel_size_stats order by rel;
                    rel                   | amname | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 -----------------------------------------+--------+-----------+-------------------------+--------------------------+----------------------------
- _timescaledb_internal._hyper_1_1_chunk  | heap   | test2     |                   12240 |                       20 |                         20
- _timescaledb_internal._hyper_1_3_chunk  | heap   | test2     |                  120960 |                      128 |                        128
- _timescaledb_internal._hyper_1_5_chunk  | heap   | test2     |                  120960 |                      127 |                        127
- _timescaledb_internal._hyper_1_7_chunk  | heap   | test2     |                  120960 |                      129 |                        129
- _timescaledb_internal._hyper_1_9_chunk  | heap   | test2     |                  120960 |                      127 |                        127
- _timescaledb_internal._hyper_1_11_chunk | heap   | test2     |                   22321 |                       30 |                         30
+ _timescaledb_internal._hyper_1_1_chunk  | heap   | test2     |                     204 |                       10 |                         10
+ _timescaledb_internal._hyper_1_3_chunk  | heap   | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_5_chunk  | heap   | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_7_chunk  | heap   | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_9_chunk  | heap   | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_11_chunk | heap   | test2     |                     373 |                       10 |                         10
  _timescaledb_internal._hyper_4_13_chunk | heap   | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_16_chunk | heap   | test3     |                       1 |                        1 |                          1
  _timescaledb_internal._hyper_4_17_chunk | heap   | test3     |                       1 |                        1 |                          1
@@ -558,12 +558,12 @@ select * from compressed_rel_size_stats
 where amname = 'hyperstore' order by rel;
                    rel                   |   amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 -----------------------------------------+------------+-----------+-------------------------+--------------------------+----------------------------
- _timescaledb_internal._hyper_1_1_chunk  | hyperstore | test2     |                   12240 |                       20 |                         20
- _timescaledb_internal._hyper_1_3_chunk  | hyperstore | test2     |                  120960 |                      128 |                        128
- _timescaledb_internal._hyper_1_5_chunk  | hyperstore | test2     |                  120960 |                      127 |                        127
- _timescaledb_internal._hyper_1_7_chunk  | hyperstore | test2     |                  120960 |                      129 |                        129
- _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                  120960 |                      127 |                        127
- _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                   22321 |                       30 |                         30
+ _timescaledb_internal._hyper_1_1_chunk  | hyperstore | test2     |                     204 |                       10 |                         10
+ _timescaledb_internal._hyper_1_3_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_5_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_7_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_9_chunk  | hyperstore | test2     |                    2016 |                       10 |                         10
+ _timescaledb_internal._hyper_1_11_chunk | hyperstore | test2     |                     373 |                       10 |                         10
 (6 rows)
 
 -- Check that query plan is now ColumnarScan and that all data, except
@@ -652,7 +652,7 @@ select * from compressed_rel_size_stats
 where amname = 'hyperstore' and rel = :'chunk'::regclass;
                   rel                   |   amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 ----------------------------------------+------------+-----------+-------------------------+--------------------------+----------------------------
- _timescaledb_internal._hyper_1_1_chunk | hyperstore | test2     |                   12240 |                       20 |                         20
+ _timescaledb_internal._hyper_1_1_chunk | hyperstore | test2     |                     204 |                       10 |                         10
 (1 row)
 
 insert into :chunk values ('2022-06-01 10:01', 6, 6, 6.0, 6.0);
@@ -733,8 +733,8 @@ where amname = 'hyperstore' and relparent = 'test2'::regclass
 order by rel;
                   rel                   |   amname   | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 ----------------------------------------+------------+-----------+-------------------------+--------------------------+----------------------------
- _timescaledb_internal._hyper_1_1_chunk | hyperstore | test2     |                   12243 |                       20 |                         20
- _timescaledb_internal._hyper_1_3_chunk | hyperstore | test2     |                  120960 |                      128 |                        128
+ _timescaledb_internal._hyper_1_1_chunk | hyperstore | test2     |                     207 |                       10 |                         10
+ _timescaledb_internal._hyper_1_3_chunk | hyperstore | test2     |                    2016 |                       10 |                         10
 (2 rows)
 
 -- Test that we can compress old way using compress_using=>heap
@@ -750,7 +750,7 @@ where amname = 'heap' and relparent = 'test2'::regclass
 order by rel;
                   rel                   | amname | relparent | numrows_pre_compression | numrows_post_compression | numrows_frozen_immediately 
 ----------------------------------------+--------+-----------+-------------------------+--------------------------+----------------------------
- _timescaledb_internal._hyper_1_5_chunk | heap   | test2     |                  120960 |                      127 |                        127
+ _timescaledb_internal._hyper_1_5_chunk | heap   | test2     |                    2016 |                       10 |                         10
 (1 row)
 
 \set ON_ERROR_STOP 0
