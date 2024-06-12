@@ -648,10 +648,10 @@ hyperstore_get_latest_tid(TableScanDesc sscan, ItemPointer tid)
 	if (is_compressed_tid(tid))
 	{
 		ItemPointerData decoded_tid;
-		uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+		uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
 		const Relation rel = scan->cscan_desc->rs_rd;
 		rel->rd_tableam->tuple_get_latest_tid(scan->cscan_desc, &decoded_tid);
-		tid_to_compressed_tid(tid, &decoded_tid, tuple_index);
+		hyperstore_tid_encode(tid, &decoded_tid, tuple_index);
 	}
 	else
 	{
@@ -861,7 +861,7 @@ hyperstore_index_fetch_tuple(struct IndexFetchTableData *scan, ItemPointer tid, 
 	}
 
 	/* Recreate the original TID for the compressed table */
-	uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+	uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
 	Assert(tuple_index != InvalidTupleIndex);
 	child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(cscan->compr_rel));
 
@@ -951,7 +951,7 @@ hyperstore_fetch_row_version(Relation relation, ItemPointer tid, Snapshot snapsh
 		TupleTableSlot *child_slot =
 			arrow_slot_get_compressed_slot(slot, RelationGetDescr(child_rel));
 
-		tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+		tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
 		result = table_tuple_fetch_row_version(child_rel, &decoded_tid, snapshot, child_slot);
 		table_close(child_rel, NoLock);
 	}
@@ -980,7 +980,7 @@ hyperstore_tuple_tid_valid(TableScanDesc scan, ItemPointer tid)
 		return valid;
 	}
 
-	(void) compressed_tid_to_tid(&ctid, tid);
+	(void) hyperstore_tid_decode(&ctid, tid);
 	return cscan->compressed_rel->rd_tableam->tuple_tid_valid(cscan->cscan_desc, &ctid);
 }
 
@@ -1098,7 +1098,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 			TidEntry *tidentry;
 			uint16 tuple_index;
 
-			tuple_index = compressed_tid_to_tid(&decoded_tid, &deltid->tid);
+			tuple_index = hyperstore_tid_decode(&decoded_tid, &deltid->tid);
 			tidentry = hash_search(tidhash, &decoded_tid, HASH_ENTER, &found);
 
 			if (!found)
@@ -1178,7 +1178,7 @@ hyperstore_index_delete_tuples(Relation rel, TM_IndexDeleteOp *delstate)
 				TM_IndexDelete *deltid = &delstate->deltids[delstate->ndeltids];
 
 				deltid->id = id;
-				tid_to_compressed_tid(&deltid->tid, &deltid_compr->tid, tuple_index);
+				hyperstore_tid_encode(&deltid->tid, &deltid_compr->tid, tuple_index);
 				delstate->ndeltids++;
 			}
 		}
@@ -1438,7 +1438,7 @@ hyperstore_tuple_delete(Relation relation, ItemPointer tid, CommandId cid, Snaps
 		HyperstoreInfo *caminfo = RelationGetHyperstoreInfo(relation);
 		Relation crel = table_open(caminfo->compressed_relid, RowExclusiveLock);
 		ItemPointerData decoded_tid;
-		uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+		uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
 
 		/*
 		 * It is only possible to delete the compressed segment if all rows in
@@ -1523,7 +1523,7 @@ hyperstore_tuple_lock(Relation relation, ItemPointer tid, Snapshot snapshot, Tup
 		TupleTableSlot *child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(crel));
 		ItemPointerData decoded_tid;
 
-		uint16 tuple_index = compressed_tid_to_tid(&decoded_tid, tid);
+		uint16 tuple_index = hyperstore_tid_decode(&decoded_tid, tid);
 		result = crel->rd_tableam->tuple_lock(crel,
 											  &decoded_tid,
 											  snapshot,
@@ -2267,7 +2267,7 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 		}
 
 		ItemPointerData index_tid;
-		tid_to_compressed_tid(&index_tid, tid, rownum + 1);
+		hyperstore_tid_encode(&index_tid, tid, rownum + 1);
 		Assert(!icstate->is_segmentby_index || rownum == 0);
 
 		/*
