@@ -818,8 +818,12 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	}
 
 	/* Generate the aggregation pushdown path */
-	Path *cheapest_total_path = get_best_total_path(input_rel);
+	(void) get_best_total_path;
+	//Path *cheapest_total_path = get_best_total_path(input_rel);
+	Path *cheapest_total_path = existing_agg_path->subpath;
 	Assert(cheapest_total_path != NULL);
+//	fprintf(stderr, "cheapest total path at partial agg entry point is:\n");
+//	my_print(cheapest_total_path);
 	generate_agg_pushdown_path(root,
 							   cheapest_total_path,
 							   output_rel,

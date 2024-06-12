@@ -213,6 +213,16 @@ try_insert_vector_agg_node(Plan *plan)
 		return plan;
 	}
 
+	if (agg->aggstrategy != AGG_PLAIN && agg->aggstrategy != AGG_HASHED)
+	{
+		/*
+		 * The sorted grouping produces sorted output, and the above plan nodes
+		 * might rely on that. Vectorized aggregation uses hashing and cannot
+		 * provide sorted output.
+		 */
+		return plan;
+	}
+
 	if (agg->plan.lefttree == NULL)
 	{
 		/*
