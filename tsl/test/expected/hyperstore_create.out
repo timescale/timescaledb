@@ -220,6 +220,54 @@ select * from amrels where relparent='test3'::regclass;
  _timescaledb_internal._hyper_4_16_chunk | hyperstore | test3
 (3 rows)
 
+-- Test that we can DDL on a hypertable that is not a Hyperstore but
+-- has one chunk that is a Hyperstore works.
+create table test4 (time timestamptz not null, device int, temp float);
+select created from create_hypertable('test4', 'time');
+ created 
+---------
+ t
+(1 row)
+
+insert into test4 values ('2022-06-01', 1, 1.0), ('2022-08-01', 1, 1.0);
+-- should be at least two chunks
+select count(ch) from show_chunks('test4') ch;
+ count 
+-------
+     2
+(1 row)
+
+select ch as chunk from show_chunks('test4') ch limit 1 \gset
+alter table test4 set (timescaledb.compress);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "test4" is set to ""
+NOTICE:  default order by for hypertable "test4" is set to ""time" DESC"
+alter table :chunk set access method hyperstore;
+select * from amrels where relparent='test4'::regclass;
+                   rel                   |   amname   | relparent 
+-----------------------------------------+------------+-----------
+ _timescaledb_internal._hyper_6_18_chunk | hyperstore | test4
+ _timescaledb_internal._hyper_6_19_chunk | heap       | test4
+(2 rows)
+
+-- test that alter table on the hypertable works
+alter table test4 add column magic int;
+\d :chunk
+          Table "_timescaledb_internal._hyper_6_18_chunk"
+ Column |           Type           | Collation | Nullable | Default 
+--------+--------------------------+-----------+----------+---------
+ time   | timestamp with time zone |           | not null | 
+ device | integer                  |           |          | 
+ temp   | double precision         |           |          | 
+ magic  | integer                  |           |          | 
+Indexes:
+    "_hyper_6_18_chunk_test4_time_idx" btree ("time" DESC)
+Check constraints:
+    "constraint_10" CHECK ("time" >= 'Wed May 25 17:00:00 2022 PDT'::timestamp with time zone AND "time" < 'Wed Jun 01 17:00:00 2022 PDT'::timestamp with time zone)
+Inherits: test4
+
+-- Test that dropping a table with one chunk being a hyperstore works.
+drop table test4;
 -- Create view to see compression stats. Left join chunks with stats
 -- to detect missing stats. Only show row counts because size stats
 -- seem to vary in tests
