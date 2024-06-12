@@ -274,7 +274,7 @@ and relname like '%time%' \gset
 reset role; -- need superuser for pageinspect
 
 -- The index should contain 1 key (device 1) with 2 TIDs
-select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
 
 -- Check that a query can use the index
 explain (costs off)
@@ -291,7 +291,7 @@ where indrelid = :'non_unique_chunk'::regclass
 and relname like '%time%' \gset
 
 -- Index should have two tids, since one row excluded
-select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
 
 -- Check that the index works. Expect two rows to be returned.
 explain (costs off)
@@ -307,7 +307,7 @@ where indrelid = :'non_unique_chunk'::regclass
 and relname like '%time%' \gset
 
 -- Index should have two tids, since one row excluded
-select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
 
 -- Check that the index works as expected. Only one row should match.
 explain (costs off)
