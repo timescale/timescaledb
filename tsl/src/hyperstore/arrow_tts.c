@@ -296,14 +296,14 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 				 * compressed tuple again, just with a new tuple index */
 				ItemPointerData decoded_tid;
 
-				compressed_tid_to_tid(&decoded_tid, &slot->tts_tid);
+				hyperstore_tid_decode(&decoded_tid, &slot->tts_tid);
 
 				if (!ItemPointerEquals(&decoded_tid, &child_slot->tts_tid))
 					clear_arrow_parent(slot);
 			}
 		}
 
-		tid_to_compressed_tid(&slot->tts_tid, &child_slot->tts_tid, tuple_index);
+		hyperstore_tid_encode(&slot->tts_tid, &child_slot->tts_tid, tuple_index);
 
 		/* Stored a compressed tuple so clear the non-compressed slot */
 		ExecClearTuple(aslot->noncompressed_slot);
