@@ -2734,33 +2734,24 @@ LIMIT 100;
                                  ->  Sort (actual rows=0 loops=1)
                                        Sort Key: m2_1."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=0 loops=1)
-                                             Sort Key: m2_1."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 1
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 1
                                  ->  Sort (actual rows=21 loops=1)
                                        Sort Key: m2_2."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=720 loops=1)
-                                             Sort Key: m2_2."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=720 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 2
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=720 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 2
                                  ->  Sort (actual rows=0 loops=1)
                                        Sort Key: m2_3."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=0 loops=1)
-                                             Sort Key: m2_3."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=0 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 1
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=0 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 1
                            ->  Merge Append (never executed)
                                  Sort Key: m2_4."time"
                                  ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m2_4 (never executed)
@@ -2773,21 +2764,17 @@ LIMIT 100;
                                  Sort Key: m2_7."time"
                                  ->  Sort (never executed)
                                        Sort Key: m2_7."time"
-                                       ->  Sort (never executed)
-                                             Sort Key: m2_7."time"
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
-                                                   ->  Seq Scan on compress_hyper_6_20_chunk (never executed)
-                                                         Filter: (device_id = 2)
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
+                                             ->  Seq Scan on compress_hyper_6_20_chunk (never executed)
+                                                   Filter: (device_id = 2)
                                  ->  Sort (never executed)
                                        Sort Key: m2_8."time"
-                                       ->  Sort (never executed)
-                                             Sort Key: m2_8."time"
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
-                                                   ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
-                                                         Filter: (device_id = 2)
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
+                                             ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
+                                                   Filter: (device_id = 2)
                                  ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_9 (never executed)
                                        Index Cond: (device_id = 2)
-(84 rows)
+(71 rows)
 
 -- test implicit self-join
 :PREFIX
@@ -3575,22 +3562,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: (device_id IS NOT NULL)
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: (device_id IS NOT NULL)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: (device_id IS NOT NULL)
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: (device_id IS NOT NULL)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: (device_id IS NOT NULL)
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: (device_id IS NOT NULL)
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -3605,11 +3586,9 @@ LIMIT 10;
                                  Filter: (device_id IS NOT NULL)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: (device_id IS NOT NULL)
-(61 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: (device_id IS NOT NULL)
+(53 rows)
 
 :PREFIX
 SELECT *
@@ -3618,8 +3597,8 @@ WHERE device_id IS NULL
 ORDER BY time,
     device_id
 LIMIT 10;
-                                                                         QUERY PLAN                                                                          
--------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=0 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
          Order: metrics_space."time", metrics_space.device_id
@@ -3651,27 +3630,18 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=0 loops=1)
-                                 Index Cond: (device_id IS NULL)
+                     ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=0 loops=1)
+                           Index Cond: (device_id IS NULL)
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=0 loops=1)
-                                 Index Cond: (device_id IS NULL)
+                     ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=0 loops=1)
+                           Index Cond: (device_id IS NULL)
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=0 loops=1)
-                                 Index Cond: (device_id IS NULL)
+                     ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=0 loops=1)
+                           Index Cond: (device_id IS NULL)
          ->  Merge Append (actual rows=0 loops=1)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (actual rows=0 loops=1)
@@ -3691,12 +3661,9 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=0 loops=1)
-                                 Index Cond: (device_id IS NULL)
-(76 rows)
+                     ->  Index Scan using _hyper_2_12_chunk_metrics_space_device_id_device_id_peer_v0_v_2 on _hyper_2_12_chunk (actual rows=0 loops=1)
+                           Index Cond: (device_id IS NULL)
+(64 rows)
 
 -- test IN (Const,Const)
 :PREFIX
@@ -3706,8 +3673,8 @@ WHERE device_id IN (1, 2)
 ORDER BY time,
     device_id
 LIMIT 10;
-                                                                     QUERY PLAN                                                                      
------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=10 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=10 loops=1)
          Order: metrics_space."time", metrics_space.device_id
@@ -3730,16 +3697,12 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: (device_id = ANY ('{1,2}'::integer[]))
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: (device_id = ANY ('{1,2}'::integer[]))
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (never executed)
-                                 Index Cond: (device_id = ANY ('{1,2}'::integer[]))
+                     ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (never executed)
+                           Index Cond: (device_id = ANY ('{1,2}'::integer[]))
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -3752,7 +3715,7 @@ LIMIT 10;
                      ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk (never executed)
                            ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
                                  Filter: (device_id = ANY ('{1,2}'::integer[]))
-(44 rows)
+(40 rows)
 
 -- test cast pushdown
 :PREFIX
@@ -3823,30 +3786,21 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
-                                 Filter: (device_id = device_id_peer)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = device_id_peer)
+                           Rows Removed by Filter: 672
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
-                                 Filter: (device_id = device_id_peer)
-                                 Rows Removed by Filter: 2016
+                     ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = device_id_peer)
+                           Rows Removed by Filter: 2016
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
-                                 Filter: (device_id = device_id_peer)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = device_id_peer)
+                           Rows Removed by Filter: 672
          ->  Merge Append (actual rows=0 loops=1)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (actual rows=0 loops=1)
@@ -3866,13 +3820,10 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
-                                 Filter: (device_id = device_id_peer)
-                                 Rows Removed by Filter: 336
-(80 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
+                           Filter: (device_id = device_id_peer)
+                           Rows Removed by Filter: 336
+(68 rows)
 
 :PREFIX
 SELECT *
@@ -3910,22 +3861,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: (device_id_peer < device_id)
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: (device_id_peer < device_id)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: (device_id_peer < device_id)
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: (device_id_peer < device_id)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: (device_id_peer < device_id)
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: (device_id_peer < device_id)
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -3940,11 +3885,9 @@ LIMIT 10;
                                  Filter: (device_id_peer < device_id)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: (device_id_peer < device_id)
-(61 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: (device_id_peer < device_id)
+(53 rows)
 
 -- test expressions
 :PREFIX
@@ -4195,22 +4138,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -4227,11 +4164,9 @@ LIMIT 10;
                                  Filter: (_ts_meta_max_3 >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
-(69 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: ("time" >= 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+(61 rows)
 
 :PREFIX
 SELECT *
@@ -4275,22 +4210,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -4307,11 +4236,9 @@ LIMIT 10;
                                  Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
-(69 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: ("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
+(61 rows)
 
 :PREFIX
 SELECT *
@@ -4355,22 +4282,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -4387,11 +4308,9 @@ LIMIT 10;
                                  Filter: (_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
-(69 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: ('Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone < "time")
+(61 rows)
 
 --pushdowns between order by and segment by columns
 :PREFIX
@@ -4401,8 +4320,8 @@ WHERE v0 < 1
 ORDER BY time,
     device_id
 LIMIT 10;
-                                                                         QUERY PLAN                                                                         
-------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                      QUERY PLAN                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=0 loops=1)
    ->  Custom Scan (ChunkAppend) on metrics_space (actual rows=0 loops=1)
          Order: metrics_space."time", metrics_space.device_id
@@ -4437,27 +4356,18 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=0 loops=1)
-                                 Index Cond: (v0 < 1)
+                     ->  Index Scan using _hyper_2_7_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_7_chunk (actual rows=0 loops=1)
+                           Index Cond: (v0 < 1)
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=0 loops=1)
-                                 Index Cond: (v0 < 1)
+                     ->  Index Scan using _hyper_2_8_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_8_chunk (actual rows=0 loops=1)
+                           Index Cond: (v0 < 1)
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=0 loops=1)
-                                 Index Cond: (v0 < 1)
+                     ->  Index Scan using _hyper_2_9_chunk_metrics_space_device_id_device_id_peer_v0_v1_2 on _hyper_2_9_chunk (actual rows=0 loops=1)
+                           Index Cond: (v0 < 1)
          ->  Merge Append (actual rows=0 loops=1)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (actual rows=0 loops=1)
@@ -4479,13 +4389,10 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
-                                 Filter: (v0 < 1)
-                                 Rows Removed by Filter: 336
-(82 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
+                           Filter: (v0 < 1)
+                           Rows Removed by Filter: 336
+(70 rows)
 
 :PREFIX
 SELECT *
@@ -4530,30 +4437,21 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
-                                 Filter: (v0 < device_id)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
+                           Filter: (v0 < device_id)
+                           Rows Removed by Filter: 672
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
-                                 Filter: (v0 < device_id)
-                                 Rows Removed by Filter: 2016
+                     ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
+                           Filter: (v0 < device_id)
+                           Rows Removed by Filter: 2016
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
-                                 Filter: (v0 < device_id)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
+                           Filter: (v0 < device_id)
+                           Rows Removed by Filter: 672
          ->  Merge Append (actual rows=0 loops=1)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (actual rows=0 loops=1)
@@ -4575,13 +4473,10 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
-                                 Filter: (v0 < device_id)
-                                 Rows Removed by Filter: 336
-(85 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
+                           Filter: (v0 < device_id)
+                           Rows Removed by Filter: 336
+(73 rows)
 
 :PREFIX
 SELECT *
@@ -4622,22 +4517,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: (device_id < v0)
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: (device_id < v0)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: (device_id < v0)
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: (device_id < v0)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: (device_id < v0)
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: (device_id < v0)
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -4654,11 +4543,9 @@ LIMIT 10;
                                  Filter: (_ts_meta_max_1 > device_id)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: (device_id < v0)
-(66 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: (device_id < v0)
+(58 rows)
 
 :PREFIX
 SELECT *
@@ -4700,30 +4587,21 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
-                                 Filter: (v1 = (device_id)::double precision)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
+                           Filter: (v1 = (device_id)::double precision)
+                           Rows Removed by Filter: 672
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
-                                 Filter: (v1 = (device_id)::double precision)
-                                 Rows Removed by Filter: 2016
+                     ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
+                           Filter: (v1 = (device_id)::double precision)
+                           Rows Removed by Filter: 2016
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
-                                 Filter: (v1 = (device_id)::double precision)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
+                           Filter: (v1 = (device_id)::double precision)
+                           Rows Removed by Filter: 672
          ->  Merge Append (actual rows=0 loops=1)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (actual rows=0 loops=1)
@@ -4743,13 +4621,10 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
-                                 Filter: (v1 = (device_id)::double precision)
-                                 Rows Removed by Filter: 336
-(80 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
+                           Filter: (v1 = (device_id)::double precision)
+                           Rows Removed by Filter: 336
+(68 rows)
 
 --pushdown between two order by column (not pushed down)
 :PREFIX
@@ -4792,30 +4667,21 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
-                                 Filter: ((v0)::double precision = v1)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_7_chunk (actual rows=0 loops=1)
+                           Filter: ((v0)::double precision = v1)
+                           Rows Removed by Filter: 672
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
-                                 Filter: ((v0)::double precision = v1)
-                                 Rows Removed by Filter: 2016
+                     ->  Seq Scan on _hyper_2_8_chunk (actual rows=0 loops=1)
+                           Filter: ((v0)::double precision = v1)
+                           Rows Removed by Filter: 2016
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
-                                 Filter: ((v0)::double precision = v1)
-                                 Rows Removed by Filter: 672
+                     ->  Seq Scan on _hyper_2_9_chunk (actual rows=0 loops=1)
+                           Filter: ((v0)::double precision = v1)
+                           Rows Removed by Filter: 672
          ->  Merge Append (actual rows=0 loops=1)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (actual rows=0 loops=1)
@@ -4835,13 +4701,10 @@ LIMIT 10;
                ->  Sort (actual rows=0 loops=1)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                      Sort Method: quicksort 
-                     ->  Sort (actual rows=0 loops=1)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           Sort Method: quicksort 
-                           ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
-                                 Filter: ((v0)::double precision = v1)
-                                 Rows Removed by Filter: 336
-(80 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (actual rows=0 loops=1)
+                           Filter: ((v0)::double precision = v1)
+                           Rows Removed by Filter: 336
+(68 rows)
 
 --pushdown of quals on order by and segment by cols anded together
 :PREFIX_VERBOSE
@@ -4932,22 +4795,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -4964,11 +4821,9 @@ LIMIT 10;
                                  Filter: ((_ts_meta_max_3 > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
-(68 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: (("time" > 'Fri Dec 31 17:00:00 1999 PST'::timestamp with time zone) OR (device_id = 1))
+(60 rows)
 
 --functions not yet optimized
 :PREFIX
@@ -5007,22 +4862,16 @@ LIMIT 10;
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                ->  Sort (never executed)
                      Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                           ->  Seq Scan on _hyper_2_7_chunk (never executed)
-                                 Filter: ("time" < now())
+                     ->  Seq Scan on _hyper_2_7_chunk (never executed)
+                           Filter: ("time" < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                           ->  Seq Scan on _hyper_2_8_chunk (never executed)
-                                 Filter: ("time" < now())
+                     ->  Seq Scan on _hyper_2_8_chunk (never executed)
+                           Filter: ("time" < now())
                ->  Sort (never executed)
                      Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                           ->  Seq Scan on _hyper_2_9_chunk (never executed)
-                                 Filter: ("time" < now())
+                     ->  Seq Scan on _hyper_2_9_chunk (never executed)
+                           Filter: ("time" < now())
          ->  Merge Append (never executed)
                Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
                ->  Sort (never executed)
@@ -5037,11 +4886,9 @@ LIMIT 10;
                            ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
                ->  Sort (never executed)
                      Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     ->  Sort (never executed)
-                           Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                           ->  Seq Scan on _hyper_2_12_chunk (never executed)
-                                 Filter: ("time" < now())
-(61 rows)
+                     ->  Seq Scan on _hyper_2_12_chunk (never executed)
+                           Filter: ("time" < now())
+(53 rows)
 
 -- test sort optimization interaction
 :PREFIX
@@ -5689,8 +5536,8 @@ FROM :TEST_TABLE
 WHERE time > '2000-01-08'::text::timestamptz
 ORDER BY time,
     device_id;
-                                                                QUERY PLAN                                                                
-------------------------------------------------------------------------------------------------------------------------------------------
+                                                             QUERY PLAN                                                             
+------------------------------------------------------------------------------------------------------------------------------------
  Custom Scan (ChunkAppend) on metrics_space (actual rows=3915 loops=1)
    Order: metrics_space."time", metrics_space.device_id
    ->  Merge Append (actual rows=0 loops=1)
@@ -5724,27 +5571,18 @@ ORDER BY time,
          ->  Sort (actual rows=447 loops=1)
                Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
                Sort Method: quicksort 
-               ->  Sort (actual rows=447 loops=1)
-                     Sort Key: _hyper_2_7_chunk."time", _hyper_2_7_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (actual rows=447 loops=1)
-                           Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk (actual rows=447 loops=1)
+                     Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Sort (actual rows=1341 loops=1)
                Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
                Sort Method: quicksort 
-               ->  Sort (actual rows=1341 loops=1)
-                     Sort Key: _hyper_2_8_chunk."time", _hyper_2_8_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (actual rows=1341 loops=1)
-                           Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_2_8_chunk_metrics_space_time_idx on _hyper_2_8_chunk (actual rows=1341 loops=1)
+                     Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
          ->  Sort (actual rows=447 loops=1)
                Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
                Sort Method: quicksort 
-               ->  Sort (actual rows=447 loops=1)
-                     Sort Key: _hyper_2_9_chunk."time", _hyper_2_9_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Index Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=447 loops=1)
-                           Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+               ->  Index Scan Backward using _hyper_2_9_chunk_metrics_space_time_idx on _hyper_2_9_chunk (actual rows=447 loops=1)
+                     Index Cond: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
    ->  Merge Append (actual rows=1680 loops=1)
          Sort Key: _hyper_2_10_chunk."time", _hyper_2_10_chunk.device_id
          ->  Sort (actual rows=336 loops=1)
@@ -5764,12 +5602,9 @@ ORDER BY time,
          ->  Sort (actual rows=336 loops=1)
                Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
                Sort Method: quicksort 
-               ->  Sort (actual rows=336 loops=1)
-                     Sort Key: _hyper_2_12_chunk."time", _hyper_2_12_chunk.device_id
-                     Sort Method: quicksort 
-                     ->  Seq Scan on _hyper_2_12_chunk (actual rows=336 loops=1)
-                           Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
-(78 rows)
+               ->  Seq Scan on _hyper_2_12_chunk (actual rows=336 loops=1)
+                     Filter: ("time" > ('2000-01-08'::cstring)::timestamp with time zone)
+(66 rows)
 
 -- test aggregate
 :PREFIX
@@ -6837,19 +6672,13 @@ FROM :TEST_TABLE m1
                      Sort Key: m1_4."time", m1_4.device_id
                      ->  Sort (never executed)
                            Sort Key: m1_4."time", m1_4.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_4."time", m1_4.device_id
-                                 ->  Seq Scan on _hyper_2_7_chunk m1_4 (never executed)
+                           ->  Seq Scan on _hyper_2_7_chunk m1_4 (never executed)
                      ->  Sort (never executed)
                            Sort Key: m1_5."time", m1_5.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_5."time", m1_5.device_id
-                                 ->  Seq Scan on _hyper_2_8_chunk m1_5 (never executed)
+                           ->  Seq Scan on _hyper_2_8_chunk m1_5 (never executed)
                      ->  Sort (never executed)
                            Sort Key: m1_6."time", m1_6.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_6."time", m1_6.device_id
-                                 ->  Seq Scan on _hyper_2_9_chunk m1_6 (never executed)
+                           ->  Seq Scan on _hyper_2_9_chunk m1_6 (never executed)
                ->  Merge Append (never executed)
                      Sort Key: m1_7."time", m1_7.device_id
                      ->  Sort (never executed)
@@ -6862,9 +6691,7 @@ FROM :TEST_TABLE m1
                                  ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
                      ->  Sort (never executed)
                            Sort Key: m1_9."time", m1_9.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_9."time", m1_9.device_id
-                                 ->  Seq Scan on _hyper_2_12_chunk m1_9 (never executed)
+                           ->  Seq Scan on _hyper_2_12_chunk m1_9 (never executed)
          ->  Materialize (actual rows=10 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=10 loops=1)
                      Order: m2."time", m2.device_id
@@ -6889,19 +6716,13 @@ FROM :TEST_TABLE m1
                            Sort Key: m2_4."time", m2_4.device_id
                            ->  Sort (never executed)
                                  Sort Key: m2_4."time", m2_4.device_id
-                                 ->  Sort (never executed)
-                                       Sort Key: m2_4."time", m2_4.device_id
-                                       ->  Seq Scan on _hyper_2_7_chunk m2_4 (never executed)
+                                 ->  Seq Scan on _hyper_2_7_chunk m2_4 (never executed)
                            ->  Sort (never executed)
                                  Sort Key: m2_5."time", m2_5.device_id
-                                 ->  Sort (never executed)
-                                       Sort Key: m2_5."time", m2_5.device_id
-                                       ->  Seq Scan on _hyper_2_8_chunk m2_5 (never executed)
+                                 ->  Seq Scan on _hyper_2_8_chunk m2_5 (never executed)
                            ->  Sort (never executed)
                                  Sort Key: m2_6."time", m2_6.device_id
-                                 ->  Sort (never executed)
-                                       Sort Key: m2_6."time", m2_6.device_id
-                                       ->  Seq Scan on _hyper_2_9_chunk m2_6 (never executed)
+                                 ->  Seq Scan on _hyper_2_9_chunk m2_6 (never executed)
                      ->  Merge Append (never executed)
                            Sort Key: m2_7."time", m2_7.device_id
                            ->  Sort (never executed)
@@ -6914,10 +6735,8 @@ FROM :TEST_TABLE m1
                                        ->  Seq Scan on compress_hyper_6_21_chunk compress_hyper_6_21_chunk_1 (never executed)
                            ->  Sort (never executed)
                                  Sort Key: m2_9."time", m2_9.device_id
-                                 ->  Sort (never executed)
-                                       Sort Key: m2_9."time", m2_9.device_id
-                                       ->  Seq Scan on _hyper_2_12_chunk m2_9 (never executed)
-(106 rows)
+                                 ->  Seq Scan on _hyper_2_12_chunk m2_9 (never executed)
+(90 rows)
 
 :PREFIX
 SELECT *
@@ -6959,19 +6778,13 @@ FROM :TEST_TABLE m1
                      Sort Key: m2_4."time", m2_4.device_id
                      ->  Sort (never executed)
                            Sort Key: m2_4."time", m2_4.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m2_4."time", m2_4.device_id
-                                 ->  Seq Scan on _hyper_2_7_chunk m2_4 (never executed)
+                           ->  Seq Scan on _hyper_2_7_chunk m2_4 (never executed)
                      ->  Sort (never executed)
                            Sort Key: m2_5."time", m2_5.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m2_5."time", m2_5.device_id
-                                 ->  Seq Scan on _hyper_2_8_chunk m2_5 (never executed)
+                           ->  Seq Scan on _hyper_2_8_chunk m2_5 (never executed)
                      ->  Sort (never executed)
                            Sort Key: m2_6."time", m2_6.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m2_6."time", m2_6.device_id
-                                 ->  Seq Scan on _hyper_2_9_chunk m2_6 (never executed)
+                           ->  Seq Scan on _hyper_2_9_chunk m2_6 (never executed)
                ->  Merge Append (never executed)
                      Sort Key: m2_7."time", m2_7.device_id
                      ->  Sort (never executed)
@@ -6984,9 +6797,7 @@ FROM :TEST_TABLE m1
                                  ->  Seq Scan on compress_hyper_6_21_chunk compress_hyper_6_21_chunk_1 (never executed)
                      ->  Sort (never executed)
                            Sort Key: m2_9."time", m2_9.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m2_9."time", m2_9.device_id
-                                 ->  Seq Scan on _hyper_2_12_chunk m2_9 (never executed)
+                           ->  Seq Scan on _hyper_2_12_chunk m2_9 (never executed)
          ->  Materialize (actual rows=49 loops=1)
                ->  Nested Loop (actual rows=11 loops=1)
                      Join Filter: (m1_1."time" = m3_1."time")
@@ -7019,7 +6830,7 @@ FROM :TEST_TABLE m1
                                  ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m1_8 (actual rows=1008 loops=1)
                                        ->  Seq Scan on compress_hyper_6_21_chunk (actual rows=3 loops=1)
                                  ->  Seq Scan on _hyper_2_12_chunk m1_9 (actual rows=336 loops=1)
-(88 rows)
+(80 rows)
 
 :PREFIX
 SELECT *
@@ -7161,19 +6972,13 @@ LIMIT 10;
                      Sort Key: m1_4."time", m1_4.device_id
                      ->  Sort (never executed)
                            Sort Key: m1_4."time", m1_4.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_4."time", m1_4.device_id
-                                 ->  Seq Scan on _hyper_2_7_chunk m1_4 (never executed)
+                           ->  Seq Scan on _hyper_2_7_chunk m1_4 (never executed)
                      ->  Sort (never executed)
                            Sort Key: m1_5."time", m1_5.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_5."time", m1_5.device_id
-                                 ->  Seq Scan on _hyper_2_8_chunk m1_5 (never executed)
+                           ->  Seq Scan on _hyper_2_8_chunk m1_5 (never executed)
                      ->  Sort (never executed)
                            Sort Key: m1_6."time", m1_6.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_6."time", m1_6.device_id
-                                 ->  Seq Scan on _hyper_2_9_chunk m1_6 (never executed)
+                           ->  Seq Scan on _hyper_2_9_chunk m1_6 (never executed)
                ->  Merge Append (never executed)
                      Sort Key: m1_7."time", m1_7.device_id
                      ->  Sort (never executed)
@@ -7186,9 +6991,7 @@ LIMIT 10;
                                  ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
                      ->  Sort (never executed)
                            Sort Key: m1_9."time", m1_9.device_id
-                           ->  Sort (never executed)
-                                 Sort Key: m1_9."time", m1_9.device_id
-                                 ->  Seq Scan on _hyper_2_12_chunk m1_9 (never executed)
+                           ->  Seq Scan on _hyper_2_12_chunk m1_9 (never executed)
          ->  Materialize (actual rows=49 loops=1)
                ->  Custom Scan (ChunkAppend) on metrics_space m2 (actual rows=11 loops=1)
                      Order: m2."time"
@@ -7197,27 +7000,18 @@ LIMIT 10;
                            ->  Sort (actual rows=3 loops=1)
                                  Sort Key: m2_1."time"
                                  Sort Method: quicksort 
-                                 ->  Sort (actual rows=720 loops=1)
-                                       Sort Key: m2_1."time"
-                                       Sort Method: quicksort 
-                                       ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=720 loops=1)
-                                             ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=1 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=720 loops=1)
+                                       ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=1 loops=1)
                            ->  Sort (actual rows=7 loops=1)
                                  Sort Key: m2_2."time"
                                  Sort Method: quicksort 
-                                 ->  Sort (actual rows=2160 loops=1)
-                                       Sort Key: m2_2."time"
-                                       Sort Method: quicksort 
-                                       ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=2160 loops=1)
-                                             ->  Seq Scan on compress_hyper_6_18_chunk compress_hyper_6_18_chunk_1 (actual rows=3 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=2160 loops=1)
+                                       ->  Seq Scan on compress_hyper_6_18_chunk compress_hyper_6_18_chunk_1 (actual rows=3 loops=1)
                            ->  Sort (actual rows=3 loops=1)
                                  Sort Key: m2_3."time"
                                  Sort Method: quicksort 
-                                 ->  Sort (actual rows=720 loops=1)
-                                       Sort Key: m2_3."time"
-                                       Sort Method: quicksort 
-                                       ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=720 loops=1)
-                                             ->  Seq Scan on compress_hyper_6_19_chunk compress_hyper_6_19_chunk_1 (actual rows=1 loops=1)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=720 loops=1)
+                                       ->  Seq Scan on compress_hyper_6_19_chunk compress_hyper_6_19_chunk_1 (actual rows=1 loops=1)
                      ->  Merge Append (never executed)
                            Sort Key: m2_4."time"
                            ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_time_idx on _hyper_2_7_chunk m2_4 (never executed)
@@ -7227,18 +7021,14 @@ LIMIT 10;
                            Sort Key: m2_7."time"
                            ->  Sort (never executed)
                                  Sort Key: m2_7."time"
-                                 ->  Sort (never executed)
-                                       Sort Key: m2_7."time"
-                                       ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
-                                             ->  Seq Scan on compress_hyper_6_20_chunk compress_hyper_6_20_chunk_1 (never executed)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
+                                       ->  Seq Scan on compress_hyper_6_20_chunk compress_hyper_6_20_chunk_1 (never executed)
                            ->  Sort (never executed)
                                  Sort Key: m2_8."time"
-                                 ->  Sort (never executed)
-                                       Sort Key: m2_8."time"
-                                       ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
-                                             ->  Seq Scan on compress_hyper_6_21_chunk compress_hyper_6_21_chunk_1 (never executed)
+                                 ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
+                                       ->  Seq Scan on compress_hyper_6_21_chunk compress_hyper_6_21_chunk_1 (never executed)
                            ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_time_idx on _hyper_2_12_chunk m2_9 (never executed)
-(105 rows)
+(84 rows)
 
 :PREFIX
 SELECT *
@@ -7305,33 +7095,24 @@ LIMIT 100;
                                  ->  Sort (actual rows=0 loops=1)
                                        Sort Key: m2_1."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=0 loops=1)
-                                             Sort Key: m2_1."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=0 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 1
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_17_chunk compress_hyper_6_17_chunk_1 (actual rows=0 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 1
                                  ->  Sort (actual rows=22 loops=1)
                                        Sort Key: m2_2."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=720 loops=1)
-                                             Sort Key: m2_2."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=720 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_18_chunk compress_hyper_6_18_chunk_1 (actual rows=1 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 2
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=720 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_18_chunk compress_hyper_6_18_chunk_1 (actual rows=1 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 2
                                  ->  Sort (actual rows=0 loops=1)
                                        Sort Key: m2_3."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=0 loops=1)
-                                             Sort Key: m2_3."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=0 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_19_chunk compress_hyper_6_19_chunk_1 (actual rows=0 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 1
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=0 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_19_chunk compress_hyper_6_19_chunk_1 (actual rows=0 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 1
                            ->  Merge Append (never executed)
                                  Sort Key: m2_4."time"
                                  ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m2_4 (never executed)
@@ -7344,21 +7125,17 @@ LIMIT 100;
                                  Sort Key: m2_7."time"
                                  ->  Sort (never executed)
                                        Sort Key: m2_7."time"
-                                       ->  Sort (never executed)
-                                             Sort Key: m2_7."time"
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
-                                                   ->  Seq Scan on compress_hyper_6_20_chunk compress_hyper_6_20_chunk_1 (never executed)
-                                                         Filter: (device_id = 2)
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
+                                             ->  Seq Scan on compress_hyper_6_20_chunk compress_hyper_6_20_chunk_1 (never executed)
+                                                   Filter: (device_id = 2)
                                  ->  Sort (never executed)
                                        Sort Key: m2_8."time"
-                                       ->  Sort (never executed)
-                                             Sort Key: m2_8."time"
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
-                                                   ->  Seq Scan on compress_hyper_6_21_chunk compress_hyper_6_21_chunk_1 (never executed)
-                                                         Filter: (device_id = 2)
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
+                                             ->  Seq Scan on compress_hyper_6_21_chunk compress_hyper_6_21_chunk_1 (never executed)
+                                                   Filter: (device_id = 2)
                                  ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_9 (never executed)
                                        Index Cond: (device_id = 2)
-(105 rows)
+(92 rows)
 
 :PREFIX
 SELECT *
@@ -7404,33 +7181,24 @@ LIMIT 100;
                                  ->  Sort (actual rows=0 loops=1)
                                        Sort Key: m2_1."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=0 loops=1)
-                                             Sort Key: m2_1."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 1
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_4_chunk m2_1 (actual rows=0 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_17_chunk (actual rows=0 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 1
                                  ->  Sort (actual rows=21 loops=1)
                                        Sort Key: m2_2."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=720 loops=1)
-                                             Sort Key: m2_2."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=720 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 2
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_5_chunk m2_2 (actual rows=720 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_18_chunk (actual rows=1 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 2
                                  ->  Sort (actual rows=0 loops=1)
                                        Sort Key: m2_3."time"
                                        Sort Method: quicksort 
-                                       ->  Sort (actual rows=0 loops=1)
-                                             Sort Key: m2_3."time"
-                                             Sort Method: quicksort 
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=0 loops=1)
-                                                   ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0 loops=1)
-                                                         Filter: (device_id = 2)
-                                                         Rows Removed by Filter: 1
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_6_chunk m2_3 (actual rows=0 loops=1)
+                                             ->  Seq Scan on compress_hyper_6_19_chunk (actual rows=0 loops=1)
+                                                   Filter: (device_id = 2)
+                                                   Rows Removed by Filter: 1
                            ->  Merge Append (never executed)
                                  Sort Key: m2_4."time"
                                  ->  Index Scan Backward using _hyper_2_7_chunk_metrics_space_device_id_time_idx on _hyper_2_7_chunk m2_4 (never executed)
@@ -7443,21 +7211,17 @@ LIMIT 100;
                                  Sort Key: m2_7."time"
                                  ->  Sort (never executed)
                                        Sort Key: m2_7."time"
-                                       ->  Sort (never executed)
-                                             Sort Key: m2_7."time"
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
-                                                   ->  Seq Scan on compress_hyper_6_20_chunk (never executed)
-                                                         Filter: (device_id = 2)
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_10_chunk m2_7 (never executed)
+                                             ->  Seq Scan on compress_hyper_6_20_chunk (never executed)
+                                                   Filter: (device_id = 2)
                                  ->  Sort (never executed)
                                        Sort Key: m2_8."time"
-                                       ->  Sort (never executed)
-                                             Sort Key: m2_8."time"
-                                             ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
-                                                   ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
-                                                         Filter: (device_id = 2)
+                                       ->  Custom Scan (DecompressChunk) on _hyper_2_11_chunk m2_8 (never executed)
+                                             ->  Seq Scan on compress_hyper_6_21_chunk (never executed)
+                                                   Filter: (device_id = 2)
                                  ->  Index Scan Backward using _hyper_2_12_chunk_metrics_space_device_id_time_idx on _hyper_2_12_chunk m2_9 (never executed)
                                        Index Cond: (device_id = 2)
-(84 rows)
+(71 rows)
 
 -- test implicit self-join
 :PREFIX

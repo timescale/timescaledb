@@ -66,15 +66,11 @@ static Plan *
 adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List *tlist,
 				 AttrNumber *sortColIdx)
 {
-	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, path->parent->relid, false);
 	int childSortCols;
 	Oid *sortOperators;
 	Oid *collations;
 	bool *nullsFirst;
 	AttrNumber *childColIdx;
-
-	/* push down targetlist to children */
-	plan->targetlist = castNode(List, adjust_appendrel_attrs(root, (Node *) tlist, 1, &appinfo));
 
 	/* Compute sort column info, and adjust subplan's tlist as needed */
 	plan = ts_prepare_sort_from_pathkeys(plan,
@@ -91,6 +87,8 @@ adjust_childscan(PlannerInfo *root, Plan *plan, Path *path, List *pathkeys, List
 	/* inject sort node if child sort order does not match desired order */
 	if (!pathkeys_contained_in(pathkeys, path->pathkeys))
 	{
+		Assert(!IsA(plan, Sort));
+
 		plan = (Plan *)
 			make_sort(plan, childSortCols, childColIdx, sortOperators, collations, nullsFirst);
 	}
@@ -136,31 +134,32 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 	cscan->scan.plan.targetlist = tlist;
 
-	if (path->path.pathkeys == NIL)
+	ListCell *lc_plan, *lc_path;
+	forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
 	{
-		ListCell *lc_plan, *lc_path;
-		forboth (lc_path, path->custom_paths, lc_plan, custom_plans)
+		Plan *child_plan = lfirst(lc_plan);
+		Path *child_path = lfirst(lc_path);
+
+		/* push down targetlist to children */
+		if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
 		{
-			Plan *child_plan = lfirst(lc_plan);
-			Path *child_path = lfirst(lc_path);
+			/* if this is an append child we need to adjust targetlist references */
+			AppendRelInfo *appinfo = ts_get_appendrelinfo(root, child_path->parent->relid, false);
 
-			/* push down targetlist to children */
-			if (child_path->parent->reloptkind == RELOPT_OTHER_MEMBER_REL)
-			{
-				/* if this is an append child we need to adjust targetlist references */
-				AppendRelInfo *appinfo =
-					ts_get_appendrelinfo(root, child_path->parent->relid, false);
-
-				child_plan->targetlist =
-					castNode(List, adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
-			}
-			else
-			{
-				child_plan->targetlist = tlist;
-			}
+			child_plan->targetlist =
+				castNode(List, adjust_appendrel_attrs(root, (Node *) orig_tlist, 1, &appinfo));
+		}
+		else
+		{
+			/*
+			 * This can also be a MergeAppend path building the entire
+			 * hypertable, in case we have a single partial chunk.
+			 */
+			child_plan->targetlist = tlist;
 		}
 	}
-	else
+
+	if (path->path.pathkeys != NIL)
 	{
 		/*
 		 * If this is an ordered append node we need to ensure the columns
@@ -168,7 +167,6 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 		 * return sorted output. Children not returning sorted output will be
 		 * wrapped in a sort node.
 		 */
-		ListCell *lc_plan, *lc_path;
 		int numCols;
 		AttrNumber *sortColIdx;
 		Oid *sortOperators;
@@ -219,54 +217,13 @@ ts_chunk_append_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *path
 
 			/*
 			 * This could be a MergeAppend due to space partitioning, or
-			 * due to partially compressed chunks. In the second case, there is
-			 * no need to inject sort nodes
+			 * due to partially compressed chunks. The MergeAppend plan adds
+			 * sort to it children, and has the proper sorting itself, so no
+			 * need to do anything for it.
+			 * We can also have plain chunk scans here which might require a
+			 * Sort.
 			 */
-			if (IsA(lfirst(lc_plan), MergeAppend))
-			{
-				ListCell *lc_childpath, *lc_childplan;
-				MergeAppend *merge_plan = castNode(MergeAppend, lfirst(lc_plan));
-				MergeAppendPath *merge_path = castNode(MergeAppendPath, lfirst(lc_path));
-				Index current_group_relid =
-					((Path *) linitial(merge_path->subpaths))->parent->relid;
-
-				/*
-				 * Since for space partitioning the MergeAppend below ChunkAppend
-				 * still has the hypertable as rel we can copy sort properties and
-				 * target list from toplevel ChunkAppend.
-				 */
-				merge_plan->plan.targetlist = cscan->scan.plan.targetlist;
-				merge_plan->sortColIdx = sortColIdx;
-				merge_plan->sortOperators = sortOperators;
-				merge_plan->collations = collations;
-				merge_plan->nullsFirst = nullsFirst;
-				bool partial_chunks = true;
-
-				/* children will have same parent relid if we have partial chunks */
-				foreach (lc_childpath, merge_path->subpaths)
-				{
-					Path *child = lfirst(lc_childpath);
-					if (child->parent->relid != current_group_relid)
-						partial_chunks = false;
-				}
-
-				forboth (lc_childpath, merge_path->subpaths, lc_childplan, merge_plan->mergeplans)
-				{
-					/*
-					 * Skip this invocation in the existence of partial chunks because it
-					 * will add an unnecessary sort node, create_merge_append_plan has already
-					 * adjusted the childscan with a sort node if required
-					 */
-					if (!partial_chunks)
-						lfirst(lc_childplan) = adjust_childscan(root,
-																lfirst(lc_childplan),
-																lfirst(lc_childpath),
-																pathkeys,
-																orig_tlist,
-																sortColIdx);
-				}
-			}
-			else
+			if (!IsA(lfirst(lc_plan), MergeAppend))
 			{
 				lfirst(lc_plan) = adjust_childscan(root,
 												   lfirst(lc_plan),
