@@ -118,6 +118,28 @@ insert into test3 values ('2022-10-01', 1, 1.0);
 -- The third chunk should be a hyperstore chunk
 select * from amrels where relparent='test3'::regclass;
 
+-- Test that we can DDL on a hypertable that is not a Hyperstore but
+-- has one chunk that is a Hyperstore works.
+create table test4 (time timestamptz not null, device int, temp float);
+select created from create_hypertable('test4', 'time');
+
+insert into test4 values ('2022-06-01', 1, 1.0), ('2022-08-01', 1, 1.0);
+-- should be at least two chunks
+select count(ch) from show_chunks('test4') ch;
+select ch as chunk from show_chunks('test4') ch limit 1 \gset
+
+alter table test4 set (timescaledb.compress);
+alter table :chunk set access method hyperstore;
+select * from amrels where relparent='test4'::regclass;
+
+-- test that alter table on the hypertable works
+alter table test4 add column magic int;
+
+\d :chunk
+
+-- Test that dropping a table with one chunk being a hyperstore works.
+drop table test4;
+
 -- Create view to see compression stats. Left join chunks with stats
 -- to detect missing stats. Only show row counts because size stats
 -- seem to vary in tests
