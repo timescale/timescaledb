@@ -149,7 +149,7 @@ hsproxy_can_delete_tid(ItemPointer tid, void *state)
 		return false;
 
 	/* Decode the TID into the original compressed relation TID */
-	compressed_tid_to_tid(&decoded_tid, tid);
+	hyperstore_tid_decode(&decoded_tid, tid);
 
 	/* Check if this is the same TID as in the last call. This is a simple
 	 * optimization for when we are just traversing "compressed" TIDs that all
