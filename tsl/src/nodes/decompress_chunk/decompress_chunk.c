@@ -780,6 +780,10 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 	chunk_rel->rows = new_row_estimate;
 
 	create_compressed_scan_paths(root, compressed_rel, compression_info, &sort_info);
+	fprintf(stderr, "sortinfo: seqnum %d, pushdown %d, reverse %d, compressed pks:\n",
+		sort_info.needs_sequence_num, sort_info.can_pushdown_sort,
+		sort_info.reverse);
+	my_print(sort_info.required_compressed_pathkeys);
 
 	/* compute parent relids of the chunk and use it to filter paths*/
 	Relids parent_relids = NULL;
@@ -1033,6 +1037,8 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 				 * MergeAppend paths if some child paths have pathkeys, so
 				 * here it is enough to create a plain Append path.
 				 */
+				if (path->pathkeys == NIL)
+				{
 				path = (Path *) create_append_path(root,
 												   chunk_rel,
 												   list_make2(path, uncompressed_path),
@@ -1042,6 +1048,13 @@ ts_decompress_chunk_generate_paths(PlannerInfo *root, RelOptInfo *chunk_rel, Hyp
 												   0,
 												   false,
 												   path->rows + uncompressed_path->rows);
+				}
+				else
+				{
+					path = (Path *) create_merge_append_path(root, chunk_rel,
+						list_make2(path, uncompressed_path), path->pathkeys,
+						req_outer);
+				}
 				add_path(chunk_rel, path);
 			}
 		}
