@@ -2325,10 +2325,8 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_138_chunk."time"
-                     ->  Seq Scan on _hyper_35_138_chunk
-(25 rows)
+               ->  Seq Scan on _hyper_35_138_chunk
+(23 rows)
 
 -- make other one partial too
 INSERT INTO space_part VALUES
@@ -2354,19 +2352,15 @@ EXPLAIN (COSTS OFF) SELECT * FROM space_part ORDER BY time;
                      ->  Seq Scan on compress_hyper_36_140_chunk
          ->  Sort
                Sort Key: _hyper_35_137_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_137_chunk."time"
-                     ->  Seq Scan on _hyper_35_137_chunk
+               ->  Seq Scan on _hyper_35_137_chunk
          ->  Custom Scan (DecompressChunk) on _hyper_35_138_chunk
                ->  Sort
                      Sort Key: compress_hyper_36_141_chunk._ts_meta_sequence_num DESC
                      ->  Seq Scan on compress_hyper_36_141_chunk
          ->  Sort
                Sort Key: _hyper_35_138_chunk."time"
-               ->  Sort
-                     Sort Key: _hyper_35_138_chunk."time"
-                     ->  Seq Scan on _hyper_35_138_chunk
-(30 rows)
+               ->  Seq Scan on _hyper_35_138_chunk
+(26 rows)
 
 -- test creation of unique expression index does not interfere with enabling compression
 -- github issue 6205
