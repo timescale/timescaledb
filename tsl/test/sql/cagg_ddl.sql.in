@@ -1162,10 +1162,8 @@ SELECT * FROM cashflows;
 -- 2. test named timezone
 -- 3. test named ts
 -- 4. test named bucket width
--- named origin
 
--- Currently not supported due to a bug in time_bucket (see comment in cagg_validate_query)
-\set ON_ERROR_STOP 0
+-- named origin
 CREATE MATERIALIZED VIEW cagg_named_origin WITH
 (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1h', time, 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
@@ -1185,13 +1183,13 @@ CREATE MATERIALIZED VIEW cagg_named_ts_tz_origin WITH
 SELECT time_bucket('1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
+
 -- named bucket width
 CREATE MATERIALIZED VIEW cagg_named_all WITH
 (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket(bucket_width => '1h', ts => time, timezone => 'UTC', origin => '2001-01-03 01:23:45') AS bucket,
 avg(amount) as avg_amount
 FROM transactions GROUP BY 1 WITH NO DATA;
-\set ON_ERROR_STOP 1
 
 -- Refreshing from the beginning (NULL) of a CAGG with variable time bucket and
 -- using an INTERVAL for the end timestamp (issue #5534)

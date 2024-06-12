@@ -967,12 +967,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot create continuous aggregate on hypertable with row security")));
 
-	/* Test for broken time_bucket configurations (variable with with offset and origin). We need to
-	 * check only time based buckets since integer based buckets are always fixed. */
-	bool time_offset_or_origin_set =
-		(bucket_info.bf->bucket_time_offset != NULL) ||
-		(TIMESTAMP_NOT_FINITE(bucket_info.bf->bucket_time_origin) == false);
-
 	/* At this point, we should have a valid bucket function. Otherwise, we have errored out before.
 	 */
 	Ensure(OidIsValid(bucket_info.bf->bucket_function), "unable to find valid bucket function");
@@ -980,34 +974,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	/* Ignore time_bucket_ng in this check, since offset and origin were allowed in the past */
 	FuncInfo *func_info = ts_func_cache_get_bucketing_func(bucket_info.bf->bucket_function);
 	Ensure(func_info != NULL, "bucket function is not found in function cache");
-	bool is_time_bucket_ng = func_info->origin == ORIGIN_TIMESCALE_EXPERIMENTAL;
-
-	/*
-	 * Some time_bucket variants using variable-sized buckets and custom origin/offset values are
-	 * not behaving correctly. To prevent misaligned buckets, these variants are blocked at the
-	 * moment. This restriction can be removed as soon as time_bucket behaves correctly.
-	 *
-	 * 		--- Align with default origin ('midnight on January 1, 2000')
-	 * 		test2=# SELECT time_bucket('1 month', '2000-01-01 01:05:00 UTC'::timestamptz,
-	 *         timezone=>'UTC'); time_bucket
-	 *		------------------------
-	 *		2000-01-01 00:00:00+00
-	 *
-	 *		--- Using a custom origin
-	 *		test2=# SELECT time_bucket('1 month', '2000-01-01 01:05:00 UTC'::timestamptz,
-	 *         origin=>'2000-01-01 01:05:00 UTC'::timestamptz, timezone=>'UTC'); time_bucket
-	 *		------------------------
-	 *		2000-01-01 00:00:00+00              <--- Should be 2000-01-01 01:05:00+00
-	 *		(1 row)
-	 */
-	if (time_bucket_info_has_fixed_width(&bucket_info) == false && time_offset_or_origin_set &&
-		!is_time_bucket_ng)
-	{
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("cannot create continuous aggregate with variable-width bucket using "
-						"offset or origin.")));
-	}
 
 	/* hierarchical cagg validations */
 	if (is_hierarchical)
