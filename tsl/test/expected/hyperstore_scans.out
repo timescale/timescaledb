@@ -51,7 +51,7 @@ select * from :chunk where ctid = :'ctid';
                       QUERY PLAN                      
 ------------------------------------------------------
  Tid Scan on _hyper_1_1_chunk (actual rows=1 loops=1)
-   TID Cond: (ctid = '(2147483651,163)'::tid)
+   TID Cond: (ctid = '(2147483649,11)'::tid)
  Arrays read from cache: 0
  Arrays decompressed: 0
 (4 rows)
