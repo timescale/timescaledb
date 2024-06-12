@@ -791,10 +791,10 @@ where indrelid = :'non_unique_chunk'::regclass
 and relname like '%time%' \gset
 reset role; -- need superuser for pageinspect
 -- The index should contain 1 key (device 1) with 2 TIDs
-select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
-   ctid    | dead |       htid       |                  tids                   
------------+------+------------------+-----------------------------------------
- (16,8194) | f    | (2147483651,153) | {"(2147483651,153)","(2147483651,154)"}
+select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+ is_compressed_tid | dead |      htid      |                tids                 
+-------------------+------+----------------+-------------------------------------
+ f                 | f    | (2147483649,1) | {"(2147483649,1)","(2147483649,2)"}
 (1 row)
 
 -- Check that a query can use the index
@@ -821,10 +821,10 @@ from pg_index i inner join pg_class c on (i.indexrelid=c.oid)
 where indrelid = :'non_unique_chunk'::regclass
 and relname like '%time%' \gset
 -- Index should have two tids, since one row excluded
-select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
-   ctid    | dead |       htid       |                  tids                   
------------+------+------------------+-----------------------------------------
- (16,8194) | f    | (2147483651,153) | {"(2147483651,153)","(2147483651,154)"}
+select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+ is_compressed_tid | dead |      htid      |                tids                 
+-------------------+------+----------------+-------------------------------------
+ f                 | f    | (2147483649,1) | {"(2147483649,1)","(2147483649,2)"}
 (1 row)
 
 -- Check that the index works. Expect two rows to be returned.
@@ -850,10 +850,10 @@ from pg_index i inner join pg_class c on (i.indexrelid=c.oid)
 where indrelid = :'non_unique_chunk'::regclass
 and relname like '%time%' \gset
 -- Index should have two tids, since one row excluded
-select ctid, dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
-       ctid       | dead |       htid       | tids 
-------------------+------+------------------+------
- (2147483651,153) | f    | (2147483651,153) | 
+select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
+ is_compressed_tid | dead |      htid      | tids 
+-------------------+------+----------------+------
+ t                 | f    | (2147483649,1) | 
 (1 row)
 
 -- Check that the index works as expected. Only one row should match.

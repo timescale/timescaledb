@@ -22,6 +22,7 @@
 
 #include "arrow_cache.h"
 #include "compression/arrow_c_data_interface.h"
+#include "debug_assert.h"
 
 #include <limits.h>
 
@@ -86,81 +87,73 @@ extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_in
 
 #define TTS_IS_ARROWTUPLE(slot) ((slot)->tts_ops == &TTSOpsArrowTuple)
 
+/*
+ * The encoded Hyperstore TID can address a specific value in a compressed tuple by
+ * adding an extra "tuple index" to the TID, which is the index into the array of values
+ * in the compressed tuple. The new encoding consists of the block number (CBLOCK) and offset
+ * number (COFFSET) of the TID for the compressed row as block number and the
+ * tuple_index (TINDEX) as offset number. In addition, we have a compressed
+ * flag (F) that is set for compressed TIDs.
+ *
+ *          32                 6        10      bits
+ * +----------------------+ +---------+---------+
+ * |       CBLOCK         | | PADDING | COFFSET |   TID for compressed row
+ * +---+--------+---------+ +---------+---------+
+ * | F | CBLOCK | COFFSET | | PADDING | TINDEX  |   Encoded TID
+ * +---+--------+---------+ +---------+---------+
+ *   1     21       10         6        10      bits
+ *
+ * As a consequence, we only have 21 bits for storing the block number in the
+ * compressed relation, which means that we have to ensure that we do not
+ * exceed this limit when adding new blocks to it.
+ */
+
 #define InvalidTupleIndex 0
-#define MaxCompressedBlockNumber ((BlockNumber) 0x3FFFFF)
 
 #define BLOCKID_BITS (CHAR_BIT * sizeof(BlockIdData))
 #define COMPRESSED_FLAG (1UL << (BLOCKID_BITS - 1))
-#define TUPINDEX_BITS (10U)
-#define TUPINDEX_MASK (((uint64) 1UL << TUPINDEX_BITS) - 1)
+#define MaxCompressedBlockNumber ((BlockNumber) (COMPRESSED_FLAG - 1))
+#define OFFSET_BITS (10U)
+#define OFFSET_LIMIT ((uint64) 1UL << OFFSET_BITS)
+#define OFFSET_MASK (OFFSET_LIMIT - 1)
 
-/*
- * The "compressed TID" consists of the bits of the TID for the compressed row
- * shifted to insert the tuple index as the least significant bits of the TID.
- */
 static inline void
-tid_to_compressed_tid(ItemPointerData *out_tid, const ItemPointerData *in_tid, uint16 tuple_index)
+hyperstore_tid_encode(ItemPointerData *out_tid, const ItemPointerData *in_tid, uint16 tuple_index)
 {
-	const uint64 encoded_tid = itemptr_encode((ItemPointer) in_tid);
-	const uint64 encoded_ctid = (encoded_tid << TUPINDEX_BITS) | tuple_index;
+	const BlockNumber block = ItemPointerGetBlockNumber(in_tid);
+	const OffsetNumber offset = ItemPointerGetOffsetNumber(in_tid);
+	const uint64 encoded_tid = ((uint64) block << OFFSET_BITS) | (uint16) offset;
 
+	Assert(offset < OFFSET_LIMIT);
 	Assert(tuple_index != InvalidTupleIndex);
 
-	/*
-	 * There is a check in tidbitmap that offset is never larger than
-	 * MaxHeapTuplesPerPage and we will get an error if we do not handle that,
-	 * so we store the remainder of that division in the offset and the rest
-	 * in the block number.
-	 *
-	 * Also, the offset number may not be zero, so we add 1 here to make it
-	 * satisfy the conditions. Since the check in tidbitmap.c is an error if
-	 * offset is strictly larger than MaxHeapTuplesPerPage this will work
-	 * correctly.
-	 *
-	 * Note that the check in ItemPointerIsValid() is weaker, so we can relax
-	 * this condition later if necessary.
-	 */
-	const BlockNumber blockno = COMPRESSED_FLAG | (encoded_ctid / MaxHeapTuplesPerPage);
-	const OffsetNumber offsetno = encoded_ctid % MaxHeapTuplesPerPage + 1;
+	/* Ensure that we are not using the compressed flag in the encoded tid */
+	Ensure((COMPRESSED_FLAG | encoded_tid) != encoded_tid, "block number too large");
 
-	ItemPointerSet(out_tid, blockno, offsetno);
-
-	Assert(ItemPointerGetOffsetNumber(out_tid) >= 1 &&
-		   ItemPointerGetOffsetNumber(out_tid) <= MaxHeapTuplesPerPage);
+	ItemPointerSet(out_tid, COMPRESSED_FLAG | encoded_tid, tuple_index);
 }
 
 static inline uint16
-compressed_tid_to_tid(ItemPointerData *out_tid, const ItemPointerData *in_tid)
+hyperstore_tid_decode(ItemPointerData *out_tid, const ItemPointerData *in_tid)
 {
-	const uint64 encoded_ctid =
-		MaxHeapTuplesPerPage * (~COMPRESSED_FLAG & ItemPointerGetBlockNumber(in_tid)) +
-		(ItemPointerGetOffsetNumber(in_tid) - 1);
-	const int64 encoded_tid = encoded_ctid >> TUPINDEX_BITS;
-	const uint16 tuple_index = encoded_ctid & TUPINDEX_MASK;
+	const uint64 encoded_tid = ~COMPRESSED_FLAG & ItemPointerGetBlockNumber(in_tid);
+	const uint16 tuple_index = ItemPointerGetOffsetNumber(in_tid);
 
-	itemptr_decode(out_tid, encoded_tid);
+	BlockNumber block = (BlockNumber) (encoded_tid >> OFFSET_BITS);
+	OffsetNumber offset = (OffsetNumber) (encoded_tid & OFFSET_MASK);
+
+	ItemPointerSet(out_tid, block, offset);
 
 	Assert(tuple_index != InvalidTupleIndex);
-	Assert(ItemPointerGetOffsetNumber(out_tid) >= 1 &&
-		   ItemPointerGetOffsetNumber(out_tid) <= MaxHeapTuplesPerPage);
-
 	return tuple_index;
 }
 
 static inline void
-compressed_tid_increment_idx(ItemPointerData *tid, uint16 increment)
+hyperstore_tid_increment(ItemPointerData *tid, uint16 increment)
 {
-	const OffsetNumber offsetno = ItemPointerGetOffsetNumber(tid);
-
-	if ((offsetno + increment) <= MaxHeapTuplesPerPage)
-		ItemPointerSetOffsetNumber(tid, offsetno + increment);
-	else
-	{
-		BlockNumber blockno = ItemPointerGetBlockNumber(tid);
-		BlockNumber blockincr = (offsetno - 1 + increment) / MaxHeapTuplesPerPage;
-		OffsetNumber offincr = (offsetno - 1 + increment) % MaxHeapTuplesPerPage + 1;
-		ItemPointerSet(tid, blockno + blockincr, offincr);
-	}
+	/* Assert that we do not overflow the increment: we only have 10 bits for the tuple index */
+	Assert(ItemPointerGetOffsetNumber(tid) + increment < 1024);
+	ItemPointerSetOffsetNumber(tid, ItemPointerGetOffsetNumber(tid) + increment);
 }
 
 static inline bool
@@ -295,7 +288,7 @@ ExecIncrArrowTuple(TupleTableSlot *slot, uint16 increment)
 	}
 
 	if (aslot->tuple_index <= aslot->total_row_count)
-		compressed_tid_increment_idx(&slot->tts_tid, increment);
+		hyperstore_tid_increment(&slot->tts_tid, increment);
 
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;

@@ -671,7 +671,7 @@ select compress_chunk(:'chunk');
 select ctid from :chunk where created_at = '2022-06-01 10:01' and device_id = 6;
        ctid       
 ------------------
- (2147483730,214)
+ (2147483671,523)
 (1 row)
 
 -- Compressing a hyperstore with compress_using=>hyperstore should
@@ -692,7 +692,7 @@ select compress_chunk(:'chunk', compress_using => 'hyperstore');
 select ctid from :chunk where created_at = '2022-06-01 11:02' and device_id = 7;
        ctid       
 ------------------
- (2147483737,152)
+ (2147483673,450)
 (1 row)
 
 -- Convert all hyperstores back to heap
