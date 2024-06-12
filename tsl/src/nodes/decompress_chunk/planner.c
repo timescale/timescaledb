@@ -1067,6 +1067,7 @@ decompress_chunk_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *pat
 
 	/* Build heap sort info for batch sorted merge. */
 	List *sort_options = NIL;
+
 	if (dcpath->batch_sorted_merge)
 	{
 		/*

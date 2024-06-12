@@ -1545,17 +1545,6 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		Var *var;
 		Assert(!bms_overlap(cur_em->em_relids, info->compressed_rel->relids));
 
-		/*
-		 * We want to base our equivalence member on the hypertable equivalence
-		 * member, not on the uncompressed chunk one, because the latter is
-		 * marked as child itself. This is mostly relevant for PG16 where we
-		 * have to specify a parent for the newly created equivalence member.
-		 */
-		if (cur_em->em_is_child)
-		{
-			continue;
-		}
-
 		/* only consider EquivalenceMembers that are Vars, possibly with RelabelType, of the
 		 * uncompressed chunk */
 		var = (Var *) cur_em->em_expr;
@@ -1564,6 +1553,13 @@ add_segmentby_to_equivalence_class(PlannerInfo *root, EquivalenceClass *cur_ec,
 		if (!(var && IsA(var, Var)))
 			continue;
 
+		/*
+		 * We want to base our equivalence member on the hypertable equivalence
+		 * member, not on the uncompressed chunk one. We can't just check for
+		 * em_is_child though because the hypertable might be a child itself and not
+		 * a top-level EquivalenceMember. This is mostly relevant for PG16+ where
+		 * we have to specify a parent for the newly created equivalence member.
+		 */
 		if ((Index) var->varno != info->ht_rel->relid)
 			continue;
 
@@ -1863,10 +1859,10 @@ create_compressed_scan_paths(PlannerInfo *root, RelOptInfo *compressed_rel, Comp
 	{
 		/* Almost the same functionality as ts_create_plain_partial_paths.
 		 *
-		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose a
-		 * parallel plan for decompression. If no partial path is present for a single chunk,
-		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a non-parallel
-		 * plan (even if there are a few bigger chunks).
+		 * However, we also create a partial path for small chunks to allow PostgreSQL to choose
+		 * a parallel plan for decompression. If no partial path is present for a single chunk,
+		 * PostgreSQL will not use a parallel plan and all chunks are decompressed by a
+		 * non-parallel plan (even if there are a few bigger chunks).
 		 */
 		int parallel_workers = compute_parallel_worker(compressed_rel,
 													   compressed_rel->pages,
