@@ -2009,9 +2009,10 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 
 	ht = ts_hypertable_cache_get_entry(hcache, tablerelid, CACHE_FLAG_MISSING_OK);
 
+	const char *indexname = get_rel_name(relid);
 	if (NULL != ht)
 	{
-		ts_chunk_index_rename_parent(ht, relid, stmt->newname);
+		ts_chunk_index_rename_parent(ht, indexname, stmt->newname);
 
 		add_hypertable_to_process_args(args, ht);
 	}
@@ -2020,7 +2021,7 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 		Chunk *chunk = ts_chunk_get_by_relid(tablerelid, false);
 
 		if (NULL != chunk)
-			ts_chunk_index_rename(chunk, relid, stmt->newname);
+			ts_chunk_index_rename(chunk, indexname, stmt->newname);
 	}
 }
 
@@ -2223,12 +2224,32 @@ process_altertable_change_owner(Hypertable *ht, AlterTableCmd *cmd)
 }
 
 static void
+process_add_constraint_chunk_using_index(Hypertable *ht, Oid chunk_relid, void *arg)
+{
+	Oid hypertable_constraint_oid = *((Oid *) arg);
+	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
+
+	ts_chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid, true);
+}
+
+static void
+process_altertable_add_constraint_using_index(Hypertable *ht, const char *constraint_name)
+{
+	Oid hypertable_constraint_oid =
+		get_relation_constraint_oid(ht->main_table_relid, constraint_name, false);
+
+	Assert(constraint_name != NULL);
+
+	foreach_chunk(ht, process_add_constraint_chunk_using_index, &hypertable_constraint_oid);
+}
+
+static void
 process_add_constraint_chunk(Hypertable *ht, Oid chunk_relid, void *arg)
 {
 	Oid hypertable_constraint_oid = *((Oid *) arg);
 	Chunk *chunk = ts_chunk_get_by_relid(chunk_relid, true);
 
-	ts_chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid);
+	ts_chunk_constraint_create_on_chunk(ht, chunk, hypertable_constraint_oid, false);
 }
 
 static void
@@ -3452,6 +3473,33 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 
 				if (ht)
 					verify_constraint_hypertable(ht, cmd->def);
+
+				Constraint *constr = (Constraint *) cmd->def;
+				ConstrType contype = constr->contype;
+				const char *conname = constr->conname;
+				const char *indexname = constr->indexname;
+
+				/* This is a unique or primary constraint using an existing index */
+				if ((contype == CONSTR_UNIQUE || contype == CONSTR_PRIMARY) && indexname != NULL)
+				{
+					/*
+					 * Postgres renames the index to match the constraint name.
+					 * We need to do the same on our catalog tables to maintain
+					 * consistency.
+					 */
+					if (ht != NULL)
+					{
+						ts_chunk_index_rename_parent(ht, indexname, conname);
+					}
+					else
+					{
+						Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+						if (NULL != chunk)
+							ts_chunk_index_rename(chunk, indexname, conname);
+					}
+				}
+
 				break;
 			case AT_AlterColumnType:
 				Assert(IsA(cmd->def, ColumnDef));
@@ -3706,11 +3754,18 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 			process_altertable_change_owner(ht, cmd);
 			break;
 		case AT_AddIndexConstraint:
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("hypertables do not support adding a constraint "
-							"using an existing index")));
-			break;
+		{
+			IndexStmt *stmt = (IndexStmt *) cmd->def;
+
+			Assert(IsA(cmd->def, IndexStmt));
+
+			const char *idxname = stmt->idxname;
+
+			Assert(idxname != NULL);
+
+			process_altertable_add_constraint_using_index(ht, idxname);
+		}
+		break;
 		case AT_AddIndex:
 		{
 			IndexStmt *stmt = (IndexStmt *) cmd->def;

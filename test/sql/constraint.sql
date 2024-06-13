@@ -125,13 +125,13 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 CREATE UNIQUE INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx
 ON hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name (time);
 
-\set ON_ERROR_STOP 0
 -- Try adding constraint using existing index
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key UNIQUE
 USING INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx;
-\set ON_ERROR_STOP 1
-DROP INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx;
+
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
 
 --now can create
 ALTER TABLE  hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
@@ -632,3 +632,46 @@ DROP TABLE tbl;
 DROP TABLE fk_tbl;
 
 DROP TABLESPACE IF EXISTS tablespace1;
+
+
+----------------------- CONSTRAINT USING INDEX ------------------
+CREATE TABLE tbl_constraint_using_index (
+  time BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+
+SELECT create_hypertable('tbl_constraint_using_index', 'time', chunk_time_interval => 10);
+
+INSERT INTO tbl_constraint_using_index(time, device_id, sensor_1)
+  VALUES
+  (11, 'dev1', 11),
+  (21, 'dev2', 12),
+  (31, 'dev3', 13);
+
+CREATE UNIQUE INDEX tbl_constraint_using_index_time_device_id_idx ON tbl_constraint_using_index(time, device_id);
+
+-- Create UNIQUE CONSTRAINT USING INDEX
+ALTER TABLE tbl_constraint_using_index ADD CONSTRAINT tbl_constraint_using_index_time_device_id UNIQUE USING INDEX tbl_constraint_using_index_time_device_id_idx;
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_19_chunk');
+
+-- Test that the constraints are added for newly created chunks
+INSERT INTO tbl_constraint_using_index(time, device_id, sensor_1)
+  VALUES
+  (41, 'dev4', 14);
+
+-- Below insert should fail due to unique constraint violation
+\set ON_ERROR_STOP 0
+INSERT INTO tbl_constraint_using_index(time, device_id, sensor_1)
+  VALUES
+  (41, 'dev4', 14);
+\set ON_ERROR_STOP 1
+
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_20_chunk');
+
+ALTER TABLE tbl_constraint_using_index DROP CONSTRAINT tbl_constraint_using_index_time_device_id;
+
+-- Create Primary Key CONSTRAINT USING INDEX
+CREATE UNIQUE INDEX tbl_constraint_using_index_pkey ON tbl_constraint_using_index(time, device_id);
+ALTER TABLE tbl_constraint_using_index ADD CONSTRAINT tbl_constraint_using_index_pkey PRIMARY KEY USING INDEX tbl_constraint_using_index_pkey;
