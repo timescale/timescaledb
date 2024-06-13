@@ -60,7 +60,7 @@ extern TSDLLEXPORT int ts_chunk_constraints_add_inheritable_check_constraints(
 extern TSDLLEXPORT void ts_chunk_constraints_insert_metadata(const ChunkConstraints *ccs);
 extern TSDLLEXPORT void ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk);
 extern void ts_chunk_constraint_create_on_chunk(const Hypertable *ht, const Chunk *chunk,
-												Oid constraint_oid);
+												Oid constraint_oid, bool using_index);
 extern int ts_chunk_constraint_delete_by_hypertable_constraint_name(
 	int32 chunk_id, const char *hypertable_constraint_name, bool delete_metadata,
 	bool drop_constraint);

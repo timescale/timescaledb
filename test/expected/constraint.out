@@ -211,22 +211,22 @@ SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
 
 CREATE UNIQUE INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx
 ON hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name (time);
-\set ON_ERROR_STOP 0
 -- Try adding constraint using existing index
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key UNIQUE
 USING INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx;
 NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx" to "hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key"
-ERROR:  hypertables do not support adding a constraint using an existing index
-\set ON_ERROR_STOP 1
-DROP INDEX hyper_unique_with_looooooooooooooooooooooooooooooooo_time_idx;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_2_4_chunk_hyper_unique_with_looooooooooooooooooooooooo_1" to "4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time"
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_2_5_chunk_hyper_unique_with_looooooooooooooooooooooooo_1" to "5_7_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time"
+ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
+DROP CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key;
 --now can create
 ALTER TABLE  hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD CONSTRAINT hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_key UNIQUE (time);
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
                            Constraint                            | Type |  Columns   |                                          Index                                          |                                           Expr                                           | Deferrable | Deferred | Validated 
 -----------------------------------------------------------------+------+------------+-----------------------------------------------------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" |                                                                                          | f          | f        | t
+ 4_8_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time | u    | {time}     | _timescaledb_internal."4_8_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time" |                                                                                          | f          | f        | t
  constraint_4                                                    | c    | {time}     | -                                                                                       | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
  hyper_unique_with_looooooooooooooooooooooooooooo_sensor_1_check | c    | {sensor_1} | -                                                                                       | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
@@ -241,7 +241,7 @@ ERROR:  relation "hyper_unique_with_looooooooooooooooooooooooooooooooooo_time_ke
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name(time, device_id,sensor_1)
 VALUES (1257987700000000000, 'dev2', 11);
-ERROR:  duplicate key value violates unique constraint "4_6_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time"
+ERROR:  duplicate key value violates unique constraint "4_8_hyper_unique_with_looooooooooooooooooooooooooooooooooo_time"
 \set ON_ERROR_STOP 1
 --cannot create unique constraint on non-partition column
 \set ON_ERROR_STOP 0
@@ -273,7 +273,7 @@ SELECT * FROM test.show_constraints('hyper_unique_with_loooooooooooooooooooooooo
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_2_4_chunk');
    Constraint   | Type |  Columns   |                 Index                  |                                           Expr                                           | Deferrable | Deferred | Validated 
 ----------------+------+------------+----------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 4_10_new_name2 | u    | {time}     | _timescaledb_internal."4_10_new_name2" |                                                                                          | f          | f        | t
+ 4_12_new_name2 | u    | {time}     | _timescaledb_internal."4_12_new_name2" |                                                                                          | f          | f        | t
  check_2        | c    | {sensor_1} | -                                      | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
  constraint_4   | c    | {time}     | -                                      | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
 (3 rows)
@@ -284,8 +284,8 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         3 |                  3 | constraint_3    | 
         4 |                  4 | constraint_4    | 
         5 |                  5 | constraint_5    | 
-        4 |                    | 4_10_new_name2  | new_name2
-        5 |                    | 5_11_new_name2  | new_name2
+        4 |                    | 4_12_new_name2  | new_name2
+        5 |                    | 5_13_new_name2  | new_name2
 (5 rows)
 
 \set ON_ERROR_STOP 0
@@ -319,13 +319,13 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
-ERROR:  duplicate key value violates unique constraint "6_14_hyper_pk_pkey"
+ERROR:  duplicate key value violates unique constraint "6_16_hyper_pk_pkey"
 \set ON_ERROR_STOP 1
 --should have unique constraint not just unique index
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
        Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
 -------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 6_14_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_14_hyper_pk_pkey" |                                                                                          | f          | f        | t
+ 6_16_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_16_hyper_pk_pkey" |                                                                                          | f          | f        | t
  constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
  hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
@@ -344,7 +344,7 @@ INSERT INTO hyper_pk(time, device_id,sensor_1) VALUES
 --shouldn't be able to create pk
 \set ON_ERROR_STOP 0
 ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time);
-ERROR:  could not create unique index "6_15_hyper_pk_pkey"
+ERROR:  could not create unique index "6_17_hyper_pk_pkey"
 ALTER TABLE hyper_unique_with_looooooooooooooooooooooooooooooooooooong_name
 ADD COLUMN new_device_id int PRIMARY KEY;
 ERROR:  cannot create a unique index without the column "time" (used in partitioning)
@@ -360,7 +360,7 @@ ALTER TABLE hyper_pk ADD CONSTRAINT hyper_pk_pkey PRIMARY KEY (time) DEFERRABLE 
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_3_6_chunk');
        Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
 -------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 6_16_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_16_hyper_pk_pkey" |                                                                                          | t          | t        | t
+ 6_18_hyper_pk_pkey      | p    | {time}     | _timescaledb_internal."6_18_hyper_pk_pkey" |                                                                                          | t          | t        | t
  constraint_6            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
  hyper_pk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
@@ -383,7 +383,7 @@ BEGIN;
 (1 row)
 
 COMMIT;
-ERROR:  duplicate key value violates unique constraint "6_16_hyper_pk_pkey"
+ERROR:  duplicate key value violates unique constraint "6_18_hyper_pk_pkey"
 \set ON_ERROR_STOP 1
 ----------------------- FOREIGN KEY  ------------------
 CREATE TABLE devices(
@@ -405,7 +405,7 @@ SELECT * FROM create_hypertable('hyper_fk', 'time', chunk_time_interval => 10);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 11);
-ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "7_17_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_7_chunk" violates foreign key constraint "7_19_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 INSERT INTO devices VALUES ('dev2');
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
@@ -440,13 +440,13 @@ FOREIGN KEY (device_id) REFERENCES devices(device_id);
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
 (1257987700000000002, 'dev3', 11);
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_22_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_24_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
           Constraint          | Type |   Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
 ------------------------------+------+-------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 8_20_hyper_fk_pkey           | p    | {time}      | _timescaledb_internal."8_20_hyper_fk_pkey" |                                                                                          | f          | f        | t
- 8_22_hyper_fk_device_id_fkey | f    | {device_id} | devices_pkey                               |                                                                                          | f          | f        | t
+ 8_22_hyper_fk_pkey           | p    | {time}      | _timescaledb_internal."8_22_hyper_fk_pkey" |                                                                                          | f          | f        | t
+ 8_24_hyper_fk_device_id_fkey | f    | {device_id} | devices_pkey                               |                                                                                          | f          | f        | t
  constraint_8                 | c    | {time}      | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
  hyper_fk_sensor_1_check      | c    | {sensor_1}  | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (4 rows)
@@ -457,13 +457,13 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         3 |                  3 | constraint_3                 | 
         4 |                  4 | constraint_4                 | 
         5 |                  5 | constraint_5                 | 
-        4 |                    | 4_10_new_name2               | new_name2
-        5 |                    | 5_11_new_name2               | new_name2
+        4 |                    | 4_12_new_name2               | new_name2
+        5 |                    | 5_13_new_name2               | new_name2
         6 |                  6 | constraint_6                 | 
-        6 |                    | 6_16_hyper_pk_pkey           | hyper_pk_pkey
+        6 |                    | 6_18_hyper_pk_pkey           | hyper_pk_pkey
         8 |                  8 | constraint_8                 | 
-        8 |                    | 8_20_hyper_fk_pkey           | hyper_fk_pkey
-        8 |                    | 8_22_hyper_fk_device_id_fkey | hyper_fk_device_id_fkey
+        8 |                    | 8_22_hyper_fk_pkey           | hyper_fk_pkey
+        8 |                    | 8_24_hyper_fk_device_id_fkey | hyper_fk_device_id_fkey
 (10 rows)
 
 --test CASCADE drop behavior
@@ -472,7 +472,7 @@ NOTICE:  drop cascades to 2 other objects
 SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_4_8_chunk');
        Constraint        | Type |  Columns   |                   Index                    |                                           Expr                                           | Deferrable | Deferred | Validated 
 -------------------------+------+------------+--------------------------------------------+------------------------------------------------------------------------------------------+------------+----------+-----------
- 8_20_hyper_fk_pkey      | p    | {time}     | _timescaledb_internal."8_20_hyper_fk_pkey" |                                                                                          | f          | f        | t
+ 8_22_hyper_fk_pkey      | p    | {time}     | _timescaledb_internal."8_22_hyper_fk_pkey" |                                                                                          | f          | f        | t
  constraint_8            | c    | {time}     | -                                          | (("time" >= '1257987700000000000'::bigint) AND ("time" < '1257987700000000010'::bigint)) | f          | f        | t
  hyper_fk_sensor_1_check | c    | {sensor_1} | -                                          | (sensor_1 > (10)::numeric)                                                               | f          | f        | t
 (3 rows)
@@ -483,12 +483,12 @@ SELECT * FROM _timescaledb_catalog.chunk_constraint;
         3 |                  3 | constraint_3       | 
         4 |                  4 | constraint_4       | 
         5 |                  5 | constraint_5       | 
-        4 |                    | 4_10_new_name2     | new_name2
-        5 |                    | 5_11_new_name2     | new_name2
+        4 |                    | 4_12_new_name2     | new_name2
+        5 |                    | 5_13_new_name2     | new_name2
         6 |                  6 | constraint_6       | 
-        6 |                    | 6_16_hyper_pk_pkey | hyper_pk_pkey
+        6 |                    | 6_18_hyper_pk_pkey | hyper_pk_pkey
         8 |                  8 | constraint_8       | 
-        8 |                    | 8_20_hyper_fk_pkey | hyper_fk_pkey
+        8 |                    | 8_22_hyper_fk_pkey | hyper_fk_pkey
 (9 rows)
 
 --the fk went away.
@@ -513,7 +513,7 @@ BEGIN;
 (1 row)
 
 COMMIT;
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_23_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_25_hyper_fk_device_id_fkey"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_fk ALTER CONSTRAINT hyper_fk_device_id_fkey NOT DEFERRABLE;
 \set ON_ERROR_STOP 0
@@ -521,7 +521,7 @@ BEGIN;
   --error detected right away
   INSERT INTO hyper_fk(time, device_id,sensor_1) VALUES
   (1257987700000000003, 'dev4', 11);
-ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_23_hyper_fk_device_id_fkey"
+ERROR:  insert or update on table "_hyper_4_8_chunk" violates foreign key constraint "8_25_hyper_fk_device_id_fkey"
   SELECT 1;
 ERROR:  current transaction is aborted, commands ignored until end of transaction block
 COMMIT;
@@ -578,7 +578,7 @@ INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 \set ON_ERROR_STOP 0
 INSERT INTO hyper_ex(time, device_id,sensor_1) VALUES
 (1257987700000000000, 'dev2', 12);
-ERROR:  conflicting key value violates exclusion constraint "9_25_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "9_27_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 ALTER TABLE hyper_ex DROP CONSTRAINT hyper_ex_time_device_id_excl;
 --can now add
@@ -591,7 +591,7 @@ ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
         time WITH =, device_id WITH =
     ) WHERE (not canceled)
 ;
-ERROR:  could not create exclusion constraint "9_26_hyper_ex_time_device_id_excl"
+ERROR:  could not create exclusion constraint "9_28_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 DELETE FROM hyper_ex WHERE sensor_1 = 12;
 ALTER TABLE hyper_ex ADD CONSTRAINT hyper_ex_time_device_id_excl
@@ -611,7 +611,7 @@ BEGIN;
 (1 row)
 
 COMMIT;
-ERROR:  conflicting key value violates exclusion constraint "9_27_hyper_ex_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "9_29_hyper_ex_time_device_id_excl"
 \set ON_ERROR_STOP 1
 --cannot add exclusion constraint without partition key.
 CREATE TABLE hyper_ex_invalid (
@@ -682,7 +682,7 @@ BEGIN;
 (1 row)
 
 COMMIT;
-ERROR:  duplicate key value violates unique constraint "10_28_hyper_unique_deferred_time_key"
+ERROR:  duplicate key value violates unique constraint "10_30_hyper_unique_deferred_time_key"
 \set ON_ERROR_STOP 1
 --test deferred on create table
 CREATE TABLE hyper_pk_deferred (
@@ -708,7 +708,7 @@ BEGIN;
 (1 row)
 
 COMMIT;
-ERROR:  duplicate key value violates unique constraint "11_29_hyper_pk_deferred_pkey"
+ERROR:  duplicate key value violates unique constraint "11_31_hyper_pk_deferred_pkey"
 \set ON_ERROR_STOP 1
 --test that deferred works on create table too
 CREATE TABLE hyper_fk_deferred (
@@ -733,7 +733,7 @@ BEGIN;
 (1 row)
 
 COMMIT;
-ERROR:  insert or update on table "_hyper_11_12_chunk" violates foreign key constraint "12_30_hyper_fk_deferred_device_id_fkey"
+ERROR:  insert or update on table "_hyper_11_12_chunk" violates foreign key constraint "12_32_hyper_fk_deferred_device_id_fkey"
 \set ON_ERROR_STOP 1
 CREATE TABLE hyper_ex_deferred (
     time BIGINT,
@@ -763,7 +763,7 @@ BEGIN;
 (1 row)
 
 COMMIT;
-ERROR:  conflicting key value violates exclusion constraint "13_33_hyper_ex_deferred_time_device_id_excl"
+ERROR:  conflicting key value violates exclusion constraint "13_35_hyper_ex_deferred_time_device_id_excl"
 \set ON_ERROR_STOP 1
 -- Make sure renaming schemas won't break dropping constraints
 \c :TEST_DBNAME :ROLE_SUPERUSER
@@ -830,3 +830,62 @@ INSERT INTO tbl VALUES (
 DROP TABLE tbl;
 DROP TABLE fk_tbl;
 DROP TABLESPACE IF EXISTS tablespace1;
+----------------------- CONSTRAINT USING INDEX ------------------
+CREATE TABLE tbl_constraint_using_index (
+  time BIGINT NOT NULL,
+  device_id TEXT NOT NULL,
+  sensor_1 NUMERIC NULL DEFAULT 1 CHECK (sensor_1 > 10)
+);
+SELECT create_hypertable('tbl_constraint_using_index', 'time', chunk_time_interval => 10);
+            create_hypertable             
+------------------------------------------
+ (16,public,tbl_constraint_using_index,t)
+(1 row)
+
+INSERT INTO tbl_constraint_using_index(time, device_id, sensor_1)
+  VALUES
+  (11, 'dev1', 11),
+  (21, 'dev2', 12),
+  (31, 'dev3', 13);
+CREATE UNIQUE INDEX tbl_constraint_using_index_time_device_id_idx ON tbl_constraint_using_index(time, device_id);
+-- Create UNIQUE CONSTRAINT USING INDEX
+ALTER TABLE tbl_constraint_using_index ADD CONSTRAINT tbl_constraint_using_index_time_device_id UNIQUE USING INDEX tbl_constraint_using_index_time_device_id_idx;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "tbl_constraint_using_index_time_device_id_idx" to "tbl_constraint_using_index_time_device_id"
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_16_17_chunk_tbl_constraint_using_index_time_device_id" to "17_39_tbl_constraint_using_index_time_device_id"
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_16_18_chunk_tbl_constraint_using_index_time_device_id" to "18_40_tbl_constraint_using_index_time_device_id"
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_16_19_chunk_tbl_constraint_using_index_time_device_id" to "19_41_tbl_constraint_using_index_time_device_id"
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_19_chunk');
+                   Constraint                    | Type |     Columns      |                                  Index                                  |                          Expr                          | Deferrable | Deferred | Validated 
+-------------------------------------------------+------+------------------+-------------------------------------------------------------------------+--------------------------------------------------------+------------+----------+-----------
+ 19_41_tbl_constraint_using_index_time_device_id | u    | {time,device_id} | _timescaledb_internal."19_41_tbl_constraint_using_index_time_device_id" |                                                        | f          | f        | t
+ constraint_19                                   | c    | {time}           | -                                                                       | (("time" >= '30'::bigint) AND ("time" < '40'::bigint)) | f          | f        | t
+ tbl_constraint_using_index_sensor_1_check       | c    | {sensor_1}       | -                                                                       | (sensor_1 > (10)::numeric)                             | f          | f        | t
+(3 rows)
+
+-- Test that the constraints are added for newly created chunks
+INSERT INTO tbl_constraint_using_index(time, device_id, sensor_1)
+  VALUES
+  (41, 'dev4', 14);
+-- Below insert should fail due to unique constraint violation
+\set ON_ERROR_STOP 0
+INSERT INTO tbl_constraint_using_index(time, device_id, sensor_1)
+  VALUES
+  (41, 'dev4', 14);
+ERROR:  duplicate key value violates unique constraint "20_42_tbl_constraint_using_index_time_device_id"
+\set ON_ERROR_STOP 1
+SELECT * FROM test.show_constraints('_timescaledb_internal._hyper_16_20_chunk');
+                   Constraint                    | Type |     Columns      |                                  Index                                  |                          Expr                          | Deferrable | Deferred | Validated 
+-------------------------------------------------+------+------------------+-------------------------------------------------------------------------+--------------------------------------------------------+------------+----------+-----------
+ 20_42_tbl_constraint_using_index_time_device_id | u    | {time,device_id} | _timescaledb_internal."20_42_tbl_constraint_using_index_time_device_id" |                                                        | f          | f        | t
+ constraint_20                                   | c    | {time}           | -                                                                       | (("time" >= '40'::bigint) AND ("time" < '50'::bigint)) | f          | f        | t
+ tbl_constraint_using_index_sensor_1_check       | c    | {sensor_1}       | -                                                                       | (sensor_1 > (10)::numeric)                             | f          | f        | t
+(3 rows)
+
+ALTER TABLE tbl_constraint_using_index DROP CONSTRAINT tbl_constraint_using_index_time_device_id;
+-- Create Primary Key CONSTRAINT USING INDEX
+CREATE UNIQUE INDEX tbl_constraint_using_index_pkey ON tbl_constraint_using_index(time, device_id);
+ALTER TABLE tbl_constraint_using_index ADD CONSTRAINT tbl_constraint_using_index_pkey PRIMARY KEY USING INDEX tbl_constraint_using_index_pkey;
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_16_17_chunk_tbl_constraint_using_index_pkey_1" to "17_43_tbl_constraint_using_index_pkey"
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_16_18_chunk_tbl_constraint_using_index_pkey_1" to "18_44_tbl_constraint_using_index_pkey"
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_16_19_chunk_tbl_constraint_using_index_pkey_1" to "19_45_tbl_constraint_using_index_pkey"
+NOTICE:  ALTER TABLE / ADD CONSTRAINT USING INDEX will rename index "_hyper_16_20_chunk_tbl_constraint_using_index_pkey_1" to "20_46_tbl_constraint_using_index_pkey"
