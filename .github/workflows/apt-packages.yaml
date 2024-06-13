@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:23.04" ]
+        image: [ "debian:10-slim", "debian:11-slim", "debian:12-slim", "ubuntu:20.04", "ubuntu:22.04", "ubuntu:24.04" ]
         pg: [ 13, 14, 15, 16 ]
         license: [ "TSL", "Apache"]
         include:
