@@ -457,9 +457,23 @@ SELECT _timescaledb_functions.attach_osm_table_chunk('non_ht', 'child_fdw_table'
 
 \set ON_ERROR_STOP 1
 
--- TEST drop the hypertable and make sure foreign chunks are dropped as well --
+-- TEST CAGG over a hypertable with an OSM chunk
 \c :TEST_DBNAME :ROLE_4;
-DROP TABLE ht_try;
+SET datestyle = 'ISO';
+SET timezone = 'GMT';
+SET timescaledb.enable_tiered_reads=false;
+CREATE MATERIALIZED VIEW ht_try_daily_avg
+WITH (timescaledb.continuous, timescaledb.materialized_only=true)
+AS
+SELECT time_bucket(interval '1 day', timec) AS bucket, avg(value)
+FROM ht_try
+GROUP BY 1;
+
+SELECT * FROM ht_try_daily_avg;
+SET timescaledb.enable_tiered_reads=true;
+
+-- TEST drop the hypertable and make sure foreign chunks are dropped as well --
+DROP TABLE ht_try CASCADE;
 
 SELECT relname FROM pg_class WHERE relname = 'child_fdw_table';
 
