@@ -1438,3 +1438,47 @@ SELECT timescaledb_experimental.add_policies('cagg');
  f
 (1 row)
 
+\set ON_ERROR_STOP 0
+-- untyped refresh_start/end
+-- errors out because the type is not integer
+SELECT timescaledb_experimental.add_policies('cagg', refresh_start_offset => '20 days');
+ERROR:  invalid input syntax for type integer: "20 days"
+-- untyped retention policy drop_after
+SELECT timescaledb_experimental.add_policies('cagg', refresh_end_offset => '20 days');
+ERROR:  invalid input syntax for type integer: "20 days"
+-- unspecified integer type
+SELECT timescaledb_experimental.add_policies('cagg', refresh_start_offset => 10, refresh_end_offset => 1);
+ add_policies 
+--------------
+ t
+(1 row)
+
+-- untyped compression policy compress_after
+ALTER MATERIALIZED VIEW cagg set (timescaledb.compress = true);
+NOTICE:  defaulting compress_orderby to a
+SELECT timescaledb_experimental.add_policies('cagg', compress_after => '20 days');
+ERROR:  unsupported compress_after argument type, expected type : integer
+SELECT timescaledb_experimental.add_policies('cagg', compress_after => 40);
+ add_policies 
+--------------
+ t
+(1 row)
+
+-- timestamptz type table
+create table tab (time timestamptz, a int, b int);
+select create_hypertable('tab', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ create_hypertable 
+-------------------
+ (28,public,tab,t)
+(1 row)
+
+CREATE MATERIALIZED VIEW cagg_time WITH (timescaledb.continuous)
+AS SELECT time_bucket('7day', time), sum(b)
+FROM tab GROUP BY 1;
+NOTICE:  continuous aggregate "cagg_time" is already up-to-date
+ALTER MATERIALIZED VIEW cagg_time SET (timescaledb.compress);
+NOTICE:  defaulting compress_orderby to time_bucket
+SELECT timescaledb_experimental.add_policies('cagg_time', refresh_start_offset => '7 days', refresh_end_offset => '14 days', compress_after => '65 days', drop_after => '1 year');
+ERROR:  refresh and compression policies overlap
+\set ON_ERROR_STOP 1

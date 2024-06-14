@@ -667,3 +667,31 @@ AS SELECT time_bucket(1, a), sum(b)
    FROM t GROUP BY time_bucket(1, a);
 
 SELECT timescaledb_experimental.add_policies('cagg');
+
+\set ON_ERROR_STOP 0
+
+-- untyped refresh_start/end
+-- errors out because the type is not integer
+SELECT timescaledb_experimental.add_policies('cagg', refresh_start_offset => '20 days');
+-- untyped retention policy drop_after
+SELECT timescaledb_experimental.add_policies('cagg', refresh_end_offset => '20 days');
+-- unspecified integer type
+SELECT timescaledb_experimental.add_policies('cagg', refresh_start_offset => 10, refresh_end_offset => 1);
+-- untyped compression policy compress_after
+ALTER MATERIALIZED VIEW cagg set (timescaledb.compress = true);
+SELECT timescaledb_experimental.add_policies('cagg', compress_after => '20 days');
+SELECT timescaledb_experimental.add_policies('cagg', compress_after => 40);
+-- timestamptz type table
+create table tab (time timestamptz, a int, b int);
+
+select create_hypertable('tab', 'time');
+
+CREATE MATERIALIZED VIEW cagg_time WITH (timescaledb.continuous)
+AS SELECT time_bucket('7day', time), sum(b)
+FROM tab GROUP BY 1;
+
+ALTER MATERIALIZED VIEW cagg_time SET (timescaledb.compress);
+
+SELECT timescaledb_experimental.add_policies('cagg_time', refresh_start_offset => '7 days', refresh_end_offset => '14 days', compress_after => '65 days', drop_after => '1 year');
+
+\set ON_ERROR_STOP 1
