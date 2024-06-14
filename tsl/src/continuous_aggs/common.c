@@ -725,14 +725,30 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 			foreach (l, query->jointree->fromlist)
 			{
 				Node *jtnode = (Node *) lfirst(l);
-				JoinExpr *join = NULL;
 				if (IsA(jtnode, JoinExpr))
 				{
-					join = castNode(JoinExpr, jtnode);
+					JoinExpr *join = castNode(JoinExpr, jtnode);
 					jointype = join->jointype;
 					op = (OpExpr *) join->quals;
-					rte = list_nth(query->rtable, ((RangeTblRef *) join->larg)->rtindex - 1);
-					rte_other = list_nth(query->rtable, ((RangeTblRef *) join->rarg)->rtindex - 1);
+
+					int lindex = 0, rindex = 0;
+
+					if (IsA(join->larg, RangeTblRef))
+						lindex = ((RangeTblRef *) join->larg)->rtindex;
+
+					if (IsA(join->larg, JoinExpr))
+						lindex = ((JoinExpr *) join->larg)->rtindex;
+
+					if (IsA(join->rarg, RangeTblRef))
+						rindex = ((RangeTblRef *) join->rarg)->rtindex;
+
+					if (IsA(join->rarg, JoinExpr))
+						rindex = ((JoinExpr *) join->rarg)->rtindex;
+
+					Assert(lindex != 0 && rindex != 0);
+
+					rte = list_nth(query->rtable, lindex - 1);
+					rte_other = list_nth(query->rtable, rindex - 1);
 					if (rte->subquery != NULL || rte_other->subquery != NULL)
 						ereport(ERROR,
 								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),

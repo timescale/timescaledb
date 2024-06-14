@@ -39,6 +39,9 @@ SELECT create_hypertable(
 CREATE TABLE devices ( device_id int not null, name text, location text);
 INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
 
+CREATE TABLE location (location_id INTEGER, name TEXT);
+INSERT INTO location VALUES (1, 'Moscow'), (2, 'Berlin'), (3, 'London'), (4, 'Stockholm');
+
 CREATE TABLE devices_dup AS SELECT * FROM devices;
 CREATE VIEW devices_view AS SELECT * FROM devices;
 
@@ -546,6 +549,17 @@ SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
 FROM cagg_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
 GROUP BY 1,2,3;
+
+--Multiple JOINS are not supported
+CREATE MATERIALIZED VIEW conditions_by_day WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 day', conditions.day) AS bucket,
+   AVG(conditions.temperature),
+   devices.name,
+   location.name
+FROM conditions
+JOIN devices ON conditions.device_id = devices.device_id
+JOIN location ON location.name = devices.location
+GROUP BY bucket, devices.name, location.name;
 
 \set VERBOSITY terse
 DROP TABLE conditions CASCADE;
