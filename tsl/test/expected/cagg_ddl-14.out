@@ -31,6 +31,7 @@ CREATE TABLESPACE tablespace1 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLE
 CREATE TABLESPACE tablespace2 OWNER :ROLE_DEFAULT_PERM_USER LOCATION :TEST_TABLESPACE2_PATH;
 CREATE SCHEMA rename_schema;
 GRANT ALL ON SCHEMA rename_schema TO :ROLE_DEFAULT_PERM_USER;
+CREATE SCHEMA test_schema AUTHORIZATION :ROLE_DEFAULT_PERM_USER;
 SET ROLE :ROLE_DEFAULT_PERM_USER;
 CREATE TABLE foo(time TIMESTAMPTZ NOT NULL, data INTEGER);
 SELECT create_hypertable('foo', 'time');
@@ -39,19 +40,29 @@ SELECT create_hypertable('foo', 'time');
  (2,public,foo,t)
 (1 row)
 
-CREATE MATERIALIZED VIEW rename_test
+CREATE MATERIALIZED VIEW rename_test_old
   WITH ( timescaledb.continuous, timescaledb.materialized_only=true)
 AS SELECT time_bucket('1week', time), COUNT(data)
     FROM foo
     GROUP BY 1 WITH NO DATA;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
- user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
-------------------+----------------+-----------------------+-------------------
- public           | rename_test    | _timescaledb_internal | _partial_view_3
+ user_view_schema | user_view_name  |  partial_view_schema  | partial_view_name 
+------------------+-----------------+-----------------------+-------------------
+ public           | rename_test_old | _timescaledb_internal | _partial_view_3
 (1 row)
 
-ALTER MATERIALIZED VIEW rename_test SET SCHEMA rename_schema;
+ALTER TABLE rename_test_old RENAME TO rename_test;
+ALTER TABLE rename_test SET SCHEMA test_schema;
+SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
+      FROM _timescaledb_catalog.continuous_agg;
+ user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
+------------------+----------------+-----------------------+-------------------
+ test_schema      | rename_test    | _timescaledb_internal | _partial_view_3
+(1 row)
+
+ALTER MATERIALIZED VIEW test_schema.rename_test SET SCHEMA rename_schema;
+DROP SCHEMA test_schema;
 SELECT user_view_schema, user_view_name, partial_view_schema, partial_view_name
       FROM _timescaledb_catalog.continuous_agg;
  user_view_schema | user_view_name |  partial_view_schema  | partial_view_name 
