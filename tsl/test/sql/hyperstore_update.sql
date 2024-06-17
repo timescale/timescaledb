@@ -101,7 +101,8 @@ from show_chunks(:'hypertable') ch limit 1 \gset
 vacuum full :chunk;
 
 \x on
-select ctid, * from :hypertable order by created_at offset 898 limit 1;
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable order by created_at offset 898 limit 1;
 select created_at, location_id, owner_id, device_id, humidity
 from :hypertable order by created_at offset 898 limit 1 \gset
 \x off
@@ -117,7 +118,8 @@ commit;
 select humidity from :hypertable where created_at = :'created_at' and humidity = 400.0;
 
 \x on
-select ctid, * from :hypertable order by created_at offset 898 limit 1;
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable order by created_at offset 898 limit 1;
 select created_at, location_id, owner_id, device_id, humidity
 from :hypertable order by created_at offset 898 limit 1 \gset
 \x off
