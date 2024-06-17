@@ -11,34 +11,34 @@ select setseed(0.3);
 -- Create view to see the compressed relations
 create view compressed_rels as
 with reg_chunk as (
-	 select * from _timescaledb_catalog.chunk where compressed_chunk_id IS NOT NULL
+     select * from _timescaledb_catalog.chunk where compressed_chunk_id IS NOT NULL
 )
 select format('%I.%I', reg_chunk.schema_name, reg_chunk.table_name)::regclass as relid,
-	   format('%I.%I', cpr_chunk.schema_name, cpr_chunk.table_name)::regclass as compressed_relid
+       format('%I.%I', cpr_chunk.schema_name, cpr_chunk.table_name)::regclass as compressed_relid
 from _timescaledb_catalog.chunk cpr_chunk
 inner join reg_chunk on (cpr_chunk.id = reg_chunk.compressed_chunk_id);
 
 -- Create two hypertables with same config and data, apart from one
 -- having a hyperstore chunk (hystable). The regular table (regtable)
 -- will be used as a reference.
-create table hystable(time timestamptz, location int, device int, temp float);
-create table regtable(time timestamptz, location int, device int, temp float);
+create table hystable(time timestamptz, location bigint, device smallint, temp float4);
+create table regtable(time timestamptz, location bigint, device smallint, temp float4);
 select create_hypertable('hystable', 'time', create_default_indexes => false);
 select create_hypertable('regtable', 'time', create_default_indexes => false);
 
 insert into regtable (time, location, device, temp)
 values ('2022-06-01 00:01', 1, 1, 1.0),
-	   ('2022-06-01 00:02', 2, 2, 2.0),
-	   ('2022-06-01 00:03', 1, 3, 3.0),
-	   ('2022-06-01 00:04', 2, 3, 4.0);
+       ('2022-06-01 00:02', 2, 2, 2.0),
+       ('2022-06-01 00:03', 1, 3, 3.0),
+       ('2022-06-01 00:04', 2, 3, 4.0);
 
 insert into hystable select * from regtable;
 
 -- Make sure new chunks are hyperstore from the start, except
 -- obviously for the chunk that was already created.
 alter table hystable set access method hyperstore, set (
-	  timescaledb.compress_orderby = 'time',
-	  timescaledb.compress_segmentby = 'location'
+      timescaledb.compress_orderby = 'time',
+      timescaledb.compress_segmentby = 'location'
 );
 
 select ch chunk, amname access_method
@@ -216,7 +216,7 @@ select create_hypertable('hystable', 'time', create_default_indexes => false);
 
 -- This time create the table without a segmentby column
 alter table hystable set access method hyperstore, set (
-	  timescaledb.compress_orderby = 'time'
+      timescaledb.compress_orderby = 'time'
 );
 
 -- vacuum on empty table
@@ -238,5 +238,3 @@ compressed_rels crels on (i.indrelid = crels.compressed_relid);
 -- delete some data to generate garbage
 delete from hystable where temp > 20;
 vacuum (index_cleanup on) hystable;
-
-
