@@ -9,11 +9,11 @@
 create table :hypertable(
        metric_id serial,
        created_at timestamptz not null unique,
-       location_id int,		--segmentby attribute with index
-       owner_id int,		--segmentby attribute without index
-       device_id int,		--non-segmentby attribute
-       temp float,
-       humidity float
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
 );
 
 create index hypertable_location_id_idx on :hypertable (location_id);

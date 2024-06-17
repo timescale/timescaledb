@@ -57,11 +57,11 @@ $$;
 create table :hypertable(
        metric_id serial,
        created_at timestamptz not null unique,
-       location_id int,		--segmentby attribute with index
-       owner_id int,		--segmentby attribute without index
-       device_id int,		--non-segmentby attribute
-       temp float,
-       humidity float
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
 );
 create index hypertable_location_id_idx on :hypertable (location_id);
 create index hypertable_device_id_idx on :hypertable (device_id);
@@ -151,7 +151,7 @@ location_id | 5
 owner_id    | 4
 device_id   | 19
 temp        | 14.8028647461121
-humidity    | 32.8888982411381
+humidity    | 32.8889
 
 select created_at, location_id, owner_id, device_id
 from :hypertable order by created_at offset 577 limit 1 \gset
@@ -178,7 +178,7 @@ location_id | 5
 owner_id    | 4
 device_id   | 19
 temp        | 14.8028647461121
-humidity    | 32.8888982411381
+humidity    | 32.8889
 
 update :hypertable set temp = 100.0 where created_at = :'created_at';
 select * from :hypertable where created_at = :'created_at';
@@ -189,7 +189,7 @@ location_id | 5
 owner_id    | 4
 device_id   | 19
 temp        | 100
-humidity    | 32.8888982411381
+humidity    | 32.8889
 
 \x off
 -- Disable checks on max tuples decompressed per transaction
@@ -300,7 +300,7 @@ location_id       | 4
 owner_id          | 1
 device_id         | 5
 temp              | 32.7528003907232
-humidity          | 98.6390091565201
+humidity          | 98.639
 
 select created_at, location_id, owner_id, device_id, humidity
 from :hypertable order by created_at offset 898 limit 1 \gset
@@ -308,9 +308,9 @@ from :hypertable order by created_at offset 898 limit 1 \gset
 begin;
 declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
 fetch forward 1 from curs1;
-     humidity     
-------------------
- 98.6390091565201
+ humidity 
+----------
+   98.639
 (1 row)
 
 -- Update via the cursor. The update should work since it happens on
@@ -332,16 +332,17 @@ select ch as chunk
 from show_chunks(:'hypertable') ch limit 1 \gset
 vacuum full :chunk;
 \x on
-select ctid, * from :hypertable order by created_at offset 898 limit 1;
--[ RECORD 1 ]-----------------------------
-ctid        | (2147483704,102)
-metric_id   | 899
-created_at  | Wed Jun 01 02:29:40 2022 PDT
-location_id | 4
-owner_id    | 1
-device_id   | 5
-temp        | 32.7528003907232
-humidity    | 200
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable order by created_at offset 898 limit 1;
+-[ RECORD 1 ]-----+-----------------------------
+is_compressed_tid | t
+metric_id         | 899
+created_at        | Wed Jun 01 02:29:40 2022 PDT
+location_id       | 4
+owner_id          | 1
+device_id         | 5
+temp              | 32.7528003907232
+humidity          | 200
 
 select created_at, location_id, owner_id, device_id, humidity
 from :hypertable order by created_at offset 898 limit 1 \gset
@@ -365,16 +366,17 @@ select humidity from :hypertable where created_at = :'created_at' and humidity =
 (0 rows)
 
 \x on
-select ctid, * from :hypertable order by created_at offset 898 limit 1;
--[ RECORD 1 ]-----------------------------
-ctid        | (17,41)
-metric_id   | 899
-created_at  | Wed Jun 01 02:29:40 2022 PDT
-location_id | 4
-owner_id    | 1
-device_id   | 5
-temp        | 32.7528003907232
-humidity    | 200
+select _timescaledb_debug.is_compressed_tid(ctid), *
+from :hypertable order by created_at offset 898 limit 1;
+-[ RECORD 1 ]-----+-----------------------------
+is_compressed_tid | f
+metric_id         | 899
+created_at        | Wed Jun 01 02:29:40 2022 PDT
+location_id       | 4
+owner_id          | 1
+device_id         | 5
+temp              | 32.7528003907232
+humidity          | 200
 
 select created_at, location_id, owner_id, device_id, humidity
 from :hypertable order by created_at offset 898 limit 1 \gset
