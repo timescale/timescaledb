@@ -11,16 +11,11 @@ set role :ROLE_DEFAULT_PERM_USER;
 -- Avoid parallel (index) scans to make test stable
 set max_parallel_workers_per_gather to 0;
 
--- Redefine the indexes to include one value field in the index and
--- check that index-only scans work also for included attributes.
-drop index hypertable_location_id_idx;
+-- Drop the device_id index and redefine it later with extra columns.
 drop index hypertable_device_id_idx;
 
-create index hypertable_location_id_idx on :hypertable (location_id) include (humidity);
-create index hypertable_device_id_idx on :hypertable (device_id) include (humidity);
-
 create view chunk_indexes as
-select ch::regclass as chunk, indexrelid::regclass as index, attname
+select ch::regclass::text as chunk, indexrelid::regclass::text as index, attname
 from pg_attribute att inner join pg_index ind
 on (att.attrelid=ind.indrelid and att.attnum=ind.indkey[0])
 inner join show_chunks(:'hypertable') ch on (ch = att.attrelid)
@@ -38,10 +33,29 @@ $$, :'hypertable'));
 select location_id, count(*) into orig from :hypertable
 where location_id in (3,4,5) group by location_id;
 
--- show index size before switching to hyperstore
-select index, pg_relation_size(index)
+-- Create other segmentby indexes to test different combinations. Also
+-- redefine the device_id index to include one value field in the
+-- index and check that index-only scans work also for included
+-- attributes.
+create index hypertable_location_id_include_humidity_idx on :hypertable (location_id) include (humidity);
+create index hypertable_device_id_idx on :hypertable (device_id) include (humidity);
+create index hypertable_owner_idx on :hypertable (owner_id);
+create index hypertable_location_id_owner_id_idx on :hypertable (location_id, owner_id);
+
+-- Save index size before switching to hyperstore so that we can
+-- compare sizes after. Don't show the actual sizes because it varies
+-- slightly on different platforms.
+create table index_sizes_before as
+select index, pg_relation_size(index::regclass)
 from chunk_indexes
-where chunk=:'chunk2'::regclass and (attname='location_id' or attname='device_id' or attname='owner_id');
+where chunk::regclass = :'chunk2'::regclass
+and (attname='location_id' or attname='device_id' or attname='owner_id');
+
+-- Drop some segmentby indexes and recreate them after converting to
+-- hyperstore. This is to test having some created before conversion
+-- and some after.
+drop index hypertable_owner_idx;
+drop index hypertable_location_id_owner_id_idx;
 
 alter table :chunk2 set access method hyperstore;
 
@@ -62,12 +76,19 @@ select owner_id, count(*) into owner_comp from :hypertable
 where owner_id in (3,4,5) group by owner_id;
 select * from owner_orig join owner_comp using (owner_id) where owner_orig.count != owner_comp.count;
 
-
--- the indexes on segmentby columns should be smaller on hyperstore
--- while the device_id index remains the same size
-select index, pg_relation_size(index)
-from chunk_indexes
-where chunk=:'chunk2'::regclass and (attname='location_id' or attname='device_id' or attname='owner_id');
+-- the indexes on segmentby columns should be smaller on hyperstore,
+-- except for the covering index on location_id (because it also
+-- includes the non-segmentby column humidity).  The device_id index
+-- should also remain the same size since it is not on a segmentby
+-- column.
+select
+    a.index,
+    pg_relation_size(a.index) = b.pg_relation_size as is_same_size,
+    pg_relation_size(a.index) < b.pg_relation_size as is_smaller
+from chunk_indexes a
+join index_sizes_before b on (a.index = b.index)
+where chunk::regclass=:'chunk2'::regclass
+and (attname='location_id' or attname='device_id' or attname='owner_id');
 
 -- the query should not use index-only scan on the hypestore chunk
 -- (number 2) because it is not supported on segmentby indexes
@@ -85,15 +106,18 @@ drop table orig, owner_orig, owner_comp;
 --
 -- test that indexes work after updates
 --
-select ctid, created_at, location_id, temp from :chunk2 order by location_id, created_at desc limit 2;
+select _timescaledb_debug.is_compressed_tid(ctid), created_at, location_id, temp
+from :chunk2 order by location_id, created_at desc limit 2;
 
 -- first update moves the value from the compressed rel to the non-compressed (seen via ctid)
 update :hypertable set temp=1.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
-select ctid, created_at, location_id, temp from :chunk2 order by location_id, created_at desc limit 2;
+select  _timescaledb_debug.is_compressed_tid(ctid), created_at, location_id, temp
+from :chunk2 order by location_id, created_at desc limit 2;
 
 -- second update should be a hot update (tuple in same block after update, as shown by ctid)
 update :hypertable set temp=2.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
-select ctid, created_at, location_id, temp from :chunk2 order by location_id, created_at desc limit 2;
+select  _timescaledb_debug.is_compressed_tid(ctid), created_at, location_id, temp
+from :chunk2 order by location_id, created_at desc limit 2;
 
 -- make sure query uses a segmentby index and returns the correct data for the update value
 select explain_anonymize(format($$
@@ -161,7 +185,7 @@ $$, :'hypertable'));
 -- We just compare the counts here, not the full content.
 select heapam.count as heapam, hyperstore.count as hyperstore
   from (select count(location_id) from :hypertable where location_id between 5 and 10) heapam,
-	   (select count(location_id) from :hypertable where location_id between 5 and 10) hyperstore;
+       (select count(location_id) from :hypertable where location_id between 5 and 10) hyperstore;
 
 drop table saved_hypertable;
 
