@@ -22,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: toshimaru/auto-author-assign@v2.1.0
+        with:
+          repo_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
   ask-review:
     name: Run pull-review
