@@ -424,3 +424,24 @@ compressed_rels crels on (i.indrelid = crels.compressed_relid);
 -- delete some data to generate garbage
 delete from hystable where temp > 20;
 vacuum (index_cleanup on) hystable;
+create table readings(
+       time timestamptz not null unique,
+       location int,
+       device int,
+       temp numeric(4,1),
+       humidity float
+);
+select create_hypertable('readings', 'time');
+   create_hypertable   
+-----------------------
+ (6,public,readings,t)
+(1 row)
+
+insert into readings (time, location, device, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
+alter table readings
+      set access method hyperstore,
+      set (timescaledb.compress_orderby = 'time',
+      	   timescaledb.compress_segmentby = 'device');
+vacuum analyze readings;

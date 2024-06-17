@@ -313,6 +313,20 @@ typedef struct HyperstoreParallelScanDescData
 
 typedef struct HyperstoreParallelScanDescData *HyperstoreParallelScanDesc;
 
+typedef enum HyperstoreScanState
+{
+	HYPERSTORE_SCAN_START,
+	HYPERSTORE_SCAN_COMPRESSED = HYPERSTORE_SCAN_START,
+	HYPERSTORE_SCAN_NON_COMPRESSED,
+	HYPERSTORE_SCAN_DONE,
+} HyperstoreScanState;
+
+const char *scan_state_name[] = {
+	[HYPERSTORE_SCAN_COMPRESSED] = "COMPRESSED",
+	[HYPERSTORE_SCAN_NON_COMPRESSED] = "NON_COMPRESSED",
+	[HYPERSTORE_SCAN_DONE] = "DONE",
+};
+
 typedef struct HyperstoreScanDescData
 {
 	TableScanDescData rs_base;
@@ -322,11 +336,16 @@ typedef struct HyperstoreScanDescData
 	int64 returned_noncompressed_count;
 	int64 returned_compressed_count;
 	int32 compressed_row_count;
-	bool compressed_read_done;
+	HyperstoreScanState hs_scan_state;
 	bool reset;
 } HyperstoreScanDescData;
 
 typedef struct HyperstoreScanDescData *HyperstoreScanDesc;
+
+static bool hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection direction,
+												 TupleTableSlot *slot);
+static bool hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection direction,
+											  TupleTableSlot *slot);
 
 /*
  * Initialization common for beginscan and rescan.
@@ -407,7 +426,6 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 					 ParallelTableScanDesc parallel_scan, uint32 flags)
 {
 	HyperstoreScanDesc scan;
-	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
 	HyperstoreParallelScanDesc cpscan = (HyperstoreParallelScanDesc) parallel_scan;
 
 	RelationIncrementReferenceCount(relation);
@@ -424,21 +442,33 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 	scan->rs_base.rs_key = nkeys > 0 ? palloc0(sizeof(ScanKeyData) * nkeys) : NULL;
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
-	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
 	scan->returned_noncompressed_count = 0;
 	scan->returned_compressed_count = 0;
 	scan->compressed_row_count = 0;
 	scan->reset = true;
 
-	/*
-	 * Don't read compressed data if transparent decompression is enabled or
-	 * it is requested by the scan.
-	 *
-	 * Transparent decompression reads compressed data itself, directly from
-	 * the compressed chunk, so avoid reading it again here.
-	 */
-	scan->compressed_read_done = (ts_guc_enable_transparent_decompression == 2) ||
-								 (keys && keys->sk_flags & SK_NO_COMPRESSED);
+	if (ts_is_hypertable(relation->rd_id))
+	{
+		/* If this is a hypertable, there is nothing for us to scan */
+		scan->hs_scan_state = HYPERSTORE_SCAN_DONE;
+		return &scan->rs_base;
+	}
+
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
+
+	if ((ts_guc_enable_transparent_decompression == 2) ||
+		(keys && keys->sk_flags & SK_NO_COMPRESSED))
+	{
+		/*
+		 * Don't read compressed data if transparent decompression is enabled
+		 * or it is requested by the scan.
+		 *
+		 * Transparent decompression reads compressed data itself, directly
+		 * from the compressed chunk, so avoid reading it again here.
+		 */
+		scan->hs_scan_state = HYPERSTORE_SCAN_NON_COMPRESSED;
+	}
 
 	initscan(scan, keys, nkeys);
 
@@ -462,13 +492,16 @@ hyperstore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey ke
 
 	ParallelTableScanDesc cptscan =
 		parallel_scan ? (ParallelTableScanDesc) &cpscan->cpscandesc : NULL;
-	Relation crel = scan->compressed_rel;
-	scan->cscan_desc = crel->rd_tableam->scan_begin(scan->compressed_rel,
-													snapshot,
-													scan->rs_base.rs_nkeys,
-													scan->rs_base.rs_key,
-													cptscan,
-													flags);
+	if (scan->compressed_rel)
+	{
+		Relation crel = scan->compressed_rel;
+		scan->cscan_desc = crel->rd_tableam->scan_begin(crel,
+														snapshot,
+														scan->rs_base.rs_nkeys,
+														scan->rs_base.rs_key,
+														cptscan,
+														flags);
+	}
 
 	return &scan->rs_base;
 }
@@ -481,7 +514,7 @@ hyperstore_rescan(TableScanDesc sscan, ScanKey key, bool set_params, bool allow_
 
 	initscan(scan, key, scan->rs_base.rs_nkeys);
 	scan->reset = true;
-	scan->compressed_read_done = false;
+	scan->hs_scan_state = HYPERSTORE_SCAN_START;
 
 	table_rescan(scan->cscan_desc, key);
 
@@ -500,7 +533,8 @@ hyperstore_endscan(TableScanDesc sscan)
 	RelationDecrementReferenceCount(sscan->rs_rd);
 	if (scan->cscan_desc)
 		table_endscan(scan->cscan_desc);
-	table_close(scan->compressed_rel, AccessShareLock);
+	if (scan->compressed_rel)
+		table_close(scan->compressed_rel, AccessShareLock);
 
 	Relation relation = sscan->rs_rd;
 
@@ -528,36 +562,51 @@ static bool
 hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableSlot *slot)
 {
 	HyperstoreScanDesc scan = (HyperstoreScanDesc) sscan;
-	TupleTableSlot *child_slot;
 
-	TS_DEBUG_LOG("relid: %d, relation: %s, reset: %s, compressed_read_done: %s",
+	TS_DEBUG_LOG("relid: %d, relation: %s, reset: %s, scan_state: %s",
 				 sscan->rs_rd->rd_id,
 				 get_rel_name(sscan->rs_rd->rd_id),
 				 yes_no(scan->reset),
-				 yes_no(scan->compressed_read_done));
+				 scan_state_name[scan->hs_scan_state]);
 
-	if (scan->compressed_read_done)
+	switch (scan->hs_scan_state)
 	{
-		/* All the compressed data has been returned, so now return tuples
-		 * from the non-compressed data */
-		child_slot = arrow_slot_get_noncompressed_slot(slot);
+		case HYPERSTORE_SCAN_DONE:
+			return false; /* Nothing more to scan */
+		case HYPERSTORE_SCAN_NON_COMPRESSED:
+			return hyperstore_getnextslot_noncompressed(scan, direction, slot);
+		case HYPERSTORE_SCAN_COMPRESSED:
+			return hyperstore_getnextslot_compressed(scan, direction, slot);
+	}
+	return false; /* To keep compiler happy */
+}
 
-		Relation relation = sscan->rs_rd;
-		const TableAmRoutine *oldtam = switch_to_heapam(relation);
-		bool result =
-			relation->rd_tableam->scan_getnextslot(scan->uscan_desc, direction, child_slot);
-		relation->rd_tableam = oldtam;
+static bool
+hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection direction,
+									 TupleTableSlot *slot)
+{
+	TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
 
-		if (result)
-		{
-			scan->returned_noncompressed_count++;
-			ExecStoreArrowTuple(slot, InvalidTupleIndex);
-		}
+	Relation relation = scan->rs_base.rs_rd;
+	const TableAmRoutine *oldtam = switch_to_heapam(relation);
+	bool result = relation->rd_tableam->scan_getnextslot(scan->uscan_desc, direction, child_slot);
+	relation->rd_tableam = oldtam;
 
-		return result;
+	if (result)
+	{
+		scan->returned_noncompressed_count++;
+		ExecStoreArrowTuple(slot, InvalidTupleIndex);
 	}
 
-	child_slot = arrow_slot_get_compressed_slot(slot, RelationGetDescr(scan->compressed_rel));
+	return result;
+}
+
+static bool
+hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection direction,
+								  TupleTableSlot *slot)
+{
+	TupleTableSlot *child_slot =
+		arrow_slot_get_compressed_slot(slot, RelationGetDescr(scan->compressed_rel));
 
 	if (scan->reset || arrow_slot_is_last(slot) || arrow_slot_is_consumed(slot))
 	{
@@ -566,8 +615,8 @@ hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableS
 		if (!table_scan_getnextslot(scan->cscan_desc, direction, child_slot))
 		{
 			ExecClearTuple(slot);
-			scan->compressed_read_done = true;
-			return hyperstore_getnextslot(sscan, direction, slot);
+			scan->hs_scan_state = HYPERSTORE_SCAN_NON_COMPRESSED;
+			return hyperstore_getnextslot(&scan->rs_base, direction, slot);
 		}
 
 		Assert(ItemPointerIsValid(&child_slot->tts_tid));
@@ -580,8 +629,7 @@ hyperstore_getnextslot(TableScanDesc sscan, ScanDirection direction, TupleTableS
 	}
 
 	scan->returned_compressed_count++;
-	pgstat_count_hyperstore_getnext(sscan->rs_rd);
-
+	pgstat_count_hyperstore_getnext(scan->rs_base.rs_rd);
 	return true;
 }
 
