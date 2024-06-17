@@ -56,11 +56,11 @@ $$;
 create table :hypertable(
        metric_id serial,
        created_at timestamptz not null unique,
-       location_id int,		--segmentby attribute with index
-       owner_id int,		--segmentby attribute without index
-       device_id int,		--non-segmentby attribute
-       temp float,
-       humidity float
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
 );
 create index hypertable_location_id_idx on :hypertable (location_id);
 create index hypertable_device_id_idx on :hypertable (device_id);
@@ -266,11 +266,11 @@ values ('2022-06-01 00:00:03', 21, 1, 1.0, 1.0)
 on conflict (created_at) do update set location_id = 22;
 select * from :hypertable where location_id between 11 and 22
 order by location_id;
- metric_id |          created_at          | location_id | owner_id | device_id |       temp       |     humidity     
------------+------------------------------+-------------+----------+-----------+------------------+------------------
-         1 | Wed Jun 01 00:00:00 2022 PDT |          12 |        2 |        23 | 16.4320374922463 | 55.2454376356891
-    259204 | Wed Jun 01 00:00:02 2022 PDT |          20 |          |         1 |                1 |                1
-    259205 | Wed Jun 01 00:00:03 2022 PDT |          22 |          |         1 |                1 |                1
+ metric_id |          created_at          | location_id | owner_id | device_id |       temp       | humidity 
+-----------+------------------------------+-------------+----------+-----------+------------------+----------
+         1 | Wed Jun 01 00:00:00 2022 PDT |          12 |        2 |        23 | 16.4320374922463 |  55.2454
+    259204 | Wed Jun 01 00:00:02 2022 PDT |          20 |          |         1 |                1 |        1
+    259205 | Wed Jun 01 00:00:03 2022 PDT |          22 |          |         1 |                1 |        1
 (3 rows)
 
 drop table :hypertable;
