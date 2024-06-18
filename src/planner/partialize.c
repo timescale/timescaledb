@@ -444,26 +444,46 @@ add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 {
 	/* Translate targetlist for partition */
 	AppendRelInfo *appinfo = ts_get_appendrelinfo(root, subpath->parent->relid, false);
-	PathTarget *chunktarget = copy_pathtarget(partial_grouping_target);
-	chunktarget->exprs =
-		castNode(List, adjust_appendrel_attrs(root, (Node *) chunktarget->exprs, 1, &appinfo));
+	PathTarget *chunk_grouped_target = copy_pathtarget(partial_grouping_target);
+	chunk_grouped_target->exprs =
+		castNode(List,
+				 adjust_appendrel_attrs(root,
+										(Node *) chunk_grouped_target->exprs,
+										/* nappinfos = */ 1,
+										&appinfo));
 
-	/* In declarative partitioning planning, this is done by apply_scanjoin_target_to_path */
-	Assert(list_length(subpath->pathtarget->exprs) == list_length(input_target->exprs));
-	subpath->pathtarget->sortgrouprefs = input_target->sortgrouprefs;
+	/*
+	 * We might have to project before aggregation. In declarative partitioning
+	 * planning, the projection is applied by apply_scanjoin_target_to_path().
+	 */
+	PathTarget *chunk_target_before_grouping = copy_pathtarget(input_target);
+	chunk_target_before_grouping->exprs =
+		castNode(List,
+				 adjust_appendrel_attrs(root,
+										(Node *) chunk_target_before_grouping->exprs,
+										/* nappinfos = */ 1,
+										&appinfo));
+	subpath =
+		apply_projection_to_path(root, subpath->parent, subpath, chunk_target_before_grouping);
 
 	if (can_sort)
 	{
-		AggPath *agg_path =
-			create_sorted_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
+		AggPath *agg_path = create_sorted_partial_agg_path(root,
+														   subpath,
+														   chunk_grouped_target,
+														   d_num_groups,
+														   extra_data);
 
 		*sorted_paths = lappend(*sorted_paths, (Path *) agg_path);
 	}
 
 	if (can_hash)
 	{
-		AggPath *agg_path =
-			create_hashed_partial_agg_path(root, subpath, chunktarget, d_num_groups, extra_data);
+		AggPath *agg_path = create_hashed_partial_agg_path(root,
+														   subpath,
+														   chunk_grouped_target,
+														   d_num_groups,
+														   extra_data);
 
 		*hashed_paths = lappend(*hashed_paths, (Path *) agg_path);
 	}
