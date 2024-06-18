@@ -426,43 +426,6 @@ process_drop_trigger_start(ProcessUtilityArgs *args, DropStmt *stmt)
 	ts_cache_release(hcache);
 }
 
-static void
-process_altertableschema(ProcessUtilityArgs *args)
-{
-	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
-	Oid relid;
-	Cache *hcache;
-	Hypertable *ht;
-
-	Assert(alterstmt->objectType == OBJECT_TABLE);
-
-	if (NULL == alterstmt->relation)
-		return;
-
-	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
-
-	if (!OidIsValid(relid))
-		return;
-
-	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
-
-	if (ht == NULL)
-	{
-		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
-
-		if (NULL != chunk)
-			ts_chunk_set_schema(chunk, alterstmt->newschema);
-	}
-	else
-	{
-		ts_hypertable_set_schema(ht, alterstmt->newschema);
-
-		add_hypertable_to_process_args(args, ht);
-	}
-
-	ts_cache_release(hcache);
-}
-
 /* We use this for both materialized views and views. */
 static void
 process_alterviewschema(ProcessUtilityArgs *args)
@@ -485,6 +448,53 @@ process_alterviewschema(ProcessUtilityArgs *args)
 	name = get_rel_name(relid);
 
 	ts_continuous_agg_rename_view(schema, name, stmt->newschema, name, &stmt->objectType);
+}
+
+static void
+process_altertableschema(ProcessUtilityArgs *args)
+{
+	AlterObjectSchemaStmt *alterstmt = (AlterObjectSchemaStmt *) args->parsetree;
+	Oid relid;
+	Cache *hcache;
+	Hypertable *ht;
+
+	Assert(alterstmt->objectType == OBJECT_TABLE);
+
+	if (NULL == alterstmt->relation)
+		return;
+
+	relid = RangeVarGetRelid(alterstmt->relation, NoLock, true);
+
+	if (!OidIsValid(relid))
+		return;
+
+	ht = ts_hypertable_cache_get_cache_and_entry(relid, CACHE_FLAG_MISSING_OK, &hcache);
+
+	if (ht == NULL)
+	{
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
+
+		if (cagg)
+		{
+			alterstmt->objectType = OBJECT_MATVIEW;
+			process_alterviewschema(args);
+			ts_cache_release(hcache);
+			return;
+		}
+
+		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
+
+		if (NULL != chunk)
+			ts_chunk_set_schema(chunk, alterstmt->newschema);
+	}
+	else
+	{
+		ts_hypertable_set_schema(ht, alterstmt->newschema);
+
+		add_hypertable_to_process_args(args, ht);
+	}
+
+	ts_cache_release(hcache);
 }
 
 /* Change the schema of a hypertable or a chunk */
@@ -1820,8 +1830,16 @@ process_reindex(ProcessUtilityArgs *args)
 	return result;
 }
 
+static void
+process_rename_view(Oid relid, RenameStmt *stmt)
+{
+	char *schema = get_namespace_name(get_rel_namespace(relid));
+	char *name = get_rel_name(relid);
+	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname, &stmt->renameType);
+}
+
 /*
- * Rename a hypertable or a chunk.
+ * Rename a hypertable, chunk or continuous aggregate.
  */
 static void
 process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameStmt *stmt)
@@ -1830,6 +1848,15 @@ process_rename_table(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 
 	if (NULL == ht)
 	{
+		ContinuousAgg *cagg = ts_continuous_agg_find_by_relid(relid);
+
+		if (cagg)
+		{
+			stmt->renameType = OBJECT_MATVIEW;
+			process_rename_view(relid, stmt);
+			return;
+		}
+
 		Chunk *chunk = ts_chunk_get_by_relid(relid, false);
 
 		if (NULL != chunk)
@@ -1953,14 +1980,6 @@ process_rename_index(ProcessUtilityArgs *args, Cache *hcache, Oid relid, RenameS
 		if (NULL != chunk)
 			ts_chunk_index_rename(chunk, relid, stmt->newname);
 	}
-}
-
-static void
-process_rename_view(Oid relid, RenameStmt *stmt)
-{
-	char *schema = get_namespace_name(get_rel_namespace(relid));
-	char *name = get_rel_name(relid);
-	ts_continuous_agg_rename_view(schema, name, schema, stmt->newname, &stmt->renameType);
 }
 
 /* Visit all internal catalog tables with a schema column to check for applicable rename */
