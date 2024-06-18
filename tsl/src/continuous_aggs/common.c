@@ -11,22 +11,29 @@
 
 #include "guc.h"
 
-static Const *check_time_bucket_argument(Node *arg, char *position);
+static Const *check_time_bucket_argument(Node *arg, char *position, bool process_checks);
 static void caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id,
 									Oid hypertable_oid, AttrNumber hypertable_partition_colno,
 									Oid hypertable_partition_coltype,
 									int64 hypertable_partition_col_interval,
 									int32 parent_mat_hypertable_id);
+static void process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const *arg);
+static void process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf,
+										  bool process_checks, bool is_cagg_create,
+										  AttrNumber htpartcolno);
 static void caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *targetList,
 									bool is_cagg_create);
 static bool cagg_query_supported(const Query *query, StringInfo hint, StringInfo detail,
 								 const bool finalized);
+static Datum get_bucket_width_datum(CAggTimebucketInfo bucket_info);
+static int64 get_bucket_width(CAggTimebucketInfo bucket_info);
 static FuncExpr *build_conversion_call(Oid type, FuncExpr *boundary);
 static FuncExpr *build_boundary_call(int32 ht_id, Oid type);
 static Const *cagg_boundary_make_lower_bound(Oid type);
 static Node *build_union_query_quals(int32 ht_id, Oid partcoltype, Oid opno, int varno,
 									 AttrNumber attno);
 static RangeTblEntry *makeRangeTblEntry(Query *subquery, const char *aliasname);
+static bool time_bucket_info_has_fixed_width(const ContinuousAggsBucketFunction *bf);
 
 #define INTERNAL_TO_DATE_FUNCTION "to_date"
 #define INTERNAL_TO_TSTZ_FUNCTION "to_timestamp"
@@ -34,14 +41,14 @@ static RangeTblEntry *makeRangeTblEntry(Query *subquery, const char *aliasname);
 #define BOUNDARY_FUNCTION "cagg_watermark"
 
 static Const *
-check_time_bucket_argument(Node *arg, char *position)
+check_time_bucket_argument(Node *arg, char *position, bool process_checks)
 {
 	if (IsA(arg, NamedArgExpr))
 		arg = (Node *) castNode(NamedArgExpr, arg)->arg;
 
 	Node *expr = eval_const_expressions(NULL, arg);
 
-	if (!IsA(expr, Const))
+	if (process_checks && !IsA(expr, Const))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("only immutable expressions allowed in time bucket function"),
@@ -215,6 +222,158 @@ process_additional_timebucket_parameter(ContinuousAggsBucketFunction *bf, Const 
 }
 
 /*
+ * Process the FuncExpr node to fill the bucket function data structure. The other
+ * parameters are used when `process_check` is true that means we need to raise errors
+ * when invalid parameters are passed to the time bucket function when creating a cagg.
+ */
+static void
+process_timebucket_parameters(FuncExpr *fe, ContinuousAggsBucketFunction *bf, bool process_checks,
+							  bool is_cagg_create, AttrNumber htpartcolno)
+{
+	Node *width_arg;
+	Node *col_arg;
+	bool custom_origin = false;
+	Const *const_arg;
+
+	/* Only column allowed : time_bucket('1day', <column> ) */
+	col_arg = lsecond(fe->args);
+	/* Could be a named argument */
+	if (IsA(col_arg, NamedArgExpr))
+		col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
+
+	if (process_checks && htpartcolno != InvalidAttrNumber &&
+		(!(IsA(col_arg, Var)) || castNode(Var, col_arg)->varattno != htpartcolno))
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("time bucket function must reference the primary hypertable "
+						"dimension column")));
+
+	if (list_length(fe->args) >= 3)
+	{
+		Const *arg = check_time_bucket_argument(lthird(fe->args), "third", process_checks);
+		process_additional_timebucket_parameter(bf, arg);
+	}
+
+	if (list_length(fe->args) >= 4)
+	{
+		Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth", process_checks);
+		process_additional_timebucket_parameter(bf, arg);
+	}
+
+	/* Check for custom origin. */
+	switch (exprType(col_arg))
+	{
+		case DATEOID:
+			/* Origin is always 3rd arg for date variants. */
+			if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == DATEOID)
+			{
+				Node *arg = lthird(fe->args);
+				custom_origin = true;
+				/* this function also takes care of named arguments */
+				const_arg = check_time_bucket_argument(arg, "third", process_checks);
+				bf->bucket_time_origin =
+					DatumGetTimestamp(DirectFunctionCall1(date_timestamp, const_arg->constvalue));
+			}
+			break;
+		case TIMESTAMPOID:
+			/* Origin is always 3rd arg for timestamp variants. */
+			if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == TIMESTAMPOID)
+			{
+				Node *arg = lthird(fe->args);
+				custom_origin = true;
+				const_arg = check_time_bucket_argument(arg, "third", process_checks);
+				bf->bucket_time_origin = DatumGetTimestamp(const_arg->constvalue);
+			}
+			break;
+		case TIMESTAMPTZOID:
+			/* Origin can be 3rd or 4th arg for timestamptz variants. */
+			if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
+			{
+				Node *arg = lthird(fe->args);
+				custom_origin = true;
+				Const *constval = check_time_bucket_argument(arg, "third", process_checks);
+				bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
+			}
+			else if (list_length(fe->args) >= 4 && exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
+			{
+				custom_origin = true;
+				if (IsA(lfourth(fe->args), Const))
+				{
+					bf->bucket_time_origin =
+						DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
+				}
+				/* could happen in a statement like time_bucket('1h', .., 'utc', origin =>
+				 * ...) */
+				else if (IsA(lfourth(fe->args), NamedArgExpr))
+				{
+					Const *constval =
+						check_time_bucket_argument(lfourth(fe->args), "fourth", process_checks);
+
+					bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
+				}
+			}
+	}
+	if (process_checks && custom_origin && TIMESTAMP_NOT_FINITE(bf->bucket_time_origin))
+	{
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("invalid origin value: infinity")));
+	}
+
+	/*
+	 * We constify width expression here so any immutable expression will be allowed.
+	 * Otherwise it would make it harder to create caggs for hypertables with e.g. int8
+	 * partitioning column as int constants default to int4 and so expression would
+	 * have a cast and not be a Const.
+	 */
+	width_arg = linitial(fe->args);
+
+	if (IsA(width_arg, NamedArgExpr))
+		width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
+
+	width_arg = eval_const_expressions(NULL, width_arg);
+	if (IsA(width_arg, Const))
+	{
+		Const *width = castNode(Const, width_arg);
+		bf->bucket_width_type = width->consttype;
+
+		if (width->constisnull)
+		{
+			if (process_checks && is_cagg_create)
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("invalid bucket width for time bucket function")));
+		}
+		else
+		{
+			if (width->consttype == INTERVALOID)
+			{
+				bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
+			}
+
+			if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
+			{
+				bf->bucket_integer_width =
+					ts_interval_value_to_internal(width->constvalue, width->consttype);
+			}
+		}
+	}
+	else
+	{
+		if (process_checks)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("only immutable expressions allowed in time bucket function"),
+					 errhint("Use an immutable expression as first argument to the time bucket "
+							 "function.")));
+	}
+
+	bf->bucket_function = fe->funcid;
+	bf->bucket_time_based = ts_continuous_agg_bucket_on_interval(bf->bucket_function);
+	bf->bucket_fixed_interval = time_bucket_info_has_fixed_width(bf);
+}
+
+/*
  * Check if the group-by clauses has exactly 1 time_bucket(.., <col>) where
  * <col> is the hypertable's partitioning column and other invariants. Then fill
  * the `bucket_width` and other fields of `tbinfo`.
@@ -225,8 +384,6 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 {
 	ListCell *l;
 	bool found = false;
-	bool custom_origin = false;
-	Const *const_arg;
 
 	/* Make sure tbinfo was initialized. This assumption is used below. */
 	Assert(tbinfo->bf->bucket_integer_width == 0);
@@ -240,9 +397,7 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 
 		if (IsA(tle->expr, FuncExpr))
 		{
-			FuncExpr *fe = ((FuncExpr *) tle->expr);
-			Node *width_arg;
-			Node *col_arg;
+			FuncExpr *fe = castNode(FuncExpr, tle->expr);
 
 			/* Filter any non bucketing functions */
 			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
@@ -286,143 +441,11 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 			else
 				found = true;
 
-			/* Only column allowed : time_bucket('1day', <column> ) */
-			col_arg = lsecond(fe->args);
-			/* Could be a named argument */
-			if (IsA(col_arg, NamedArgExpr))
-				col_arg = (Node *) castNode(NamedArgExpr, col_arg)->arg;
-
-			if (!(IsA(col_arg, Var)) || ((Var *) col_arg)->varattno != tbinfo->htpartcolno)
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("time bucket function must reference the primary hypertable "
-								"dimension column")));
-
-			if (list_length(fe->args) >= 3)
-			{
-				Const *arg = check_time_bucket_argument(lthird(fe->args), "third");
-				process_additional_timebucket_parameter(tbinfo->bf, arg);
-			}
-
-			if (list_length(fe->args) >= 4)
-			{
-				Const *arg = check_time_bucket_argument(lfourth(fe->args), "fourth");
-				process_additional_timebucket_parameter(tbinfo->bf, arg);
-			}
-
-			/* Check for custom origin. */
-			switch (exprType(col_arg))
-			{
-				case DATEOID:
-					/* Origin is always 3rd arg for date variants. */
-					if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == DATEOID)
-					{
-						Node *arg = lthird(fe->args);
-						custom_origin = true;
-						/* this function also takes care of named arguments */
-						const_arg = check_time_bucket_argument(arg, "third");
-						tbinfo->bf->bucket_time_origin = DatumGetTimestamp(
-							DirectFunctionCall1(date_timestamp, const_arg->constvalue));
-					}
-					break;
-				case TIMESTAMPOID:
-					/* Origin is always 3rd arg for timestamp variants. */
-					if (list_length(fe->args) == 3 && exprType(lthird(fe->args)) == TIMESTAMPOID)
-					{
-						Node *arg = lthird(fe->args);
-						custom_origin = true;
-						const_arg = check_time_bucket_argument(arg, "third");
-						tbinfo->bf->bucket_time_origin = DatumGetTimestamp(const_arg->constvalue);
-					}
-					break;
-				case TIMESTAMPTZOID:
-					/* Origin can be 3rd or 4th arg for timestamptz variants. */
-					if (list_length(fe->args) >= 3 && exprType(lthird(fe->args)) == TIMESTAMPTZOID)
-					{
-						Node *arg = lthird(fe->args);
-						custom_origin = true;
-						Const *constval = check_time_bucket_argument(arg, "third");
-						tbinfo->bf->bucket_time_origin = DatumGetTimestampTz(constval->constvalue);
-					}
-					else if (list_length(fe->args) >= 4 &&
-							 exprType(lfourth(fe->args)) == TIMESTAMPTZOID)
-					{
-						custom_origin = true;
-						if (IsA(lfourth(fe->args), Const))
-						{
-							tbinfo->bf->bucket_time_origin =
-								DatumGetTimestampTz(castNode(Const, lfourth(fe->args))->constvalue);
-						}
-						/* could happen in a statement like time_bucket('1h', .., 'utc', origin =>
-						 * ...) */
-						else if (IsA(lfourth(fe->args), NamedArgExpr))
-						{
-							Const *constval =
-								check_time_bucket_argument(lfourth(fe->args), "fourth");
-
-							tbinfo->bf->bucket_time_origin =
-								DatumGetTimestampTz(constval->constvalue);
-						}
-					}
-			}
-			if (custom_origin && TIMESTAMP_NOT_FINITE(tbinfo->bf->bucket_time_origin))
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-						 errmsg("invalid origin value: infinity")));
-			}
-
-			/*
-			 * We constify width expression here so any immutable expression will be allowed.
-			 * Otherwise it would make it harder to create caggs for hypertables with e.g. int8
-			 * partitioning column as int constants default to int4 and so expression would
-			 * have a cast and not be a Const.
-			 */
-			width_arg = linitial(fe->args);
-
-			if (IsA(width_arg, NamedArgExpr))
-				width_arg = (Node *) castNode(NamedArgExpr, width_arg)->arg;
-
-			width_arg = eval_const_expressions(NULL, width_arg);
-			if (IsA(width_arg, Const))
-			{
-				Const *width = castNode(Const, width_arg);
-				tbinfo->bf->bucket_width_type = width->consttype;
-
-				if (width->constisnull)
-				{
-					if (is_cagg_create)
-						ereport(ERROR,
-								(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-								 errmsg("invalid bucket width for time bucket function")));
-				}
-				else
-				{
-					if (width->consttype == INTERVALOID)
-					{
-						tbinfo->bf->bucket_time_width = DatumGetIntervalP(width->constvalue);
-					}
-
-					if (!IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo))
-					{
-						tbinfo->bf->bucket_integer_width =
-							ts_interval_value_to_internal(width->constvalue, width->consttype);
-					}
-				}
-			}
-			else
-			{
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("only immutable expressions allowed in time bucket function"),
-						 errhint("Use an immutable expression as first argument to the time bucket "
-								 "function.")));
-			}
-
-			tbinfo->bf->bucket_function = fe->funcid;
-			tbinfo->bf->bucket_time_based =
-				ts_continuous_agg_bucket_on_interval(tbinfo->bf->bucket_function);
-			tbinfo->bf->bucket_fixed_interval = time_bucket_info_has_fixed_width(tbinfo);
+			process_timebucket_parameters(fe,
+										  tbinfo->bf,
+										  true,
+										  is_cagg_create,
+										  tbinfo->htpartcolno);
 		}
 	}
 
@@ -435,11 +458,11 @@ caggtimebucket_validate(CAggTimebucketInfo *tbinfo, List *groupClause, List *tar
 						"supported")));
 	}
 
-	if (!time_bucket_info_has_fixed_width(tbinfo))
+	if (!time_bucket_info_has_fixed_width(tbinfo->bf))
 	{
 		/* Variable-sized buckets can be used only with intervals. */
 		Assert(tbinfo->bf->bucket_time_width != NULL);
-		Assert(IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo));
+		Assert(IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo->bf));
 
 		if ((tbinfo->bf->bucket_time_width->month != 0) &&
 			((tbinfo->bf->bucket_time_width->day != 0) ||
@@ -988,8 +1011,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 								is_cagg_create);
 
 		/* Cannot create cagg with fixed bucket on top of variable bucket. */
-		if (time_bucket_info_has_fixed_width(&bucket_info_parent) == false &&
-			time_bucket_info_has_fixed_width(&bucket_info) == true)
+		if (time_bucket_info_has_fixed_width(bucket_info_parent.bf) == false &&
+			time_bucket_info_has_fixed_width(bucket_info.bf) == true)
 		{
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
@@ -1517,10 +1540,10 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 /*
  * Returns true if the time bucket size is fixed
  */
-bool
-time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo)
+static bool
+time_bucket_info_has_fixed_width(const ContinuousAggsBucketFunction *bf)
 {
-	if (!IS_TIME_BUCKET_INFO_TIME_BASED(tbinfo))
+	if (!IS_TIME_BUCKET_INFO_TIME_BASED(bf))
 	{
 		return true;
 	}
@@ -1528,8 +1551,7 @@ time_bucket_info_has_fixed_width(const CAggTimebucketInfo *tbinfo)
 	{
 		/* Historically, we treat all buckets with timezones as variable. Buckets with only days are
 		 * treated as fixed. */
-		return tbinfo->bf->bucket_time_width->month == 0 &&
-			   tbinfo->bf->bucket_time_timezone == NULL;
+		return bf->bucket_time_width->month == 0 && bf->bucket_time_timezone == NULL;
 	}
 }
 
@@ -1559,4 +1581,42 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 	}
 
 	return cagg;
+}
+
+/* Get time bucket function info based on the view definition */
+ContinuousAggsBucketFunction *
+ts_cagg_get_bucket_function_info(Oid view_oid)
+{
+	Relation view_rel = relation_open(view_oid, AccessShareLock);
+	Query *query = copyObject(get_view_query(view_rel));
+	relation_close(view_rel, NoLock);
+
+	Assert(query != NULL);
+	Assert(query->commandType == CMD_SELECT);
+
+	ContinuousAggsBucketFunction *bf = palloc0(sizeof(ContinuousAggsBucketFunction));
+
+	ListCell *l;
+	foreach (l, query->groupClause)
+	{
+		SortGroupClause *sgc = lfirst_node(SortGroupClause, l);
+		TargetEntry *tle = get_sortgroupclause_tle(sgc, query->targetList);
+
+		if (IsA(tle->expr, FuncExpr))
+		{
+			FuncExpr *fe = castNode(FuncExpr, tle->expr);
+
+			/* Filter any non bucketing functions */
+			FuncInfo *finfo = ts_func_cache_get_bucketing_func(fe->funcid);
+			if (finfo == NULL)
+				continue;
+
+			Assert(finfo->is_bucketing_func);
+
+			process_timebucket_parameters(fe, bf, false, false, InvalidAttrNumber);
+			break;
+		}
+	}
+
+	return bf;
 }
