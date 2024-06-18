@@ -265,7 +265,7 @@ build_merge_insert_columns(List *strings, const char *separator, const char *pre
 			appendStringInfoString(ret, quote_identifier(grpcol));
 		}
 
-		elog(DEBUG5, "%s: %s", __func__, ret->data);
+		elog(DEBUG2, "%s: %s", __func__, ret->data);
 		return ret->data;
 	}
 
@@ -293,7 +293,7 @@ build_merge_join_clause(List *column_names)
 			appendStringInfoString(ret, quote_identifier(column));
 		}
 
-		elog(DEBUG5, "%s: %s", __func__, ret->data);
+		elog(DEBUG2, "%s: %s", __func__, ret->data);
 		return ret->data;
 	}
 
@@ -320,7 +320,7 @@ build_merge_update_clause(List *column_names)
 			appendStringInfoString(ret, quote_identifier(column));
 		}
 
-		elog(DEBUG5, "%s: %s", __func__, ret->data);
+		elog(DEBUG2, "%s: %s", __func__, ret->data);
 		return ret->data;
 	}
 
@@ -378,7 +378,7 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 {
 	int res;
 	int64 watermark;
-	bool isnull;
+	bool isnull = true;
 	Datum maxdat;
 	StringInfo command = makeStringInfo();
 
@@ -402,7 +402,8 @@ spi_update_watermark(Hypertable *mat_ht, SchemaAndName materialization_table,
 		   "partition types for result (%d) and dimension (%d) do not match",
 		   SPI_gettypeid(SPI_tuptable->tupdesc, 1),
 		   materialization_type);
-	maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
+	if (SPI_processed > 0)
+		maxdat = SPI_getbinval(SPI_tuptable->vals[0], SPI_tuptable->tupdesc, 1, &isnull);
 
 	if (!isnull)
 	{
@@ -425,6 +426,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 	List *grp_colnames = cagg_find_groupingcols((ContinuousAgg *) cagg, mat_ht);
 	List *agg_colnames = cagg_find_aggref_and_var_cols((ContinuousAgg *) cagg, mat_ht);
 	List *all_columns = NIL;
+	uint64 rows_processed = 0;
 
 	/* Concat both lists into a single one*/
 	all_columns = list_concat(all_columns, grp_colnames);
@@ -434,6 +436,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 	materialization_start = OidOutputFunctionCall(out_fn, materialization_range.start);
 	materialization_end = OidOutputFunctionCall(out_fn, materialization_range.end);
 
+	/* MERGE statement to UPDATE affected buckets and INSERT new ones */
 	appendStringInfo(command,
 					 "WITH partial AS ( "
 					 "  SELECT * "
@@ -477,7 +480,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 build_merge_insert_columns(all_columns, ", ", NULL),
 					 build_merge_insert_columns(all_columns, ", ", "P."));
 
-	elog(DEBUG5, "%s", command->data);
+	elog(DEBUG2, "%s", command->data);
 	res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
 
 	if (res < 0)
@@ -492,8 +495,59 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 			 NameStr(*materialization_table.schema),
 			 NameStr(*materialization_table.name));
 
+	rows_processed += SPI_processed;
+
+	/* DELETE rows from the materialization hypertable when necessary */
+	resetStringInfo(command);
+	appendStringInfo(command,
+					 "DELETE "
+					 "FROM %s.%s M "
+					 "WHERE M.%s >= %s AND M.%s < %s "
+					 "AND NOT EXISTS ("
+					 " SELECT FROM %s.%s P "
+					 " WHERE %s AND P.%s >= %s AND P.%s < %s) ",
+
+					 /* materialization hypertable */
+					 quote_identifier(NameStr(*materialization_table.schema)),
+					 quote_identifier(NameStr(*materialization_table.name)),
+
+					 /* materialization hypertable WHERE */
+					 quote_identifier(NameStr(*time_column_name)),
+					 quote_literal_cstr(materialization_start),
+					 quote_identifier(NameStr(*time_column_name)),
+					 quote_literal_cstr(materialization_end),
+
+					 /* partial VIEW */
+					 quote_identifier(NameStr(*partial_view.schema)),
+					 quote_identifier(NameStr(*partial_view.name)),
+
+					 /* MERGE JOIN condition */
+					 build_merge_join_clause(grp_colnames),
+
+					 /* partial WHERE */
+					 quote_identifier(NameStr(*time_column_name)),
+					 quote_literal_cstr(materialization_start),
+					 quote_identifier(NameStr(*time_column_name)),
+					 quote_literal_cstr(materialization_end));
+	elog(DEBUG2, "%s", command->data);
+	res = SPI_execute(command->data, false /* read_only */, 0 /*count*/);
+
+	if (res < 0)
+		elog(ERROR,
+			 "could not delete values from the materialization table \"%s.%s\"",
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
+	else
+		elog(LOG,
+			 "deleted " UINT64_FORMAT " row(s) from materialization table \"%s.%s\"",
+			 SPI_processed,
+			 NameStr(*materialization_table.schema),
+			 NameStr(*materialization_table.name));
+
+	rows_processed += SPI_processed;
+
 	/* Get the max(time_dimension) of the materialized data */
-	if (SPI_processed > 0)
+	if (rows_processed > 0)
 	{
 		spi_update_watermark(mat_ht,
 							 materialization_table,
