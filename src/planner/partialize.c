@@ -657,7 +657,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 	}
 }
 
-
 /*
  Is the provided path a agg path that uses a sorted or plain agg strategy?
 */
