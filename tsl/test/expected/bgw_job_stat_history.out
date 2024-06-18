@@ -62,12 +62,6 @@ SELECT proc_schema, proc_name, sqlerrcode, err_message FROM timescaledb_informat
  public      | custom_job_error | 22012      | division by zero
 (1 row)
 
-SELECT _timescaledb_functions.stop_background_workers();
- stop_background_workers 
--------------------------
- t
-(1 row)
-
 -- Check current jobs status
 SELECT job_id, job_status, total_runs, total_successes, total_failures
 FROM timescaledb_information.job_stats
@@ -85,19 +79,6 @@ SELECT pg_reload_conf();
  pg_reload_conf 
 ----------------
  t
-(1 row)
-
-\c :TEST_DBNAME :ROLE_SUPERUSER
-SELECT _timescaledb_functions.start_background_workers();
- start_background_workers 
---------------------------
- t
-(1 row)
-
-SELECT pg_sleep(6);
- pg_sleep 
-----------
- 
 (1 row)
 
 SELECT scheduled FROM alter_job(:job_id_1, next_start => now());

@@ -233,31 +233,75 @@ get_existing_agg_path(const RelOptInfo *relation)
 /*
  * Get all subpaths from a Append, MergeAppend, or ChunkAppend path
  */
-static List *
-get_subpaths_from_append_path(Path *path, bool handle_gather_path)
+static void
+get_subpaths_from_append_path(Path *path, List **subpaths, Path **append, Path **gather)
 {
 	if (IsA(path, AppendPath))
 	{
 		AppendPath *append_path = castNode(AppendPath, path);
-		return append_path->subpaths;
+		*subpaths = append_path->subpaths;
+		*append = path;
+		return;
 	}
-	else if (IsA(path, MergeAppendPath))
+
+	if (IsA(path, MergeAppendPath))
 	{
 		MergeAppendPath *merge_append_path = castNode(MergeAppendPath, path);
-		return merge_append_path->subpaths;
+		*subpaths = merge_append_path->subpaths;
+		*append = path;
+		return;
 	}
-	else if (ts_is_chunk_append_path(path))
+
+	if (ts_is_chunk_append_path(path))
 	{
 		CustomPath *custom_path = castNode(CustomPath, path);
-		return custom_path->custom_paths;
+		*subpaths = custom_path->custom_paths;
+		*append = path;
+		return;
 	}
-	else if (handle_gather_path && IsA(path, GatherPath))
+
+	if (IsA(path, GatherPath))
 	{
-		return get_subpaths_from_append_path(castNode(GatherPath, path)->subpath, false);
+		*gather = path;
+		get_subpaths_from_append_path(castNode(GatherPath, path)->subpath,
+									  subpaths,
+									  append,
+									  /* gather = */ NULL);
+		return;
+	}
+
+	if (IsA(path, GatherMergePath))
+	{
+		*gather = path;
+		get_subpaths_from_append_path(castNode(GatherMergePath, path)->subpath,
+									  subpaths,
+									  append,
+									  /* gather = */ NULL);
+		return;
+	}
+
+	if (IsA(path, SortPath))
+	{
+		/* Can see GatherMerge -> Sort -> Partial HashAggregate in parallel plans. */
+		get_subpaths_from_append_path(castNode(SortPath, path)->subpath, subpaths, append, gather);
+		return;
+	}
+
+	if (IsA(path, AggPath))
+	{
+		/* Can see GatherMerge -> Sort -> Partial HashAggregate in parallel plans. */
+		get_subpaths_from_append_path(castNode(AggPath, path)->subpath, subpaths, append, gather);
+		return;
+	}
+
+	if (IsA(path, ProjectionPath))
+	{
+		ProjectionPath *projection = castNode(ProjectionPath, path);
+		get_subpaths_from_append_path(projection->subpath, subpaths, append, gather);
+		return;
 	}
 
 	/* Aggregation push-down is not supported for other path types so far */
-	return NIL;
 }
 
 /*
@@ -393,7 +437,7 @@ create_hashed_partial_agg_path(PlannerInfo *root, Path *path, PathTarget *target
  * Add partially aggregated subpath
  */
 static void
-add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
+add_partially_aggregated_subpaths(PlannerInfo *root, PathTarget *input_target,
 								  PathTarget *partial_grouping_target, double d_num_groups,
 								  GroupPathExtraData *extra_data, bool can_sort, bool can_hash,
 								  Path *subpath, List **sorted_paths, List **hashed_paths)
@@ -404,9 +448,9 @@ add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
 	chunktarget->exprs =
 		castNode(List, adjust_appendrel_attrs(root, (Node *) chunktarget->exprs, 1, &appinfo));
 
-	/* In declarative partitioning planning, this is done by appy_scanjoin_target_to_path */
-	Assert(list_length(subpath->pathtarget->exprs) == list_length(parent_path->pathtarget->exprs));
-	subpath->pathtarget->sortgrouprefs = parent_path->pathtarget->sortgrouprefs;
+	/* In declarative partitioning planning, this is done by apply_scanjoin_target_to_path */
+	Assert(list_length(subpath->pathtarget->exprs) == list_length(input_target->exprs));
+	subpath->pathtarget->sortgrouprefs = input_target->sortgrouprefs;
 
 	if (can_sort)
 	{
@@ -431,19 +475,30 @@ add_partially_aggregated_subpaths(PlannerInfo *root, Path *parent_path,
  * The generated paths contain partial aggregations (created by using AGGSPLIT_INITIAL_SERIAL).
  * These aggregations need to be finished by the caller by adding a node that performs the
  * AGGSPLIT_FINAL_DESERIAL step.
+ *
+ * The original path can be either parallel or non-parallel aggregation, and the
+ * resulting path will be parallel accordingly.
  */
 static void
-generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptInfo *output_rel,
-						   RelOptInfo *partially_grouped_rel, PathTarget *grouping_target,
-						   PathTarget *partial_grouping_target, bool can_sort, bool can_hash,
-						   double d_num_groups, GroupPathExtraData *extra_data)
+generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptInfo *input_rel,
+						   RelOptInfo *output_rel, RelOptInfo *partially_grouped_rel,
+						   PathTarget *grouping_target, PathTarget *partial_grouping_target,
+						   bool can_sort, bool can_hash, double d_num_groups,
+						   GroupPathExtraData *extra_data)
 {
 	/* Get subpaths */
-	List *subpaths = get_subpaths_from_append_path(cheapest_total_path, false);
+	List *subpaths = NIL;
+	Path *top_gather = NULL;
+	Path *top_append = NULL;
+	get_subpaths_from_append_path(cheapest_total_path, &subpaths, &top_append, &top_gather);
 
 	/* No subpaths available or unsupported append node */
 	if (subpaths == NIL)
+	{
 		return;
+	}
+
+	Assert(top_append != NULL);
 
 	if (list_length(subpaths) < 2)
 	{
@@ -470,36 +525,43 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		 * In this case, the partial aggregation needs to be pushed down below the lower
 		 * append path.
 		 */
-		List *subsubpaths = get_subpaths_from_append_path(subpath, false);
+		List *partially_compressed_paths = NIL;
+		Path *partially_compressed_append = NULL;
+		Path *partially_compressed_gather = NULL;
+		get_subpaths_from_append_path(subpath,
+									  &partially_compressed_paths,
+									  &partially_compressed_append,
+									  &partially_compressed_gather);
+		Assert(partially_compressed_gather == NULL);
 
-		if (subsubpaths != NIL)
+		if (partially_compressed_append != NULL)
 		{
-			List *sorted_subsubpaths = NIL;
-			List *hashed_subsubpaths = NIL;
+			List *partially_compressed_sorted = NIL;
+			List *partially_compressed_hashed = NIL;
 
 			ListCell *lc2;
-			foreach (lc2, subsubpaths)
+			foreach (lc2, partially_compressed_paths)
 			{
-				Path *subsubpath = lfirst(lc2);
+				Path *partially_compressed_path = lfirst(lc2);
 
 				add_partially_aggregated_subpaths(root,
-												  cheapest_total_path,
+												  input_rel->reltarget,
 												  partial_grouping_target,
 												  d_num_groups,
 												  extra_data,
 												  can_sort,
 												  can_hash,
-												  subsubpath,
-												  &sorted_subsubpaths /* Result path */,
-												  &hashed_subsubpaths /* Result path */);
+												  partially_compressed_path,
+												  &partially_compressed_sorted /* Result path */,
+												  &partially_compressed_hashed /* Result path */);
 			}
 
 			if (can_sort)
 			{
 				sorted_subpaths = lappend(sorted_subpaths,
 										  copy_append_like_path(root,
-																subpath,
-																sorted_subsubpaths,
+																partially_compressed_append,
+																partially_compressed_sorted,
 																subpath->pathtarget));
 			}
 
@@ -507,15 +569,15 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 			{
 				hashed_subpaths = lappend(hashed_subpaths,
 										  copy_append_like_path(root,
-																subpath,
-																hashed_subsubpaths,
+																partially_compressed_append,
+																partially_compressed_hashed,
 																subpath->pathtarget));
 			}
 		}
 		else
 		{
 			add_partially_aggregated_subpaths(root,
-											  cheapest_total_path,
+											  input_rel->reltarget,
 											  partial_grouping_target,
 											  d_num_groups,
 											  extra_data,
@@ -533,143 +595,71 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 
 
 	/* Create new append paths */
-	if (sorted_subpaths != NIL)
-	{
-		add_path(partially_grouped_rel,
-				 copy_append_like_path(root,
-									   cheapest_total_path,
-									   sorted_subpaths,
-									   partial_grouping_target));
-	}
-
-	if (hashed_subpaths != NIL)
-	{
-		add_path(partially_grouped_rel,
-				 copy_append_like_path(root,
-									   cheapest_total_path,
-									   hashed_subpaths,
-									   partial_grouping_target));
-	}
-}
-
-/*
- * Generate a partial aggregation path for chunk-wise partial aggregations.
-
- * This function does almost the same as generate_agg_pushdown_path(). In contrast, it processes a
- * partial_path (paths that are usually used in parallel plans) of the input relation, pushes down
- * the aggregation in this path and adds a gather node on top of the partial plan. Therefore, the
- * push-down of the partial aggregates also works in parallel plans.
- *
- * Note: The PostgreSQL terminology can cause some confusion here. Partial paths are usually used by
- * PostgreSQL to distribute work between parallel workers. This has nothing to do with the partial
- * aggregation we are creating in the function.
- */
-static void
-generate_partial_agg_pushdown_path(PlannerInfo *root, Path *cheapest_partial_path,
-								   RelOptInfo *output_rel, RelOptInfo *partially_grouped_rel,
-								   PathTarget *grouping_target, PathTarget *partial_grouping_target,
-								   bool can_sort, bool can_hash, double d_num_groups,
-								   GroupPathExtraData *extra_data)
-{
-	/* Get subpaths */
-	List *subpaths = get_subpaths_from_append_path(cheapest_partial_path, false);
-
-	/* No subpaths available or unsupported append node */
-	if (subpaths == NIL)
-		return;
-
-	if (list_length(subpaths) < 2)
+	if (top_gather == NULL)
 	{
 		/*
-		 * Doesn't make sense to add per-chunk aggregation paths if there's
-		 * only one chunk.
+		 * The original aggregation plan was non-parallel, so we're creating a
+		 * non-parallel plan as well.
 		 */
-		return;
-	}
-	/* Generate agg paths on top of the append children */
-	ListCell *lc;
-	List *sorted_subpaths = NIL;
-	List *hashed_subpaths = NIL;
-
-	foreach (lc, subpaths)
-	{
-		Path *subpath = lfirst(lc);
-
-		Assert(subpath->parallel_safe);
-
-		/* There should be no nested append paths in the partial paths to construct the upper
-		 * relation */
-		Assert(get_subpaths_from_append_path(subpath, false) == NIL);
-
-		add_partially_aggregated_subpaths(root,
-										  cheapest_partial_path,
-										  partial_grouping_target,
-										  d_num_groups,
-										  extra_data,
-										  can_sort,
-										  can_hash,
-										  subpath,
-										  &sorted_subpaths /* Result paths */,
-										  &hashed_subpaths /* Result paths */);
-	}
-
-	/* Create new append paths */
-	if (sorted_subpaths != NIL)
-	{
-		add_partial_path(partially_grouped_rel,
-						 copy_append_like_path(root,
-											   cheapest_partial_path,
-											   sorted_subpaths,
-											   partial_grouping_target));
-	}
-
-	if (hashed_subpaths != NIL)
-	{
-		add_partial_path(partially_grouped_rel,
-						 copy_append_like_path(root,
-											   cheapest_partial_path,
-											   hashed_subpaths,
-											   partial_grouping_target));
-	}
-
-	/* Finish the partial paths (just added by add_partial_path to partially_grouped_rel in this
-	 * function) by adding a gather node and add this path to the partially_grouped_rel using
-	 * add_path). */
-	foreach (lc, partially_grouped_rel->partial_pathlist)
-	{
-		Path *append_path = lfirst(lc);
-		double total_groups = append_path->rows * append_path->parallel_workers;
-
-		Path *gather_path = (Path *) create_gather_path(root,
-														partially_grouped_rel,
-														append_path,
-														partially_grouped_rel->reltarget,
-														NULL,
-														&total_groups);
-		add_path(partially_grouped_rel, (Path *) gather_path);
-	}
-}
-
-/*
- * Get the best total path for aggregation. Prefer chunk append paths if we have one, otherwise
- * return the cheapest_total_path;
- */
-static Path *
-get_best_total_path(RelOptInfo *output_rel)
-{
-	ListCell *lc;
-	foreach (lc, output_rel->pathlist)
-	{
-		Path *path = lfirst(lc);
-
-		if (ts_is_chunk_append_path(path))
+		if (sorted_subpaths != NIL)
 		{
-			fprintf(stderr, "we preferred chunk append\n");
-			return path;
+			add_path(partially_grouped_rel,
+					 copy_append_like_path(root,
+										   top_append,
+										   sorted_subpaths,
+										   partial_grouping_target));
+		}
+
+		if (hashed_subpaths != NIL)
+		{
+			add_path(partially_grouped_rel,
+					 copy_append_like_path(root,
+										   top_append,
+										   hashed_subpaths,
+										   partial_grouping_target));
 		}
 	}
+	else
+	{
+		/*
+		 * The cheapest aggregation plan was parallel, so we're creating a
+		 * parallel plan as well.
+		 */
+		if (sorted_subpaths != NIL)
+		{
+			add_partial_path(partially_grouped_rel,
+							 copy_append_like_path(root,
+												   top_append,
+												   sorted_subpaths,
+												   partial_grouping_target));
+		}
 
-	return output_rel->cheapest_total_path;
+		if (hashed_subpaths != NIL)
+		{
+			add_partial_path(partially_grouped_rel,
+							 copy_append_like_path(root,
+												   top_append,
+												   hashed_subpaths,
+												   partial_grouping_target));
+		}
+
+		/* Finish the partial paths (just added by add_partial_path to partially_grouped_rel in this
+		 * function) by adding a gather node and add this path to the partially_grouped_rel using
+		 * add_path). */
+		foreach (lc, partially_grouped_rel->partial_pathlist)
+		{
+			Path *append_path = lfirst(lc);
+			double total_groups = append_path->rows * append_path->parallel_workers;
+
+			Path *gather_path = (Path *) create_gather_path(root,
+															partially_grouped_rel,
+															append_path,
+															partially_grouped_rel->reltarget,
+															NULL,
+															&total_groups);
+			add_path(partially_grouped_rel, (Path *) gather_path);
+		}
+	}
 }
 
 /*
@@ -690,7 +680,10 @@ is_path_sorted_or_plain_agg_path(Path *path)
 static bool
 contains_path_plain_or_sorted_agg(Path *path)
 {
-	List *subpaths = get_subpaths_from_append_path(path, true);
+	List *subpaths = NIL;
+	Path *append = NULL;
+	Path *gather = NULL;
+	get_subpaths_from_append_path(path, &subpaths, &append, &gather);
 
 	Ensure(subpaths != NIL, "Unable to determine aggregation type");
 
@@ -781,7 +774,9 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	/* Determine the number of groups from the already planned aggregation */
 	AggPath *existing_agg_path = get_existing_agg_path(output_rel);
 	if (existing_agg_path == NULL)
+	{
 		return;
+	}
 
 	/* Skip partial aggregations already created by _timescaledb_functions.partialize_agg */
 	if (existing_agg_path->aggsplit == AGGSPLIT_INITIAL_SERIAL)
@@ -826,14 +821,9 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	}
 
 	/* Generate the aggregation pushdown path */
-	(void) get_best_total_path;
-	//Path *cheapest_total_path = get_best_total_path(input_rel);
-	Path *cheapest_total_path = existing_agg_path->subpath;
-	Assert(cheapest_total_path != NULL);
-	fprintf(stderr, "cheapest total path at partial agg entry point is:\n");
-	my_print(cheapest_total_path);
 	generate_agg_pushdown_path(root,
-							   cheapest_total_path,
+							   &existing_agg_path->path,
+							   input_rel,
 							   output_rel,
 							   partially_grouped_rel,
 							   grouping_target,
@@ -842,22 +832,6 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 							   can_hash,
 							   d_num_groups,
 							   extra_data);
-
-	/* The same as above but for partial paths */
-	if (input_rel->partial_pathlist != NIL && input_rel->consider_parallel)
-	{
-		Path *cheapest_partial_path = linitial(input_rel->partial_pathlist);
-		generate_partial_agg_pushdown_path(root,
-										   cheapest_partial_path,
-										   output_rel,
-										   partially_grouped_rel,
-										   grouping_target,
-										   partial_grouping_target,
-										   can_sort,
-										   can_hash,
-										   d_num_groups,
-										   extra_data);
-	}
 
 	/* Replan aggregation if we were able to generate partially grouped rel paths */
 	if (partially_grouped_rel->pathlist == NIL)
