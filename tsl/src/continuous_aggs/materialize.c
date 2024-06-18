@@ -436,6 +436,19 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 	materialization_start = OidOutputFunctionCall(out_fn, materialization_range.start);
 	materialization_end = OidOutputFunctionCall(out_fn, materialization_range.end);
 
+	StringInfo merge_update = makeStringInfo();
+	char *merge_update_clause = build_merge_update_clause(agg_colnames);
+
+	/* It make no sense but is possible to create a cagg only with time bucket (without aggregate
+	 * functions) */
+	if (merge_update_clause != NULL)
+	{
+		appendStringInfo(merge_update,
+						 "  WHEN MATCHED AND ROW(M.*) IS DISTINCT FROM ROW(P.*) THEN "
+						 "    UPDATE SET %s ",
+						 merge_update_clause);
+	}
+
 	/* MERGE statement to UPDATE affected buckets and INSERT new ones */
 	appendStringInfo(command,
 					 "WITH partial AS ( "
@@ -445,8 +458,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 ") "
 					 "MERGE INTO %s.%s M "
 					 "USING partial P ON %s AND M.%s >= %s AND M.%s < %s "
-					 "  WHEN MATCHED AND ROW(M.*) IS DISTINCT FROM ROW(P.*) THEN "
-					 "    UPDATE SET %s "
+					 "  %s " /* UPDATE */
 					 "  WHEN NOT MATCHED THEN "
 					 "    INSERT (%s) VALUES (%s) ",
 
@@ -474,7 +486,7 @@ spi_merge_materializations(Hypertable *mat_ht, const ContinuousAgg *cagg,
 					 quote_literal_cstr(materialization_end),
 
 					 /* UPDATE */
-					 build_merge_update_clause(agg_colnames),
+					 merge_update->data,
 
 					 /* INSERT */
 					 build_merge_insert_columns(all_columns, ", ", NULL),
