@@ -495,18 +495,10 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 	/* No subpaths available or unsupported append node */
 	if (subpaths == NIL)
 	{
-		fprintf(stderr, "no subpaths\n");
 		return;
 	}
 
 	Assert(top_append != NULL);
-
-	fprintf(stderr, "found:\n");
-	my_print(subpaths);
-	fprintf(stderr, "gather:\n");
-	my_print(top_gather);
-	fprintf(stderr, "append:\n");
-	my_print(top_append);
 
 	if (list_length(subpaths) < 2)
 	{
@@ -604,7 +596,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		 * The cheapest aggregation plan was parallel, so we're creating a
 		 * parallel plan as well.
 		 */
-		fprintf(stderr, "with top gather\n");
 		if (sorted_subpaths != NIL)
 		{
 			add_partial_path(partially_grouped_rel,
@@ -646,7 +637,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 		 * The original aggregation plan was non-parallel, so we're creating a
 		 * non-parallel plan as well.
 		 */
-		fprintf(stderr, "no top gather\n");
 		if (sorted_subpaths != NIL)
 		{
 			add_path(partially_grouped_rel,
@@ -667,42 +657,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 	}
 }
 
-/*
- * Generate a partial aggregation path for chunk-wise partial aggregations.
-
- * This function does almost the same as generate_agg_pushdown_path(). In contrast, it processes a
- * partial_path (paths that are usually used in parallel plans) of the input relation, pushes down
- * the aggregation in this path and adds a gather node on top of the partial plan. Therefore, the
- * push-down of the partial aggregates also works in parallel plans.
- *
- * Note: The PostgreSQL terminology can cause some confusion here. Partial paths are usually used by
- * PostgreSQL to distribute work between parallel workers. This has nothing to do with the partial
- * aggregation we are creating in the function.
- */
-static void
-generate_partial_agg_pushdown_path(PlannerInfo *root, Path *cheapest_partial_path,
-								   RelOptInfo *output_rel, RelOptInfo *partially_grouped_rel,
-								   PathTarget *grouping_target, PathTarget *partial_grouping_target,
-								   bool can_sort, bool can_hash, double d_num_groups,
-								   GroupPathExtraData *extra_data)
-{
-	/* Get subpaths */
-	// List *subpaths = get_subpaths_from_append_path(cheapest_partial_path, false);
-	List *subpaths = NIL;
-
-	/* No subpaths available or unsupported append node */
-	if (subpaths == NIL)
-		return;
-
-	if (list_length(subpaths) < 2)
-	{
-		/*
-		 * Doesn't make sense to add per-chunk aggregation paths if there's
-		 * only one chunk.
-		 */
-		return;
-	}
-}
 
 /*
  Is the provided path a agg path that uses a sorted or plain agg strategy?
@@ -813,14 +767,10 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	Assert(extra != NULL);
 	GroupPathExtraData *extra_data = (GroupPathExtraData *) extra;
 
-	fprintf(stderr, "output pathlist:\n");
-	my_print(output_rel->pathlist);
-
 	/* Determine the number of groups from the already planned aggregation */
 	AggPath *existing_agg_path = get_existing_agg_path(output_rel);
 	if (existing_agg_path == NULL)
 	{
-		fprintf(stderr, "no existing agg path\n");
 		return;
 	}
 
