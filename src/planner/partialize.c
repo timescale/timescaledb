@@ -590,7 +590,31 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 	}
 
 	/* Create new append paths */
-	if (top_gather != NULL)
+	if (top_gather == NULL)
+	{
+		/*
+		 * The original aggregation plan was non-parallel, so we're creating a
+		 * non-parallel plan as well.
+		 */
+		if (sorted_subpaths != NIL)
+		{
+			add_path(partially_grouped_rel,
+					 copy_append_like_path(root,
+										   top_append,
+										   sorted_subpaths,
+										   partial_grouping_target));
+		}
+
+		if (hashed_subpaths != NIL)
+		{
+			add_path(partially_grouped_rel,
+					 copy_append_like_path(root,
+										   top_append,
+										   hashed_subpaths,
+										   partial_grouping_target));
+		}
+	}
+	else
 	{
 		/*
 		 * The cheapest aggregation plan was parallel, so we're creating a
@@ -629,30 +653,6 @@ generate_agg_pushdown_path(PlannerInfo *root, Path *cheapest_total_path, RelOptI
 															NULL,
 															&total_groups);
 			add_path(partially_grouped_rel, (Path *) gather_path);
-		}
-	}
-	else
-	{
-		/*
-		 * The original aggregation plan was non-parallel, so we're creating a
-		 * non-parallel plan as well.
-		 */
-		if (sorted_subpaths != NIL)
-		{
-			add_path(partially_grouped_rel,
-					 copy_append_like_path(root,
-										   top_append,
-										   sorted_subpaths,
-										   partial_grouping_target));
-		}
-
-		if (hashed_subpaths != NIL)
-		{
-			add_path(partially_grouped_rel,
-					 copy_append_like_path(root,
-										   top_append,
-										   hashed_subpaths,
-										   partial_grouping_target));
 		}
 	}
 }
