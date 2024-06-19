@@ -1163,7 +1163,7 @@ WHERE user_view_name = 'cashflows'
 \d+ "_timescaledb_internal".:"MAT_TABLE_NAME"
 \d+ 'cashflows'
 
-SELECT * FROM cashflows;
+SELECT * FROM cashflows ORDER BY cashflows;
 
 -- test cagg creation with named arguments in time_bucket
 -- note that positional arguments cannot follow named arguments
@@ -1281,20 +1281,20 @@ WITH NO DATA;
 \d+ conditions_daily
 
 -- Should return NO ROWS
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
 
 ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=false);
 
 \d+ conditions_daily
 
 -- Should return ROWS because now it is realtime
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
 
 -- Should return ROWS because we refreshed it
 ALTER MATERIALIZED VIEW conditions_daily SET (timescaledb.materialized_only=true);
 \d+ conditions_daily
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
 
 -- Test TRUNCATE over a Realtime CAgg
 DROP MATERIALIZED VIEW conditions_daily;
@@ -1332,7 +1332,7 @@ SELECT count(*) FROM show_chunks('conditions_daily');
 SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(:mat_hypertable_id)) AS watermak_after;
 
 -- Should return ROWS because the watermark was reseted by the TRUNCATE
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
 
 -- check compression settings are cleaned up when deleting a cagg with compression
 CREATE TABLE cagg_cleanup(time timestamptz not null);

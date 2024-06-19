@@ -173,29 +173,29 @@ CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 DROP MATERIALIZED VIEW :CAGG_NAME_3TH_LEVEL;
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
-SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_3TH_LEVEL ORDER BY bucket, device_id;
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
 TRUNCATE :CAGG_NAME_2TH_LEVEL,:CAGG_NAME_1ST_LEVEL;
 CALL refresh_continuous_aggregate(:'CAGG_NAME_2TH_LEVEL', NULL, NULL);
 CALL refresh_continuous_aggregate(:'CAGG_NAME_1ST_LEVEL', NULL, NULL);
-SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket, device_id;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 
 -- DROP the 2TH level CAGG don't affect others
 DROP MATERIALIZED VIEW :CAGG_NAME_2TH_LEVEL;
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
-SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_2TH_LEVEL ORDER BY bucket, temperature;
 \set ON_ERROR_STOP 1
 -- should work because dropping the top level CAGG
 -- don't affect the down level CAGGs
-SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket, device_id;
 
 -- DROP the first CAGG should work
 DROP MATERIALIZED VIEW :CAGG_NAME_1ST_LEVEL;
 \set ON_ERROR_STOP 0
 -- should error because it was dropped
-SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket;
+SELECT * FROM :CAGG_NAME_1ST_LEVEL ORDER BY bucket, device_id;
 \set ON_ERROR_STOP 1

@@ -71,6 +71,8 @@ SELECT * FROM pg2dim_h2_t2;
  Fri Oct 19 13:02:00 2018 PDT |      3 |    9
 (1 row)
 
+-- Increased to prefer hash aggregates for plan stability.
+SET work_mem to '50MB';
 -- Compare partitionwise aggreate enabled/disabled. First run queries
 -- on PG partitioned tables for reference.
 -- All partition keys covered by GROUP BY
@@ -417,38 +419,38 @@ ORDER BY 1, 2;
                Runtime Exclusion: false
                ->  Merge Append
                      Sort Key: _hyper_1_1_chunk."time"
-                     ->  Partial GroupAggregate
-                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, PARTIAL avg(_hyper_1_1_chunk.temp)
-                           Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
-                           ->  Sort
-                                 Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
-                                 Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+                     ->  Sort
+                           Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, (PARTIAL avg(_hyper_1_1_chunk.temp))
+                           Sort Key: _hyper_1_1_chunk."time"
+                           ->  Partial HashAggregate
+                                 Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, PARTIAL avg(_hyper_1_1_chunk.temp)
+                                 Group Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
                                  ->  Index Scan Backward using _hyper_1_1_chunk_hyper_time_idx on _timescaledb_internal._hyper_1_1_chunk
                                        Output: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device, _hyper_1_1_chunk.temp
-                     ->  Partial GroupAggregate
-                           Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, PARTIAL avg(_hyper_1_2_chunk.temp)
-                           Group Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device
-                           ->  Sort
-                                 Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
-                                 Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device
+                     ->  Sort
+                           Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, (PARTIAL avg(_hyper_1_2_chunk.temp))
+                           Sort Key: _hyper_1_2_chunk."time"
+                           ->  Partial HashAggregate
+                                 Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, PARTIAL avg(_hyper_1_2_chunk.temp)
+                                 Group Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device
                                  ->  Index Scan Backward using _hyper_1_2_chunk_hyper_time_idx on _timescaledb_internal._hyper_1_2_chunk
                                        Output: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device, _hyper_1_2_chunk.temp
                ->  Merge Append
                      Sort Key: _hyper_1_3_chunk."time"
-                     ->  Partial GroupAggregate
-                           Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, PARTIAL avg(_hyper_1_3_chunk.temp)
-                           Group Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device
-                           ->  Sort
-                                 Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
-                                 Sort Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device
+                     ->  Sort
+                           Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, (PARTIAL avg(_hyper_1_3_chunk.temp))
+                           Sort Key: _hyper_1_3_chunk."time"
+                           ->  Partial HashAggregate
+                                 Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, PARTIAL avg(_hyper_1_3_chunk.temp)
+                                 Group Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device
                                  ->  Index Scan Backward using _hyper_1_3_chunk_hyper_time_idx on _timescaledb_internal._hyper_1_3_chunk
                                        Output: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device, _hyper_1_3_chunk.temp
-                     ->  Partial GroupAggregate
-                           Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, PARTIAL avg(_hyper_1_4_chunk.temp)
-                           Group Key: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device
-                           ->  Sort
-                                 Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
-                                 Sort Key: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device
+                     ->  Sort
+                           Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, (PARTIAL avg(_hyper_1_4_chunk.temp))
+                           Sort Key: _hyper_1_4_chunk."time"
+                           ->  Partial HashAggregate
+                                 Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, PARTIAL avg(_hyper_1_4_chunk.temp)
+                                 Group Key: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device
                                  ->  Index Scan Backward using _hyper_1_4_chunk_hyper_time_idx on _timescaledb_internal._hyper_1_4_chunk
                                        Output: _hyper_1_4_chunk."time", _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
 (47 rows)
