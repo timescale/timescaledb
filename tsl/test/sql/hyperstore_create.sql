@@ -409,8 +409,14 @@ create index on rides (rate_code, pickup_datetime desc);
 create index on rides (passenger_count, pickup_datetime desc);
 alter table rides set (timescaledb.compress_segmentby='payment_type');
 insert into rides values (1,'2016-01-01 00:00:01','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3);
--- check that it is possible to compress
-\set ON_ERROR_STOP 0
--- currently fails
+-- Check that it is possible to compress
 select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('rides') ch;
-\set ON_ERROR_STOP 1
+select rel, amname from compressed_rel_size_stats
+where relparent::regclass = 'rides'::regclass;
+
+-- Query to check everything is OK
+analyze rides;
+
+explain (costs off)
+select * from rides;
+select * from rides;
