@@ -50,6 +50,7 @@
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
 
+#include "arrow_array.h"
 #include "arrow_cache.h"
 #include "arrow_tts.h"
 #include "compression/api.h"
@@ -66,8 +67,6 @@
 
 static const TableAmRoutine hyperstore_methods;
 static void convert_to_hyperstore_finish(Oid relid);
-static Tuplesortstate *create_tuplesort_for_compress(const HyperstoreInfo *hsinfo,
-													 const TupleDesc tupdesc);
 static List *partially_compressed_relids = NIL; /* Relids that needs to have
 												 * updated status set at end of
 												 * transaction */
@@ -145,8 +144,8 @@ create_compression_relation_size_stats(int32 chunk_id, Oid relid, int32 compress
 }
 
 static HyperstoreInfo *
-lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
-								 bool create_chunk_constraints, bool *compressed_relation_created)
+lazy_build_hyperstore_info_cache(Relation rel, bool create_chunk_constraints,
+								 bool *compressed_relation_created)
 {
 	Assert(OidIsValid(rel->rd_id) && !ts_is_hypertable(rel->rd_id));
 
@@ -246,29 +245,12 @@ lazy_build_hyperstore_info_cache(Relation rel, bool missing_compressed_ok,
 		colsettings->is_segmentby = segmentby_pos > 0;
 		colsettings->is_orderby = orderby_pos > 0;
 
-		if (colsettings->is_segmentby)
-			hsinfo->num_segmentby += 1;
-
-		if (colsettings->is_orderby)
-		{
-			hsinfo->num_orderby += 1;
-			colsettings->orderby_desc =
-				ts_array_get_element_bool(settings->fd.orderby_desc, orderby_pos);
-			colsettings->nulls_first =
-				ts_array_get_element_bool(settings->fd.orderby_nullsfirst, orderby_pos);
-		}
-
-		if (colsettings->is_segmentby || colsettings->is_orderby)
-			hsinfo->num_keys += 1;
-
 		if (OidIsValid(hsinfo->compressed_relid))
 			colsettings->cattnum = get_attnum(hsinfo->compressed_relid, attname);
 		else
 			colsettings->cattnum = InvalidAttrNumber;
 	}
 
-	Assert(hsinfo->num_segmentby == ts_array_length(settings->fd.segmentby));
-	Assert(hsinfo->num_orderby == ts_array_length(settings->fd.orderby));
 	Ensure(hsinfo->relation_id > 0, "invalid chunk ID");
 
 	return hsinfo;
@@ -279,7 +261,6 @@ RelationGetHyperstoreInfo(Relation rel)
 {
 	if (NULL == rel->rd_amcache)
 		rel->rd_amcache = lazy_build_hyperstore_info_cache(rel,
-														   false /* missing_compressed_ok */,
 														   true /* create constraints */,
 														   NULL /* compressed rel created */);
 
@@ -1815,7 +1796,6 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 									 double *tups_recently_dead)
 {
 	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(OldHyperstore);
-	TupleDesc tupdesc = RelationGetDescr(OldHyperstore);
 	HyperstoreScanDesc cscan;
 	HeapScanDesc chscan;
 	HeapScanDesc uhscan;
@@ -1840,7 +1820,8 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 				 errmsg("cannot cluster a hyperstore table"),
 				 errdetail("A hyperstore table is already ordered by compression.")));
 
-	tuplesort = create_tuplesort_for_compress(hsinfo, tupdesc);
+	CompressionSettings *settings = ts_compression_settings_get(hsinfo->compressed_relid);
+	tuplesort = compression_create_tuplesort_state(settings, OldHyperstore);
 
 	/* In scan-and-sort mode and also VACUUM FULL, set phase */
 	pgstat_progress_update_param(PROGRESS_CLUSTER_PHASE, PROGRESS_CLUSTER_PHASE_SEQ_SCAN_HEAP);
@@ -2282,21 +2263,15 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 		else if (!isnull[i])
 		{
 			const Form_pg_attribute attr = TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
-			const CompressedDataHeader *header =
-				(CompressedDataHeader *) PG_DETOAST_DATUM(values[i]);
-			DecompressAllFunction decompress_all =
-				tsl_get_decompress_all_function(header->compression_algorithm, attr->atttypid);
-			Assert(decompress_all != NULL);
-			MemoryContext oldcxt = MemoryContextSwitchTo(icstate->decompression_mcxt);
-			icstate->arrow_columns[i] =
-				decompress_all(PointerGetDatum(header), attr->atttypid, oldcxt);
+			icstate->arrow_columns[i] = arrow_from_compressed(values[i],
+															  attr->atttypid,
+															  CurrentMemoryContext,
+															  icstate->decompression_mcxt);
 
 			/* If "num_rows" was set previously by another column, the
 			 * value should be the same for this column */
 			Assert(num_rows == -1 || num_rows == icstate->arrow_columns[i]->length);
 			num_rows = icstate->arrow_columns[i]->length;
-			MemoryContextReset(icstate->decompression_mcxt);
-			MemoryContextSwitchTo(oldcxt);
 		}
 	}
 
@@ -2331,40 +2306,12 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 			}
 			else
 			{
-				const char *restrict arrow_values = icstate->arrow_columns[colnum]->buffers[1];
-				const uint64 *restrict validity = icstate->arrow_columns[colnum]->buffers[0];
 				const Form_pg_attribute attr =
 					TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
-				int16 value_bytes = get_typlen(attr->atttypid);
-
-				/*
-				 * The conversion of Datum to more narrow types will truncate
-				 * the higher bytes, so we don't care if we read some garbage
-				 * into them, and can always read 8 bytes. These are unaligned
-				 * reads, so technically we have to do memcpy.
-				 */
-				uint64 value;
-				memcpy(&value, &arrow_values[value_bytes * rownum], 8);
-
-#ifdef USE_FLOAT8_BYVAL
-				Datum datum = Int64GetDatum(value);
-#else
-				/*
-				 * On 32-bit systems, the data larger than 4 bytes go by
-				 * reference, so we have to jump through these hoops.
-				 */
-				Datum datum;
-				if (value_bytes <= 4)
-				{
-					datum = Int32GetDatum((uint32) value);
-				}
-				else
-				{
-					datum = Int64GetDatum(value);
-				}
-#endif
-				values[colnum] = datum;
-				isnull[colnum] = !arrow_row_is_valid(validity, rownum);
+				NullableDatum datum =
+					arrow_get_datum(icstate->arrow_columns[colnum], attr->atttypid, rownum);
+				values[colnum] = datum.value;
+				isnull[colnum] = datum.isnull;
 			}
 
 			/* Fill in the values in the table slot for predicate checks */
@@ -2854,74 +2801,6 @@ hyperstore_scan_sample_next_tuple(TableScanDesc scan, SampleScanState *scanstate
 	return false;
 }
 
-static Tuplesortstate *
-create_tuplesort_for_compress(const HyperstoreInfo *hsinfo, const TupleDesc tupdesc)
-{
-	/*
-	 * We compress the existing non-compressed data in the table when moving
-	 * to a table access method.
-	 *
-	 * TODO: Consider if we should compress data when creating a
-	 * hyperstore. It might make more sense to just "adopt" the table in the
-	 * state they are and deal with compression as part of the normal
-	 * procedure.
-	 */
-	AttrNumber *sort_keys = palloc0(sizeof(*sort_keys) * hsinfo->num_keys);
-	Oid *sort_operators = palloc0(sizeof(*sort_operators) * hsinfo->num_keys);
-	Oid *sort_collations = palloc0(sizeof(*sort_collations) * hsinfo->num_keys);
-	bool *nulls_first = palloc0(sizeof(*nulls_first) * hsinfo->num_keys);
-	int segmentby_pos = 0;
-	int orderby_pos = 0;
-
-	for (int i = 0; i < hsinfo->num_columns; i++)
-	{
-		const ColumnCompressionSettings *column = &hsinfo->columns[i];
-		const Form_pg_attribute attr = &tupdesc->attrs[i];
-
-		Assert(attr->attnum == column->attnum);
-
-		if (column->is_segmentby || column->is_orderby)
-		{
-			TypeCacheEntry *tentry;
-			int sort_index = -1;
-			Oid sort_op = InvalidOid;
-
-			tentry = lookup_type_cache(attr->atttypid, TYPECACHE_LT_OPR | TYPECACHE_GT_OPR);
-
-			if (column->is_segmentby)
-			{
-				sort_index = segmentby_pos++;
-				sort_op = tentry->lt_opr;
-			}
-			else if (column->is_orderby)
-			{
-				sort_index = hsinfo->num_segmentby + orderby_pos++;
-				sort_op = !column->orderby_desc ? tentry->lt_opr : tentry->gt_opr;
-			}
-
-			if (!OidIsValid(sort_op))
-				elog(ERROR,
-					 "no valid sort operator for column \"%s\" of type \"%s\"",
-					 NameStr(column->attname),
-					 format_type_be(attr->atttypid));
-
-			sort_keys[sort_index] = column->attnum;
-			sort_operators[sort_index] = sort_op;
-			nulls_first[sort_index] = column->nulls_first;
-		}
-	}
-
-	return tuplesort_begin_heap(tupdesc,
-								hsinfo->num_keys,
-								sort_keys,
-								sort_operators,
-								sort_collations,
-								nulls_first,
-								maintenance_work_mem,
-								NULL,
-								false /*=randomAccess*/);
-}
-
 /*
  * Convert a table to Hyperstore.
  *
@@ -2931,10 +2810,8 @@ static void
 convert_to_hyperstore(Oid relid)
 {
 	Relation relation = table_open(relid, AccessShareLock);
-	TupleDesc tupdesc = RelationGetDescr(relation);
 	bool compress_chunk_created;
 	HyperstoreInfo *hsinfo = lazy_build_hyperstore_info_cache(relation,
-															  true /* missing_compressed_ok */,
 															  false /* create constraints */,
 															  &compress_chunk_created);
 
@@ -2950,8 +2827,9 @@ convert_to_hyperstore(Oid relid)
 
 	MemoryContext oldcxt = MemoryContextSwitchTo(CacheMemoryContext);
 	ConversionState *state = palloc0(sizeof(ConversionState));
+	CompressionSettings *settings = ts_compression_settings_get(hsinfo->compressed_relid);
 	state->before_size = ts_relation_size_impl(relid);
-	state->tuplesortstate = create_tuplesort_for_compress(hsinfo, tupdesc);
+	state->tuplesortstate = compression_create_tuplesort_state(settings, relation);
 	Assert(state->tuplesortstate);
 	state->relid = relid;
 	conversionstate = state;

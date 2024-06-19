@@ -854,9 +854,32 @@ create index on rides (passenger_count, pickup_datetime desc);
 alter table rides set (timescaledb.compress_segmentby='payment_type');
 NOTICE:  default order by for hypertable "rides" is set to "pickup_datetime DESC, vendor_id, passenger_count, rate_code"
 insert into rides values (1,'2016-01-01 00:00:01','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3);
--- check that it is possible to compress
-\set ON_ERROR_STOP 0
--- currently fails
+-- Check that it is possible to compress
 select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('rides') ch;
-ERROR:  could not determine which collation to use for string comparison
-\set ON_ERROR_STOP 1
+             compress_chunk              
+-----------------------------------------
+ _timescaledb_internal._hyper_8_43_chunk
+(1 row)
+
+select rel, amname from compressed_rel_size_stats
+where relparent::regclass = 'rides'::regclass;
+                   rel                   |   amname   
+-----------------------------------------+------------
+ _timescaledb_internal._hyper_8_43_chunk | hyperstore
+(1 row)
+
+-- Query to check everything is OK
+analyze rides;
+explain (costs off)
+select * from rides;
+                   QUERY PLAN                    
+-------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_8_43_chunk
+(1 row)
+
+select * from rides;
+ vendor_id |       pickup_datetime        |       dropoff_datetime       | passenger_count | trip_distance |  pickup_longitude   |  pickup_latitude   | rate_code |  dropoff_longitude  |  dropoff_latitude  | payment_type | fare_amount | extra | mta_tax | tip_amount | tolls_amount | improvement_surcharge | total_amount 
+-----------+------------------------------+------------------------------+-----------------+---------------+---------------------+--------------------+-----------+---------------------+--------------------+--------------+-------------+-------+---------+------------+--------------+-----------------------+--------------
+ 1         | Fri Jan 01 00:00:01 2016 PST | Fri Jan 01 00:11:55 2016 PST |               1 |          1.20 | -73.979423522949219 | 40.744613647460938 |         1 | -73.992034912109375 | 40.753944396972656 |            2 |           9 |   0.5 |     0.5 |          0 |            0 |                   0.3 |         10.3
+(1 row)
+

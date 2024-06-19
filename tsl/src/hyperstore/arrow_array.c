@@ -6,10 +6,15 @@
 
 #include <postgres.h>
 #include <access/tupmacs.h>
+#include <fmgr.h>
 #include <utils/datum.h>
+#include <utils/palloc.h>
 
 #include "arrow_array.h"
 #include "compression/arrow_c_data_interface.h"
+#include "compression/compression.h"
+
+#define TYPLEN_VARLEN (-1)
 
 /*
  * Extend a buffer if necessary.
@@ -31,7 +36,7 @@
 /*
  * Release buffer memory.
  */
-void
+static void
 arrow_release_buffers(ArrowArray *array)
 {
 	/*
@@ -211,7 +216,7 @@ arrow_from_iterator_fixlen(MemoryContext mcxt, DecompressionIterator *iterator, 
 /*
  * Read the entire contents of a decompression iterator into the arrow array.
  */
-ArrowArray *
+static ArrowArray *
 arrow_from_iterator(MemoryContext mcxt, DecompressionIterator *iterator, Oid typid)
 {
 	const int typlen = get_typlen(typid);
@@ -221,17 +226,83 @@ arrow_from_iterator(MemoryContext mcxt, DecompressionIterator *iterator, Oid typ
 		return arrow_from_iterator_fixlen(mcxt, iterator, typid);
 }
 
-ArrowArray *
-default_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+static ArrowArray *
+arrow_generic_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
 {
 	/* Slightly weird interface for passing the header, but this is what the
 	 * other decompress_all functions are using. We might want to refactor
 	 * this later. */
-	const CompressedDataHeader *header = (const CompressedDataHeader *) DatumGetPointer(compressed);
+	const CompressedDataHeader *header =
+		(const CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	DecompressionInitializer initializer =
 		tsl_get_decompression_iterator_init(header->compression_algorithm, false);
 	DecompressionIterator *iterator = initializer(compressed, element_type);
 	return arrow_from_iterator(dest_mctx, iterator, element_type);
+}
+
+static DecompressAllFunction
+arrow_get_decompress_all(uint8 compression_alg, Oid typid)
+{
+	DecompressAllFunction decompress_all = NULL;
+
+	decompress_all = tsl_get_decompress_all_function(compression_alg, typid);
+
+	if (decompress_all == NULL)
+		decompress_all = arrow_generic_decompress_all;
+
+	Assert(decompress_all != NULL);
+	return decompress_all;
+}
+
+#ifdef USE_ASSERT_CHECKING
+static bool
+verify_offsets(const ArrowArray *array)
+{
+	if (array->n_buffers == 3)
+	{
+		const int32 *offsets = array->buffers[1];
+
+		for (int64 i = 0; i < array->length; ++i)
+			if (offsets[i + 1] < offsets[i])
+				return false;
+	}
+	return true;
+}
+#endif
+
+ArrowArray *
+arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, MemoryContext tmp_mcxt)
+{
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
+	DecompressAllFunction decompress_all =
+		arrow_get_decompress_all(header->compression_algorithm, typid);
+
+	TS_DEBUG_LOG("decompressing column with type %s using decompression algorithm %s",
+				 format_type_be(typid),
+				 NameStr(*compression_get_algorithm_name(header->compression_algorithm)));
+
+	MemoryContext oldcxt = MemoryContextSwitchTo(tmp_mcxt);
+	ArrowArray *array = decompress_all(PointerGetDatum(header), typid, dest_mcxt);
+
+	Assert(verify_offsets(array));
+
+	/*
+	 * If the release function is not set, it is the old-style decompress_all
+	 * and then buffers should be deleted by default.
+	 */
+	if (array->release == NULL)
+		array->release = arrow_release_buffers;
+
+	/*
+	 * Not sure how necessary this reset is, but keeping it for now.
+	 *
+	 * The amount of data is bounded by the number of columns in the tuple
+	 * table slot, so it might be possible to skip this reset.
+	 */
+	MemoryContextReset(tmp_mcxt);
+	MemoryContextSwitchTo(oldcxt);
+
+	return array;
 }
 
 /*
@@ -246,18 +317,32 @@ arrow_get_datum_varlen(ArrowArray *array, Oid typid, int64 index)
 	const int32 *offsets = array->buffers[1];
 	const uint8 *data = array->buffers[2];
 	const int32 offset = offsets[index];
-	Datum value = PointerGetDatum(&data[offset]);
+	const int32 datalen = offsets[index + 1] - offset;
+	Datum value;
 
 	if (!arrow_row_is_valid(validity, index))
 		return (NullableDatum){ .isnull = true };
 
+	/* Need to handle text as a special case because the cstrings are stored
+	 * back-to-back without varlena header */
+	if (typid == TEXTOID)
+	{
+		const int32 varlen = VARHDRSZ + datalen;
+		value = (Datum) palloc(varlen);
+		SET_VARSIZE(value, varlen);
+		memcpy(VARDATA_ANY(value), &data[offset], datalen);
+	}
+	else
+		value = PointerGetDatum(&data[offset]);
+
 	/* We have stored the bytes of the varlen value directly in the buffer, so
 	 * this should work as expected. */
-	TS_DEBUG_LOG("retrieved varlen value %s row " INT64_FORMAT
-				 " from offset %d in memory context %s",
+	TS_DEBUG_LOG("retrieved varlen value '%s' row " INT64_FORMAT
+				 " from offset %d dictionary=%p in memory context %s",
 				 datum_as_string(typid, value, false),
 				 index,
 				 offset,
+				 array->dictionary,
 				 GetMemoryChunkContext((void *) data)->name);
 
 	return (NullableDatum){ .isnull = false, .value = value };
