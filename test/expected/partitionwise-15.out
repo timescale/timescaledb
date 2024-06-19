@@ -72,7 +72,7 @@ SELECT * FROM pg2dim_h2_t2;
 (1 row)
 
 -- Increased to prefer hash aggregates for plan stability.
-SET work_mem to '50MB';
+SET work_mem to '256MB';
 -- Compare partitionwise aggreate enabled/disabled. First run queries
 -- on PG partitioned tables for reference.
 -- All partition keys covered by GROUP BY
