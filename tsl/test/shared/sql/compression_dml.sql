@@ -76,7 +76,7 @@ SELECT chunk_schema || '.' || chunk_name as "chunk_table"
        WHERE hypertable_name = 'mytab' ORDER BY range_start limit 1 \gset
 
 -- compress only the first chunk
-SELECT compress_chunk(:'chunk_table');
+SELECT count(compress_chunk(:'chunk_table'));
 
 -- insert a row into first compressed chunk
 INSERT INTO mytab SELECT '2022-10-07 05:30:10+05:30'::timestamp with time zone, 3, 3;
@@ -105,7 +105,7 @@ generate_series('1990-01-01'::timestamptz, '1990-01-10'::timestamptz, INTERVAL '
 generate_series(1, 3, 1 ) AS g2(source_id),
 generate_series(1, 3, 1 ) AS g3(label);
 
-SELECT compress_chunk(c) FROM show_chunks('comp_seg_varchar') c;
+SELECT count(compress_chunk(c)) FROM show_chunks('comp_seg_varchar') c;
 
 
 -- all tuples should come from compressed chunks
@@ -124,3 +124,24 @@ ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 
 DROP TABLE comp_seg_varchar;
+
+-- test row locks for compressed tuples are blocked
+CREATE TABLE row_locks(time timestamptz NOT NULL);
+SELECT table_name FROM create_hypertable('row_locks', 'time');
+ALTER TABLE row_locks SET (timescaledb.compress);
+INSERT INTO row_locks VALUES('2021-01-01 00:00:00');
+SELECT count(compress_chunk(c)) FROM show_chunks('row_locks') c;
+
+-- should succeed cause no compressed tuples are returned
+SELECT FROM row_locks WHERE time < '2021-01-01 00:00:00' FOR UPDATE;
+-- should be blocked
+\set ON_ERROR_STOP 0
+SELECT FROM row_locks FOR UPDATE;
+SELECT FROM row_locks FOR NO KEY UPDATE;
+SELECT FROM row_locks FOR SHARE;
+SELECT FROM row_locks FOR KEY SHARE;
+\set ON_ERROR_STOP 1
+
+DROP TABLE row_locks;
+
+
