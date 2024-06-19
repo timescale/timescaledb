@@ -21,6 +21,7 @@ typedef struct DecompressChunkState
 	List *is_segmentby_column;
 	List *bulk_decompression_column;
 	List *custom_scan_tlist;
+	bool has_row_marks;
 
 	DecompressContext decompress_context;
 
