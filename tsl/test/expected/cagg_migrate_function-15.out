@@ -806,7 +806,7 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-01 00:00:00+01'), sensor, av
 (6 rows)
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week;
+SELECT * FROM cagg_temp_ng_1week ORDER BY time, sensor;
              time             | sensor | avg 
 ------------------------------+--------+-----
  Fri Dec 25 15:00:00 2009 PST |      1 | 101
@@ -861,7 +861,7 @@ SELECT timescaledb_experimental.time_bucket_ng('1 week', time, '2005-01-01 15:00
 (4 rows)
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week_corgin;
+SELECT * FROM cagg_temp_ng_1week_corgin ORDER BY time, sensor;
              time             | sensor | avg 
 ------------------------------+--------+-----
  Sat Dec 26 15:00:00 2009 PST |      1 | 101
