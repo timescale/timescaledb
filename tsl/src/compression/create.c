@@ -29,6 +29,7 @@
 #include <utils/array.h>
 #include <utils/builtins.h>
 #include <utils/datum.h>
+#include <utils/guc.h>
 #include <utils/rel.h>
 #include <utils/syscache.h>
 #include <utils/typcache.h>
@@ -908,7 +909,6 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 	ArrayType *column_res = NULL;
 	Datum datum;
 	text *message;
-	char *original_search_path = pstrdup(GetConfigOption("search_path", false, true));
 	bool isnull;
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
@@ -922,6 +922,10 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 			 get_rel_name(ht->main_table_relid));
 		return NULL;
 	}
+
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	initStringInfo(&command);
 	appendStringInfo(&command,
@@ -937,11 +941,6 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
-
-	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
 	res = SPI_execute(command.data, true /* read_only */, 0 /*count*/);
 
@@ -973,15 +972,10 @@ compression_setting_segmentby_get_default(const Hypertable *ht)
 		confidence = DatumGetInt32(datum);
 	}
 
-	/* Reset search path since this can be executed as part of a larger transaction */
-	resetStringInfo(&command);
-	appendStringInfo(&command, "SET LOCAL search_path TO %s", original_search_path);
-	res = SPI_exec(command.data, 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not reset search_path"))));
-	pfree(original_search_path);
-
 	pfree(command.data);
+
+	/* Reset search path since this can be executed as part of a larger transaction */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 	if (res != SPI_OK_FINISH)
@@ -1020,7 +1014,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	MemoryContext upper = CurrentMemoryContext;
 	MemoryContext old;
 	char *orderby;
-	char *original_search_path = pstrdup(GetConfigOption("search_path", false, true));
 	int32 confidence = -1;
 
 	Oid types[] = { TEXTARRAYOID };
@@ -1039,6 +1032,10 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 		return obs;
 	}
 
+	/* Lock down search_path */
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
+
 	initStringInfo(&command);
 	appendStringInfo(&command,
 					 "SELECT "
@@ -1054,11 +1051,6 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 
 	if (SPI_connect() != SPI_OK_CONNECT)
 		elog(ERROR, "could not connect to SPI");
-
-	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
 
 	res = SPI_execute_with_args(command.data,
 								1,
@@ -1096,12 +1088,8 @@ compression_setting_orderby_get_default(Hypertable *ht, ArrayType *segmentby)
 	}
 
 	/* Reset search path since this can be executed as part of a larger transaction */
-	resetStringInfo(&command);
-	appendStringInfo(&command, "SET LOCAL search_path TO %s", original_search_path);
-	res = SPI_exec(command.data, 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not reset search_path"))));
-	pfree(original_search_path);
+	AtEOXact_GUC(false, save_nestlevel);
+
 	pfree(command.data);
 
 	res = SPI_finish();

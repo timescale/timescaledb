@@ -33,6 +33,7 @@
 #include "dimension_vector.h"
 #include "errors.h"
 #include "export.h"
+#include "foreign_key.h"
 #include "hypercube.h"
 #include "hypertable.h"
 #include "partitioning.h"
@@ -512,6 +513,9 @@ ts_chunk_constraints_create(const Hypertable *ht, const Chunk *chunk)
 		Assert(list_length(cookedconstrs) == list_length(newconstrs));
 		CommandCounterIncrement();
 	}
+
+	/* Copy FK triggers to this chunk */
+	ts_chunk_copy_referencing_fk(ht, chunk);
 }
 
 ScanIterator

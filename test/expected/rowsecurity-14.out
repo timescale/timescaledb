@@ -542,8 +542,8 @@ SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.
 (6 rows)
 
 DELETE FROM category WHERE cid = 33;    -- fails with FK violation
-ERROR:  update or delete on table "category" violates foreign key constraint "4_7_document_cid_fkey" on table "_hyper_1_4_chunk"
-DETAIL:  Key is still referenced from table "_hyper_1_4_chunk".
+ERROR:  update or delete on table "category" violates foreign key constraint "document_cid_fkey" on table "document"
+DETAIL:  Key is still referenced from table "document".
 -- can insert FK referencing invisible PK
 SET SESSION AUTHORIZATION regress_rls_carol;
 SELECT * FROM document d FULL OUTER JOIN category c on d.cid = c.cid ORDER BY d.did, c.cid;
@@ -4715,8 +4715,8 @@ ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 -- Errors due to rows in r2
 DELETE FROM r1;
-ERROR:  update or delete on table "r1" violates foreign key constraint "113_23_r2_a_fkey" on table "_hyper_26_113_chunk"
-DETAIL:  Key (a)=(10) is still referenced from table "_hyper_26_113_chunk".
+ERROR:  update or delete on table "r1" violates foreign key constraint "r2_a_fkey" on table "r2"
+DETAIL:  Key (a)=(10) is still referenced from table "r2".
 -- Reset r2 to no-RLS
 DROP POLICY p1 ON r2;
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;

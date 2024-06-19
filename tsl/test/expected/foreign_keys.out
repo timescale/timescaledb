@@ -1,0 +1,582 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- test single column fk constraint from plain table to hypertable during hypertable creation
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time), info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM metrics WHERE time = '2020-01-01';
+ERROR:  update or delete on table "_hyper_1_1_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+-- should fail
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  update or delete on table "_hyper_1_1_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_1_1_chunk | t
+(2 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+         tgfoid         | parent | tgisinternal | tgconstrrelid 
+------------------------+--------+--------------+---------------
+ "RI_FKey_noaction_del" | f      | t            | event
+ "RI_FKey_noaction_upd" | f      | t            | event
+ "RI_FKey_noaction_del" | t      | t            | event
+ "RI_FKey_noaction_upd" | t      | t            | event
+(4 rows)
+
+-- create new chunk and repeat the test
+INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_1_1_chunk | t
+ event_time_fkey2 | event    | _timescaledb_internal._hyper_1_2_chunk | t
+(3 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+         tgfoid         | parent | tgisinternal | tgconstrrelid 
+------------------------+--------+--------------+---------------
+ "RI_FKey_noaction_del" | f      | t            | event
+ "RI_FKey_noaction_upd" | f      | t            | event
+ "RI_FKey_noaction_del" | t      | t            | event
+ "RI_FKey_noaction_upd" | t      | t            | event
+ "RI_FKey_noaction_del" | t      | t            | event
+ "RI_FKey_noaction_upd" | t      | t            | event
+(6 rows)
+
+-- chunks referenced in fk constraints must not be dropped or truncated
+\set ON_ERROR_STOP 0
+TRUNCATE metrics;
+ERROR:  cannot truncate a table referenced in a foreign key constraint
+TRUNCATE _timescaledb_internal._hyper_1_1_chunk;
+ERROR:  cannot truncate a table referenced in a foreign key constraint
+TRUNCATE _timescaledb_internal._hyper_1_2_chunk;
+ERROR:  cannot truncate a table referenced in a foreign key constraint
+DROP TABLE _timescaledb_internal._hyper_1_1_chunk;
+ERROR:  cannot drop table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+DROP TABLE _timescaledb_internal._hyper_1_2_chunk;
+ERROR:  cannot drop table _timescaledb_internal._hyper_1_2_chunk because other objects depend on it
+SELECT drop_chunks('metrics', '1 month'::interval);
+ERROR:  cannot drop constraint 1_1_metrics_pkey on table _timescaledb_internal._hyper_1_1_chunk because other objects depend on it
+\set ON_ERROR_STOP 1
+-- after removing constraint dropping should succeed
+ALTER TABLE event DROP CONSTRAINT event_time_fkey;
+SELECT drop_chunks('metrics', '1 month'::interval);
+              drop_chunks               
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+(2 rows)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with RESTRICT
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE RESTRICT ON UPDATE RESTRICT, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+\set ON_ERROR_STOP 0
+-- should fail
+DELETE FROM metrics WHERE time = '2020-01-01';
+ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+-- should fail
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  update or delete on table "_hyper_2_3_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_2_3_chunk | t
+(2 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+         tgfoid         | parent | tgisinternal | tgconstrrelid 
+------------------------+--------+--------------+---------------
+ "RI_FKey_restrict_del" | f      | t            | event
+ "RI_FKey_restrict_upd" | f      | t            | event
+ "RI_FKey_restrict_del" | t      | t            | event
+ "RI_FKey_restrict_upd" | t      | t            | event
+(4 rows)
+
+-- create new chunk and repeat the test
+INSERT INTO metrics(time, device, value) VALUES ('2021-01-01', 'd1', 1.0);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2021-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2021-01-01', 'info2');
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_2_3_chunk | t
+ event_time_fkey2 | event    | _timescaledb_internal._hyper_2_4_chunk | t
+(3 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+         tgfoid         | parent | tgisinternal | tgconstrrelid 
+------------------------+--------+--------------+---------------
+ "RI_FKey_restrict_del" | f      | t            | event
+ "RI_FKey_restrict_upd" | f      | t            | event
+ "RI_FKey_restrict_del" | t      | t            | event
+ "RI_FKey_restrict_upd" | t      | t            | event
+ "RI_FKey_restrict_del" | t      | t            | event
+ "RI_FKey_restrict_upd" | t      | t            | event
+(6 rows)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with CASCADE
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ time | info 
+------+------
+(0 rows)
+
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+             time             | info  
+------------------------------+-------
+ Wed Jan 01 00:30:00 2020 PST | info2
+(1 row)
+
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_3_5_chunk | t
+(2 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+        tgfoid         | parent | tgisinternal | tgconstrrelid 
+-----------------------+--------+--------------+---------------
+ "RI_FKey_cascade_del" | f      | t            | event
+ "RI_FKey_cascade_upd" | f      | t            | event
+ "RI_FKey_cascade_del" | t      | t            | event
+ "RI_FKey_cascade_upd" | t      | t            | event
+(4 rows)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with SET NULL
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE SET NULL ON UPDATE SET NULL, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ time | info  
+------+-------
+      | info2
+(1 row)
+
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ time | info  
+------+-------
+      | info2
+(1 row)
+
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_4_6_chunk | t
+(2 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+        tgfoid         | parent | tgisinternal | tgconstrrelid 
+-----------------------+--------+--------------+---------------
+ "RI_FKey_setnull_del" | f      | t            | event
+ "RI_FKey_setnull_upd" | f      | t            | event
+ "RI_FKey_setnull_del" | t      | t            | event
+ "RI_FKey_setnull_upd" | t      | t            | event
+(4 rows)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable during hypertable creation with SET DEFAULT
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+CREATE TABLE event(time timestamptz default null references metrics(time) ON DELETE SET DEFAULT ON UPDATE SET DEFAULT, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ time | info  
+------+-------
+      | info2
+(1 row)
+
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ time | info  
+------+-------
+      | info2
+(1 row)
+
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_5_7_chunk | t
+(2 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+          tgfoid          | parent | tgisinternal | tgconstrrelid 
+--------------------------+--------+--------------+---------------
+ "RI_FKey_setdefault_del" | f      | t            | event
+ "RI_FKey_setdefault_upd" | f      | t            | event
+ "RI_FKey_setdefault_del" | t      | t            | event
+ "RI_FKey_setdefault_upd" | t      | t            | event
+(4 rows)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable with constraint being added separately
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, info text);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE RESTRICT;
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+-- should fail
+\set ON_ERROR_STOP 0
+DELETE FROM metrics WHERE time = '2020-01-01';
+ERROR:  update or delete on table "_hyper_6_8_chunk" violates foreign key constraint "event_time_fkey1" on table "event"
+\set ON_ERROR_STOP 1
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |               confrelid                | parent 
+------------------+----------+----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_6_8_chunk | t
+(2 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+         tgfoid         | parent | tgisinternal | tgconstrrelid 
+------------------------+--------+--------------+---------------
+ "RI_FKey_restrict_del" | f      | t            | event
+ "RI_FKey_noaction_upd" | f      | t            | event
+ "RI_FKey_restrict_del" | t      | t            | event
+ "RI_FKey_noaction_upd" | t      | t            | event
+(4 rows)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test multi column fk constraint from plain table to hypertable
+CREATE TABLE metrics(time timestamptz , device text, value float, primary key (time, device));
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, device text, info text);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time,device) REFERENCES metrics(time,device) ON DELETE RESTRICT;
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, device, info) VALUES ('2020-01-02', 'd1', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd2', 'info2');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, device, info) VALUES ('2020-01-01', 'd1', 'info2');
+-- should fail
+\set ON_ERROR_STOP 0
+DELETE FROM metrics WHERE time = '2020-01-01';
+ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+DELETE FROM metrics WHERE device = 'd1';
+ERROR:  update or delete on table "_hyper_7_9_chunk" violates foreign key constraint "event_time_device_fkey" on table "event"
+\set ON_ERROR_STOP 1
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to hypertable with constraint being added separately while data is present
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01', 'd1', 1.0);
+CREATE TABLE event(time timestamptz, info text);
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+INSERT INTO event(time, info) VALUES ('2020-02-01', 'info1');
+-- should fail
+\set ON_ERROR_STOP 0
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE SET NULL;
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+INSERT INTO metrics(time, device, value) VALUES ('2020-02-01', 'd1', 1.0);
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time) ON DELETE CASCADE;
+-- delete should cascade
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event;
+             time             | info  
+------------------------------+-------
+ Sat Feb 01 00:00:00 2020 PST | info1
+(1 row)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from plain table to compressed hypertable
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 0:00:00', 'd1', 1.0);
+INSERT INTO metrics(time, device, value) VALUES ('2020-01-01 1:00:00', 'd1', 1.0);
+ALTER TABLE metrics SET(timescaledb.compress, timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "metrics" is set to ""time" DESC"
+SELECT count(compress_chunk(ch)) FROM show_chunks('metrics') ch;
+ count 
+-------
+     1
+(1 row)
+
+CREATE TABLE event(time timestamptz references metrics(time) ON DELETE CASCADE ON UPDATE CASCADE, info text);
+-- should fail
+\set ON_ERROR_STOP 0
+INSERT INTO event(time, info) VALUES ('2020-01-02', 'info1');
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+INSERT INTO event(time, info) VALUES ('2020-01-01', 'info2');
+\set ON_ERROR_STOP 0
+-- should fail
+UPDATE event SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+ERROR:  insert or update on table "event" violates foreign key constraint "event_time_fkey"
+\set ON_ERROR_STOP 1
+-- should succeed
+BEGIN;
+UPDATE event SET time = '2020-01-01 01:00:00' WHERE time = '2020-01-01';
+ROLLBACK;
+-- should cascade
+BEGIN;
+DELETE FROM metrics WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+ time | info 
+------+------
+(0 rows)
+
+ROLLBACK;
+-- should cascade
+BEGIN;
+UPDATE metrics SET time = '2020-01-01 00:30:00' WHERE time = '2020-01-01';
+SELECT * FROM event ORDER BY event;
+             time             | info  
+------------------------------+-------
+ Wed Jan 01 00:30:00 2020 PST | info2
+(1 row)
+
+ROLLBACK;
+SELECT conname, conrelid::regclass, confrelid::regclass, conparentid <> 0 AS parent FROM pg_constraint WHERE conrelid='event'::regclass ORDER BY oid;
+     conname      | conrelid |                confrelid                | parent 
+------------------+----------+-----------------------------------------+--------
+ event_time_fkey  | event    | metrics                                 | f
+ event_time_fkey1 | event    | _timescaledb_internal._hyper_9_12_chunk | t
+(2 rows)
+
+SELECT tgfoid::regproc, tgparentid <> 0 AS parent, tgisinternal, tgconstrrelid::regclass FROM pg_trigger WHERE tgconstrrelid='event'::regclass ORDER BY oid;
+        tgfoid         | parent | tgisinternal | tgconstrrelid 
+-----------------------+--------+--------------+---------------
+ "RI_FKey_cascade_del" | f      | t            | event
+ "RI_FKey_cascade_upd" | f      | t            | event
+ "RI_FKey_cascade_del" | t      | t            | event
+ "RI_FKey_cascade_upd" | t      | t            | event
+(4 rows)
+
+DROP TABLE event;
+DROP TABLE metrics;
+-- test single column fk constraint from hypertable to hypertable
+CREATE TABLE metrics(time timestamptz primary key, device text, value float);
+SELECT table_name FROM create_hypertable('metrics', 'time');
+ table_name 
+------------
+ metrics
+(1 row)
+
+CREATE TABLE event(time timestamptz, info text);
+SELECT table_name FROM create_hypertable('event', 'time');
+NOTICE:  adding not-null constraint to column "time"
+ table_name 
+------------
+ event
+(1 row)
+
+\set ON_ERROR_STOP 0
+ALTER TABLE event ADD CONSTRAINT event_time_fkey FOREIGN KEY (time) REFERENCES metrics(time);
+ERROR:  hypertables cannot be used as foreign key references of hypertables
+\set ON_ERROR_STOP 1
+CREATE TABLE event2(time timestamptz REFERENCES metrics(time), info text);
+\set ON_ERROR_STOP 0
+SELECT table_name FROM create_hypertable('event2', 'time');
+ERROR:  hypertables cannot be used as foreign key references of hypertables
+\set ON_ERROR_STOP 1
+DROP TABLE event;
+DROP TABLE event2;
+DROP TABLE metrics;

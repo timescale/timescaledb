@@ -21,6 +21,7 @@ set(SOURCES
     extension.c
     extension_constants.c
     expression_utils.c
+    foreign_key.c
     gapfill.c
     guc.c
     histogram.c
