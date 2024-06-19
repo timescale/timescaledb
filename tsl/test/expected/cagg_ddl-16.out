@@ -1804,7 +1804,7 @@ View definition:
     cashflow2
    FROM _timescaledb_internal._materialized_hypertable_45;
 
-SELECT * FROM cashflows;
+SELECT * FROM cashflows ORDER BY cashflows;
             bucket            | amount | cashflow | cashflow2 
 ------------------------------+--------+----------+-----------
  Sun Dec 31 16:00:00 2017 PST |      1 |       10 |        11
@@ -1963,7 +1963,7 @@ View definition:
    FROM _timescaledb_internal._materialized_hypertable_53;
 
 -- Should return NO ROWS
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
  location | bucket | avg 
 ----------+--------+-----
 (0 rows)
@@ -1991,12 +1991,12 @@ UNION ALL
   GROUP BY conditions.location, (time_bucket('@ 1 day'::interval, conditions."time"));
 
 -- Should return ROWS because now it is realtime
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
  SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  NYC      | Mon Jan 01 16:00:00 2018 PST |  65
+ SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  por      | Mon Jan 01 16:00:00 2018 PST | 100
  NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
  NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
@@ -2018,12 +2018,12 @@ View definition:
    FROM _timescaledb_internal._materialized_hypertable_53;
 
 CALL refresh_continuous_aggregate('conditions_daily', NULL, NULL);
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
  SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  NYC      | Mon Jan 01 16:00:00 2018 PST |  65
+ SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  por      | Mon Jan 01 16:00:00 2018 PST | 100
  NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
  NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
@@ -2081,12 +2081,12 @@ SELECT _timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark
 (1 row)
 
 -- Should return ROWS because the watermark was reseted by the TRUNCATE
-SELECT * FROM conditions_daily ORDER BY bucket, avg;
+SELECT * FROM conditions_daily ORDER BY bucket, location;
  location |            bucket            | avg 
 ----------+------------------------------+-----
  SFO      | Sun Dec 31 16:00:00 2017 PST |  55
- SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  NYC      | Mon Jan 01 16:00:00 2018 PST |  65
+ SFO      | Mon Jan 01 16:00:00 2018 PST |  65
  por      | Mon Jan 01 16:00:00 2018 PST | 100
  NYC      | Wed Oct 31 17:00:00 2018 PDT |  65
  NYC      | Thu Nov 01 17:00:00 2018 PDT |  15
