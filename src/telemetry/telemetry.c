@@ -360,9 +360,8 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -397,6 +396,9 @@ add_errors_by_sqlerrcode(JsonbParseState *parse_state)
 										  sqlerrs_jsonb);
 		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 
 	res = SPI_finish();
 
@@ -462,9 +464,8 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	command = makeStringInfo();
 
@@ -524,6 +525,10 @@ add_job_stats_by_job_type(JsonbParseState *parse_state)
 		add_job_stats_internal(parse_state, TextDatumGetCString(jobtype_datum), &stats);
 		MemoryContextSwitchTo(spi_context);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
 }
@@ -795,8 +800,8 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 		elog(ERROR, "could not connect to SPI");
 
 	/* Lock down search_path */
-	res = SPI_execute("SET LOCAL search_path TO pg_catalog, pg_temp", false, 0);
-	Ensure(res >= 0, "could not set search path");
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	res = SPI_execute(query, true, 0);
 	Ensure(res >= 0, "could not execute query");
@@ -833,6 +838,10 @@ add_query_result_dict(JsonbParseState *state, const char *query)
 		}
 		pushJsonbValue(&state, WJB_END_OBJECT, NULL);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
+
 	MemoryContextSwitchTo(spi_context);
 	res = SPI_finish();
 	Assert(res == SPI_OK_FINISH);
