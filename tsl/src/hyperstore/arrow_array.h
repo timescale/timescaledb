@@ -11,12 +11,7 @@
 #include "compression/compression.h"
 
 extern ArrowArray *arrow_create_with_buffers(MemoryContext mcxt, int n_buffers);
-extern ArrowArray *arrow_from_iterator(MemoryContext mcxt, DecompressionIterator *iterator,
-									   Oid typid);
 extern NullableDatum arrow_get_datum(ArrowArray *array, Oid typid, int64 index);
 extern void arrow_release_buffers(ArrowArray *array);
-extern ArrowArray *default_decompress_all(Datum compressed, Oid element_type,
-										  MemoryContext dest_mctx);
-
-#define TYPLEN_VARLEN (-1)
-#define TYPLEN_CSTRING (-2)
+extern ArrowArray *arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt,
+										 MemoryContext tmp_mcxt);
