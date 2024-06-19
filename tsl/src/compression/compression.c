@@ -98,7 +98,8 @@ tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 	return definitions[algorithm].decompress_all;
 }
 
-static Tuplesortstate *compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel);
+static Tuplesortstate *compress_chunk_sort_relation(const CompressionSettings *settings,
+													Relation in_rel);
 static void row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
 												CommandId mycid);
 static void row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row);
@@ -535,18 +536,13 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	return cstat;
 }
 
-static Tuplesortstate *
-compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
+Tuplesortstate *
+compression_create_tuplesort_state(const CompressionSettings *settings, Relation rel)
 {
-	TupleDesc tupDesc = RelationGetDescr(in_rel);
-	Tuplesortstate *tuplesortstate;
-	TableScanDesc scan;
-	TupleTableSlot *slot;
-
+	TupleDesc tupdesc = RelationGetDescr(rel);
 	int num_segmentby = ts_array_length(settings->fd.segmentby);
 	int num_orderby = ts_array_length(settings->fd.orderby);
 	int n_keys = num_segmentby + num_orderby;
-
 	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
 	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
 	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
@@ -568,7 +564,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 			attname = ts_array_get_element_text(settings->fd.orderby, position);
 		}
 		compress_chunk_populate_sort_info_for_column(settings,
-													 RelationGetRelid(in_rel),
+													 RelationGetRelid(rel),
 													 attname,
 													 &sort_keys[n],
 													 &sort_operators[n],
@@ -576,16 +572,25 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 													 &nulls_first[n]);
 	}
 
-	tuplesortstate = tuplesort_begin_heap(tupDesc,
-										  n_keys,
-										  sort_keys,
-										  sort_operators,
-										  sort_collations,
-										  nulls_first,
-										  maintenance_work_mem,
-										  NULL,
-										  false /*=randomAccess*/);
+	return tuplesort_begin_heap(tupdesc,
+								n_keys,
+								sort_keys,
+								sort_operators,
+								sort_collations,
+								nulls_first,
+								maintenance_work_mem,
+								NULL,
+								false /*=randomAccess*/);
+}
 
+static Tuplesortstate *
+compress_chunk_sort_relation(const CompressionSettings *settings, Relation in_rel)
+{
+	Tuplesortstate *tuplesortstate;
+	TableScanDesc scan;
+	TupleTableSlot *slot;
+
+	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
 	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
 	slot = table_slot_create(in_rel, NULL);
 
@@ -611,7 +616,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 }
 
 void
-compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
+compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings, Oid table,
 											 const char *attname, AttrNumber *att_nums,
 											 Oid *sort_operator, Oid *collation, bool *nulls_first)
 {
