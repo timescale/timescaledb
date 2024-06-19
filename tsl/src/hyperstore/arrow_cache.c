@@ -44,9 +44,6 @@ typedef struct ArrowColumnCacheEntry
 	int16 num_arrays; /* Number of entries in arrow_arrays */
 } ArrowColumnCacheEntry;
 
-static ArrowArray *arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid,
-												 Datum datum);
-
 /*
  * The function dlist_move_tail only exists for PG14 and above, so provide it
  * for PG13 here.
@@ -177,8 +174,11 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 			if (!isnull)
 			{
 				const Form_pg_attribute attr = TupleDescAttr(tupdesc, attoff);
-				entry->arrow_arrays[attoff] =
-					arrow_column_cache_decompress(acache, attr->atttypid, value);
+				entry->arrow_arrays[attoff] = arrow_from_compressed(value,
+																	attr->atttypid,
+																	acache->mcxt,
+																	acache->decompression_mcxt);
+
 				if (decompress_cache_print)
 					decompress_cache_misses++;
 			}
@@ -338,57 +338,4 @@ arrow_column_cache_read_one(ArrowTupleTableSlot *aslot, AttrNumber attno)
 
 	decompress_one_attr(aslot, entry, attno, cattno);
 	return entry->arrow_arrays;
-}
-
-#ifdef TS_DEBUG
-static const char *compression_algorithm_name[] = {
-	[_INVALID_COMPRESSION_ALGORITHM] = "INVALID",	   [COMPRESSION_ALGORITHM_ARRAY] = "ARRAY",
-	[COMPRESSION_ALGORITHM_DICTIONARY] = "DICTIONARY", [COMPRESSION_ALGORITHM_GORILLA] = "GORILLA",
-	[COMPRESSION_ALGORITHM_DELTADELTA] = "DELTADELTA",
-};
-#endif
-
-/*
- * Decompress an attribute batch and add it to the arrow tuple cache.
- *
- * Returns a pointer to the cached entry as an arrow array. The arrow array
- * either has a fully decompressed batch using the batch decompress, or store
- * an iterator to decompress the column in the private_data field.
- *
- * We are storing the iterator in the private_data field because otherwise we
- * would need to create an extra structure to wrap the ArrowArray. This is
- * something that we might want to consider later anyway.
- */
-static ArrowArray *
-arrow_column_cache_decompress(const ArrowColumnCache *acache, Oid typid, Datum datum)
-{
-	const CompressedDataHeader *header = (CompressedDataHeader *) PG_DETOAST_DATUM(datum);
-	DecompressAllFunction decompress_all =
-		tsl_get_decompress_all_function(header->compression_algorithm, typid);
-	TS_DEBUG_LOG("decompressing column with type %s using decompression algorithm %s",
-				 format_type_be(typid),
-				 compression_algorithm_name[header->compression_algorithm]);
-
-	if (decompress_all == NULL)
-		decompress_all = default_decompress_all;
-
-	MemoryContext oldcxt = MemoryContextSwitchTo(acache->decompression_mcxt);
-	ArrowArray *arrow_column = decompress_all(PointerGetDatum(header), typid, acache->mcxt);
-
-	/*
-	 * If the release function is not set, it is the old-style decompress_all
-	 * and then buffers should be deleted by default.
-	 */
-	if (arrow_column->release == NULL)
-		arrow_column->release = arrow_release_buffers;
-
-	/*
-	 * Not sure how necessary this reset is, but keeping it for now.
-	 *
-	 * The amount of data is bounded by the number of columns in the tuple
-	 * table slot, so it might be possible to skip this reset.
-	 */
-	MemoryContextReset(acache->decompression_mcxt);
-	MemoryContextSwitchTo(oldcxt);
-	return arrow_column;
 }

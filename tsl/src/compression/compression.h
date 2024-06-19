@@ -360,10 +360,12 @@ extern void compress_row_destroy(CompressSingleRowState *cr);
 extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
-extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
-														 const char *attname, AttrNumber *att_nums,
-														 Oid *sort_operator, Oid *collation,
-														 bool *nulls_first);
+extern void compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings,
+														 Oid table, const char *attname,
+														 AttrNumber *att_nums, Oid *sort_operator,
+														 Oid *collation, bool *nulls_first);
+extern Tuplesortstate *compression_create_tuplesort_state(const CompressionSettings *settings,
+														  Relation rel);
 extern void row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
