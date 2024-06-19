@@ -150,28 +150,54 @@ SHOW timescaledb.enable_optimizations;
 (5 rows)
 
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1_date GROUP BY t ORDER BY t DESC limit 2;
-                                                      QUERY PLAN                                                      
-----------------------------------------------------------------------------------------------------------------------
+                                                      QUERY PLAN                                                       
+-----------------------------------------------------------------------------------------------------------------------
  Limit
-   ->  GroupAggregate
-         Group Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone))
-         ->  Result
-               ->  Merge Append
-                     Sort Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone)) DESC
-                     ->  Index Scan using _hyper_4_6_chunk_time_plain_date on _hyper_4_6_chunk
-                     ->  Index Scan using _hyper_4_7_chunk_time_plain_date on _hyper_4_7_chunk
-                     ->  Index Scan using _hyper_4_8_chunk_time_plain_date on _hyper_4_8_chunk
-                     ->  Index Scan using _hyper_4_9_chunk_time_plain_date on _hyper_4_9_chunk
-                     ->  Index Scan using _hyper_4_10_chunk_time_plain_date on _hyper_4_10_chunk
-                     ->  Index Scan using _hyper_4_11_chunk_time_plain_date on _hyper_4_11_chunk
-                     ->  Index Scan using _hyper_4_12_chunk_time_plain_date on _hyper_4_12_chunk
-                     ->  Index Scan using _hyper_4_13_chunk_time_plain_date on _hyper_4_13_chunk
-                     ->  Index Scan using _hyper_4_14_chunk_time_plain_date on _hyper_4_14_chunk
-                     ->  Index Scan using _hyper_4_15_chunk_time_plain_date on _hyper_4_15_chunk
-                     ->  Index Scan using _hyper_4_16_chunk_time_plain_date on _hyper_4_16_chunk
-                     ->  Index Scan using _hyper_4_17_chunk_time_plain_date on _hyper_4_17_chunk
-                     ->  Index Scan using _hyper_4_18_chunk_time_plain_date on _hyper_4_18_chunk
-(19 rows)
+   ->  Sort
+         Sort Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone)) DESC
+         ->  Finalize HashAggregate
+               Group Key: (date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone))
+               ->  Append
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_6_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_6_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_7_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_7_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_8_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_8_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_9_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_9_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_10_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_10_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_11_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_11_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_12_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_12_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_13_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_13_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_14_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_14_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_15_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_15_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_16_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_16_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_17_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_17_chunk
+                     ->  Partial HashAggregate
+                           Group Key: date_trunc('minute'::text, (_hyper_4_18_chunk."time")::timestamp with time zone)
+                           ->  Seq Scan on _hyper_4_18_chunk
+(45 rows)
 
 --the minute and second results should be diff
 :PREFIX SELECT date_trunc('minute', time) t, avg(series_0), min(series_1), avg(series_2) FROM hyper_1 GROUP BY t ORDER BY t DESC limit 2;
