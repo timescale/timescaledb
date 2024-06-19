@@ -203,7 +203,7 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-01 00:00:00+01'), sensor, av
     ORDER BY 1, 2;
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week;
+SELECT * FROM cagg_temp_ng_1week ORDER BY time, sensor;
 
 
 ----
@@ -244,7 +244,7 @@ SELECT timescaledb_experimental.time_bucket_ng('1 week', time, '2005-01-01 15:00
     ORDER BY 1, 2;
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week_corgin;
+SELECT * FROM cagg_temp_ng_1week_corgin ORDER BY time, sensor;
 
 ----
 -- Check bucket conversion -- timestamp without custom origin
