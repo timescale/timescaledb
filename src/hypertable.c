@@ -1276,6 +1276,15 @@ hypertable_validate_constraints(Oid relid)
 	{
 		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
 
+		if (form->contype == CONSTRAINT_FOREIGN)
+		{
+			if (ts_hypertable_relid_to_id(form->confrelid) != -1)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("hypertables cannot be used as foreign key references of "
+								"hypertables")));
+		}
+
 		if (form->contype == CONSTRAINT_CHECK && form->connoinherit)
 			ereport(ERROR,
 					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
@@ -2461,14 +2470,25 @@ ts_chunk_get_osm_slice_and_lock(int32 osm_chunk_id, int32 time_dim_id, LockTuple
 				.lockmode = tuplockmode,
 				.waitpolicy = LockWaitBlock,
 			};
+			/*
+			 * We cannot acquire a tuple lock when running in recovery mode
+			 * since that prevents scans on tiered hypertables from running
+			 * on a read-only secondary. Acquiring a tuple lock requires
+			 * assigning a transaction id for the current transaction state
+			 * which is not possible in recovery mode. So we only acquire the
+			 * lock if we are not in recovery mode.
+			 */
+			ScanTupLock *const tuplock_ptr = RecoveryInProgress() ? NULL : &tuplock;
+
 			if (!IsolationUsesXactSnapshot())
 			{
 				/* in read committed mode, we follow all updates to this tuple */
 				tuplock.lockflags |= TUPLE_LOCK_FLAG_FIND_LAST_VERSION;
 			}
+
 			DimensionSlice *dimslice =
 				ts_dimension_slice_scan_by_id_and_lock(cc->fd.dimension_slice_id,
-													   &tuplock,
+													   tuplock_ptr,
 													   CurrentMemoryContext,
 													   tablelockmode);
 			if (dimslice->fd.dimension_id == time_dim_id)
@@ -2498,6 +2518,18 @@ ts_hypertable_osm_range_update(PG_FUNCTION_ARGS)
 
 	Oid time_type; /* required for resolving the argument types, should match the hypertable
 					  partitioning column type */
+
+	/*
+	 * This function is not meant to be run on a read-only secondary. It is
+	 * only used by OSM to update chunk's range in timescaledb catalog when
+	 * tiering configuration changes (a new chunk is created, a chunk drop
+	 * etc); OSM would already be holding a lock on a dimension slice tuple
+	 * by this moment (which is not possible on read-only instance).
+	 * Technically this function can be executed from SQL (e.g. from psql) when
+	 * in recovery mode; in that instance an ERROR would be thrown when trying
+	 * to update the dimension slice tuple, no harm will be done.
+	 */
+	Assert(!RecoveryInProgress());
 
 	hcache = ts_hypertable_cache_pin();
 	ht = ts_resolve_hypertable_from_table_or_cagg(hcache, relid, true);

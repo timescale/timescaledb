@@ -64,12 +64,10 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 {
 	InternalTimeRange combined_materialization_range = new_materialization_range;
 	bool materialize_invalidations_separately = range_length(invalidation_range) > 0;
-	int res;
 
 	/* Lock down search_path */
-	res = SPI_exec("SET LOCAL search_path TO pg_catalog, pg_temp", 0);
-	if (res < 0)
-		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), (errmsg("could not set search_path"))));
+	int save_nestlevel = NewGUCNestLevel();
+	RestrictSearchPath();
 
 	/* pin the start of new_materialization to the end of new_materialization,
 	 * we are not allowed to materialize beyond that point
@@ -131,6 +129,9 @@ continuous_agg_update_materialization(Hypertable *mat_ht, const ContinuousAgg *c
 									internal_time_range_to_time_range(new_materialization_range),
 									chunk_id);
 	}
+
+	/* Restore search_path */
+	AtEOXact_GUC(false, save_nestlevel);
 }
 
 static bool

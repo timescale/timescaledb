@@ -207,3 +207,10 @@ SET timescaledb.compression_orderby_default_function = '_timescaledb_functions.g
 SET timescaledb.compression_segmentby_default_function = '_timescaledb_functions.get_segmentby_defaults';
 RESET timescaledb.compression_segmentby_default_function;
 RESET timescaledb.compression_orderby_default_function;
+
+-- test search_path quoting
+SET search_path TO '';
+CREATE TABLE public.t1 (time timestamptz NOT NULL, segment_value text NOT NULL);
+SELECT public.create_hypertable('public.t1', 'time');
+ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
+RESET search_path;
