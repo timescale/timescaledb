@@ -377,3 +377,40 @@ select compress_chunk(:'chunk3', compress_using => 'heap');
 select * from only :chunk3;
 -- But the tuple is returned in a query without ONLY
 select * from :chunk3 where created_at = '2022-06-15 16:00' and device_id = 8;
+
+-- Test a more complicated schema from the NYC Taxi data set. This is
+-- to test that compression using hyperstore works, since there was an
+-- issue with setting up the tuple sort state during compression.
+create table rides (
+    vendor_id text,
+    pickup_datetime timestamptz not null,
+    dropoff_datetime timestamptz not null,
+    passenger_count numeric,
+    trip_distance numeric,
+    pickup_longitude numeric,
+    pickup_latitude numeric,
+    rate_code int,
+    dropoff_longitude numeric,
+    dropoff_latitude numeric,
+    payment_type int,
+    fare_amount numeric,
+    extra numeric,
+    mta_tax numeric,
+    tip_amount numeric,
+    tolls_amount numeric,
+    improvement_surcharge numeric,
+    total_amount numeric
+);
+
+select create_hypertable('rides', 'pickup_datetime', 'payment_type', 2, create_default_indexes=>false);
+create index on rides (vendor_id, pickup_datetime desc);
+create index on rides (pickup_datetime desc, vendor_id);
+create index on rides (rate_code, pickup_datetime desc);
+create index on rides (passenger_count, pickup_datetime desc);
+alter table rides set (timescaledb.compress_segmentby='payment_type');
+insert into rides values (1,'2016-01-01 00:00:01','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3);
+-- check that it is possible to compress
+\set ON_ERROR_STOP 0
+-- currently fails
+select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('rides') ch;
+\set ON_ERROR_STOP 1
