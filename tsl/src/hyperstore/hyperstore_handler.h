@@ -35,8 +35,6 @@ typedef struct ColumnCompressionSettings
 	bool is_orderby;
 	bool is_segmentby;
 	bool is_dropped;
-	bool orderby_desc;
-	bool nulls_first;
 } ColumnCompressionSettings;
 
 /*
@@ -52,9 +50,6 @@ typedef struct HyperstoreInfo
 	int32 compressed_relation_id; /* TimescaleDB ID of compressed relation (chunk ID) */
 	Oid compressed_relid;		  /* Relid of compressed relation */
 	int num_columns;
-	int num_segmentby;
-	int num_orderby;
-	int num_keys;
 	AttrNumber count_cattno; /* Attribute number of count column in
 							  * compressed rel */
 	/* Per-column information follows. */
