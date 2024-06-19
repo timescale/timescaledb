@@ -1258,7 +1258,7 @@ CREATE TABLE conditions (
 SELECT create_hypertable('conditions', 'time');
 
 INSERT INTO conditions VALUES ( '2018-01-01 09:20:00-08', 'SFO', 55);
-INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'por', 100);
+INSERT INTO conditions VALUES ( '2018-01-02 09:30:00-08', 'POR', 100);
 INSERT INTO conditions VALUES ( '2018-01-02 09:20:00-08', 'SFO', 65);
 INSERT INTO conditions VALUES ( '2018-01-02 09:10:00-08', 'NYC', 65);
 INSERT INTO conditions VALUES ( '2018-11-01 09:20:00-08', 'NYC', 45);
