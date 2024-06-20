@@ -901,8 +901,8 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	fprintf(stderr, "will replan\n");
 
 	/* Prefer our paths */
-	output_rel->pathlist = NIL;
-	output_rel->partial_pathlist = NIL;
+//	output_rel->pathlist = NIL;
+//	output_rel->partial_pathlist = NIL;
 
 	/* Finalize the created partially aggregated paths by adding a 'Finalize Aggregate' node on top
 	 * of them. */
