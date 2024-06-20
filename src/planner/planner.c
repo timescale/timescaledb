@@ -1566,16 +1566,16 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 	if (!involves_hypertable(root, input_rel))
 		return;
 
-	if (stage == UPPERREL_GROUP_AGG && output_rel != NULL)
+	if (parse->hasAggs && stage == UPPERREL_GROUP_AGG && output_rel != NULL && !partials_found)
 	{
-		if (parse->hasAggs)
-			ts_preprocess_first_last_aggregates(root, root->processed_tlist);
+		ts_preprocess_first_last_aggregates(root, root->processed_tlist);
 
-		if (!partials_found)
-			ts_plan_add_hashagg(root, input_rel, output_rel);
+		ts_plan_add_hashagg(root, input_rel, output_rel);
 
 		if (ts_guc_enable_chunkwise_aggregation)
+		{
 			ts_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
+		}
 	}
 }
 

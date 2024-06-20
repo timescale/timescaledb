@@ -491,8 +491,7 @@ ORDER BY 1, 2;
                            Output: date_trunc('month'::text, _hyper_1_4_chunk."time"), _hyper_1_4_chunk.device, _hyper_1_4_chunk.temp
 (27 rows)
 
--- Partial aggregation pushdown is currently not supported for this query by
--- the TSDB pushdown code since a projection is used in the path.
+-- Partial aggregation pushdown when a projection is used in the path.
 SET enable_partitionwise_aggregate = 'on';
 :PREFIX
 SELECT date_trunc('month', time), device, avg(temp)
@@ -884,8 +883,7 @@ LIMIT 10;
                                  Output: time_func(_hyper_3_8_chunk."time"), _hyper_3_8_chunk.device, _hyper_3_8_chunk.temp
 (19 rows)
 
--- Partial aggregation pushdown is currently not supported for this query by
--- the TSDB pushdown code since a projection is used in the path.
+-- Partial aggregation pushdown when a projection is used in the path.
 :PREFIX
 SELECT time_func(time), _timescaledb_functions.get_partition_hash(device), avg(temp)
 FROM hyper_timepart
