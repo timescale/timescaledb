@@ -44,12 +44,18 @@ arrow_release_buffers(ArrowArray *array)
 	 * the Arrow array, but we do not have these so we do not care about
 	 * them.
 	 */
-	Assert(array->children == NULL && array->dictionary == NULL);
+	Assert(array->children == NULL);
 
 	for (int i = 0; i < array->n_buffers; ++i)
 	{
 		pfree((void *) array->buffers[i]);
 		array->buffers[i] = NULL; /* Just a precaution to avoid a dangling reference */
+	}
+
+	if (array->dictionary)
+	{
+		arrow_release_buffers(array->dictionary);
+		array->dictionary = NULL;
 	}
 }
 
@@ -312,17 +318,32 @@ arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, Memo
  * This will always be a reference.
  */
 static NullableDatum
-arrow_get_datum_varlen(ArrowArray *array, Oid typid, int64 index)
+arrow_get_datum_varlen(const ArrowArray *array, Oid typid, int64 index)
 {
 	const uint64 *restrict validity = array->buffers[0];
-	const int32 *offsets = array->buffers[1];
-	const uint8 *data = array->buffers[2];
-	const int32 offset = offsets[index];
-	const int32 datalen = offsets[index + 1] - offset;
+	const int32 *offsets;
+	const uint8 *data;
 	Datum value;
 
 	if (!arrow_row_is_valid(validity, index))
 		return (NullableDatum){ .isnull = true };
+
+	if (array->dictionary)
+	{
+		const ArrowArray *dict = array->dictionary;
+		const int16 *indexes = (int16 *) array->buffers[1];
+		index = indexes[index];
+		offsets = dict->buffers[1];
+		data = dict->buffers[2];
+	}
+	else
+	{
+		offsets = array->buffers[1];
+		data = array->buffers[2];
+	}
+
+	const int32 offset = offsets[index];
+	const int32 datalen = offsets[index + 1] - offset;
 
 	/* Need to handle text as a special case because the cstrings are stored
 	 * back-to-back without varlena header */
