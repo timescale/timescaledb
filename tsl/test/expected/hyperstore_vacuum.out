@@ -271,7 +271,7 @@ select * from bt_page_items(:'hystable_location_chunk_idx', 1);
 -- Insert bigger data set and create new chunks
 insert into regtable (time, location, device, temp)
 select t, ceil(random()*10), ceil(random()*30), random()*40
-from generate_series('2022-06-01'::timestamptz, '2022-06-10', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-06-10', '60s') t;
 insert into hystable select * from regtable;
 -- All new chunks should be hyperstores since we configured hyperstore
 -- as default hypertable AM
@@ -303,7 +303,7 @@ compressed_rels crels on (i.indrelid = crels.compressed_relid);
 select tuple_count from pgstattuple(:'hystable_device_chunk_idx');
  tuple_count 
 -------------
-         479
+         102
 (1 row)
 
 -- Compressing will move all the data to the compressed relation and
@@ -318,7 +318,7 @@ select compress_chunk(:'hystable_chunk');
 select tuple_count from pgstattuple(:'hystable_device_chunk_idx');
  tuple_count 
 -------------
-         110
+          30
 (1 row)
 
 -- Test vacuum without index cleanup. Should not remove dead tuples
@@ -327,7 +327,7 @@ vacuum (index_cleanup off) hystable;
 select tuple_count from pgstattuple(:'hystable_device_chunk_idx');
  tuple_count 
 -------------
-         110
+          30
 (1 row)
 
 -- Running vacuum with index_cleanup on should further reduce the
@@ -337,44 +337,44 @@ vacuum (index_cleanup on) hystable;
 select tuple_count from pgstattuple(:'hystable_device_chunk_idx');
  tuple_count 
 -------------
-          80
+          30
 (1 row)
 
 -- Check that index scans return correct count()
 select count(*) from regtable where temp > 10;
  count 
 -------
- 58184
+  9732
 (1 row)
 
 select count(*) from hystable where temp > 10;
  count 
 -------
- 58184
+  9732
 (1 row)
 
 select count(*) from regtable where location > 4;
  count 
 -------
- 46711
+  7791
 (1 row)
 
 select count(*) from hystable where location > 4;
  count 
 -------
- 46711
+  7791
 (1 row)
 
 select count(*) from regtable where device > 5;
  count 
 -------
- 64786
+ 10839
 (1 row)
 
 select count(*) from hystable where device > 5;
  count 
 -------
- 64786
+ 10839
 (1 row)
 
 drop table hystable;
