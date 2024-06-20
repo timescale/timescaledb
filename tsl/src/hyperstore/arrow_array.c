@@ -16,6 +16,73 @@
 
 #define TYPLEN_VARLEN (-1)
 
+typedef struct ArrowPrivate
+{
+	MemoryContext mcxt; /* The memory context on which the private data is allocated */
+	size_t value_capacity;
+	struct varlena *value; /* For text types, a reusable memory area to create
+							* the varlena version of the c-string */
+} ArrowPrivate;
+
+static Datum
+arrow_private_cstring_to_text_datum(ArrowPrivate *ap, const uint8 *data, size_t datalen)
+{
+	const size_t varlen = VARHDRSZ + datalen;
+
+	/* Allocate memory on the ArrowArray's memory context. Start with twice
+	 * the size necessary for the value. Reallocate and expand later as
+	 * necessary for next values. */
+	if (ap->value == NULL)
+	{
+		ap->value_capacity = varlen * 2;
+		ap->value = MemoryContextAlloc(ap->mcxt, ap->value_capacity);
+	}
+	else if (varlen > ap->value_capacity)
+	{
+		ap->value_capacity = varlen * 2;
+		ap->value = repalloc(ap->value, ap->value_capacity);
+	}
+
+	SET_VARSIZE(ap->value, varlen);
+	memcpy(VARDATA_ANY(ap->value), data, datalen);
+
+	return PointerGetDatum(ap->value);
+}
+
+static ArrowPrivate *
+arrow_private_create(ArrowArray *array, Oid typid)
+{
+	ArrowPrivate *private = array->private_data;
+
+	Assert(NULL == array->private_data);
+	private = palloc0(sizeof(ArrowPrivate));
+	private->mcxt = CurrentMemoryContext;
+	array->private_data = private;
+
+	return private;
+}
+
+static inline ArrowPrivate *
+arrow_private_get(const ArrowArray *array)
+{
+	Assert(array->private_data != NULL);
+	return (ArrowPrivate *) array->private_data;
+}
+
+static void
+arrow_private_release(ArrowArray *array)
+{
+	if (array->private_data != NULL)
+	{
+		ArrowPrivate *ap = array->private_data;
+
+		if (ap->value != NULL)
+			pfree(ap->value);
+		pfree(ap);
+		array->private_data = NULL;
+	}
+}
+
 /*
  * Extend a buffer if necessary.
  *
@@ -64,6 +131,9 @@ arrow_release_buffers(ArrowArray *array)
 		arrow_release_buffers(array->dictionary);
 		array->dictionary = NULL;
 	}
+
+	if (array->private_data)
+		arrow_private_release(array);
 }
 
 /*
@@ -139,6 +209,7 @@ arrow_from_iterator_varlen(MemoryContext mcxt, DecompressionIterator *iterator, 
 	array->buffers[2] = data_buffer;
 	array->null_count = null_count;
 	array->release = arrow_release_buffers;
+
 	return array;
 }
 
@@ -300,6 +371,10 @@ arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, Memo
 	if (array->release == NULL)
 		array->release = arrow_release_buffers;
 
+	MemoryContextSwitchTo(dest_mcxt);
+	/* Create private arrow info on the same memory context as the array itself */
+	arrow_private_create(array, typid);
+
 	/*
 	 * Not sure how necessary this reset is, but keeping it for now.
 	 *
@@ -343,16 +418,14 @@ arrow_get_datum_varlen(const ArrowArray *array, Oid typid, uint16 index)
 	}
 
 	const int32 offset = offsets[index];
-	const int32 datalen = offsets[index + 1] - offset;
 
 	/* Need to handle text as a special case because the cstrings are stored
 	 * back-to-back without varlena header */
 	if (typid == TEXTOID)
 	{
-		const int32 varlen = VARHDRSZ + datalen;
-		value = (Datum) palloc(varlen);
-		SET_VARSIZE(value, varlen);
-		memcpy(VARDATA_ANY(value), &data[offset], datalen);
+		ArrowPrivate *ap = arrow_private_get(array);
+		const int32 datalen = offsets[index + 1] - offset;
+		value = arrow_private_cstring_to_text_datum(ap, &data[offset], datalen);
 	}
 	else
 		value = PointerGetDatum(&data[offset]);
@@ -379,7 +452,7 @@ arrow_get_datum_varlen(const ArrowArray *array, Oid typid, uint16 index)
  * data into an arrow array.
  */
 static NullableDatum
-arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int16 typlen, uint16 index)
+arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 index)
 {
 	const bool typbyval = get_typbyval(typid);
 	const uint64 *restrict validity = array->buffers[0];
@@ -406,7 +479,7 @@ arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int16 typlen, uint16 index)
 }
 
 NullableDatum
-arrow_get_datum(ArrowArray *array, Oid typid, int16 typlen, uint16 index)
+arrow_get_datum(const ArrowArray *array, Oid typid, int16 typlen, uint16 index)
 {
 	if (typlen == TYPLEN_VARLEN)
 		return arrow_get_datum_varlen(array, typid, index);
