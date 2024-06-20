@@ -2,7 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 create table readings(time timestamptz,
-       location int,
+       location text,
        device int,
        temp float,
        humidity float,
@@ -59,7 +59,7 @@ select * from :chunk where ctid = :'ctid';
 select * from :chunk where ctid = :'ctid';
              time             | location | device |       temp       |     humidity     
 ------------------------------+----------+--------+------------------+------------------
- Wed Jun 01 00:19:20 2022 PDT |        8 |      1 | 18.1995372460622 | 31.5529442138474
+ Wed Jun 01 00:19:20 2022 PDT | 8        |      1 | 18.1995372460622 | 31.5529442138474
 (1 row)
 
 -- Insert a new row, which will then be non-compressed, and fetch it.
@@ -78,7 +78,7 @@ select * from :chunk where ctid = :'ctid';
 select * from :chunk where ctid = :'ctid';
              time             | location | device | temp | humidity 
 ------------------------------+----------+--------+------+----------
- Wed May 25 17:34:56 2022 PDT |        1 |      2 | 3.14 |     2.14
+ Wed May 25 17:34:56 2022 PDT | 1        |      2 | 3.14 |     2.14
 (1 row)
 
 -- Check that a bad option name generates an error.
@@ -306,4 +306,17 @@ select time, temp + humidity from readings where device between 5 and 10 and hum
  Wed Jun 01 00:15:25 2022 PDT | 11.6666413710752
  Wed Jun 01 00:16:05 2022 PDT | 98.9968121849908
 (5 rows)
+
+-- Get the compressed chunk
+select format('%I.%I', c2.schema_name, c2.table_name)::regclass as cchunk
+from _timescaledb_catalog.chunk c1
+join _timescaledb_catalog.chunk c2
+on (c1.compressed_chunk_id = c2.id)
+where format('%I.%I', c1.schema_name, c1.table_name)::regclass = :'chunk'::regclass \gset
+-- Show that location is using dictionary encoding
+select (_timescaledb_functions.compressed_data_info(location)).* from :cchunk limit 1;
+ algorithm  | has_nulls 
+------------+-----------
+ DICTIONARY | f
+(1 row)
 
