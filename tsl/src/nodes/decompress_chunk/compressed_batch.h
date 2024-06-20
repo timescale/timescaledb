@@ -7,6 +7,7 @@
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_context.h"
+#include <executor/tuptable.h>
 
 typedef struct ArrowArray ArrowArray;
 
@@ -122,7 +123,6 @@ extern void compressed_batch_advance(DecompressContext *dcontext,
 extern void compressed_batch_save_first_tuple(DecompressContext *dcontext,
 											  DecompressBatchState *batch_state,
 											  TupleTableSlot *first_tuple_slot);
-extern ArrowArray *make_single_value_arrow(Oid pgtype, Datum datum, bool isnull);
 
 /*
  * Initialize the batch memory context and bulk decompression context.
