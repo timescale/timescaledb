@@ -34,6 +34,7 @@
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/decompress_chunk/exec.h"
 #include "nodes/decompress_chunk/planner.h"
+#include "nodes/decompress_chunk/vector_quals.h"
 #include "nodes/vector_agg/exec.h"
 #include "ts_catalog/array_utils.h"
 #include "vector_predicates.h"
@@ -144,6 +145,26 @@ typedef struct
 	List *bulk_decompression_column;
 
 } DecompressionMapContext;
+
+typedef struct VectorQualInfoDecompressChunk
+{
+	VectorQualInfo vqinfo;
+	const UncompressedColumnInfo *colinfo;
+} VectorQualInfoDecompressChunk;
+
+static bool *
+build_vector_attrs_array(const UncompressedColumnInfo *colinfo, const CompressionInfo *info)
+{
+	const unsigned short arrlen = info->chunk_rel->max_attr + 1;
+	bool *vector_attrs = palloc0(sizeof(bool) * arrlen);
+
+	for (AttrNumber attno = 0; attno < arrlen; attno++)
+	{
+		vector_attrs[attno] = colinfo[attno].bulk_decompression_possible;
+	}
+
+	return vector_attrs;
+}
 
 /*
  * Try to make the custom scan targetlist that follows the order of the
@@ -660,8 +681,8 @@ is_not_runtime_constant(Node *node)
  * Try to check if the current qual is vectorizable, and if needed make a
  * commuted copy. If not, return NULL.
  */
-static Node *
-make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path, Node *qual)
+Node *
+vector_qual_make(Node *qual, const VectorQualInfo *vqinfo)
 {
 	/*
 	 * We can vectorize BoolExpr (AND/OR/NOT).
@@ -685,7 +706,7 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 		foreach (lc, boolexpr->args)
 		{
 			Node *arg = lfirst(lc);
-			Node *vectorized_arg = make_vectorized_qual(context, path, arg);
+			Node *vectorized_arg = vector_qual_make(arg, vqinfo);
 			if (vectorized_arg == NULL)
 			{
 				return NULL;
@@ -781,7 +802,7 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 	}
 
 	Var *var = castNode(Var, arg1);
-	if ((Index) var->varno != path->info->chunk_rel->relid)
+	if ((Index) var->varno != vqinfo->rti)
 	{
 		/*
 		 * We have a Var from other relation (join clause), can't vectorize it
@@ -802,7 +823,7 @@ make_vectorized_qual(DecompressionMapContext *context, DecompressChunkPath *path
 	 * ExecQual is performed before ExecProject and operates on the decompressed
 	 * scan slot, so the qual attnos are the uncompressed chunk attnos.
 	 */
-	if (!context->uncompressed_attno_info[var->varattno].bulk_decompression_possible)
+	if (!vqinfo->vector_attrs[var->varattno])
 	{
 		/* This column doesn't support bulk decompression. */
 		return NULL;
@@ -879,6 +900,7 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 					  List **vectorized, List **nonvectorized)
 {
 	ListCell *lc;
+
 	foreach (lc, qual_list)
 	{
 		Node *source_qual = lfirst(lc);
@@ -891,8 +913,14 @@ find_vectorized_quals(DecompressionMapContext *context, DecompressChunkPath *pat
 		 */
 		Node *transformed_comparison =
 			(Node *) ts_transform_cross_datatype_comparison((Expr *) source_qual);
-
-		Node *vectorized_qual = make_vectorized_qual(context, path, transformed_comparison);
+		VectorQualInfoDecompressChunk vqidc = {
+			.vqinfo = {
+				.vector_attrs = build_vector_attrs_array(context->uncompressed_attno_info, path->info),
+				.rti = path->info->chunk_rel->relid,
+			},
+			.colinfo = context->uncompressed_attno_info,
+		};
+		Node *vectorized_qual = vector_qual_make(transformed_comparison, &vqidc.vqinfo);
 		if (vectorized_qual)
 		{
 			*vectorized = lappend(*vectorized, vectorized_qual);
