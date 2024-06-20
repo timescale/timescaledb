@@ -163,7 +163,7 @@ select * from bt_page_items(:'hystable_location_chunk_idx', 1);
 -- Insert bigger data set and create new chunks
 insert into regtable (time, location, device, temp)
 select t, ceil(random()*10), ceil(random()*30), random()*40
-from generate_series('2022-06-01'::timestamptz, '2022-06-10', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-06-10', '60s') t;
 
 insert into hystable select * from regtable;
 
