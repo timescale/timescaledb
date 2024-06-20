@@ -608,9 +608,6 @@ generate_partial_agg_pushdown_path(PlannerInfo *root, Path *cheapest_partial_pat
 								   bool can_hash, double d_num_groups,
 								   GroupPathExtraData *extra_data)
 {
-	fprintf(stderr, "try generate partial for:\n");
-	my_print(cheapest_partial_path);
-
 	/* Get subpaths */
 	List *subpaths = get_subpaths_from_append_path(cheapest_partial_path, false);
 
@@ -898,8 +895,6 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	if (partially_grouped_rel->pathlist == NIL)
 		return;
 
-	fprintf(stderr, "will replan\n");
-
 	/* Prefer our paths */
 	output_rel->pathlist = NIL;
 	output_rel->partial_pathlist = NIL;
@@ -959,7 +954,6 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 											  d_num_groups));
 		}
 	}
-	fprintf(stderr, "replanning done\n");
 }
 
 /*
