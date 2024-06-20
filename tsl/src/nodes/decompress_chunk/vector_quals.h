@@ -13,6 +13,28 @@
 #include <compression/arrow_c_data_interface.h>
 
 /*
+ * VectorQualInfo provides planner time information for extracting
+ * vectorizable quals from regular quals.
+ */
+typedef struct VectorQualInfo
+{
+	/* The range-table index of the relation to compute vectorized quals
+	 * for */
+	Index rti;
+
+	/*
+	 * Interface function to be provided by scan node.
+	 *
+	 * Given an attribute/column number, determine whether the column is
+	 * vectorizable.
+	 *
+	 * Scan-node specific data can be provided by embedding this struct in a
+	 * larger one.
+	 */
+	bool (*is_vector_column)(const struct VectorQualInfo *vqinfo, AttrNumber attno);
+} VectorQualInfo;
+
+/*
  * VectorQualState keeps the necessary state needed for the computation of
  * vectorized filters in scan nodes.
  *
@@ -40,5 +62,6 @@ typedef struct VectorQualState
 										 bool *is_default_value);
 } VectorQualState;
 
+extern Node *vector_qual_make(Node *qual, const VectorQualInfo *vqinfo);
 extern VectorQualSummary vector_qual_compute(VectorQualState *vqstate);
 extern ArrowArray *make_single_value_arrow(Oid pgtype, Datum datum, bool isnull);
