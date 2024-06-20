@@ -6,6 +6,7 @@
 
 #include <postgres.h>
 
+#include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
@@ -17,6 +18,19 @@
 #include "guc.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
 #include "nodes/decompress_chunk/vector_predicates.h"
+#include "nodes/decompress_chunk/vector_quals.h"
+
+/*
+ * VectorQualState for a compressed batch used to pass
+ * DecompressChunk-specific data to vector qual functions that are shared
+ * across scan nodes.
+ */
+typedef struct CompressedBatchVectorQualState
+{
+	VectorQualState vqstate;
+	DecompressBatchState *batch_state;
+	DecompressContext *dcontext;
+} CompressedBatchVectorQualState;
 
 /*
  * Create a single-value ArrowArray of an arithmetic type. This is a specialized
@@ -289,117 +303,22 @@ decompress_column(DecompressContext *dcontext, DecompressBatchState *batch_state
 }
 
 /*
- * When we have a dictionary-encoded Arrow Array, and have run a predicate on
- * the dictionary, this function is used to translate the dictionary predicate
- * result to the final predicate result.
+ * Get the arrow array for the compressed batch via the VectorQualState.
+ *
+ * This is a DecompressChunk-specific implementation of the
+ * VectorQualState->get_arrow_array() function used to interface with the
+ * vector qual code across different scan nodes.
  */
-static void
-translate_bitmap_from_dictionary(const ArrowArray *arrow, const uint64 *dict_result,
-								 uint64 *restrict final_result)
+static const ArrowArray *
+compressed_batch_get_arrow_array(VectorQualState *vqstate, const Var *var, bool *is_default_value)
 {
-	Assert(arrow->dictionary != NULL);
-
-	const size_t n = arrow->length;
-	const int16 *indices = (int16 *) arrow->buffers[1];
-	for (size_t outer = 0; outer < n / 64; outer++)
-	{
-		uint64 word = 0;
-		for (size_t inner = 0; inner < 64; inner++)
-		{
-			const size_t row = outer * 64 + inner;
-			const size_t bit_index = inner;
-#define INNER_LOOP                                                                                 \
-	const int16 index = indices[row];                                                              \
-	const bool valid = arrow_row_is_valid(dict_result, index);                                     \
-	word |= ((uint64) valid) << bit_index;
-
-			INNER_LOOP
-		}
-		final_result[outer] &= word;
-	}
-
-	if (n % 64)
-	{
-		uint64 word = 0;
-		for (size_t row = (n / 64) * 64; row < n; row++)
-		{
-			const size_t bit_index = row % 64;
-
-			INNER_LOOP
-		}
-		final_result[n / 64] &= word;
-	}
-#undef INNER_LOOP
-}
-
-static void
-compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
-				   TupleTableSlot *compressed_slot, Node *qual, uint64 *restrict result)
-{
-	/*
-	 * Some predicates can be evaluated to a Const at run time.
-	 */
-	if (IsA(qual, Const))
-	{
-		Const *c = castNode(Const, qual);
-		if (c->constisnull || !DatumGetBool(c->constvalue))
-		{
-			/*
-			 * Some predicates are evaluated to a null Const, like a
-			 * strict comparison with stable expression that evaluates to null.
-			 * No rows pass.
-			 */
-			const size_t n_batch_result_words = (batch_state->total_batch_rows + 63) / 64;
-			for (size_t i = 0; i < n_batch_result_words; i++)
-			{
-				result[i] = 0;
-			}
-		}
-		else
-		{
-			/*
-			 * This is a constant true qual, every row passes and we can
-			 * just ignore it. No idea how it can happen though.
-			 */
-			Assert(false);
-		}
-		return;
-	}
-
-	/*
-	 * For now, we support NullTest, "Var ? Const" predicates and
-	 * ScalarArrayOperations.
-	 */
-	List *args = NULL;
-	RegProcedure vector_const_opcode = InvalidOid;
-	ScalarArrayOpExpr *saop = NULL;
-	OpExpr *opexpr = NULL;
-	NullTest *nulltest = NULL;
-	if (IsA(qual, NullTest))
-	{
-		nulltest = castNode(NullTest, qual);
-		args = list_make1(nulltest->arg);
-	}
-	else if (IsA(qual, ScalarArrayOpExpr))
-	{
-		saop = castNode(ScalarArrayOpExpr, qual);
-		args = saop->args;
-		vector_const_opcode = get_opcode(saop->opno);
-	}
-	else
-	{
-		Ensure(IsA(qual, OpExpr), "expected OpExpr");
-		opexpr = castNode(OpExpr, qual);
-		args = opexpr->args;
-		vector_const_opcode = get_opcode(opexpr->opno);
-	}
-
-	/*
-	 * Find the compressed column referred to by the Var.
-	 */
-	Var *var = castNode(Var, linitial(args));
+	CompressedBatchVectorQualState *cbvqstate = (CompressedBatchVectorQualState *) vqstate;
+	DecompressContext *dcontext = cbvqstate->dcontext;
+	DecompressBatchState *batch_state = cbvqstate->batch_state;
 	CompressionColumnDescription *column_description = NULL;
+	TupleTableSlot *compressed_slot = vqstate->slot;
 	int column_index = 0;
+
 	for (; column_index < dcontext->num_data_columns; column_index++)
 	{
 		column_description = &dcontext->compressed_chunk_columns[column_index];
@@ -460,8 +379,6 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	 * default values in a special way because they don't produce the usual
 	 * decompressed ArrowArrays.
 	 */
-	uint64 default_value_predicate_result[1];
-	uint64 *predicate_result = result;
 	const ArrowArray *vector = column_values->arrow;
 	if (column_values->arrow == NULL)
 	{
@@ -481,6 +398,135 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 										 *column_values->output_value,
 										 *column_values->output_isnull);
 
+		/*
+		 * We start from an all-valid bitmap, because the predicate is
+		 * AND-ed to it.
+		 */
+		*is_default_value = true;
+	}
+	else
+		*is_default_value = false;
+
+	return vector;
+}
+
+/*
+ * When we have a dictionary-encoded Arrow Array, and have run a predicate on
+ * the dictionary, this function is used to translate the dictionary predicate
+ * result to the final predicate result.
+ */
+static void
+translate_bitmap_from_dictionary(const ArrowArray *arrow, const uint64 *dict_result,
+								 uint64 *restrict final_result)
+{
+	Assert(arrow->dictionary != NULL);
+
+	const size_t n = arrow->length;
+	const int16 *indices = (int16 *) arrow->buffers[1];
+	for (size_t outer = 0; outer < n / 64; outer++)
+	{
+		uint64 word = 0;
+		for (size_t inner = 0; inner < 64; inner++)
+		{
+			const size_t row = outer * 64 + inner;
+			const size_t bit_index = inner;
+#define INNER_LOOP                                                                                 \
+	const int16 index = indices[row];                                                              \
+	const bool valid = arrow_row_is_valid(dict_result, index);                                     \
+	word |= ((uint64) valid) << bit_index;
+
+			INNER_LOOP
+		}
+		final_result[outer] &= word;
+	}
+
+	if (n % 64)
+	{
+		uint64 word = 0;
+		for (size_t row = (n / 64) * 64; row < n; row++)
+		{
+			const size_t bit_index = row % 64;
+
+			INNER_LOOP
+		}
+		final_result[n / 64] &= word;
+	}
+#undef INNER_LOOP
+}
+
+static void
+compute_plain_qual(VectorQualState *vqstate, TupleTableSlot *slot, Node *qual,
+				   uint64 *restrict result)
+{
+	/*
+	 * Some predicates can be evaluated to a Const at run time.
+	 */
+	if (IsA(qual, Const))
+	{
+		Const *c = castNode(Const, qual);
+		if (c->constisnull || !DatumGetBool(c->constvalue))
+		{
+			/*
+			 * Some predicates are evaluated to a null Const, like a
+			 * strict comparison with stable expression that evaluates to null.
+			 * No rows pass.
+			 */
+			const size_t n_batch_result_words = (vqstate->num_results + 63) / 64;
+			for (size_t i = 0; i < n_batch_result_words; i++)
+			{
+				result[i] = 0;
+			}
+		}
+		else
+		{
+			/*
+			 * This is a constant true qual, every row passes and we can
+			 * just ignore it. No idea how it can happen though.
+			 */
+			Assert(false);
+		}
+		return;
+	}
+
+	/*
+	 * For now, we support NullTest, "Var ? Const" predicates and
+	 * ScalarArrayOperations.
+	 */
+	List *args = NULL;
+	RegProcedure vector_const_opcode = InvalidOid;
+	ScalarArrayOpExpr *saop = NULL;
+	OpExpr *opexpr = NULL;
+	NullTest *nulltest = NULL;
+	if (IsA(qual, NullTest))
+	{
+		nulltest = castNode(NullTest, qual);
+		args = list_make1(nulltest->arg);
+	}
+	else if (IsA(qual, ScalarArrayOpExpr))
+	{
+		saop = castNode(ScalarArrayOpExpr, qual);
+		args = saop->args;
+		vector_const_opcode = get_opcode(saop->opno);
+	}
+	else
+	{
+		Ensure(IsA(qual, OpExpr), "expected OpExpr");
+		opexpr = castNode(OpExpr, qual);
+		args = opexpr->args;
+		vector_const_opcode = get_opcode(opexpr->opno);
+	}
+
+	/*
+	 * Find the compressed column referred to by the Var.
+	 */
+	Var *var = castNode(Var, linitial(args));
+	uint64 default_value_predicate_result[1];
+	uint64 *predicate_result = result;
+	bool default_value = false;
+	const ArrowArray *vector = vqstate->get_arrow_array(vqstate, var, &default_value);
+
+	if (default_value)
+	{
 		/*
 		 * We start from an all-valid bitmap, because the predicate is
 		 * AND-ed to it.
@@ -573,16 +619,15 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	}
 
 	/* Translate the result if the column had a default value. */
-	if (column_values->arrow == NULL)
+	if (default_value)
 	{
-		Assert(column_values->decompression_type == DT_Scalar);
 		if (!(default_value_predicate_result[0] & 1))
 		{
 			/*
 			 * We had a default value for the compressed column, and it
 			 * didn't pass the predicate, so the entire batch didn't pass.
 			 */
-			const size_t n_batch_result_words = (batch_state->total_batch_rows + 63) / 64;
+			const size_t n_batch_result_words = (vqstate->num_results + 63) / 64;
 			for (size_t i = 0; i < n_batch_result_words; i++)
 			{
 				result[i] = 0;
@@ -591,18 +636,17 @@ compute_plain_qual(DecompressContext *dcontext, DecompressBatchState *batch_stat
 	}
 }
 
-static void compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
-							 TupleTableSlot *compressed_slot, Node *qual, uint64 *restrict result);
-
+static void compute_one_qual(VectorQualState *vqstate, TupleTableSlot *compressed_slot, Node *qual,
+							 uint64 *restrict result);
 static void
-compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
-						 TupleTableSlot *compressed_slot, List *quals, uint64 *restrict result)
+compute_qual_conjunction(VectorQualState *vqstate, TupleTableSlot *compressed_slot, List *quals,
+						 uint64 *restrict result)
 {
 	ListCell *lc;
 	foreach (lc, quals)
 	{
-		compute_one_qual(dcontext, batch_state, compressed_slot, lfirst(lc), result);
-		if (get_vector_qual_summary(result, batch_state->total_batch_rows) == NoRowsPass)
+		compute_one_qual(vqstate, compressed_slot, lfirst(lc), result);
+		if (get_vector_qual_summary(result, vqstate->num_results) == NoRowsPass)
 		{
 			/*
 			 * Exit early if no rows pass already. This might allow us to avoid
@@ -614,10 +658,10 @@ compute_qual_conjunction(DecompressContext *dcontext, DecompressBatchState *batc
 }
 
 static void
-compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batch_state,
-						 TupleTableSlot *compressed_slot, List *quals, uint64 *restrict result)
+compute_qual_disjunction(VectorQualState *vqstate, TupleTableSlot *compressed_slot, List *quals,
+						 uint64 *restrict result)
 {
-	const size_t n_rows = batch_state->total_batch_rows;
+	const size_t n_rows = vqstate->num_results;
 	const size_t n_result_words = (n_rows + 63) / 64;
 	uint64 *or_result = palloc(sizeof(uint64) * n_result_words);
 	for (size_t i = 0; i < n_result_words; i++)
@@ -634,7 +678,7 @@ compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batc
 		{
 			one_qual_result[i] = (uint64) -1;
 		}
-		compute_one_qual(dcontext, batch_state, compressed_slot, lfirst(lc), one_qual_result);
+		compute_one_qual(vqstate, compressed_slot, lfirst(lc), one_qual_result);
 		for (size_t i = 0; i < n_result_words; i++)
 		{
 			or_result[i] |= one_qual_result[i];
@@ -657,19 +701,19 @@ compute_qual_disjunction(DecompressContext *dcontext, DecompressBatchState *batc
 }
 
 static void
-compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
-				 TupleTableSlot *compressed_slot, Node *qual, uint64 *restrict result)
+compute_one_qual(VectorQualState *vqstate, TupleTableSlot *compressed_slot, Node *qual,
+				 uint64 *restrict result)
 {
 	if (!IsA(qual, BoolExpr))
 	{
-		compute_plain_qual(dcontext, batch_state, compressed_slot, qual, result);
+		compute_plain_qual(vqstate, compressed_slot, qual, result);
 		return;
 	}
 
 	BoolExpr *boolexpr = castNode(BoolExpr, qual);
 	if (boolexpr->boolop == AND_EXPR)
 	{
-		compute_qual_conjunction(dcontext, batch_state, compressed_slot, boolexpr->args, result);
+		compute_qual_conjunction(vqstate, compressed_slot, boolexpr->args, result);
 		return;
 	}
 
@@ -678,7 +722,7 @@ compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
 	 * NOT and consider it non-vectorizable at planning time. So only OR is left.
 	 */
 	Ensure(boolexpr->boolop == OR_EXPR, "expected OR");
-	compute_qual_disjunction(dcontext, batch_state, compressed_slot, boolexpr->args, result);
+	compute_qual_disjunction(vqstate, compressed_slot, boolexpr->args, result);
 }
 
 /*
@@ -686,19 +730,18 @@ compute_one_qual(DecompressContext *dcontext, DecompressBatchState *batch_state,
  * it means the entire batch is filtered out, and we use this for further
  * optimizations.
  */
-static VectorQualSummary
-compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_state,
-					 TupleTableSlot *compressed_slot)
+VectorQualSummary
+vector_qual_compute(VectorQualState *vqstate)
 {
 	/*
 	 * Allocate the bitmap that will hold the vectorized qual results. We will
 	 * initialize it to all ones and AND the individual quals to it.
 	 */
-	const size_t n_rows = batch_state->total_batch_rows;
+	const size_t n_rows = vqstate->num_results;
 	const int bitmap_bytes = sizeof(uint64) * ((n_rows + 63) / 64);
-	batch_state->vector_qual_result =
-		MemoryContextAlloc(batch_state->per_batch_context, bitmap_bytes);
-	memset(batch_state->vector_qual_result, 0xFF, bitmap_bytes);
+	vqstate->vector_qual_result = MemoryContextAlloc(vqstate->per_vector_mcxt, bitmap_bytes);
+	memset(vqstate->vector_qual_result, 0xFF, bitmap_bytes);
+
 	if (n_rows % 64 != 0)
 	{
 		/*
@@ -706,20 +749,19 @@ compute_vector_quals(DecompressContext *dcontext, DecompressBatchState *batch_st
 		 * bitmap word. Since all predicates are ANDed to the result bitmap,
 		 * we can do it here once instead of doing it in each predicate.
 		 */
-		const uint64 mask = ((uint64) -1) >> (64 - batch_state->total_batch_rows % 64);
-		batch_state->vector_qual_result[batch_state->total_batch_rows / 64] = mask;
+		const uint64 mask = ((uint64) -1) >> (64 - vqstate->num_results % 64);
+		vqstate->vector_qual_result[vqstate->num_results / 64] = mask;
 	}
 
 	/*
 	 * Compute the quals.
 	 */
-	compute_qual_conjunction(dcontext,
-							 batch_state,
-							 compressed_slot,
-							 dcontext->vectorized_quals_constified,
-							 batch_state->vector_qual_result);
+	compute_qual_conjunction(vqstate,
+							 vqstate->slot,
+							 vqstate->vectorized_quals_constified,
+							 vqstate->vector_qual_result);
 
-	return get_vector_qual_summary(batch_state->vector_qual_result, n_rows);
+	return get_vector_qual_summary(vqstate->vector_qual_result, n_rows);
 }
 
 /*
@@ -930,10 +972,24 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		}
 	}
 
+	CompressedBatchVectorQualState cbvqstate = {
+		.vqstate = {
+			.vectorized_quals_constified = dcontext->vectorized_quals_constified,
+			.num_results = batch_state->total_batch_rows,
+			.per_vector_mcxt = batch_state->per_batch_context,
+			.slot = compressed_slot,
+			.get_arrow_array = compressed_batch_get_arrow_array,
+		},
+		.batch_state = batch_state,
+		.dcontext = dcontext,
+	};
+	VectorQualState *vqstate = &cbvqstate.vqstate;
+
 	VectorQualSummary vector_qual_summary =
-		dcontext->vectorized_quals_constified != NIL ?
-			compute_vector_quals(dcontext, batch_state, compressed_slot) :
-			AllRowsPass;
+		vqstate->vectorized_quals_constified != NIL ? vector_qual_compute(vqstate) : AllRowsPass;
+
+	batch_state->vector_qual_result = vqstate->vector_qual_result;
+
 	if (vector_qual_summary == NoRowsPass && !dcontext->batch_sorted_merge)
 	{
 		/*
@@ -975,6 +1031,7 @@ compressed_batch_set_compressed_tuple(DecompressContext *dcontext,
 		if (vector_qual_summary == AllRowsPass)
 		{
 			batch_state->vector_qual_result = NULL;
+			vqstate->vector_qual_result = NULL;
 		}
 	}
 }
