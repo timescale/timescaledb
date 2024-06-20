@@ -408,7 +408,12 @@ create index on rides (pickup_datetime desc, vendor_id);
 create index on rides (rate_code, pickup_datetime desc);
 create index on rides (passenger_count, pickup_datetime desc);
 alter table rides set (timescaledb.compress_segmentby='payment_type');
-insert into rides values (1,'2016-01-01 00:00:01','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3);
+
+-- Insert some values. Particularly interested in testing text type handling.
+insert into rides values
+(745233436676,'2016-01-01 00:00:03','2016-01-01 00:11:14',1,6.00,-73.947151184082031,40.791046142578125,1,-73.920768737792969,40.865577697753906,2,9,0.5,0.5,0,0,0.3,19.3),
+(6,'2016-01-01 00:00:02','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3),
+(356,'2016-01-01 00:00:01','2016-01-01 00:11:55',1,1.20,-73.979423522949219,40.744613647460938,1,-73.992034912109375,40.753944396972656,2,9,0.5,0.5,0,0,0.3,10.3);
 -- Check that it is possible to compress
 select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('rides') ch;
 select rel, amname from compressed_rel_size_stats
@@ -417,6 +422,8 @@ where relparent::regclass = 'rides'::regclass;
 -- Query to check everything is OK
 analyze rides;
 
+-- This should decompress and create text datums (column 1) in an
+-- order that exercises datum caching in the arrow array
 explain (costs off)
-select * from rides;
-select * from rides;
+select * from rides order by pickup_datetime;
+select * from rides order by pickup_datetime;
