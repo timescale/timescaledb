@@ -4,6 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 #include <postgres.h>
+#include <access/attnum.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
@@ -19,7 +20,6 @@
 #include <utils/palloc.h>
 #include <utils/typcache.h>
 
-#include "compat/compat.h"
 #include "columnar_scan.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
@@ -36,7 +36,6 @@ typedef struct ColumnarScanState
 	int nscankeys;
 	List *scankey_quals;
 	List *vectorized_quals_orig;
-	bool have_constant_false_vectorized_qual;
 } ColumnarScanState;
 
 static bool
@@ -408,16 +407,6 @@ columnar_scan_exec(CustomScanState *state)
 	}
 }
 
-static List *
-get_args_from(Node *node)
-{
-	if (IsA(node, OpExpr))
-		return castNode(OpExpr, node)->args;
-	if (IsA(node, ScalarArrayOpExpr))
-		return castNode(ScalarArrayOpExpr, node)->args;
-	return NIL;
-}
-
 static void
 columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 {
@@ -450,9 +439,6 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	vector_qual_state_init(&cstate->vqstate, state->ss.ps.ps_ExprContext);
 	cstate->scankeys = extract_scan_keys(hsinfo, scan, &cstate->nscankeys, &cstate->scankey_quals);
 
-	/* Constify stable expressions in vectorized predicates. */
-	cstate->have_constant_false_vectorized_qual = false;
-
 	PlannerGlobal glob = {
 		.boundParams = state->ss.ps.state->es_param_list_info,
 	};
@@ -463,35 +449,6 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	foreach (lc, cstate->vectorized_quals_orig)
 	{
 		Node *constified = estimate_expression_value(&root, (Node *) lfirst(lc));
-
-		/*
-		 * Note that some expressions are evaluated to a null Const, like a
-		 * strict comparison with stable expression that evaluates to null. If
-		 * we have such filter, no rows can pass, so we set a special flag to
-		 * return early.
-		 */
-		if (IsA(constified, Const))
-		{
-			Const *c = castNode(Const, constified);
-			if (c->constisnull || !DatumGetBool(c->constvalue))
-			{
-				cstate->have_constant_false_vectorized_qual = true;
-				break;
-			}
-			else
-			{
-				/*
-				 * This is a constant true qual, every row passes and we can
-				 * just ignore it. No idea how it can happen though.
-				 */
-				Assert(false);
-				continue;
-			}
-		}
-
-		List *args = get_args_from(constified);
-		Ensure(args && IsA(lsecond(args), Const),
-			   "failed to evaluate runtime constant in vectorized filter");
 		cstate->vqstate.vectorized_quals_constified =
 			lappend(cstate->vqstate.vectorized_quals_constified, constified);
 	}
@@ -634,176 +591,29 @@ static CustomScanMethods columnar_scan_plan_methods = {
 	.CreateCustomScanState = columnar_scan_state_create,
 };
 
-static bool
-contains_volatile_functions_checker(Oid func_id, void *context)
+typedef struct VectorQualInfoHyperstore
 {
-	return (func_volatile(func_id) == PROVOLATILE_VOLATILE);
-}
+	VectorQualInfo vqinfo;
+	const HyperstoreInfo *hsinfo;
+} VectorQualInfoHyperstore;
 
-static bool
-is_not_runtime_constant_walker(Node *node, void *context)
+static bool *
+columnar_scan_build_vector_attrs(const ColumnCompressionSettings *columns, int numcolumns)
 {
-	if (node == NULL)
+	bool *vector_attrs = palloc0(sizeof(bool) * (numcolumns + 1));
+
+	for (int i = 0; i < numcolumns; i++)
 	{
-		return false;
+		const ColumnCompressionSettings *column = &columns[i];
+		AttrNumber attnum = AttrOffsetGetAttrNumber(i);
+
+		Assert(column->attnum == attnum || column->attnum == InvalidAttrNumber);
+		vector_attrs[attnum] =
+			(!column->is_segmentby && column->attnum != InvalidAttrNumber &&
+			 tsl_get_decompress_all_function(compression_get_default_algorithm(column->typid),
+											 column->typid) != NULL);
 	}
-
-	switch (nodeTag(node))
-	{
-		case T_Var:
-		case T_PlaceHolderVar:
-		case T_Param:
-			/*
-			 * We might want to support these nodes to have vectorizable
-			 * join clauses (T_Var), join clauses referencing a variable that is
-			 * above outer join (T_PlaceHolderVar) or initplan parameters and
-			 * prepared statement parameters (T_Param). We don't support them at
-			 * the moment.
-			 */
-			return true;
-		default:
-			if (check_functions_in_node(node,
-										contains_volatile_functions_checker,
-										/* context = */ NULL))
-			{
-				return true;
-			}
-			return expression_tree_walker(node,
-										  is_not_runtime_constant_walker,
-										  /* context = */ NULL);
-	}
-}
-
-/*
- * Check if the given node is a run-time constant, i.e. it doesn't contain
- * volatile functions or variables or parameters. This means we can evaluate
- * it at run time, allowing us to apply the vectorized comparison operators
- * that have the form "Var op Const". This applies for example to filter
- * expressions like `time > now() - interval '1 hour'`.
- * Note that we do the same evaluation when doing run time chunk exclusion, but
- * there is no good way to pass the evaluated clauses to the underlying nodes
- * like this DecompressChunk node.
- */
-static bool
-is_not_runtime_constant(Node *node)
-{
-	bool result = is_not_runtime_constant_walker(node, /* context = */ NULL);
-	return result;
-}
-
-/*
- * Try to check if the current qual is vectorizable, and if needed make a
- * commuted copy. If not, return NULL.
- */
-static Node *
-make_vectorized_qual(Node *qual, const HyperstoreInfo *hsinfo)
-{
-	/*
-	 * Currently we vectorize some "Var op Const" binary predicates,
-	 * and scalar array operations with these predicates.
-	 */
-	if (!IsA(qual, OpExpr) && !IsA(qual, ScalarArrayOpExpr))
-	{
-		return NULL;
-	}
-
-	List *args = NIL;
-	OpExpr *opexpr = NULL;
-	Oid opno = InvalidOid;
-	ScalarArrayOpExpr *saop = NULL;
-	if (IsA(qual, OpExpr))
-	{
-		opexpr = castNode(OpExpr, qual);
-		args = opexpr->args;
-		opno = opexpr->opno;
-	}
-	else
-	{
-		saop = castNode(ScalarArrayOpExpr, qual);
-		args = saop->args;
-		opno = saop->opno;
-	}
-
-	if (list_length(args) != 2)
-	{
-		return NULL;
-	}
-
-	if (opexpr && IsA(lsecond(args), Var))
-	{
-		/*
-		 * Try to commute the operator if we have Var on the right.
-		 */
-		opno = get_commutator(opno);
-		if (!OidIsValid(opno))
-		{
-			return NULL;
-		}
-
-		opexpr = (OpExpr *) copyObject(opexpr);
-		opexpr->opno = opno;
-		/*
-		 * opfuncid is a cache, we can set it to InvalidOid like the
-		 * CommuteOpExpr() does.
-		 */
-		opexpr->opfuncid = InvalidOid;
-		args = list_make2(lsecond(args), linitial(args));
-		opexpr->args = args;
-	}
-
-	/*
-	 * We can vectorize the operation where the left side is a Var and the right
-	 * side is a constant or can be evaluated to a constant at run time (e.g.
-	 * contains stable functions).
-	 */
-	if (!IsA(linitial(args), Var) || is_not_runtime_constant(lsecond(args)))
-	{
-		return NULL;
-	}
-
-	Var *var = castNode(Var, linitial(args));
-
-	/*
-	 * ExecQual is performed before ExecProject and operates on the decompressed
-	 * scan slot, so the qual attnos are the uncompressed chunk attnos.
-	 */
-
-	const ColumnCompressionSettings *column =
-		&hsinfo->columns[AttrNumberGetAttrOffset(var->varattno)];
-
-	Assert(column->attnum == var->varattno);
-
-	bool is_arrow_column =
-		(!column->is_segmentby && column->attnum != InvalidAttrNumber &&
-		 tsl_get_decompress_all_function(compression_get_default_algorithm(column->typid),
-										 column->typid) != NULL);
-
-	if (!is_arrow_column)
-	{
-		/* This column doesn't support bulk decompression. */
-		return NULL;
-	}
-
-	Oid opcode = get_opcode(opno);
-	if (!get_vector_const_predicate(opcode))
-	{
-		return NULL;
-	}
-
-#if PG14_GE
-	if (saop)
-	{
-		if (saop->hashfuncid)
-		{
-			/*
-			 * Don't vectorize if the planner decided to build a hash table.
-			 */
-			return NULL;
-		}
-	}
-#endif
-
-	return opexpr ? (Node *) opexpr : (Node *) saop;
+	return vector_attrs;
 }
 
 static Plan *
@@ -812,7 +622,19 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 {
 	CustomScan *columnar_scan_plan = makeNode(CustomScan);
 	RangeTblEntry *rte = planner_rt_fetch(rel->relid, root);
+	Relation relation = RelationIdGetRelation(rte->relid);
+	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
+	List *vectorized_quals = NIL;
+	List *nonvectorized_quals = NIL;
+	ListCell *lc;
 
+	VectorQualInfoHyperstore vqih = {
+		.vqinfo = {
+			.rti = rel->relid,
+			.vector_attrs = columnar_scan_build_vector_attrs(hsinfo->columns, hsinfo->num_columns),
+		},
+		.hsinfo = hsinfo,
+	};
 	Assert(best_path->path.parent->rtekind == RTE_RELATION);
 
 	columnar_scan_plan->flags = best_path->flags;
@@ -825,16 +647,10 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	/* Reduce RestrictInfo list to bare expressions; ignore pseudoconstants */
 	scan_clauses = extract_actual_clauses(scan_clauses, false);
 
-	Relation relation = RelationIdGetRelation(rte->relid);
-	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
-	List *vectorized_quals = NIL;
-	List *nonvectorized_quals = NIL;
-	ListCell *lc;
-
 	foreach (lc, scan_clauses)
 	{
 		Node *source_qual = lfirst(lc);
-		Node *vectorized_qual = make_vectorized_qual(source_qual, hsinfo);
+		Node *vectorized_qual = vector_qual_make(source_qual, &vqih.vqinfo);
 
 		if (vectorized_qual)
 		{
