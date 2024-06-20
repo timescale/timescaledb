@@ -851,6 +851,10 @@ ts_pushdown_partial_agg(PlannerInfo *root, Hypertable *ht, RelOptInfo *input_rel
 	if (partially_grouped_rel->pathlist == NIL)
 		return;
 
+	/* Prefer our paths */
+	output_rel->pathlist = NIL;
+	output_rel->partial_pathlist = NIL;
+
 	/* Finalize the created partially aggregated paths by adding a 'Finalize Aggregate' node on top
 	 * of them. */
 	AggClauseCosts *agg_final_costs = &extra_data->agg_final_costs;
