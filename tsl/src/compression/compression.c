@@ -128,7 +128,7 @@ static void row_compressor_flush(RowCompressor *row_compressor, CommandId mycid,
 
 static int create_segment_filter_scankey(RowDecompressor *decompressor,
 										 char *segment_filter_col_name, StrategyNumber strategy,
-										 ScanKeyData *scankeys, int num_scankeys,
+										 Oid subtype, ScanKeyData *scankeys, int num_scankeys,
 										 Bitmapset **null_columns, Datum value, bool is_null_check,
 										 bool is_array_op);
 static void create_per_compressed_column(RowDecompressor *decompressor);
@@ -2059,6 +2059,7 @@ build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
 				key_index = create_segment_filter_scankey(decompressor,
 														  attname,
 														  BTEqualStrategyNumber,
+														  InvalidOid,
 														  scankeys,
 														  key_index,
 														  null_columns,
@@ -2079,6 +2080,7 @@ build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
 				key_index = create_segment_filter_scankey(decompressor,
 														  column_segment_min_name(index),
 														  BTLessEqualStrategyNumber,
+														  InvalidOid,
 														  scankeys,
 														  key_index,
 														  null_columns,
@@ -2088,6 +2090,7 @@ build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
 				key_index = create_segment_filter_scankey(decompressor,
 														  column_segment_max_name(index),
 														  BTGreaterEqualStrategyNumber,
+														  InvalidOid,
 														  scankeys,
 														  key_index,
 														  null_columns,
@@ -2104,9 +2107,9 @@ build_scankeys(Oid hypertable_relid, Oid out_rel, RowDecompressor *decompressor,
 
 static int
 create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filter_col_name,
-							  StrategyNumber strategy, ScanKeyData *scankeys, int num_scankeys,
-							  Bitmapset **null_columns, Datum value, bool is_null_check,
-							  bool is_array_op)
+							  StrategyNumber strategy, Oid subtype, ScanKeyData *scankeys,
+							  int num_scankeys, Bitmapset **null_columns, Datum value,
+							  bool is_null_check, bool is_array_op)
 {
 	AttrNumber cmp_attno = get_attnum(decompressor->in_rel->rd_id, segment_filter_col_name);
 	Assert(cmp_attno != InvalidAttrNumber);
@@ -2164,7 +2167,7 @@ create_segment_filter_scankey(RowDecompressor *decompressor, char *segment_filte
 						   flags,
 						   cmp_attno,
 						   strategy,
-						   InvalidOid, /* No strategy subtype. */
+						   subtype,
 						   decompressor->in_desc->attrs[AttrNumberGetAttrOffset(cmp_attno)]
 							   .attcollation,
 						   opr,
@@ -2766,6 +2769,34 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, L
 }
 
 /*
+ * Get the subtype for an indexscan from the provided filter. We also
+ * need to handle array constants appropriately.
+ */
+static Oid
+deduce_filter_subtype(BatchFilter *filter, Oid att_typoid)
+{
+	Oid subtype = InvalidOid;
+
+	if (!filter->value)
+		return InvalidOid;
+
+	/*
+	 * Check if the filter type is different from the att type. If yes, the
+	 * subtype needs to be set appropriately.
+	 */
+	if (att_typoid != filter->value->consttype)
+	{
+		/* For an array type get its element type */
+		if (filter->is_array_op)
+			subtype = get_element_type(filter->value->consttype);
+		else
+			subtype = filter->value->consttype;
+	}
+
+	return subtype;
+}
+
+/*
  * This method will build scan keys for predicates including
  * SEGMENT BY column with attribute number from compressed chunk
  * if condition is like <segmentbycol> = <const value>, else
@@ -2785,6 +2816,7 @@ build_update_delete_scankeys(RowDecompressor *decompressor, List *heap_filters, 
 	{
 		filter = lfirst(lc);
 		AttrNumber attno = get_attnum(decompressor->in_rel->rd_id, NameStr(filter->column_name));
+		Oid typoid = get_atttype(decompressor->in_rel->rd_id, attno);
 		if (attno == InvalidAttrNumber)
 			ereport(ERROR,
 					(errcode(ERRCODE_UNDEFINED_COLUMN),
@@ -2795,6 +2827,7 @@ build_update_delete_scankeys(RowDecompressor *decompressor, List *heap_filters, 
 		key_index = create_segment_filter_scankey(decompressor,
 												  NameStr(filter->column_name),
 												  filter->strategy,
+												  deduce_filter_subtype(filter, typoid),
 												  scankeys,
 												  key_index,
 												  null_columns,
@@ -2979,6 +3012,7 @@ build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
 	for (int attno = 1; attno <= index_rel->rd_index->indnatts && idx < *num_scankeys; attno++)
 	{
 		char *attname = get_attname(RelationGetRelid(index_rel), attno, false);
+		Oid typoid = get_atttype(RelationGetRelid(index_rel), attno);
 		foreach (lc, index_filters)
 		{
 			filter = lfirst(lc);
@@ -2998,7 +3032,7 @@ build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
 									   flags,
 									   attno,
 									   filter->strategy,
-									   InvalidOid, /* no strategy subtype */
+									   deduce_filter_subtype(filter, typoid), /* subtype */
 									   filter->collation,
 									   filter->opcode,
 									   filter->value ? filter->value->constvalue : 0);
