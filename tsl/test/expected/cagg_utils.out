@@ -166,7 +166,7 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', a."time"), cou
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), count(*) FROM metrics, devices a, devices b GROUP BY 1 $$);
  is_valid | error_level | error_code |                                           error_message                                           | error_detail | error_hint 
 ----------+-------------+------------+---------------------------------------------------------------------------------------------------+--------------+------------
- f        | ERROR       | 0A000      | only two tables with one hypertable and one normal tableare  allowed in continuous aggregate view |              | 
+ f        | ERROR       | 0A000      | only two tables with one hypertable and one normal table are allowed in continuous aggregate view |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), device_id, count(*) FROM metrics LEFT JOIN devices ON id = device_id GROUP BY 1, 2 $$);
