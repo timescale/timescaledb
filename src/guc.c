@@ -164,6 +164,7 @@ TSDLLEXPORT bool ts_guc_enable_merge_on_cagg_refresh = false;
 TSDLLEXPORT char *ts_guc_hypercore_indexam_whitelist;
 TSDLLEXPORT HypercoreCopyToBehavior ts_guc_hypercore_copy_to_behavior =
 	HYPERCORE_COPY_NO_COMPRESSED_DATA;
+TSDLLEXPORT bool ts_guc_enable_hypercore_scankey_pushdown = true;
 
 /* default value of ts_guc_max_open_chunks_per_insert and
  * ts_guc_max_cached_chunks_per_hypertable will be set as their respective boot-value when the
@@ -1068,6 +1069,20 @@ _guc_init(void)
 							 NULL,
 							 NULL,
 							 NULL);
+
+	DefineCustomBoolVariable(/* name= */ MAKE_EXTOPTION("enable_hypercore_scankey_pushdown"),
+							 /* short_desc= */
+							 "Push down qualifiers as scankeys when using Hypercore TAM",
+							 /* long_desc= */
+							 "Enabling this setting might lead to faster scans when "
+							 "query qualifiers match Hypercore segmentby and orderby columns.",
+							 /* valueAddr= */ &ts_guc_enable_hypercore_scankey_pushdown,
+							 /* bootValue= */ true,
+							 /* context= */ PGC_USERSET,
+							 /* flags= */ 0,
+							 /* check_hook= */ NULL,
+							 /* assign_hook= */ NULL,
+							 /* show_hook= */ NULL);
 
 	DefineCustomIntVariable(/* name= */ MAKE_EXTOPTION("debug_bgw_scheduler_exit_status"),
 							/* short_desc= */ "exit status to use when shutting down the scheduler",

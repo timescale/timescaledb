@@ -8,9 +8,11 @@
 #include <access/heapam.h>
 #include <access/hio.h>
 #include <access/htup_details.h>
+#include <access/relscan.h>
 #include <access/rewriteheap.h>
 #include <access/sdir.h>
 #include <access/skey.h>
+#include <access/stratnum.h>
 #include <access/tableam.h>
 #include <access/transam.h>
 #include <access/xact.h>
@@ -307,6 +309,19 @@ lazy_build_hypercore_info_cache(Relation rel, bool create_chunk_constraints,
 			colsettings->cattnum = get_attnum(hsinfo->compressed_relid, attname);
 		else
 			colsettings->cattnum = InvalidAttrNumber;
+
+		if (colsettings->is_orderby)
+		{
+			const char *min_attname = column_segment_min_name(orderby_pos);
+			const char *max_attname = column_segment_max_name(orderby_pos);
+			colsettings->cattnum_min = get_attnum(hsinfo->compressed_relid, min_attname);
+			colsettings->cattnum_max = get_attnum(hsinfo->compressed_relid, max_attname);
+		}
+		else
+		{
+			colsettings->cattnum_min = InvalidAttrNumber;
+			colsettings->cattnum_max = InvalidAttrNumber;
+		}
 	}
 
 	Ensure(hsinfo->relation_id > 0, "invalid chunk ID");
@@ -462,6 +477,21 @@ compute_targrows(Relation rel)
 }
 #endif
 
+static void
+scankey_init(const TypeCacheEntry *tce, const ScanKey oldkey, ScanKey newkey,
+			 const AttrNumber newattno, StrategyNumber newstrategy)
+{
+	Oid opno = get_opfamily_member(tce->btree_opf, tce->type_id, oldkey->sk_subtype, newstrategy);
+	ScanKeyEntryInitialize(newkey,
+						   0,
+						   newattno,
+						   oldkey->sk_strategy,
+						   oldkey->sk_subtype,
+						   oldkey->sk_collation,
+						   get_opcode(opno),
+						   oldkey->sk_argument);
+}
+
 /*
  * Initialization common for beginscan and rescan.
  */
@@ -476,11 +506,16 @@ initscan(HypercoreScanDesc scan, ScanKey keys, int nkeys)
 	 *
 	 * It is only possible to use scankeys in the following two cases:
 	 *
-	 * 1. The scankey is for a segment_by column
-	 * 2. The scankey is for a column that has min/max metadata (i.e., order_by column).
+	 * 1. The scankey is for a segmentby column
+	 * 2. The scankey is for a column that has min/max metadata (e.g., orderby column).
 	 *
-	 * TODO: Implement support for (2) above, which involves transforming a
-	 * scankey to the corresponding min/max scankeys.
+	 * For case (2), it is necessary to translate the scankey on the
+	 * non-compressed relation to two min and max scankeys on the compressed
+	 * relation.
+	 *
+	 * Note that scankeys should only contain btree strategies for heap
+	 * scans. ColumnarScan is currently the only node pushing down scankeys
+	 * and it always creates btree strategies.
 	 */
 	if (NULL != keys && nkeys > 0)
 	{
@@ -503,13 +538,89 @@ initscan(HypercoreScanDesc scan, ScanKey keys, int nkeys)
 					nvalidkeys++;
 					break;
 				}
+
+				/* Transform equality to min/max on metadata columns */
+				else if (key->sk_attno == column->attnum && hypercore_column_has_minmax(column))
+				{
+					const TypeCacheEntry *tce =
+						lookup_type_cache(column->typid, TYPECACHE_BTREE_OPFAMILY);
+
+					/* Type cache never returns NULL */
+					Assert(tce);
+
+					/* Assert that the scankey's strategy is indeed a btree
+					 * strategy by checking that the key's function is a btree
+					 * function. */
+					Assert(key->sk_func.fn_oid ==
+						   get_opcode(get_opfamily_member(tce->btree_opf,
+														  tce->type_id,
+														  key->sk_subtype,
+														  key->sk_strategy)));
+					switch (key->sk_strategy)
+					{
+						case BTLessStrategyNumber:
+						case BTLessEqualStrategyNumber:
+						{
+							/*
+							 * The operators '<' and '<=' translate to the
+							 * same operators on the min metadata column
+							 */
+							scankey_init(tce,
+										 key,
+										 &scan->rs_base.rs_key[nvalidkeys++],
+										 column->cattnum_min,
+										 key->sk_strategy);
+							break;
+						}
+						case BTEqualStrategyNumber:
+						{
+							/*
+							 * Equality ('=') translates to:
+							 *
+							 * x <= min_col AND x >= max_col
+							 */
+
+							scankey_init(tce,
+										 key,
+										 &scan->rs_base.rs_key[nvalidkeys++],
+										 column->cattnum_min,
+										 BTLessEqualStrategyNumber);
+							scankey_init(tce,
+										 key,
+										 &scan->rs_base.rs_key[nvalidkeys++],
+										 column->cattnum_max,
+										 BTGreaterEqualStrategyNumber);
+							break;
+						}
+						case BTGreaterEqualStrategyNumber:
+						case BTGreaterStrategyNumber:
+						{
+							/*
+							 * The operators '>' and '>=' translate to the
+							 * same operators on the max metadata column
+							 */
+
+							scankey_init(tce,
+										 key,
+										 &scan->rs_base.rs_key[nvalidkeys++],
+										 column->cattnum_max,
+										 key->sk_strategy);
+							break;
+						}
+						default:
+							pg_unreachable();
+							Assert(false);
+							break;
+					}
+
+					break;
+				}
 			}
 		}
 	}
 
 	scan->rs_base.rs_nkeys = nvalidkeys;
 
-	/* Use the TableScanDescData's scankeys to store the transformed compression scan keys */
 	if (scan->rs_base.rs_flags & SO_TYPE_SEQSCAN)
 		pgstat_count_hypercore_scan(scan->rs_base.rs_rd);
 }
@@ -566,16 +677,19 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 
 	RelationIncrementReferenceCount(relation);
 
-	TS_DEBUG_LOG("starting %s scan of relation %s parallel_scan=%p",
+	TS_DEBUG_LOG("starting %s scan of relation %s parallel_scan=%p nkeys=%d",
 				 get_scan_type(flags),
 				 RelationGetRelationName(relation),
-				 parallel_scan);
+				 parallel_scan,
+				 nkeys);
 
 	scan = palloc0(sizeof(HypercoreScanDescData));
 	scan->rs_base.rs_rd = relation;
 	scan->rs_base.rs_snapshot = snapshot;
 	scan->rs_base.rs_nkeys = nkeys;
-	scan->rs_base.rs_key = nkeys > 0 ? palloc0(sizeof(ScanKeyData) * nkeys) : NULL;
+	/* Allocate double the scan keys to account for some being transformed to
+	 * two min/max keys */
+	scan->rs_base.rs_key = nkeys > 0 ? palloc0(sizeof(ScanKeyData) * nkeys * 2) : NULL;
 	scan->rs_base.rs_flags = flags;
 	scan->rs_base.rs_parallel = parallel_scan;
 	scan->returned_noncompressed_count = 0;
@@ -590,8 +704,8 @@ hypercore_beginscan(Relation relation, Snapshot snapshot, int nkeys, ScanKey key
 		return &scan->rs_base;
 	}
 
-	HypercoreInfo *hsinfo = RelationGetHypercoreInfo(relation);
-	scan->compressed_rel = table_open(hsinfo->compressed_relid, AccessShareLock);
+	HypercoreInfo *hcinfo = RelationGetHypercoreInfo(relation);
+	scan->compressed_rel = table_open(hcinfo->compressed_relid, AccessShareLock);
 
 	if (should_skip_compressed_data(&scan->rs_base))
 	{
@@ -668,6 +782,7 @@ hypercore_endscan(TableScanDesc sscan)
 	HypercoreScanDesc scan = (HypercoreScanDesc) sscan;
 
 	RelationDecrementReferenceCount(sscan->rs_rd);
+
 	if (scan->cscan_desc)
 		table_endscan(scan->cscan_desc);
 	if (scan->compressed_rel)
