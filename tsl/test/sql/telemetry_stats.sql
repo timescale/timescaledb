@@ -77,8 +77,13 @@ SELECT * FROM normal;
 
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
 
+-- Reindex to avoid the dependency on the way the index is built (e.g. the caggs
+-- might get their rows inserted in different order during the refresh based on
+-- the underlying aggregation plan, and the index will be built differently,
+-- which can influence its size).
+REINDEX DATABASE :TEST_DBNAME;
 -- ANALYZE to get updated reltuples stats
-ANALYZE normal, hyper, part;
+VACUUM ANALYZE;
 
 SELECT count(c) FROM show_chunks('hyper') c;
 SELECT count(c) FROM show_chunks('contagg') c;
@@ -105,7 +110,13 @@ FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
 -- Turn of real-time aggregation
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.materialized_only = true);
 
-ANALYZE normal, hyper, part;
+-- Reindex to avoid the dependency on the way the index is built (e.g. the caggs
+-- might get their rows inserted in different order during the refresh based on
+-- the underlying aggregation plan, and the index will be built differently,
+-- which can influence its size).
+REINDEX DATABASE :TEST_DBNAME;
+-- ANALYZE to get updated reltuples stats
+VACUUM ANALYZE;
 
 REFRESH MATERIALIZED VIEW telemetry_report;
 SELECT jsonb_pretty(rels) AS relations FROM relations;
