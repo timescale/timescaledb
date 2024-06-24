@@ -46,6 +46,18 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
 
+static const char *compression_algorithm_name[] = {
+	[_INVALID_COMPRESSION_ALGORITHM] = "INVALID",	   [COMPRESSION_ALGORITHM_ARRAY] = "ARRAY",
+	[COMPRESSION_ALGORITHM_DICTIONARY] = "DICTIONARY", [COMPRESSION_ALGORITHM_GORILLA] = "GORILLA",
+	[COMPRESSION_ALGORITHM_DELTADELTA] = "DELTADELTA",
+};
+
+const char *
+compression_get_algorithm_name(CompressionAlgorithm alg)
+{
+	return compression_algorithm_name[alg];
+}
+
 static Compressor *
 compressor_for_type(Oid type)
 {
@@ -1944,6 +1956,59 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	encoded[encoded_len] = '\0';
 
 	PG_RETURN_CSTRING(encoded);
+}
+
+/* create_hypertable record attribute numbers */
+enum Anum_compressed_info
+{
+	Anum_compressed_info_algorithm = 1,
+	Anum_compressed_info_has_nulls,
+	_Anum_compressed_info_max,
+};
+
+#define Natts_compressed_info (_Anum_compressed_info_max - 1)
+
+extern Datum
+tsl_compressed_data_info(PG_FUNCTION_ARGS)
+{
+	const CompressedDataHeader *header = (CompressedDataHeader *) PG_GETARG_VARLENA_P(0);
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	bool has_nulls = false;
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in "
+						"context that cannot accept type record")));
+
+	switch (header->compression_algorithm)
+	{
+		case COMPRESSION_ALGORITHM_GORILLA:
+			has_nulls = gorilla_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DICTIONARY:
+			has_nulls = dictionary_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DELTADELTA:
+			has_nulls = deltadelta_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_ARRAY:
+			has_nulls = array_compressed_has_nulls(header);
+			break;
+	}
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	Datum values[Natts_compressed_info];
+	bool nulls[Natts_compressed_info] = { false };
+
+	values[AttrNumberGetAttrOffset(Anum_compressed_info_algorithm)] =
+		CStringGetDatum(compression_get_algorithm_name(header->compression_algorithm));
+	values[AttrNumberGetAttrOffset(Anum_compressed_info_has_nulls)] = BoolGetDatum(has_nulls);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
 }
 
 extern CompressionStorage

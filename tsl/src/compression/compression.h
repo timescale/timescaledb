@@ -301,6 +301,7 @@ extern Datum tsl_compressed_data_send(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_recv(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_in(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_out(PG_FUNCTION_ARGS);
+extern Datum tsl_compressed_data_info(PG_FUNCTION_ARGS);
 
 static void
 pg_attribute_unused() assert_num_compression_algorithms_sane(void)
@@ -325,6 +326,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
+extern const char *compression_get_algorithm_name(CompressionAlgorithm alg);
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
 

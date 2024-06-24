@@ -40,9 +40,9 @@ void
 arrow_release_buffers(ArrowArray *array)
 {
 	/*
-	 * The recommended release function frees child nodes and dictionary in
-	 * the Arrow array, but we do not have these so we do not care about
-	 * them.
+	 * The recommended release function frees child nodes and the dictionary
+	 * in the Arrow array, but, currently, the child array is not used so we
+	 * do not care about it.
 	 */
 	Assert(array->children == NULL);
 
@@ -253,14 +253,6 @@ arrow_get_decompress_all(uint8 compression_alg, Oid typid)
 	return decompress_all;
 }
 
-#ifdef TS_DEBUG
-static const char *compression_algorithm_name[] = {
-	[_INVALID_COMPRESSION_ALGORITHM] = "INVALID",	   [COMPRESSION_ALGORITHM_ARRAY] = "ARRAY",
-	[COMPRESSION_ALGORITHM_DICTIONARY] = "DICTIONARY", [COMPRESSION_ALGORITHM_GORILLA] = "GORILLA",
-	[COMPRESSION_ALGORITHM_DELTADELTA] = "DELTADELTA",
-};
-#endif
-
 #ifdef USE_ASSERT_CHECKING
 static bool
 verify_offsets(const ArrowArray *array)
@@ -286,7 +278,7 @@ arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, Memo
 
 	TS_DEBUG_LOG("decompressing column with type %s using decompression algorithm %s",
 				 format_type_be(typid),
-				 compression_algorithm_name[header->compression_algorithm]);
+				 compression_get_algorithm_name(header->compression_algorithm));
 
 	MemoryContext oldcxt = MemoryContextSwitchTo(tmp_mcxt);
 	ArrowArray *array = decompress_all(PointerGetDatum(header), typid, dest_mcxt);

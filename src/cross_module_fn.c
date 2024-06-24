@@ -68,6 +68,7 @@ CROSSMODULE_WRAPPER(compressed_data_send);
 CROSSMODULE_WRAPPER(compressed_data_recv);
 CROSSMODULE_WRAPPER(compressed_data_in);
 CROSSMODULE_WRAPPER(compressed_data_out);
+CROSSMODULE_WRAPPER(compressed_data_info);
 CROSSMODULE_WRAPPER(deltadelta_compressor_append);
 CROSSMODULE_WRAPPER(deltadelta_compressor_finish);
 CROSSMODULE_WRAPPER(gorilla_compressor_append);

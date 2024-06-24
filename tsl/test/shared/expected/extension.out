@@ -52,6 +52,7 @@ ORDER BY pronamespace::regnamespace::text COLLATE "C", p.oid::regprocedure::text
  _timescaledb_functions.chunks_local_size(name,name)
  _timescaledb_functions.compressed_chunk_local_stats(name,name)
  _timescaledb_functions.compressed_data_in(cstring)
+ _timescaledb_functions.compressed_data_info(_timescaledb_internal.compressed_data)
  _timescaledb_functions.compressed_data_out(_timescaledb_internal.compressed_data)
  _timescaledb_functions.compressed_data_recv(internal)
  _timescaledb_functions.compressed_data_send(_timescaledb_internal.compressed_data)

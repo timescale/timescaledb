@@ -3,7 +3,7 @@
 -- LICENSE-TIMESCALE for a copy of the license.
 
 create table readings(time timestamptz,
-       location int,
+       location text,
        device int,
        temp float,
        humidity float,
@@ -103,3 +103,13 @@ on conflict (location, device, time) do nothing;
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select time, temp + humidity from readings where device between 5 and 10 and humidity > 5 limit 5;
 select time, temp + humidity from readings where device between 5 and 10 and humidity > 5 limit 5;
+
+-- Get the compressed chunk
+select format('%I.%I', c2.schema_name, c2.table_name)::regclass as cchunk
+from _timescaledb_catalog.chunk c1
+join _timescaledb_catalog.chunk c2
+on (c1.compressed_chunk_id = c2.id)
+where format('%I.%I', c1.schema_name, c1.table_name)::regclass = :'chunk'::regclass \gset
+
+-- Show that location is using dictionary encoding
+select (_timescaledb_functions.compressed_data_info(location)).* from :cchunk limit 1;
