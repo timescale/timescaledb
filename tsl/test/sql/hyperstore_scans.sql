@@ -113,3 +113,41 @@ where format('%I.%I', c1.schema_name, c1.table_name)::regclass = :'chunk'::regcl
 
 -- Show that location is using dictionary encoding
 select (_timescaledb_functions.compressed_data_info(location)).* from :cchunk limit 1;
+
+-- Test that vectorized filtering on text column works
+set enable_indexscan=off;
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select time, location, temp from :chunk
+where location = 1::text
+order by time desc;
+
+--  Save the data for comparison with seqscan
+create temp table chunk_saved as
+select time, location, temp from :chunk
+where location = 1::text
+order by time desc;
+
+-- Show same query with seqscan and compare output
+set timescaledb.enable_columnarscan=off;
+explain (analyze, costs off, timing off, summary off)
+select time, location, temp from :chunk
+where location = 1::text
+order by time desc;
+
+-- If output is the same, this query should return nothing
+(select time, location, temp from :chunk
+where location = 1::text
+order by time desc)
+except
+select * from chunk_saved;
+
+-- Insert some non-compressed values to see that vectorized filtering
+-- works on those non-compressed text columns.
+insert into :chunk values ('2022-06-01 15:30'::timestamptz, 1, 2, 3.14, 2.14), ('2022-06-01 15:30'::timestamptz, 2, 2, 3.14, 2.14);
+
+-- Query should only return the one non-compressed row that has location=1
+(select time, location, temp from :chunk
+where location = 1::text
+order by time desc)
+except
+select * from chunk_saved;
