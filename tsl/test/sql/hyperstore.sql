@@ -12,14 +12,14 @@ CREATE TABLE readings(
        humidity float
 );
 
-SELECT create_hypertable('readings', 'time');
+SELECT create_hypertable('readings', by_range('time', '1d'::interval));
 -- Disable incremental sort to make tests stable
 SET enable_incremental_sort = false;
 SELECT setseed(1);
 
 INSERT INTO readings (time, location, device, temp, humidity)
 SELECT t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
-FROM generate_series('2022-06-01'::timestamptz, '2022-06-01'::timestamptz + '4 weeks'::interval, '5m') t;
+FROM generate_series('2022-06-01'::timestamptz, '2022-07-01'::timestamptz, '5m') t;
 
 ALTER TABLE readings SET (
 	  timescaledb.compress,
