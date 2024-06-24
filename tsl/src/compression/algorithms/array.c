@@ -40,6 +40,13 @@ typedef struct ArrayCompressed
 	uint64 alignment_sentinel[FLEXIBLE_ARRAY_MEMBER];
 } ArrayCompressed;
 
+bool
+array_compressed_has_nulls(const CompressedDataHeader *header)
+{
+	const ArrayCompressed *ac = (const ArrayCompressed *) header;
+	return ac->has_nulls;
+}
+
 static void
 pg_attribute_unused() assertions(void)
 {
