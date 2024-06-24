@@ -426,26 +426,28 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	Relation rel = state->ss.ss_currentRelation;
 	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
-	/* The CustomScan state always creates a scan slot of type TTSOpsVirtual,
-	 * even if one sets scan->scanrelid to a valid index to indicate scan of a
-	 * base relation. This might be a bug in the custom scan state
-	 * implementation. To ensure the base relation's scan slot type is used,
-	 * we recreate the scan slot here with the slot type used by the
-	 * underlying base relation. It is not necessary (or possible) to drop the
-	 * existing slot since it is registered in the tuple table and will be
-	 * released when the executor finishes. */
+#if PG16_LT
+	/* Since PG16, one can specify state->slotOps to initialize a CustomScan
+	 * with a custom scan slot. But pre-PG16, the CustomScan state always
+	 * created a scan slot of type TTSOpsVirtual, even if one sets
+	 * scan->scanrelid to a valid index to indicate scan of a base relation.
+	 * To ensure the base relation's scan slot type is used, we recreate the
+	 * scan slot here with the slot type used by the underlying base
+	 * relation. It is not necessary (or possible) to drop the existing slot
+	 * since it is registered in the tuple table and will be released when the
+	 * executor finishes. */
 	ExecInitScanTupleSlot(estate,
 						  &state->ss,
 						  RelationGetDescr(rel),
 						  table_slot_callbacks(state->ss.ss_currentRelation));
 
 	/* Must reinitialize projection for the new slot type as well, including
-	 * ExecQual state for the new slot */
+	 * ExecQual state for the new slot. */
 	ExecInitResultTypeTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
-	vector_qual_state_init(&cstate->vqstate, state->ss.ps.ps_ExprContext);
-
 	state->ss.ps.qual = ExecInitQual(scan->plan.qual, (PlanState *) state);
+#endif
+	vector_qual_state_init(&cstate->vqstate, state->ss.ps.ps_ExprContext);
 	cstate->scankeys = extract_scan_keys(hsinfo, scan, &cstate->nscankeys, &cstate->scankey_quals);
 
 	/* Constify stable expressions in vectorized predicates. */
@@ -621,6 +623,9 @@ columnar_scan_state_create(CustomScan *cscan)
 	cstate = (ColumnarScanState *) newNode(sizeof(ColumnarScanState), T_CustomScanState);
 	cstate->css.methods = &columnar_scan_state_methods;
 	cstate->vectorized_quals_orig = linitial(cscan->custom_exprs);
+#if PG16_GE
+	cstate->css.slotOps = &TTSOpsArrowTuple;
+#endif
 	return (Node *) cstate;
 }
 
