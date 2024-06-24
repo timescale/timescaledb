@@ -4,10 +4,9 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <catalog/pg_inherits.h>
 #include <utils/builtins.h>
 
-#include "chunk.h"
-#include "hypertable.h"
 #include "scan_iterator.h"
 #include "scanner.h"
 #include "ts_catalog/array_utils.h"
@@ -28,11 +27,10 @@ ts_compression_settings_equal(const CompressionSettings *left, const Compression
 }
 
 CompressionSettings *
-ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid)
+ts_compression_settings_materialize(const CompressionSettings *src, Oid relid, Oid compress_relid)
 {
-	CompressionSettings *src = ts_compression_settings_get(ht_relid);
-	Assert(src);
-	CompressionSettings *dst = ts_compression_settings_create(dst_relid,
+	CompressionSettings *dst = ts_compression_settings_create(relid,
+															  compress_relid,
 															  src->fd.segmentby,
 															  src->fd.orderby,
 															  src->fd.orderby_desc,
@@ -42,8 +40,9 @@ ts_compression_settings_materialize(Oid ht_relid, Oid dst_relid)
 }
 
 CompressionSettings *
-ts_compression_settings_create(Oid relid, ArrayType *segmentby, ArrayType *orderby,
-							   ArrayType *orderby_desc, ArrayType *orderby_nullsfirst)
+ts_compression_settings_create(Oid relid, Oid compress_relid, ArrayType *segmentby,
+							   ArrayType *orderby, ArrayType *orderby_desc,
+							   ArrayType *orderby_nullsfirst)
 {
 	Catalog *catalog = ts_catalog_get();
 	CatalogSecurityContext sec_ctx;
@@ -61,6 +60,7 @@ ts_compression_settings_create(Oid relid, ArrayType *segmentby, ArrayType *order
 		   (!orderby && !orderby_desc && !orderby_nullsfirst));
 
 	fd.relid = relid;
+	fd.compress_relid = compress_relid;
 	fd.segmentby = segmentby;
 	fd.orderby = orderby;
 	fd.orderby_desc = orderby_desc;
@@ -95,6 +95,12 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 
 	fd->relid = DatumGetObjectId(values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)]);
 
+	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)])
+		fd->compress_relid = InvalidOid;
+	else
+		fd->compress_relid = DatumGetObjectId(
+			values[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)]);
+
 	if (nulls[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)])
 		fd->segmentby = NULL;
 	else
@@ -125,19 +131,28 @@ compression_settings_fill_from_tuple(CompressionSettings *settings, TupleInfo *t
 		heap_freetuple(tuple);
 }
 
-TSDLLEXPORT CompressionSettings *
-ts_compression_settings_get(Oid relid)
+static void
+compression_settings_iterator_init(ScanIterator *iterator, Oid relid, bool by_compress_relid)
+{
+	int indexid =
+		by_compress_relid ? COMPRESSION_SETTINGS_COMPRESS_RELID_IDX : COMPRESSION_SETTINGS_PKEY;
+	iterator->ctx.index = catalog_get_index(ts_catalog_get(), COMPRESSION_SETTINGS, indexid);
+	ts_scan_iterator_scan_key_init(iterator,
+								   by_compress_relid ?
+									   Anum_compression_settings_compress_relid_idx_relid :
+									   Anum_compression_settings_pkey_relid,
+								   BTEqualStrategyNumber,
+								   F_OIDEQ,
+								   ObjectIdGetDatum(relid));
+}
+
+static CompressionSettings *
+compression_settings_get(Oid relid, bool by_compress_relid)
 {
 	CompressionSettings *settings = NULL;
 	ScanIterator iterator =
 		ts_scan_iterator_create(COMPRESSION_SETTINGS, AccessShareLock, CurrentMemoryContext);
-	iterator.ctx.index =
-		catalog_get_index(ts_catalog_get(), COMPRESSION_SETTINGS, COMPRESSION_SETTINGS_PKEY);
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_compression_settings_pkey_relid,
-								   BTEqualStrategyNumber,
-								   F_OIDEQ,
-								   ObjectIdGetDatum(relid));
+	compression_settings_iterator_init(&iterator, relid, by_compress_relid);
 
 	ts_scanner_start_scan(&iterator.ctx);
 	TupleInfo *ti = ts_scanner_next(&iterator.ctx);
@@ -151,8 +166,20 @@ ts_compression_settings_get(Oid relid)
 	return settings;
 }
 
-TSDLLEXPORT bool
-ts_compression_settings_delete(Oid relid)
+TSDLLEXPORT CompressionSettings *
+ts_compression_settings_get(Oid relid)
+{
+	return compression_settings_get(relid, false);
+}
+
+TSDLLEXPORT CompressionSettings *
+ts_compression_settings_get_by_compress_relid(Oid relid)
+{
+	return compression_settings_get(relid, true);
+}
+
+static bool
+compression_settings_delete(Oid relid, bool by_compress_relid)
 {
 	if (!OidIsValid(relid))
 		return false;
@@ -160,13 +187,7 @@ ts_compression_settings_delete(Oid relid)
 	int count = 0;
 	ScanIterator iterator =
 		ts_scan_iterator_create(COMPRESSION_SETTINGS, RowExclusiveLock, CurrentMemoryContext);
-	iterator.ctx.index =
-		catalog_get_index(ts_catalog_get(), COMPRESSION_SETTINGS, COMPRESSION_SETTINGS_PKEY);
-	ts_scan_iterator_scan_key_init(&iterator,
-								   Anum_compression_settings_pkey_relid,
-								   BTEqualStrategyNumber,
-								   F_OIDEQ,
-								   ObjectIdGetDatum(relid));
+	compression_settings_iterator_init(&iterator, relid, by_compress_relid);
 
 	ts_scanner_foreach(&iterator)
 	{
@@ -177,35 +198,46 @@ ts_compression_settings_delete(Oid relid)
 	return count > 0;
 }
 
-TSDLLEXPORT void
-ts_compression_settings_rename_column_hypertable(Hypertable *ht, char *old, char *new)
+TSDLLEXPORT bool
+ts_compression_settings_delete(Oid relid)
 {
-	ts_compression_settings_rename_column(ht->main_table_relid, old, new);
-	if (ht->fd.compressed_hypertable_id)
-	{
-		ListCell *lc;
-		List *chunks = ts_chunk_get_by_hypertable_id(ht->fd.compressed_hypertable_id);
-		foreach (lc, chunks)
-		{
-			Chunk *chunk = lfirst(lc);
-			ts_compression_settings_rename_column(chunk->table_id, old, new);
-		}
-	}
+	return compression_settings_delete(relid, false);
+}
+
+TSDLLEXPORT bool
+ts_compression_settings_delete_by_compress_relid(Oid relid)
+{
+	return compression_settings_delete(relid, true);
+}
+
+static void
+compression_settings_rename_column(CompressionSettings *settings, const char *old, const char *new)
+{
+	settings->fd.segmentby = ts_array_replace_text(settings->fd.segmentby, old, new);
+	settings->fd.orderby = ts_array_replace_text(settings->fd.orderby, old, new);
+	ts_compression_settings_update(settings);
 }
 
 TSDLLEXPORT void
-ts_compression_settings_rename_column(Oid relid, char *old, char *new)
+ts_compression_settings_rename_column_recurse(Oid parent_relid, const char *old, const char *new)
 {
-	CompressionSettings *settings = ts_compression_settings_get(relid);
+	CompressionSettings *settings = ts_compression_settings_get(parent_relid);
 
-	if (!settings)
-		return;
+	if (settings)
+		compression_settings_rename_column(settings, old, new);
 
-	settings->fd.segmentby = ts_array_replace_text(settings->fd.segmentby, old, new);
+	List *children = find_inheritance_children(parent_relid, NoLock);
+	ListCell *lc;
 
-	settings->fd.orderby = ts_array_replace_text(settings->fd.orderby, old, new);
+	foreach (lc, children)
+	{
+		Oid relid = lfirst_oid(lc);
 
-	ts_compression_settings_update(settings);
+		settings = ts_compression_settings_get(relid);
+
+		if (settings)
+			compression_settings_rename_column(settings, old, new);
+	}
 }
 
 TSDLLEXPORT int
@@ -268,6 +300,12 @@ compression_settings_formdata_make_tuple(const FormData_compression_settings *fd
 	bool nulls[Natts_compression_settings] = { false };
 
 	values[AttrNumberGetAttrOffset(Anum_compression_settings_relid)] = ObjectIdGetDatum(fd->relid);
+
+	if (OidIsValid(fd->compress_relid))
+		values[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)] =
+			ObjectIdGetDatum(fd->compress_relid);
+	else
+		nulls[AttrNumberGetAttrOffset(Anum_compression_settings_compress_relid)] = true;
 
 	if (fd->segmentby)
 		values[AttrNumberGetAttrOffset(Anum_compression_settings_segmentby)] =

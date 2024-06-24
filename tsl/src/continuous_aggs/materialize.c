@@ -19,6 +19,7 @@
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
+#include "chunk.h"
 #include "debug_assert.h"
 #include "materialize.h"
 #include "ts_catalog/continuous_agg.h"

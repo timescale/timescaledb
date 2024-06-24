@@ -310,8 +310,7 @@ find_chunk_to_merge_into(Hypertable *ht, Chunk *current_chunk)
 		return NULL;
 
 	/* Get reloid of the previous compressed chunk */
-	Oid prev_comp_reloid = ts_chunk_get_relid(previous_chunk->fd.compressed_chunk_id, false);
-	CompressionSettings *prev_comp_settings = ts_compression_settings_get(prev_comp_reloid);
+	CompressionSettings *prev_comp_settings = ts_compression_settings_get(previous_chunk->table_id);
 	CompressionSettings *ht_comp_settings = ts_compression_settings_get(ht->main_table_relid);
 	if (!ts_compression_settings_equal(ht_comp_settings, prev_comp_settings))
 		return NULL;
@@ -594,7 +593,7 @@ decompress_chunk_impl(Chunk *uncompressed_chunk, bool if_compressed)
 	/* Delete the compressed chunk */
 	ts_compression_chunk_size_delete(uncompressed_chunk->fd.id);
 	ts_chunk_clear_compressed_chunk(uncompressed_chunk);
-	ts_compression_settings_delete(compressed_chunk->table_id);
+	ts_compression_settings_delete(uncompressed_chunk->table_id);
 
 	/*
 	 * Lock the compressed chunk that is going to be deleted. At this point,
@@ -715,9 +714,7 @@ tsl_compress_chunk_wrapper(Chunk *chunk, bool if_not_compressed, bool recompress
 		if (recompress)
 		{
 			CompressionSettings *ht_settings = ts_compression_settings_get(chunk->hypertable_relid);
-			Oid compressed_chunk_relid = ts_chunk_get_relid(chunk->fd.compressed_chunk_id, true);
-			CompressionSettings *chunk_settings =
-				ts_compression_settings_get(compressed_chunk_relid);
+			CompressionSettings *chunk_settings = ts_compression_settings_get(chunk->table_id);
 
 			if (!ts_compression_settings_equal(ht_settings, chunk_settings))
 			{
@@ -890,11 +887,10 @@ static Oid
 get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk)
 {
 	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ShareLock);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ShareLock);
 
-	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
+	CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 
 	ResultRelInfo *indstate = ts_catalog_open_indexes(compressed_chunk_rel);
 	Oid index_oid = get_compressed_chunk_index(indstate, settings);
@@ -1078,8 +1074,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 			 NameStr(uncompressed_chunk->fd.table_name));
 
 	/* need it to find the segby cols from the catalog */
-	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
-	CompressionSettings *settings = ts_compression_settings_get(compressed_chunk->table_id);
+	const CompressionSettings *settings = ts_compression_settings_get(uncompressed_chunk->table_id);
 
 	int nsegmentby_cols = ts_array_length(settings->fd.segmentby);
 
@@ -1093,6 +1088,7 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/* lock both chunks, compressed and uncompressed */
 	/* TODO: Take RowExclusive locks instead of AccessExclusive */
+	Chunk *compressed_chunk = ts_chunk_get_by_id(uncompressed_chunk->fd.compressed_chunk_id, true);
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
 	Relation compressed_chunk_rel = table_open(compressed_chunk->table_id, ExclusiveLock);
 

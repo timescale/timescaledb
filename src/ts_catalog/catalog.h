@@ -1091,6 +1091,7 @@ typedef enum Anum_continuous_aggs_watermark_pkey
 typedef enum Anum_compression_settings
 {
 	Anum_compression_settings_relid = 1,
+	Anum_compression_settings_compress_relid,
 	Anum_compression_settings_segmentby,
 	Anum_compression_settings_orderby,
 	Anum_compression_settings_orderby_desc,
@@ -1103,6 +1104,7 @@ typedef enum Anum_compression_settings
 typedef struct FormData_compression_settings
 {
 	Oid relid;
+	Oid compress_relid;
 	ArrayType *segmentby;
 	ArrayType *orderby;
 	ArrayType *orderby_desc;
@@ -1114,6 +1116,7 @@ typedef FormData_compression_settings *Form_compression_settings;
 enum
 {
 	COMPRESSION_SETTINGS_PKEY = 0,
+	COMPRESSION_SETTINGS_COMPRESS_RELID_IDX,
 	_MAX_COMPRESSION_SETTINGS_INDEX,
 };
 
@@ -1124,6 +1127,15 @@ typedef enum Anum_compression_settings_pkey
 } Anum_compression_settings_pkey;
 
 #define Natts_compression_chunk_size_pkey (_Anum_compression_chunk_size_pkey_max - 1)
+
+typedef enum Anum_compression_settings_compress_relid_idx
+{
+	Anum_compression_settings_compress_relid_idx_relid = 1,
+	_Anum_compression_settings_compress_relid_idx_max,
+} Anum_compression_settings_compress_relid_idx;
+
+#define Natts_compression_settings_compress_relid_idx                                              \
+	(_Anum_compression_settings_compress_relid_idx_max - 1)
 
 #define COMPRESSION_CHUNK_SIZE_TABLE_NAME "compression_chunk_size"
 typedef enum Anum_compression_chunk_size
