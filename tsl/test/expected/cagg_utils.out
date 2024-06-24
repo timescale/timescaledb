@@ -123,9 +123,9 @@ SELECT * FROM cagg_validate_query($$ SELECT 1 FROM pg_catalog.pg_class $$);
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT relkind, count(*) FROM pg_catalog.pg_class GROUP BY 1 $$);
- is_valid | error_level | error_code |            error_message             | error_detail | error_hint 
-----------+-------------+------------+--------------------------------------+--------------+------------
- f        | ERROR       | TS001      | table "pg_class" is not a hypertable |              | 
+ is_valid | error_level | error_code |           error_message           |                          error_detail                          | error_hint 
+----------+-------------+------------+-----------------------------------+----------------------------------------------------------------+------------
+ f        | ERROR       | 0A000      | invalid continuous aggregate view | At least one hypertable should be used in the view definition. | 
 (1 row)
 
 -- time_bucket with offset is not allowed
@@ -158,33 +158,33 @@ SELECT * FROM cagg_validate_query($$ SELECT time_bucket_gapfill('1 hour', "time"
 
 -- invalid join queries
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', a."time"), count(*) FROM metrics a, metrics b GROUP BY 1 $$);
- is_valid | error_level | error_code |           error_message           |                              error_detail                               | error_hint 
-----------+-------------+------------+-----------------------------------+-------------------------------------------------------------------------+------------
- f        | ERROR       | 0A000      | invalid continuous aggregate view | Multiple hypertables or normal tables are not supported in FROM clause. | 
+ is_valid | error_level | error_code |           error_message           |                         error_detail                         | error_hint 
+----------+-------------+------------+-----------------------------------+--------------------------------------------------------------+------------
+ f        | ERROR       | 0A000      | invalid continuous aggregate view | Only one hypertable is allowed in continuous aggregate view. | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), count(*) FROM metrics, devices a, devices b GROUP BY 1 $$);
- is_valid | error_level | error_code |                                           error_message                                           | error_detail | error_hint 
-----------+-------------+------------+---------------------------------------------------------------------------------------------------+--------------+------------
- f        | ERROR       | 0A000      | only two tables with one hypertable and one normal table are allowed in continuous aggregate view |              | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), device_id, count(*) FROM metrics LEFT JOIN devices ON id = device_id GROUP BY 1, 2 $$);
- is_valid | error_level | error_code |                      error_message                      | error_detail | error_hint 
-----------+-------------+------------+---------------------------------------------------------+--------------+------------
- f        | ERROR       | 0A000      | only inner joins are supported in continuous aggregates |              | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), device_id, count(*) FROM metrics JOIN devices ON id = device_id AND name = 'foo' GROUP BY 1, 2 $$);
- is_valid | error_level | error_code |           error_message           |              error_detail              |                            error_hint                            
-----------+-------------+------------+-----------------------------------+----------------------------------------+------------------------------------------------------------------
- f        | ERROR       | 0A000      | invalid continuous aggregate view | Unsupported expression in join clause. | Only equality conditions are supported in continuous aggregates.
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 SELECT * FROM cagg_validate_query($$ SELECT time_bucket('1 hour', "time"), device_id, count(*) FROM metrics JOIN devices ON id < device_id GROUP BY 1, 2 $$);
- is_valid | error_level | error_code |           error_message           |                           error_detail                           | error_hint 
-----------+-------------+------------+-----------------------------------+------------------------------------------------------------------+------------
- f        | ERROR       | 0A000      | invalid continuous aggregate view | Only equality conditions are supported in continuous aggregates. | 
+ is_valid | error_level | error_code | error_message | error_detail | error_hint 
+----------+-------------+------------+---------------+--------------+------------
+ t        |             |            |               |              | 
 (1 row)
 
 -- invalid caggs on caggs
