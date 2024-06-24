@@ -320,3 +320,66 @@ select (_timescaledb_functions.compressed_data_info(location)).* from :cchunk li
  DICTIONARY | f
 (1 row)
 
+-- Test that vectorized filtering on text column works
+set enable_indexscan=off;
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select time, location, temp from :chunk
+where location = 1::text
+order by time desc;
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Sort (actual rows=2417 loops=1)
+   Sort Key: "time" DESC
+   Sort Method: quicksort 
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=2417 loops=1)
+         Vectorized Filter: (location = '1'::text)
+         Rows Removed by Filter: 22020
+ Arrays read from cache: 3573
+ Arrays decompressed: 90
+(8 rows)
+
+--  Save the data for comparison with seqscan
+create temp table chunk_saved as
+select time, location, temp from :chunk
+where location = 1::text
+order by time desc;
+-- Show same query with seqscan and compare output
+set timescaledb.enable_columnarscan=off;
+explain (analyze, costs off, timing off, summary off)
+select time, location, temp from :chunk
+where location = 1::text
+order by time desc;
+                          QUERY PLAN                           
+---------------------------------------------------------------
+ Sort (actual rows=2417 loops=1)
+   Sort Key: "time" DESC
+   Sort Method: quicksort 
+   ->  Seq Scan on _hyper_1_1_chunk (actual rows=2417 loops=1)
+         Filter: (location = '1'::text)
+         Rows Removed by Filter: 22020
+(6 rows)
+
+-- If output is the same, this query should return nothing
+(select time, location, temp from :chunk
+where location = 1::text
+order by time desc)
+except
+select * from chunk_saved;
+ time | location | temp 
+------+----------+------
+(0 rows)
+
+-- Insert some non-compressed values to see that vectorized filtering
+-- works on those non-compressed text columns.
+insert into :chunk values ('2022-06-01 15:30'::timestamptz, 1, 2, 3.14, 2.14), ('2022-06-01 15:30'::timestamptz, 2, 2, 3.14, 2.14);
+-- Query should only return the one non-compressed row that has location=1
+(select time, location, temp from :chunk
+where location = 1::text
+order by time desc)
+except
+select * from chunk_saved;
+             time             | location | temp 
+------------------------------+----------+------
+ Wed Jun 01 15:30:00 2022 PDT | 1        | 3.14
+(1 row)
+
