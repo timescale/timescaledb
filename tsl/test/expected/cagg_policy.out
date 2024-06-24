@@ -397,7 +397,8 @@ SELECT timescaledb_experimental.remove_policies('continuous_agg_max_mat_date', f
 ERROR:  "continuous_agg_max_mat_date" is not a continuous aggregate
 -- No policy is added if one errors out
 SELECT timescaledb_experimental.add_policies('max_mat_view_date', refresh_start_offset => '1 day'::interval, refresh_end_offset => '2 day'::interval, compress_after => '20 days'::interval, drop_after => '25 days'::interval);
-ERROR:  there are gaps in refresh policy
+ERROR:  policy refresh window too small
+DETAIL:  The start and end offsets must cover at least two buckets in the valid time range of type "date".
 SELECT timescaledb_experimental.show_policies('max_mat_view_date');
  show_policies 
 ---------------
