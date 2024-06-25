@@ -24,7 +24,7 @@ jobs:
         run: |
           echo ${{ !github.event.pull_request.draft }}
           echo ${{ github.event.pull_request.base }}
-          echo ${{ toJSON(github.event.pull_request.base) }}
+          echo "${{ toJSON(github.event.pull_request.base) }}"
           echo ${{ github.event.pull_request.base.ref == 'main' }}
           echo ${{ !github.event.pull_request.draft && github.event.pull_request.base.ref == 'main' }}
 
