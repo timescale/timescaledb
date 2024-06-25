@@ -16,6 +16,8 @@ SET jit_above_cost=0;
 SET jit_inline_above_cost=0;
 SET jit_optimize_above_cost=0;
 SET jit_tuple_deforming=on;
+-- disable hash aggregates to get stable tests
+set enable_hashagg to false;
 \ir :TEST_LOAD_NAME
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
@@ -197,16 +199,19 @@ SELECT * FROM jit_device_summary WHERE metric_spread = 1800 ORDER BY bucket DESC
                      Output: _hyper_4_6_chunk.bucket, _hyper_4_6_chunk.device_id, _hyper_4_6_chunk.metric_avg, _hyper_4_6_chunk.metric_spread
                      Index Cond: (_hyper_4_6_chunk.bucket < 'Mon Dec 31 01:00:00 2018 PST'::timestamp with time zone)
                      Filter: (_hyper_4_6_chunk.metric_spread = '1800'::double precision)
-               ->  HashAggregate
+               ->  GroupAggregate
                      Output: (time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time)), _hyper_3_5_chunk.device_id, avg(_hyper_3_5_chunk.metric), (max(_hyper_3_5_chunk.metric) - min(_hyper_3_5_chunk.metric))
-                     Group Key: time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time), _hyper_3_5_chunk.device_id
+                     Group Key: (time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time)), _hyper_3_5_chunk.device_id
                      Filter: ((max(_hyper_3_5_chunk.metric) - min(_hyper_3_5_chunk.metric)) = '1800'::double precision)
-                     ->  Result
-                           Output: time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time), _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
-                           ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
-                                 Output: _hyper_3_5_chunk.observation_time, _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
-                                 Index Cond: (_hyper_3_5_chunk.observation_time >= 'Mon Dec 31 01:00:00 2018 PST'::timestamp with time zone)
-(19 rows)
+                     ->  Sort
+                           Output: (time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time)), _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
+                           Sort Key: (time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time)), _hyper_3_5_chunk.device_id
+                           ->  Result
+                                 Output: time_bucket('@ 1 hour'::interval, _hyper_3_5_chunk.observation_time), _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
+                                 ->  Index Scan using _hyper_3_5_chunk_jit_test_contagg_observation_time_idx on _timescaledb_internal._hyper_3_5_chunk
+                                       Output: _hyper_3_5_chunk.observation_time, _hyper_3_5_chunk.device_id, _hyper_3_5_chunk.metric
+                                       Index Cond: (_hyper_3_5_chunk.observation_time >= 'Mon Dec 31 01:00:00 2018 PST'::timestamp with time zone)
+(22 rows)
 
 -- generate the results into two different files
 \set ECHO errors

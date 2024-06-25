@@ -196,6 +196,7 @@ if(EXISTS ${PG_CONFIG_H})
   file(STRINGS "${PG_CONFIG_H}" PG_USE_LLVM
        REGEX "^#[\t ]*define[\t ]+USE_LLVM[\t ]+1.*")
   if(PG_USE_LLVM)
+    message(STATUS "Building with JIT support")
     list(APPEND TEST_FILES jit.sql)
   endif()
 endif()
