@@ -1097,3 +1097,34 @@ SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
+-- test multiple unique constraints
+CREATE TABLE multi_unique (time timestamptz NOT NULL, u1 int, u2 int, value float, unique(time, u1), unique(time, u2));
+SELECT table_name FROM create_hypertable('multi_unique', 'time');
+  table_name  
+--------------
+ multi_unique
+(1 row)
+
+ALTER TABLE multi_unique SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
+NOTICE:  default order by for hypertable "multi_unique" is set to ""time" DESC"
+INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- all INSERTS should fail with constraint violation
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "76_1_multi_unique_time_u1_key"
+DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "76_1_multi_unique_time_u1_key"
+DETAIL:  Key ("time", u1)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "76_2_multi_unique_time_u2_key"
+DETAIL:  Key ("time", u2)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
+\set ON_ERROR_STOP 1
+DROP TABLE multi_unique;
