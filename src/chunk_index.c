@@ -987,12 +987,11 @@ ts_chunk_index_adjust_meta(int32 chunk_id, const char *ht_index_name, const char
 }
 
 int
-ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *new_name)
+ts_chunk_index_rename(Chunk *chunk, const char *old_name, const char *new_name)
 {
 	ScanKeyData scankey[2];
-	const char *indexname = get_rel_name(chunk_indexrelid);
 	ChunkIndexRenameInfo renameinfo = {
-		.oldname = indexname,
+		.oldname = old_name,
 		.newname = new_name,
 	};
 
@@ -1005,7 +1004,7 @@ ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *new_name)
 				Anum_chunk_index_chunk_id_index_name_idx_index_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				CStringGetDatum(indexname));
+				CStringGetDatum(old_name));
 
 	return chunk_index_scan_update(CHUNK_INDEX_CHUNK_ID_INDEX_NAME_IDX,
 								   scankey,
@@ -1016,12 +1015,11 @@ ts_chunk_index_rename(Chunk *chunk, Oid chunk_indexrelid, const char *new_name)
 }
 
 int
-ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const char *new_name)
+ts_chunk_index_rename_parent(Hypertable *ht, const char *old_name, const char *new_name)
 {
 	ScanKeyData scankey[2];
-	const char *indexname = get_rel_name(hypertable_indexrelid);
 	ChunkIndexRenameInfo renameinfo = {
-		.oldname = indexname,
+		.oldname = old_name,
 		.newname = new_name,
 		.isparent = true,
 	};
@@ -1035,7 +1033,7 @@ ts_chunk_index_rename_parent(Hypertable *ht, Oid hypertable_indexrelid, const ch
 				Anum_chunk_index_hypertable_id_hypertable_index_name_idx_hypertable_index_name,
 				BTEqualStrategyNumber,
 				F_NAMEEQ,
-				CStringGetDatum(indexname));
+				CStringGetDatum(old_name));
 
 	return chunk_index_scan_update(CHUNK_INDEX_HYPERTABLE_ID_HYPERTABLE_INDEX_NAME_IDX,
 								   scankey,
