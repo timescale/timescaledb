@@ -161,8 +161,13 @@ SELECT * FROM normal;
 INSERT INTO part
 SELECT * FROM normal;
 CALL refresh_continuous_aggregate('contagg', NULL, NULL);
+-- Reindex to avoid the dependency on the way the index is built (e.g. the caggs
+-- might get their rows inserted in different order during the refresh based on
+-- the underlying aggregation plan, and the index will be built differently,
+-- which can influence its size).
+REINDEX DATABASE :TEST_DBNAME;
 -- ANALYZE to get updated reltuples stats
-ANALYZE normal, hyper, part;
+VACUUM ANALYZE;
 SELECT count(c) FROM show_chunks('hyper') c;
  count 
 -------
@@ -185,14 +190,14 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_relations": 2                              +
      },                                                  +
      "tables": {                                         +
-         "heap_size": 65536,                             +
+         "heap_size": 73728,                             +
          "toast_size": 8192,                             +
          "indexes_size": 0,                              +
          "num_relations": 2,                             +
          "num_reltuples": 697                            +
      },                                                  +
      "hypertables": {                                    +
-         "heap_size": 163840,                            +
+         "heap_size": 475136,                            +
          "toast_size": 0,                                +
          "compression": {                                +
              "compressed_heap_size": 0,                  +
@@ -207,19 +212,19 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
              "num_compressed_hypertables": 0,            +
              "compressed_row_count_frozen_immediately": 0+
          },                                              +
-         "indexes_size": 286720,                         +
+         "indexes_size": 270336,                         +
          "num_children": 11,                             +
          "num_relations": 2,                             +
-         "num_reltuples": 697                            +
+         "num_reltuples": 1394                           +
      },                                                  +
      "materialized_views": {                             +
          "toast_size": 8192,                             +
          "indexes_size": 0,                              +
          "num_relations": 1,                             +
-         "num_reltuples": 0                              +
+         "num_reltuples": 1                              +
      },                                                  +
      "partitioned_tables": {                             +
-         "heap_size": 98304,                             +
+         "heap_size": 180224,                            +
          "toast_size": 0,                                +
          "indexes_size": 0,                              +
          "num_children": 6,                              +
@@ -260,7 +265,7 @@ SELECT (SELECT count(*) FROM normal) num_inserted_rows,
 	   (SELECT rels -> 'partitioned_tables' -> 'num_reltuples' FROM relations) part_reltuples;
  num_inserted_rows | normal_reltuples | hyper_reltuples | part_reltuples 
 -------------------+------------------+-----------------+----------------
-               697 | 697              | 697             | 697
+               697 | 697              | 1394            | 697
 (1 row)
 
 -- Add compression
@@ -290,7 +295,13 @@ FROM show_chunks('contagg') c ORDER BY c LIMIT 1;
 
 -- Turn of real-time aggregation
 ALTER MATERIALIZED VIEW contagg SET (timescaledb.materialized_only = true);
-ANALYZE normal, hyper, part;
+-- Reindex to avoid the dependency on the way the index is built (e.g. the caggs
+-- might get their rows inserted in different order during the refresh based on
+-- the underlying aggregation plan, and the index will be built differently,
+-- which can influence its size).
+REINDEX DATABASE :TEST_DBNAME;
+-- ANALYZE to get updated reltuples stats
+VACUUM ANALYZE;
 REFRESH MATERIALIZED VIEW telemetry_report;
 SELECT jsonb_pretty(rels) AS relations FROM relations;
                          relations                         
@@ -300,41 +311,41 @@ SELECT jsonb_pretty(rels) AS relations FROM relations;
          "num_relations": 2                               +
      },                                                   +
      "tables": {                                          +
-         "heap_size": 65536,                              +
+         "heap_size": 73728,                              +
          "toast_size": 8192,                              +
          "indexes_size": 0,                               +
          "num_relations": 2,                              +
          "num_reltuples": 697                             +
      },                                                   +
      "hypertables": {                                     +
-         "heap_size": 196608,                             +
+         "heap_size": 368640,                             +
          "toast_size": 40960,                             +
          "compression": {                                 +
              "compressed_heap_size": 114688,              +
              "compressed_row_count": 14,                  +
              "compressed_toast_size": 40960,              +
              "num_compressed_chunks": 5,                  +
-             "uncompressed_heap_size": 81920,             +
+             "uncompressed_heap_size": 221184,            +
              "uncompressed_row_count": 736,               +
              "compressed_indexes_size": 16384,            +
              "uncompressed_toast_size": 0,                +
-             "uncompressed_indexes_size": 147456,         +
+             "uncompressed_indexes_size": 131072,         +
              "num_compressed_hypertables": 2,             +
              "compressed_row_count_frozen_immediately": 14+
          },                                               +
          "indexes_size": 204800,                          +
          "num_children": 11,                              +
          "num_relations": 2,                              +
-         "num_reltuples": 413                             +
+         "num_reltuples": 658                             +
      },                                                   +
      "materialized_views": {                              +
          "toast_size": 8192,                              +
          "indexes_size": 0,                               +
          "num_relations": 1,                              +
-         "num_reltuples": 0                               +
+         "num_reltuples": 1                               +
      },                                                   +
      "partitioned_tables": {                              +
-         "heap_size": 98304,                              +
+         "heap_size": 180224,                             +
          "toast_size": 0,                                 +
          "indexes_size": 0,                               +
          "num_children": 6,                               +

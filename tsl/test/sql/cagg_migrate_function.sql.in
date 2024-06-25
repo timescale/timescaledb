@@ -295,7 +295,7 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-01 00:00:00'), sensor, avg(v
     ORDER BY 1, 2;
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week_timestamp;
+SELECT * FROM cagg_temp_ng_1week_timestamp ORDER BY time, sensor;
 
 ----
 -- Check bucket conversion -- date without custom origin
@@ -346,7 +346,7 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-01 01:00:00+00'), sensor, av
     ORDER BY 1, 2;
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week_date;
+SELECT * FROM cagg_temp_ng_1week_date ORDER BY time, sensor;
 
 -- Ensure we error out when the CAgg does not use a deprecated function
 \set ON_ERROR_STOP 0
