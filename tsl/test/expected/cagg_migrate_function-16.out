@@ -944,7 +944,7 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-01 00:00:00'), sensor, avg(v
 (4 rows)
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week_timestamp;
+SELECT * FROM cagg_temp_ng_1week_timestamp ORDER BY time, sensor;
            time           | sensor | avg 
 --------------------------+--------+-----
  Sat Dec 26 00:00:00 2009 |      1 | 101
@@ -1027,7 +1027,7 @@ SELECT time_bucket('1 week', time, origin=>'2000-01-01 01:00:00+00'), sensor, av
 (4 rows)
 
 -- Even the CAgg now uses time_bucket, we should see buckets of the same alignment
-SELECT * FROM cagg_temp_ng_1week_date;
+SELECT * FROM cagg_temp_ng_1week_date ORDER BY time, sensor;
     time    | sensor | avg 
 ------------+--------+-----
  12-26-2009 |      1 | 101
