@@ -18,6 +18,7 @@ name: Assign PR to author and reviewers
 jobs:
   debug:
     name: Debug job
+    runs-on: ubuntu-latest
     steps:
       - name: Debug step
         run: |
