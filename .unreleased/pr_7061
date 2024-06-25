@@ -1,0 +1,1 @@
+Fixes: #7061 Fix handling of multiple unique indexes in compressed INSERT
