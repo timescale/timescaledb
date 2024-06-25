@@ -16,6 +16,16 @@ name: Assign PR to author and reviewers
   pull_request:
 
 jobs:
+  debug:
+    name: Debug job
+    steps:
+      - name: Debug step
+        run: |
+          echo ${{ !github.event.pull_request.draft }}
+          echo ${{ github.event.pull_request.base }}
+          echo ${{ github.event.pull_request.base == 'main' }}
+          echo ${{ !github.event.pull_request.draft && github.event.pull_request.base == 'main' }}
+
   assign-pr:
     name: Assign PR to author
     permissions:
