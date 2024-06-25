@@ -26,7 +26,7 @@ jobs:
   ask-review:
     name: Run pull-review
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.base == 'main' }}
     steps:
       - uses: actions/checkout@v4
       - name: Run pull-review with docker
@@ -39,3 +39,9 @@ jobs:
         run: |
           PR_URL="https://github.com/${OWNER}/${REPO}/pull/${PULL_REQUEST_NUMBER}"
           docker run ghcr.io/imsky/pull-review "$PR_URL" --github-token "${GITHUB_TOKEN}"
+      - name: Debug
+        run: |
+          echo ${{ !github.event.pull_request.draft }}
+          echo ${{ github.event.pull_request.base }}
+          echo ${{ github.event.pull_request.base == 'main' }}
+          echo ${{ !github.event.pull_request.draft && github.event.pull_request.base == 'main' }}
