@@ -24,8 +24,9 @@ jobs:
         run: |
           echo ${{ !github.event.pull_request.draft }}
           echo ${{ github.event.pull_request.base }}
-          echo ${{ github.event.pull_request.base == 'main' }}
-          echo ${{ !github.event.pull_request.draft && github.event.pull_request.base == 'main' }}
+          echo ${{ toJSON(github.event.pull_request.base) }}
+          echo ${{ github.event.pull_request.base.ref == 'main' }}
+          echo ${{ !github.event.pull_request.draft && github.event.pull_request.base.ref == 'main' }}
 
   assign-pr:
     name: Assign PR to author
