@@ -1159,3 +1159,15 @@ COPY compressed_table (time,a,b,c) FROM stdin;
 \.
 \set ON_ERROR_STOP 1
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
+
+-- Test decompression with DML which compares int8 to int4
+CREATE TABLE hyper_84 (time timestamptz, device int8, location int8, temp float8);
+SELECT create_hypertable('hyper_84', 'time', create_default_indexes => false);
+INSERT INTO hyper_84 VALUES ('2024-01-01', 1, 1, 1.0);
+ALTER TABLE hyper_84 SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
+-- indexscan for decompression: UPDATE
+UPDATE hyper_84 SET temp = 100 where device = 1;
+SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
+-- indexscan for decompression: DELETE
+DELETE FROM hyper_84 WHERE device = 1;

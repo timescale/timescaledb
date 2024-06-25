@@ -1,0 +1,1 @@
+Fixes: #7055 Fix scankey where consttype is different from var

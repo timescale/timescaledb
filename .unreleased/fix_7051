@@ -1,0 +1,1 @@
+Fixes: #7051 Make reorder_vs_insert deterministic

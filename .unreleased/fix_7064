@@ -1,0 +1,1 @@
+Fixes: #7064 Fix a bug in default orderby calc. in compression 
