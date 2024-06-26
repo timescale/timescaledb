@@ -117,5 +117,34 @@ INSERT INTO metrics_tstz VALUES
     (timestamptz '2018-01-01 07:00:00 PST', 3, 0.9, 30)
 ;
 
-
+-- scramble index column names
+--
+-- index column names must never be used to match between relation columns and index columns
+-- to catch any such bugs, we scramble the index column names in regresscheck-shared
+DO $$
+DECLARE
+i regclass;
+colname name;
+BEGIN
+  FOR i IN
+    SELECT c.oid FROM pg_class c
+    WHERE
+      c.relkind='i' AND
+      c.relnamespace IN (
+        'public'::regnamespace,
+        '_timescaledb_internal'::regnamespace
+      ) AND
+      c.relname NOT IN (
+        'bgw_job_stat_pkey',
+        'bgw_job_stat_history_pkey',
+        'bgw_job_stat_history_job_id_idx',
+        'bgw_policy_chunk_stats_job_id_chunk_id_key'
+      )
+  LOOP
+    FOR colname IN SELECT a.attname FROM pg_attribute a WHERE a.attrelid = i ORDER BY a.attnum
+    LOOP
+      EXECUTE format('ALTER TABLE %s RENAME COLUMN %I TO %s', i, colname, format('XyZ_%s', colname));
+    END LOOP;
+  END LOOP;
+END$$;
 
