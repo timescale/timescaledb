@@ -478,8 +478,9 @@ tsl_text_dictionary_decompress_all(Datum compressed, Oid element_type, MemoryCon
 		Simple8bRleBitmap nulls = simple8brle_bitmap_decompress(nulls_serialized);
 		CheckCompressedData(n_notnull + simple8brle_bitmap_num_ones(&nulls) == n_total);
 
-		int current_notnull_element = n_notnull - 1;
-		for (int i = n_total - 1; i >= 0; i--)
+		/* current_notnull_element needs to go below 0, so use signed type */
+		int64 current_notnull_element = n_notnull - 1;
+		for (int64 i = n_total - 1; i >= 0; i--)
 		{
 			Assert(i >= current_notnull_element);
 

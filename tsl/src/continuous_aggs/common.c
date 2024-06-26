@@ -671,8 +671,8 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only two tables with one hypertable and one normal table"
-						"are  allowed in continuous aggregate view")));
+				 errmsg("only two tables with one hypertable and one normal table "
+						"are allowed in continuous aggregate view")));
 	}
 	/* Extra checks for joins in Caggs. */
 	if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||

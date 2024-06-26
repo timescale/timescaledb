@@ -214,3 +214,33 @@ CREATE TABLE public.t1 (time timestamptz NOT NULL, segment_value text NOT NULL);
 SELECT public.create_hypertable('public.t1', 'time');
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
 RESET search_path;
+
+-- test same named objects in different schemas with default orderbys
+\c :TEST_DBNAME :ROLE_SUPERUSER
+
+CREATE SCHEMA schema1;
+CREATE SCHEMA schema2;
+GRANT ALL ON SCHEMA schema1, schema2 to public;
+
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+CREATE TABLE schema1.page_events2 (
+ time        TIMESTAMPTZ         NOT NULL,
+ page        TEXT              NOT NULL
+);
+
+SELECT create_hypertable('schema1.page_events2', 'time');
+ALTER TABLE schema1.page_events2 SET (
+ timescaledb.compress,
+ timescaledb.compress_segmentby = 'page'
+);
+
+CREATE TABLE schema2.page_events2 (
+ time        TIMESTAMPTZ         NOT NULL,
+ page        TEXT              NOT NULL
+);
+
+SELECT create_hypertable('schema2.page_events2', 'time');
+ALTER TABLE schema2.page_events2 SET (
+ timescaledb.compress,
+ timescaledb.compress_segmentby = 'page'
+);

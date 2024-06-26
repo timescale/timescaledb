@@ -519,6 +519,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	state->rel = rel;
 	state->result_relation_info = relinfo;
 	state->estate = dispatch->estate;
+	state->compressed_chunk_table_id = InvalidOid;
 	ts_set_compression_status(state, chunk);
 
 	if (relinfo->ri_RelationDesc->rd_rel->relhasindex && relinfo->ri_IndexRelationDescs == NULL)
@@ -634,7 +635,12 @@ ts_set_compression_status(ChunkInsertState *state, const Chunk *chunk)
 {
 	state->chunk_compressed = ts_chunk_is_compressed(chunk);
 	if (state->chunk_compressed)
+	{
 		state->chunk_partial = ts_chunk_is_partial(chunk);
+		if (!OidIsValid(state->compressed_chunk_table_id))
+			state->compressed_chunk_table_id =
+				ts_chunk_get_relid(chunk->fd.compressed_chunk_id, false);
+	}
 }
 
 extern void

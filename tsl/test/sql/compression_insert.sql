@@ -729,3 +729,22 @@ INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
 \set ON_ERROR_STOP 1
 
 DROP TABLE test_limit;
+RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
+
+-- test multiple unique constraints
+CREATE TABLE multi_unique (time timestamptz NOT NULL, u1 int, u2 int, value float, unique(time, u1), unique(time, u2));
+SELECT table_name FROM create_hypertable('multi_unique', 'time');
+ALTER TABLE multi_unique SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
+
+INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('multi_unique') c;
+
+\set ON_ERROR_STOP 0
+-- all INSERTS should fail with constraint violation
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 0, 1, 1.0); ROLLBACK;
+BEGIN; INSERT INTO multi_unique VALUES('2024-01-01', 1, 0, 1.0); ROLLBACK;
+\set ON_ERROR_STOP 1
+
+DROP TABLE multi_unique;
+
