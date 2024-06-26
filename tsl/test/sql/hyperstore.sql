@@ -110,6 +110,8 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 -- Show with indexscan
 SET enable_indexscan = true;
+SET enable_seqscan = false;
+SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
@@ -124,16 +126,20 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
 
 -- Qual on compressed column with index
+SET timescaledb.enable_columnarscan = true;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 
 -- With index scan
 SET enable_indexscan = true;
+SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 SET enable_indexscan = false;
+SET enable_seqscan = true;
+SET timescaledb.enable_columnarscan = true;
 
 -- With transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
@@ -150,87 +156,6 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 SET timescaledb.enable_transparent_decompression TO false;
-
---
--- Test ANALYZE.
---
--- First create a separate regular table with the chunk data as a
--- reference of accurate stats. Analyze it and compare with analyze
--- on the original chunk.
---
-CREATE TABLE chunk_data (LIKE :chunk);
-INSERT INTO chunk_data SELECT * FROM :chunk;
-ANALYZE chunk_data;
-
-CREATE VIEW chunk_data_relstats AS
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = 'chunk_data'::regclass;
-
-CREATE VIEW chunk_data_attrstats AS
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = 'chunk_data'::regclass
-ORDER BY attname;
-
-SELECT * FROM chunk_data_relstats;
-SELECT * FROM chunk_data_attrstats ORDER BY attname;
-
--- Stats on compressed chunk before ANALYZE. Note that this chunk is
--- partially compressed
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk'::regclass;
-
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
-ORDER BY attname;
-
--- ANALYZE directly on chunk
-ANALYZE :chunk;
-
--- Stats after ANALYZE. Show rows that differ. The number of relpages
--- will differ because the chunk is compressed and uses less pages.
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk'::regclass;
-
--- There should be no difference in attrstats, so EXCEPT query should
--- show no results
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
-EXCEPT
-SELECT * FROM chunk_data_attrstats
-ORDER BY attname;
-
--- ANALYZE also via hypertable root and show that it will
--- recurse to another chunk
-ALTER TABLE :chunk2 SET ACCESS METHOD hyperstore;
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk2'::regclass;
-
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass
-ORDER BY attname;
-
-SELECT count(*) FROM :chunk2;
-
-ANALYZE readings;
-
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk2'::regclass;
-
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass
-ORDER BY attname;
-
-ALTER TABLE :chunk2 SET ACCESS METHOD heap;
 
 -- We should be able to change it back to heap.
 -- Compression metadata should be cleaned up

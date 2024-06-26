@@ -1,0 +1,346 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\ir include/setup_hyperstore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+\ir hyperstore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function explain_analyze_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
+);
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+-- Get some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 \gset
+-- To generate plans consistently.
+set max_parallel_workers_per_gather to 0;
+-- Start without these indexes
+drop index hypertable_location_id_idx;
+drop index hypertable_device_id_idx;
+--
+-- Test ANALYZE.
+--
+-- First create a separate regular table with the chunk data as a
+-- reference of accurate stats. Analyze it and compare with analyze
+-- on the original chunk.
+--
+create table normaltable (like :chunk1);
+insert into normaltable select * from :chunk1;
+create view relstats as
+select oid::regclass as relid, reltuples
+from pg_class
+order by relid;
+create view relstats_compare as
+select * from relstats where relid in ('normaltable'::regclass, :'chunk1'::regclass);
+create view attrstats as
+select format('%I.%I', schemaname, tablename)::regclass as relid,
+       attname,
+       n_distinct,
+       array_to_string(most_common_vals, e',') as most_common_vals
+from pg_stats
+order by relid, attname;
+create view attrstats_compare as
+select * from attrstats where relid in ('normaltable'::regclass, :'chunk1'::regclass);
+create view attrstats_diff as
+select attname, n_distinct, most_common_vals from attrstats where relid = 'normaltable'::regclass
+except
+select attname, n_distinct, most_common_vals from attrstats where relid = :'chunk1'::regclass;
+create view attrstats_same as
+select count(*)=0 as stats_are_the_same from attrstats_diff;
+-- No stats yet
+select * from relstats_compare;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk |        -1
+ normaltable                            |        -1
+(2 rows)
+
+select * from attrstats_compare;
+ relid | attname | n_distinct | most_common_vals 
+-------+---------+------------+------------------
+(0 rows)
+
+-- Check that the estimated rows is the same for the chunk and the
+-- normal table and in the right ballpark
+explain (analyze, timing off, summary off)
+select * from :chunk1 where location_id = 1;
+                                          QUERY PLAN                                          
+----------------------------------------------------------------------------------------------
+ Seq Scan on _hyper_1_1_chunk  (cost=0.00..156.80 rows=37 width=42) (actual rows=605 loops=1)
+   Filter: (location_id = 1)
+   Rows Removed by Filter: 5515
+(3 rows)
+
+explain (analyze, timing off, summary off)
+select * from normaltable where location_id = 1;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Seq Scan on normaltable  (cost=0.00..156.80 rows=37 width=42) (actual rows=605 loops=1)
+   Filter: (location_id = 1)
+   Rows Removed by Filter: 5515
+(3 rows)
+
+-- Changing to hyperstore will update relstats since it process all
+-- the data
+alter table :chunk1 set access method hyperstore;
+-- Creating an index on normaltable will also update relstats
+create index normaltable_location_id_idx on normaltable (location_id);
+-- Relstats should be the same for both tables, except for pages since
+-- a hyperstore is compressed. Column stats is not updated.
+select * from relstats_compare;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk |      6120
+ normaltable                            |      6120
+(2 rows)
+
+select * from attrstats_compare;
+ relid | attname | n_distinct | most_common_vals 
+-------+---------+------------+------------------
+(0 rows)
+
+-- Drop the index again, we'll need to recreate it again later
+drop index normaltable_location_id_idx;
+-- Check that the estimated rows is the same for the chunk and the
+-- normal table and in the right ballpark
+select count(*) from :chunk1 where location_id = 1;
+ count 
+-------
+   605
+(1 row)
+
+explain (analyze, timing off, summary off)
+select * from :chunk1 where location_id = 1;
+                                                  QUERY PLAN                                                   
+---------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.00..70.65 rows=31 width=42) (actual rows=605 loops=1)
+   Scankey: (location_id = 1)
+(2 rows)
+
+explain (analyze, timing off, summary off)
+select * from normaltable where location_id = 1;
+                                       QUERY PLAN                                        
+-----------------------------------------------------------------------------------------
+ Seq Scan on normaltable  (cost=0.00..140.50 rows=31 width=42) (actual rows=605 loops=1)
+   Filter: (location_id = 1)
+   Rows Removed by Filter: 5515
+(3 rows)
+
+-- ANALYZE directly on chunk
+analyze :chunk1;
+analyze normaltable;
+-- Stats after analyze
+select * from relstats_compare;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk |      6120
+ normaltable                            |      6120
+(2 rows)
+
+select * from attrstats_same;
+ stats_are_the_same 
+--------------------
+ t
+(1 row)
+
+-- Check that the estimated rows is now correct based on stats (reltuples)
+explain (analyze, timing off, summary off)
+select * from :chunk1 where location_id = 1;
+                                                   QUERY PLAN                                                   
+----------------------------------------------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.00..70.65 rows=605 width=42) (actual rows=605 loops=1)
+   Scankey: (location_id = 1)
+(2 rows)
+
+explain (analyze, timing off, summary off)
+select * from normaltable where location_id = 1;
+                                        QUERY PLAN                                        
+------------------------------------------------------------------------------------------
+ Seq Scan on normaltable  (cost=0.00..140.50 rows=605 width=42) (actual rows=605 loops=1)
+   Filter: (location_id = 1)
+   Rows Removed by Filter: 5515
+(3 rows)
+
+delete from :chunk1 where location_id=1;
+delete from normaltable where location_id=1;
+select * from relstats_compare;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk |      6120
+ normaltable                            |      6120
+(2 rows)
+
+select * from attrstats_same;
+ stats_are_the_same 
+--------------------
+ t
+(1 row)
+
+-- Creating an index should update relstats but not attrstats. Note
+-- also that this will be a segmentby index, and because it only
+-- indexes compressed tuples, it is extra important to check reltuples
+-- is correct.
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index normaltable_location_id_idx on normaltable (location_id);
+-- Test how VACUUM affects stats (or not)
+select * from relstats_compare;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk |      5515
+ normaltable                            |      5515
+(2 rows)
+
+vacuum :chunk1;
+vacuum normaltable;
+select * from relstats_compare;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk |      5515
+ normaltable                            |      5515
+(2 rows)
+
+select * from attrstats_same;
+ stats_are_the_same 
+--------------------
+ t
+(1 row)
+
+vacuum analyze :chunk1;
+vacuum analyze normaltable;
+select * from relstats_compare;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_1_chunk |      5515
+ normaltable                            |      5515
+(2 rows)
+
+select * from attrstats_same;
+ stats_are_the_same 
+--------------------
+ t
+(1 row)
+
+-- ANALYZE also via hypertable root and show that it will recurse to
+-- chunks. Make sure the chunk also has partially compressed data
+alter table :chunk2 set access method hyperstore;
+update :hypertable set device_id = 2 where device_id = 1;
+select * from relstats where relid = :'chunk2'::regclass;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_2_chunk |     60480
+(1 row)
+
+select * from attrstats where relid = :'chunk2'::regclass;
+ relid | attname | n_distinct | most_common_vals 
+-------+---------+------------+------------------
+(0 rows)
+
+select count(*) from :chunk2;
+ count 
+-------
+ 60480
+(1 row)
+
+analyze :hypertable;
+select * from relstats where relid = :'chunk2'::regclass;
+                 relid                  | reltuples 
+----------------------------------------+-----------
+ _timescaledb_internal._hyper_1_2_chunk |     60480
+(1 row)
+
+-- Just show that there are attrstats via a count avoid flaky output
+select count(*) from attrstats where relid = :'chunk2'::regclass;
+ count 
+-------
+     7
+(1 row)
+
