@@ -596,47 +596,6 @@ if(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
   )
 endif(USE_OPENSSL AND (NOT PG_USE_OPENSSL))
 
-if(USE_OPENSSL)
-  # Try to find a local OpenSSL installation
-  find_package(OpenSSL)
-
-  if(NOT OPENSSL_FOUND)
-    message(
-      FATAL_ERROR
-        "TimescaleDB requires OpenSSL but it wasn't found. If you want to continue without OpenSSL, re-run bootstrap with `-DUSE_OPENSSL=0`"
-    )
-  endif(NOT OPENSSL_FOUND)
-
-  if(${OPENSSL_VERSION} VERSION_LESS "1.0")
-    message(FATAL_ERROR "TimescaleDB requires OpenSSL version 1.0 or greater")
-  endif()
-
-  set(_libraries)
-  foreach(_path ${OPENSSL_LIBRARIES})
-    if(EXISTS "${_path}")
-      list(APPEND _libraries ${_path})
-    else()
-      # check if a release version of the libraries are available
-      if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND MSVC)
-        get_filename_component(_dir ${_path} DIRECTORY)
-        get_filename_component(_name ${_path} NAME_WE)
-        string(REGEX REPLACE "[Dd]$" "" _fixed ${_name})
-        get_filename_component(_ext ${_path} EXT)
-        set(_new_path "${_dir}/${_fixed}${_ext}")
-        if(EXISTS "${_new_path}")
-          list(APPEND _libraries ${_new_path})
-        endif()
-      endif()
-    endif()
-  endforeach()
-  set(OPENSSL_LIBRARIES ${_libraries})
-
-  foreach(_path ${OPENSSL_LIBRARIES})
-    message(STATUS "OpenSSL libraries: ${_path}")
-  endforeach()
-  message(STATUS "Using OpenSSL version ${OPENSSL_VERSION}")
-endif(USE_OPENSSL)
-
 if(CODECOVERAGE)
   message(STATUS "Code coverage is enabled.")
   # Note that --coverage is synonym for the necessary compiler and linker flags
