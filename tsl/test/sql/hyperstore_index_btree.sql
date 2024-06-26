@@ -276,6 +276,10 @@ reset role; -- need superuser for pageinspect
 -- The index should contain 1 key (device 1) with 2 TIDs
 select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page_items(:'chunk_time_idx', 1);
 
+-- Turn off columnarscan and seqscan to ensure index scan is picked
+set timescaledb.enable_columnarscan=false;
+set enable_seqscan=false;
+
 -- Check that a query can use the index
 explain (costs off)
 select * from non_unique_metrics where time <= '2024-01-01'::timestamptz;

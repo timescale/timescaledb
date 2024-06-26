@@ -524,13 +524,13 @@ $$, :'hypertable'));
  Append (actual rows=N loops=N)
    ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
-   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
-   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
-   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
-   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+   ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
    ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_owner_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
@@ -797,6 +797,9 @@ select _timescaledb_debug.is_compressed_tid(ctid), dead, htid, tids from bt_page
  f                 | f    | (2147483649,1) | {"(2147483649,1)","(2147483649,2)"}
 (1 row)
 
+-- Turn off columnarscan and seqscan to ensure index scan is picked
+set timescaledb.enable_columnarscan=false;
+set enable_seqscan=false;
 -- Check that a query can use the index
 explain (costs off)
 select * from non_unique_metrics where time <= '2024-01-01'::timestamptz;
