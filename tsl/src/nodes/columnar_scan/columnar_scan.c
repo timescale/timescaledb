@@ -8,6 +8,7 @@
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
+#include <nodes/extensible.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/pathnodes.h>
 #include <optimizer/cost.h>
@@ -707,7 +708,7 @@ columnar_scan_path_create(PlannerInfo *root, RelOptInfo *rel, Relids required_ou
 						   * match the orderby,segmentby settings we could do
 						   * ordering */
 
-	cspath->custom_path.flags = 0;
+	cspath->custom_path.flags = CUSTOMPATH_SUPPORT_BACKWARD_SCAN;
 	cspath->custom_path.methods = &columnar_scan_path_methods;
 
 	cost_columnar_scan(path, root, rel);
