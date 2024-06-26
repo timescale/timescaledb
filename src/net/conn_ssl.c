@@ -5,8 +5,10 @@
  */
 #include <postgres.h>
 
+#include "compat/compat-msvc-enter.h"
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include "compat/compat-msvc-exit.h"
 
 #include "conn_internal.h"
 #include "conn_plain.h"
