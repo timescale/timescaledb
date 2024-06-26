@@ -120,6 +120,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_insert.sql
     hyperstore_join.sql
     hyperstore_scans.sql
+    hyperstore_stats.sql
     hyperstore_columnar.sql
     hyperstore_policy.sql
     hyperstore_types.sql
