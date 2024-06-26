@@ -109,6 +109,8 @@ extern TupleTableSlot *ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_in
  */
 
 #define InvalidTupleIndex 0
+#define MinTupleIndex 1
+#define MaxTupleIndex UINT16_MAX
 
 #define BLOCKID_BITS (CHAR_BIT * sizeof(BlockIdData))
 #define COMPRESSED_FLAG (1UL << (BLOCKID_BITS - 1))
@@ -149,11 +151,18 @@ hyperstore_tid_decode(ItemPointerData *out_tid, const ItemPointerData *in_tid)
 }
 
 static inline void
+hyperstore_tid_set_tuple_index(ItemPointerData *tid, uint32 tuple_index)
+{
+	/* Assert that we do not overflow the increment: we only have 10 bits for the tuple index */
+	Assert(tuple_index < 1024);
+	ItemPointerSetOffsetNumber(tid, tuple_index);
+}
+
+static inline void
 hyperstore_tid_increment(ItemPointerData *tid, uint16 increment)
 {
 	/* Assert that we do not overflow the increment: we only have 10 bits for the tuple index */
-	Assert(ItemPointerGetOffsetNumber(tid) + increment < 1024);
-	ItemPointerSetOffsetNumber(tid, ItemPointerGetOffsetNumber(tid) + increment);
+	hyperstore_tid_set_tuple_index(tid, ItemPointerGetOffsetNumber(tid) + increment);
 }
 
 static inline bool
@@ -252,20 +261,20 @@ arrow_slot_is_last(const TupleTableSlot *slot)
 }
 
 /*
- * Increment an arrow slot to point to a subsequent row.
+ * Increment or decrement an arrow slot to point to a subsequent row.
  *
- * If the slot points to a non-compressed tuple, the incrementation will
+ * If the slot points to a non-compressed tuple, the change will
  * simply clear the slot.
  *
- * If the slot points to a compressed tuple, the incrementation will
- * clear the slot if it reaches the end of the segment.
+ * If the slot points to a compressed tuple, an increment or decrement will
+ * clear the slot if it reaches the end of the segment or beginning of it,
+ * respectively.
  */
 static inline TupleTableSlot *
-ExecIncrArrowTuple(TupleTableSlot *slot, uint16 increment)
+ExecIncrOrDecrArrowTuple(TupleTableSlot *slot, int32 amount)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
-	Assert(increment > 0);
 	Assert(slot != NULL && slot->tts_tupleDescriptor != NULL);
 
 	if (unlikely(!TTS_IS_ARROWTUPLE(slot)))
@@ -278,18 +287,18 @@ ExecIncrArrowTuple(TupleTableSlot *slot, uint16 increment)
 		return slot;
 	}
 
-	aslot->tuple_index += increment;
+	int32 tuple_index = (int32) aslot->tuple_index + amount;
 
-	if (aslot->tuple_index > aslot->total_row_count)
+	if (tuple_index > aslot->total_row_count || tuple_index < 1)
 	{
 		Assert(aslot->compressed_slot);
 		ExecClearTuple(slot);
 		return slot;
 	}
 
-	if (aslot->tuple_index <= aslot->total_row_count)
-		hyperstore_tid_increment(&slot->tts_tid, increment);
-
+	Assert(tuple_index > 0 && tuple_index <= aslot->total_row_count);
+	hyperstore_tid_set_tuple_index(&slot->tts_tid, tuple_index);
+	aslot->tuple_index = (uint16) tuple_index;
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;
 
@@ -302,7 +311,20 @@ ExecIncrArrowTuple(TupleTableSlot *slot, uint16 increment)
 	return slot;
 }
 
+static inline TupleTableSlot *
+ExecIncrArrowTuple(TupleTableSlot *slot, uint16 increment)
+{
+	return ExecIncrOrDecrArrowTuple(slot, increment);
+}
+
+static inline TupleTableSlot *
+ExecDecrArrowTuple(TupleTableSlot *slot, uint16 decrement)
+{
+	return ExecIncrOrDecrArrowTuple(slot, -decrement);
+}
+
 #define ExecStoreNextArrowTuple(slot) ExecIncrArrowTuple(slot, 1)
+#define ExecStorePreviousArrowTuple(slot) ExecDecrArrowTuple(slot, 1)
 
 extern const int16 *arrow_slot_get_attribute_offset_map(TupleTableSlot *slot);
 extern bool is_compressed_col(const TupleDesc tupdesc, AttrNumber attno);

@@ -101,3 +101,59 @@ order by metric_id limit 10;
 drop function location_humidity_for;
 drop function update_location_humidity;
 
+
+-- Test cursor going backwards
+create table backward_cursor (time timestamptz, location_id bigint, temp float8);
+select create_hypertable('backward_cursor', 'time', create_default_indexes=>false);
+alter table backward_cursor set (timescaledb.compress, timescaledb.compress_segmentby='location_id', timescaledb.compress_orderby='time asc');
+insert into backward_cursor values ('2024-01-01 01:00', 1, 1.0), ('2024-01-01 02:00', 1, 2.0), ('2024-01-01 03:00', 2, 3.0), ('2024-01-01 04:00', 2, 4.0);
+select compress_chunk(ch, compress_using=>'hyperstore') from show_chunks('backward_cursor') ch;
+insert into backward_cursor values ('2024-01-01 05:00', 3, 5.0), ('2024-01-01 06:00', 3, 6.0);
+
+begin;
+-- This needs to be a simple scan on top of the baserel, without a
+-- materialization. For scan nodes that don't support backwards scans,
+-- or where a sort or similar happens, the query is typically
+-- materialized first, thus not really testing the TAMs ability to do
+-- backwards scanning.
+explain (costs off)
+declare curs1 cursor for
+select _timescaledb_debug.is_compressed_tid(ctid), * from backward_cursor;
+declare curs1 cursor for
+select _timescaledb_debug.is_compressed_tid(ctid), * from backward_cursor;
+
+-- Immediately fetching backward should return nothing
+fetch backward 1 from curs1;
+
+-- Now read some values forward
+fetch forward 1 from curs1;
+fetch forward 1 from curs1;
+-- The next fetch should move into a new segment with location_id=2
+fetch forward 1 from curs1;
+-- Last compressed entry
+fetch forward 1 from curs1;
+-- Now should move into non-compressed
+fetch forward 1 from curs1;
+-- Last entry in non-compressed
+fetch forward 1 from curs1;
+-- Should return nothing since at end
+fetch forward 1 from curs1;
+-- Now move backwards
+fetch backward 1 from curs1;
+-- Now backwards into the old segment
+fetch backward 5 from curs1;
+-- Next fetch should return nothing since at start
+fetch backward 1 from curs1;
+-- Fetch first value again
+fetch forward 1 from curs1;
+-- Jump to last value
+fetch last from curs1;
+-- Back to first
+fetch first from curs1;
+-- Get the values at position 2 and 5 from the start
+fetch absolute 2 from curs1;
+fetch absolute 5 from curs1;
+-- Get the value at position 3 from the end (which should be 4 from
+-- the start)
+fetch absolute -3 from curs1;
+commit;
