@@ -8,6 +8,7 @@
 #include <access/heapam.h>
 #include <access/hio.h>
 #include <access/rewriteheap.h>
+#include <access/sdir.h>
 #include <access/skey.h>
 #include <access/tableam.h>
 
@@ -586,7 +587,6 @@ hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection dire
 									 TupleTableSlot *slot)
 {
 	TupleTableSlot *child_slot = arrow_slot_get_noncompressed_slot(slot);
-
 	Relation relation = scan->rs_base.rs_rd;
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
 	bool result = relation->rd_tableam->scan_getnextslot(scan->uscan_desc, direction, child_slot);
@@ -597,8 +597,39 @@ hyperstore_getnextslot_noncompressed(HyperstoreScanDesc scan, ScanDirection dire
 		scan->returned_noncompressed_count++;
 		ExecStoreArrowTuple(slot, InvalidTupleIndex);
 	}
+	else if (direction == BackwardScanDirection)
+	{
+		scan->hs_scan_state = HYPERSTORE_SCAN_COMPRESSED;
+		return hyperstore_getnextslot(&scan->rs_base, direction, slot);
+	}
 
 	return result;
+}
+
+static bool
+should_read_new_compressed_slot(TupleTableSlot *slot, ScanDirection direction)
+{
+	/* Scans are never invoked with NoMovementScanDirection */
+	Assert(direction != NoMovementScanDirection);
+
+	/* A slot can be empty if just started the scan or (or moved back to the
+	 * start due to backward scan) */
+	if (TTS_EMPTY(slot))
+		return true;
+
+	if (direction == ForwardScanDirection)
+	{
+		if (arrow_slot_is_last(slot) || arrow_slot_is_consumed(slot))
+			return true;
+	}
+	else if (direction == BackwardScanDirection)
+	{
+		/* Check if backward scan reached the start or the slot values */
+		if (arrow_slot_row_index(slot) <= 1)
+			return true;
+	}
+
+	return false;
 }
 
 static bool
@@ -608,24 +639,38 @@ hyperstore_getnextslot_compressed(HyperstoreScanDesc scan, ScanDirection directi
 	TupleTableSlot *child_slot =
 		arrow_slot_get_compressed_slot(slot, RelationGetDescr(scan->compressed_rel));
 
-	if (scan->reset || arrow_slot_is_last(slot) || arrow_slot_is_consumed(slot))
+	if (scan->reset || should_read_new_compressed_slot(slot, direction))
 	{
 		scan->reset = false;
 
 		if (!table_scan_getnextslot(scan->cscan_desc, direction, child_slot))
 		{
 			ExecClearTuple(slot);
-			scan->hs_scan_state = HYPERSTORE_SCAN_NON_COMPRESSED;
-			return hyperstore_getnextslot(&scan->rs_base, direction, slot);
+
+			if (direction == ForwardScanDirection)
+			{
+				scan->hs_scan_state = HYPERSTORE_SCAN_NON_COMPRESSED;
+				return hyperstore_getnextslot(&scan->rs_base, direction, slot);
+			}
+			else
+			{
+				Assert(direction == BackwardScanDirection);
+				return false;
+			}
 		}
 
 		Assert(ItemPointerIsValid(&child_slot->tts_tid));
-		ExecStoreArrowTuple(slot, 1);
+		ExecStoreArrowTuple(slot, direction == ForwardScanDirection ? 1 : MaxTupleIndex);
 		scan->compressed_row_count = arrow_slot_total_row_count(slot);
+	}
+	else if (direction == ForwardScanDirection)
+	{
+		ExecStoreNextArrowTuple(slot);
 	}
 	else
 	{
-		ExecStoreNextArrowTuple(slot);
+		Assert(direction == BackwardScanDirection);
+		ExecStorePreviousArrowTuple(slot);
 	}
 
 	scan->returned_compressed_count++;
