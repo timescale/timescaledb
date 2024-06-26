@@ -1088,9 +1088,17 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 	 * on the updated tuple in the CHUNK table potentially preventing other transaction
 	 * from updating it
 	 */
-	ts_chunk_clear_status(uncompressed_chunk,
-						  CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL);
+	if (ts_chunk_clear_status(uncompressed_chunk,
+							  CHUNK_STATUS_COMPRESSED_UNORDERED | CHUNK_STATUS_COMPRESSED_PARTIAL))
+		ereport(LOG,
+				(errmsg("cleared chunk status for recompression: \"%s.%s\"",
+						NameStr(uncompressed_chunk->fd.schema_name),
+						NameStr(uncompressed_chunk->fd.table_name))));
 
+	ereport(LOG,
+			(errmsg("acquiring locks for recompression: \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
 	/* lock both chunks, compressed and uncompressed */
 	/* TODO: Take RowExclusive locks instead of AccessExclusive */
 	Relation uncompressed_chunk_rel = table_open(uncompressed_chunk->table_id, ExclusiveLock);
@@ -1190,6 +1198,10 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/* Index scan */
 	Relation index_rel = index_open(row_compressor.index_oid, ExclusiveLock);
+	ereport(LOG,
+			(errmsg("locks acquired for recompression: \"%s.%s\"",
+					NameStr(uncompressed_chunk->fd.schema_name),
+					NameStr(uncompressed_chunk->fd.table_name))));
 
 	index_scan = index_beginscan(compressed_chunk_rel, index_rel, snapshot, 0, 0);
 	TupleTableSlot *slot = table_slot_create(compressed_chunk_rel, NULL);
