@@ -314,6 +314,11 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 		aslot->total_row_count = DatumGetInt32(d);
 	}
 
+	/* MaxTupleIndex typically used for backwards scans, so store the index
+	 * pointing to the last value */
+	if (tuple_index == MaxTupleIndex)
+		tuple_index = aslot->total_row_count;
+
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;
 
@@ -326,6 +331,20 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 	aslot->tuple_index = tuple_index;
 }
 
+/*
+ * Mark the slot as storing a tuple, returning the row at the given index in
+ * case of storing multiple compressed rows.
+ *
+ * A tuple index of InvalidTupleIndex stores a non-compressed tuple.
+ *
+ * A tuple index of 1 or greater stores a compressed tuple pointing to the
+ * row given by the index.
+ *
+ * A tuple index of MaxTupleIndex means the index of the "last" row in a
+ * compressed tuple. In other words, when fetching the data, the arrow slot
+ * will return the last row in the compressed tuple and is typically used for
+ * backward scanning.
+ */
 TupleTableSlot *
 ExecStoreArrowTuple(TupleTableSlot *slot, uint16 tuple_index)
 {
