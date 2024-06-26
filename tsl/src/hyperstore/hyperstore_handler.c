@@ -11,7 +11,6 @@
 #include <access/sdir.h>
 #include <access/skey.h>
 #include <access/tableam.h>
-
 #include <access/transam.h>
 #include <access/xact.h>
 #include <catalog/heap.h>
@@ -20,6 +19,7 @@
 #include <catalog/storage.h>
 #include <commands/progress.h>
 #include <commands/vacuum.h>
+#include <common/relpath.h>
 #include <executor/tuptable.h>
 #include <nodes/bitmapset.h>
 #include <nodes/execnodes.h>
@@ -29,6 +29,7 @@
 #include <nodes/plannodes.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
+#include <optimizer/plancat.h>
 #include <parser/parsetree.h>
 #include <pgstat.h>
 #include <postgres_ext.h>
@@ -51,6 +52,8 @@
 #include <utils/tuplesort.h>
 #include <utils/typcache.h>
 
+#include <math.h>
+
 #include "arrow_array.h"
 #include "arrow_cache.h"
 #include "arrow_tts.h"
@@ -60,6 +63,7 @@
 #include "debug_assert.h"
 #include "guc.h"
 #include "hyperstore_handler.h"
+#include "relstats.h"
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
@@ -2103,11 +2107,14 @@ hyperstore_relation_copy_for_cluster(Relation OldHyperstore, Relation NewCompres
 static void
 hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy bstrategy)
 {
+	Oid relid = RelationGetRelid(rel);
 	HyperstoreInfo *hsinfo;
+	RelStats relstats;
 
-	if (ts_is_hypertable(RelationGetRelid(rel)))
+	if (ts_is_hypertable(relid))
 		return;
 
+	relstats_fetch(relid, &relstats);
 	hsinfo = RelationGetHyperstoreInfo(rel);
 
 	LOCKMODE lmode =
@@ -2130,6 +2137,14 @@ hyperstore_vacuum_rel(Relation rel, VacuumParams *params, BufferAccessStrategy b
 	const TableAmRoutine *oldtam = switch_to_heapam(rel);
 	rel->rd_tableam->relation_vacuum(rel, params, bstrategy);
 	rel->rd_tableam = oldtam;
+
+	/* Unfortunately, relstats are currently incorrectly updated when
+	 * vacuuming, because we vacuum the non-compressed rel separately, and
+	 * last, and it will only update stats based on the data in that
+	 * table. Therefore, as a work-around, it is better to restore relstats to
+	 * what it was before vacuuming.
+	 */
+	relstats_update(relid, &relstats);
 }
 
 /*
@@ -2317,7 +2332,16 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 	/* We expect the compressed rel scan to produce a datum array that first
 	 * includes the index columns, then any columns referenced in index
 	 * predicates that are not index columns. */
-	int natts = icstate->index_info->ii_NumIndexAttrs + icstate->num_non_index_predicates;
+	const int natts = icstate->index_info->ii_NumIndexAttrs + icstate->num_non_index_predicates;
+	/* Read the actual number of rows in the compressed tuple from the count
+	 * column. The count column is appended directly after the index
+	 * attributes. */
+	const int32 num_actual_rows = DatumGetInt32(values[natts]);
+
+	/* Update ntuples for accurate statistics. When building the index, the
+	 * relation's reltuples is updated based on this count. */
+	if (tupleIsAlive)
+		icstate->ntuples += num_actual_rows;
 
 	/*
 	 * Phase 1: Go through all attribute values and decompress segments into
@@ -2348,9 +2372,8 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 			}
 			else
 			{
-				int countoff = natts;
-				Assert(num_rows == -1 || num_rows == DatumGetInt32(values[countoff]));
-				num_rows = DatumGetInt32(values[countoff]);
+				Assert(num_rows == -1 || num_rows == num_actual_rows);
+				num_rows = num_actual_rows;
 			}
 		}
 		else if (!isnull[i])
@@ -2432,7 +2455,6 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 		}
 
 		icstate->callback(index, &index_tid, values, isnull, tupleIsAlive, icstate->orig_state);
-		icstate->ntuples++;
 	}
 }
 
@@ -2707,17 +2729,17 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	bms_free(icstate.orderby_cols);
 
 	const TableAmRoutine *oldtam = switch_to_heapam(relation);
-	icstate.ntuples += relation->rd_tableam->index_build_range_scan(relation,
-																	indexRelation,
-																	indexInfo,
-																	allow_sync,
-																	anyvisible,
-																	progress,
-																	start_blockno,
-																	numblocks,
-																	callback,
-																	callback_state,
-																	hscan->uscan_desc);
+	double ntuples = relation->rd_tableam->index_build_range_scan(relation,
+																  indexRelation,
+																  indexInfo,
+																  allow_sync,
+																  anyvisible,
+																  progress,
+																  start_blockno,
+																  numblocks,
+																  callback,
+																  callback_state,
+																  hscan->uscan_desc);
 	/* Heap's index_build_range_scan() should have ended the scan, so set the
 	 * scan descriptor to NULL here in order to not try to close it again in
 	 * our own table_endscan(). */
@@ -2728,7 +2750,7 @@ hyperstore_index_build_range_scan(Relation relation, Relation indexRelation, Ind
 	if (need_unregister_snapshot)
 		UnregisterSnapshot(snapshot);
 
-	return icstate.ntuples;
+	return icstate.ntuples + ntuples;
 }
 
 /*
@@ -2801,6 +2823,89 @@ hyperstore_relation_size(Relation rel, ForkNumber forkNumber)
 	return ubytes + cbytes;
 }
 
+#define HEAP_OVERHEAD_BYTES_PER_TUPLE (MAXALIGN(SizeofHeapTupleHeader) + sizeof(ItemIdData))
+#define HEAP_USABLE_BYTES_PER_PAGE (BLCKSZ - SizeOfPageHeaderData)
+
+/*
+ * Calculate fraction of visible pages.
+ *
+ * Same calculation as in PG's table_block_relation_estimate_size().
+ */
+static double
+calc_allvisfrac(BlockNumber curpages, BlockNumber relallvisible)
+{
+	double allvisfrac;
+
+	if (relallvisible == 0 || curpages <= 0)
+		allvisfrac = 0;
+	else if ((double) relallvisible >= curpages)
+		allvisfrac = 1;
+	else
+		allvisfrac = (double) relallvisible / curpages;
+
+	return allvisfrac;
+}
+
+/*
+ * Get the number of blocks on disk of a relation.
+ *
+ * Bypasses hyperstore_relation_size()/RelationGetNumberOfBlocks(), which
+ * return the aggregate size (compressed + non-compressed).
+ */
+static BlockNumber
+relation_number_of_disk_blocks(Relation rel)
+{
+	uint64 szbytes = table_block_relation_size(rel, MAIN_FORKNUM);
+	return (szbytes + (BLCKSZ - 1)) / BLCKSZ;
+}
+
+/*
+ * Estimate the size of a Hyperstore relation.
+ *
+ * For "heap", PostgreSQL estimates the number of tuples based on the
+ * difference between the as-of-this-instant number of blocks on disk and the
+ * current pages in relstats (relpages). In other words, if there are more
+ * blocks on disk than pages according to relstats, the relation grew and the
+ * number of tuples can be extrapolated from the previous "tuple density" in
+ * relstats (reltuples / relpages).
+ *
+ * However, this extrapolation doesn't work well for a Hyperstore since there
+ * are situations where a relation can shrink in terms of pages, but grow in
+ * terms of data. For example, simply compressing a hyperstore (with no
+ * previous compressed data), will shrink the number of blocks significantly
+ * while there was no change in number of tuples. The standard PostgreSQL
+ * estimate will believe that a lot of data was deleted, thus vastly
+ * underestimating the number of tuples. Conversely, decompression will lead
+ * to overestimating since the number of pages increase drastically.
+ *
+ * Note that a hyperstore stores the aggregate stats (compressed +
+ * non-compressed) in the non-compressed relation. So, reltuples is the actual
+ * number of tuples as of the last ANALYZE (or similar operation that updates
+ * relstats). Therefore, when estimating tuples, using the normal PG function,
+ * compute an "average" tuple that represents something in-between a
+ * non-compressed tuple and a compressed one, based on the fraction of
+ * compressed vs non-compressed pages. Once there's an estimation of the
+ * number of "average" tuples, multiply the fraction of compressed tuples with
+ * the target size of a compressed batch to get the final tuple count.
+ *
+ * An alternative approach could be to calculate each relation's estimate
+ * separately and then add the results. However, that requires having stats
+ * for each separate relation, but, currently, there are often no stats for
+ * the compressed relation (this could be fixed, though). However, even if
+ * there were stats for the compressed relation, those stats would only have
+ * an accurate compressed tuple count, and the actual number of tuples would
+ * have to be estimated from that.
+ *
+ * Another option is to store custom stats outside relstats where it is
+ * possible to maintain accurate tuple counts for each relation.
+ *
+ * However, until there's a better way to figure out whether data was actually
+ * added, removed, or stayed the same, it is better to just return the current
+ * stats, if they exist. Ideally, a hyperstore should not be mutated often and
+ * be mostly (if not completely) compressed. When compressing or
+ * decompressing, relstats should also be updated. Therefore, the relstats
+ * should be quite accurate.
+ */
 static void
 hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber *pages,
 								  double *tuples, double *allvisfrac)
@@ -2821,30 +2926,16 @@ hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber 
 		return;
 	}
 
-	double ctuples;
-	double callvisfrac;
-	BlockNumber cpages;
-	BlockNumber totalpages;
-	BlockNumber relallvisible;
-	Relation crel;
-
 	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
+	const Form_pg_class form = RelationGetForm(rel);
+	Size overhead_bytes_per_tuples = HEAP_OVERHEAD_BYTES_PER_TUPLE;
+	Relation crel = table_open(hsinfo->compressed_relid, AccessShareLock);
+	BlockNumber nblocks = relation_number_of_disk_blocks(rel);
+	BlockNumber cnblocks = relation_number_of_disk_blocks(crel);
 
-	const TableAmRoutine *oldtam = switch_to_heapam(rel);
-	rel->rd_tableam->relation_estimate_size(rel, attr_widths, pages, tuples, allvisfrac);
-	rel->rd_tableam = oldtam;
+	table_close(crel, AccessShareLock);
 
-	/* Cannot pass on attr_widths since they are cached widths for the
-	 * non-compressed relation which also doesn't have the same number of
-	 * attribute (columns). If we pass NULL it will compute the estimate
-	 * instead. */
-	crel = table_open(hsinfo->compressed_relid, AccessShareLock);
-	crel->rd_tableam->relation_estimate_size(crel, NULL, &cpages, &ctuples, &callvisfrac);
-	table_close(crel, NoLock);
-
-	totalpages = *pages + cpages;
-
-	if (totalpages == 0)
+	if (nblocks == 0 && cnblocks == 0)
 	{
 		*pages = 0;
 		*allvisfrac = 0;
@@ -2852,18 +2943,65 @@ hyperstore_relation_estimate_size(Relation rel, int32 *attr_widths, BlockNumber 
 		return;
 	}
 
-	relallvisible =
-		(BlockNumber) rel->rd_rel->relallvisible + (BlockNumber) crel->rd_rel->relallvisible;
+	double frac_noncompressed = 0;
 
-	if (relallvisible == 0 || totalpages <= 0)
-		*allvisfrac = 0;
-	else if (relallvisible >= totalpages)
-		*allvisfrac = 1;
+	if (form->reltuples >= 0)
+	{
+		/*
+		 * There's stats, use it.
+		 */
+		*pages = form->relpages;
+		*tuples = form->reltuples;
+		*allvisfrac = calc_allvisfrac(nblocks + cnblocks, form->relallvisible);
+
+		TS_DEBUG_LOG("(stats) pages %u tuples %lf allvisfrac %f", *pages, *tuples, *allvisfrac);
+		return;
+	}
+	else if (nblocks == 0 && cnblocks > 0)
+		frac_noncompressed = 0;
+	else if (nblocks > 0 && cnblocks == 0)
+		frac_noncompressed = 1;
 	else
-		*allvisfrac = (double) relallvisible / totalpages;
+	{
+		Assert(cnblocks != 0);
+		/* Try to figure out the fraction of data that is compressed vs
+		 * non-compressed. */
+		frac_noncompressed = ((double) nblocks / (cnblocks * TARGET_COMPRESSED_BATCH_SIZE));
+	}
 
-	*pages = totalpages;
-	*tuples = (ctuples * GLOBAL_MAX_ROWS_PER_COMPRESSION) + *tuples;
+	/* The overhead will be 0 for mostly compressed data, which is fine
+	 * because compared to non-compressed data the overhead is negligible
+	 * anyway. */
+	overhead_bytes_per_tuples = rint(HEAP_OVERHEAD_BYTES_PER_TUPLE * frac_noncompressed);
+
+	/*
+	 * Compute an estimate based on the "aggregate" relation.
+	 *
+	 * Note that this function gets the number of blocks of the relation in
+	 * order to extrapolate a new tuple count based on the "tuple
+	 * density". This works for the hyperstore relation because
+	 * RelationGetNumberOfBlocks() returns the aggregate block count of both
+	 * relations. Also note that using the attr_widths for the non-compressed
+	 * rel won't be very representative for mostly compressed data. Should
+	 * probably compute new "average" attr_widths based on the fraction. But
+	 * that is left for the future.
+	 */
+	table_block_relation_estimate_size(rel,
+									   attr_widths,
+									   pages,
+									   tuples,
+									   allvisfrac,
+									   overhead_bytes_per_tuples,
+									   HEAP_USABLE_BYTES_PER_PAGE);
+
+	*tuples =
+		(*tuples * frac_noncompressed) + ((1 - frac_noncompressed) * TARGET_COMPRESSED_BATCH_SIZE);
+
+	TS_DEBUG_LOG("(estimated) pages %u tuples %lf allvisfrac %f frac_noncompressed %lf",
+				 *pages,
+				 *tuples,
+				 *allvisfrac,
+				 frac_noncompressed);
 }
 
 static void
