@@ -1,19 +1,35 @@
 #!/bin/bash
 set -eu
 
-#Versions
-#Expected to change more often , when we run this script.
-NEW_VERSION="2.15.3"
-CURRENT_VERSION="2.15.2"
-LAST_VERSION="2.15.1"
-RELEASE_BRANCH="2.15.x"
-RELEASE_ISSUE="613"
-
 # GITHUB_USERNAMES
 GH_USERNAME="pallavisontakke"
 
 # Folder, where we have cloned repositories' sources
 SOURCES_DIR="sources"
+
+CHANGELOG_HEADER_LINES="6"
+
+FORK_DIR="$GH_USERNAME-timescaledb"
+
+echo "---- Deriving the release related versions from main ----"
+
+cd ~/"$SOURCES_DIR"/"$FORK_DIR"
+git fetch --all
+
+CURRENT_VERSION=$(tail -1 version.config | cut -d ' ' -f 3)
+cd sql/updates
+LAST_VERSION=$(ls |grep $CURRENT_VERSION.sql |cut -d '-' -f 1)
+CURRENT_PATCH_VERSION=$(echo $CURRENT_VERSION | cut -d '.' -f 3)
+NEW_PATCH_VERSION=$((CURRENT_PATCH_VERSION + 1))
+RELEASE_BRANCH=$(echo "${CURRENT_VERSION/%.$CURRENT_PATCH_VERSION/.x}")
+NEW_VERSION=$(echo "${CURRENT_VERSION/%.$CURRENT_PATCH_VERSION/.$NEW_PATCH_VERSION}")
+
+echo "CURRENT_VERSION is $CURRENT_VERSION"
+echo "LAST_VERSION is $LAST_VERSION"
+echo "RELEASE_BRANCH is $RELEASE_BRANCH"
+echo "NEW_VERSION is $NEW_VERSION"
+cd ~/"$SOURCES_DIR"/"$FORK_DIR"
+
 
 # Derived Variables
 FORK_DIR="$GH_USERNAME-timescaledb"
@@ -22,13 +38,10 @@ UPDATE_FILE="$CURRENT_VERSION--$NEW_VERSION.sql"
 DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
 LAST_UPDATE_FILE="$LAST_VERSION--$CURRENT_VERSION.sql"
 LAST_DOWNGRADE_FILE="$CURRENT_VERSION--$LAST_VERSION.sql"
-CHANGELOG_HEADER_LINES="6"
 
 
 echo "---- Creating release branch $RELEASE_PR_BRANCH from $RELEASE_BRANCH, on the fork ----"
 
-cd ~/"$SOURCES_DIR"/"$FORK_DIR"
-git fetch --all
 git checkout -b "$RELEASE_PR_BRANCH" upstream/"$RELEASE_BRANCH"
 git branch
 git pull && git diff HEAD
