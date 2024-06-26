@@ -160,20 +160,19 @@ set enable_nestloop to false;
 select explain_analyze_anonymize(format($$
     select * from %s join the_hyperstore using (device_id)
 $$, :'chunk1'));
-                                                  explain_analyze_anonymize                                                   
-------------------------------------------------------------------------------------------------------------------------------
+                                               explain_analyze_anonymize                                                
+------------------------------------------------------------------------------------------------------------------------
  Merge Join (actual rows=N loops=N)
    Merge Cond: (_hyper_I_N_chunk.device_id = _hyper_I_N_chunk.device_id)
+   ->  Merge Append (actual rows=N loops=N)
+         Sort Key: _hyper_I_N_chunk.device_id
+         ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
+         ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
    ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-   ->  Materialize (actual rows=N loops=N)
-         ->  Merge Append (actual rows=N loops=N)
-               Sort Key: _hyper_I_N_chunk.device_id
-               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
-               ->  Index Scan using _hyper_I_N_chunk_the_hyperstore_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
  Arrays read from cache: N
  Arrays decompressed: 9
-(11 rows)
+(10 rows)
 
 -- Check that it generates the right result
 select * into :inner from :chunk1 join the_hyperstore using (device_id);

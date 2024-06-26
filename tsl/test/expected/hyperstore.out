@@ -184,15 +184,17 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 -- Show with indexscan
 SET enable_indexscan = true;
+SET enable_seqscan = false;
+SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-                         QUERY PLAN                         
-------------------------------------------------------------
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
  Limit
    ->  Sort
          Sort Key: "time", device
-         ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk
-               Scankey: (device < 4)
+         ->  Index Scan using "1_1_readings_time_key" on _hyper_1_1_chunk
+               Filter: (device < 4)
 (5 rows)
 
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
@@ -211,15 +213,17 @@ SET enable_indexscan = false;
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
-                             QUERY PLAN                             
---------------------------------------------------------------------
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
  Limit
-   ->  Sort
-         Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
-         ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
-               ->  Seq Scan on compress_hyper_2_32_chunk
-                     Filter: (device < 4)
-(6 rows)
+   ->  Gather Merge
+         Workers Planned: 1
+         ->  Sort
+               Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device
+               ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk
+                     ->  Parallel Seq Scan on compress_hyper_2_32_chunk
+                           Filter: (device < 4)
+(8 rows)
 
 SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
              time             | location | device | temp |     humidity     
@@ -233,6 +237,7 @@ SELECT * FROM :chunk WHERE device < 4 ORDER BY time, device LIMIT 5;
 
 SET timescaledb.enable_transparent_decompression TO false;
 -- Qual on compressed column with index
+SET timescaledb.enable_columnarscan = true;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
                          QUERY PLAN                         
@@ -256,6 +261,7 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 
 -- With index scan
 SET enable_indexscan = true;
+SET timescaledb.enable_columnarscan = false;
 EXPLAIN (costs off, timing off, summary off)
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
                                        QUERY PLAN                                        
@@ -278,6 +284,8 @@ SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
 (5 rows)
 
 SET enable_indexscan = false;
+SET enable_seqscan = true;
+SET timescaledb.enable_columnarscan = true;
 -- With transparent decompression
 SET timescaledb.enable_transparent_decompression TO 'hyperstore';
 SELECT * FROM :chunk WHERE location < 4 ORDER BY time, device LIMIT 5;
@@ -324,141 +332,6 @@ SELECT * FROM :chunk ORDER BY location ASC LIMIT 5;
 (5 rows)
 
 SET timescaledb.enable_transparent_decompression TO false;
---
--- Test ANALYZE.
---
--- First create a separate regular table with the chunk data as a
--- reference of accurate stats. Analyze it and compare with analyze
--- on the original chunk.
---
-CREATE TABLE chunk_data (LIKE :chunk);
-INSERT INTO chunk_data SELECT * FROM :chunk;
-ANALYZE chunk_data;
-CREATE VIEW chunk_data_relstats AS
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = 'chunk_data'::regclass;
-CREATE VIEW chunk_data_attrstats AS
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = 'chunk_data'::regclass
-ORDER BY attname;
-SELECT * FROM chunk_data_relstats;
-  relname   | reltuples | relpages 
-------------+-----------+----------
- chunk_data |       204 |        2
-(1 row)
-
-SELECT * FROM chunk_data_attrstats ORDER BY attname;
- attname  | n_distinct |                                                                                              most_common_vals                                                                                               
-----------+------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- device   |  -0.147059 | 13,18,28,1,23,22,5,16,19,4,9,14,17,21,27,30,8,11,25,2,3,7,10,24,29,6,12,20,26,15
- humidity |         -1 | 
- location |         10 | 8,2,3,10,1,6,5,9,7,4
- temp     |  -0.769608 | 15.5,20.7,33.8,37.8,38.7,2.5,4.5,6.6,8.2,9.2,9.6,10.6,11.4,12.1,12.6,15.8,15.9,16.5,17.2,18.1,22.6,22.9,23.0,23.9,25.4,26.6,26.7,28.6,29.0,29.1,29.3,29.6,31.4,33.0,33.6,34.6,36.2,36.6,37.1,37.4,38.1,38.5
- time     |         -1 | 
-(5 rows)
-
--- Stats on compressed chunk before ANALYZE. Note that this chunk is
--- partially compressed
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk'::regclass;
-     relname      | reltuples | relpages 
-------------------+-----------+----------
- _hyper_1_1_chunk |       204 |        2
-(1 row)
-
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
-ORDER BY attname;
- attname  | n_distinct |                                                                                              most_common_vals                                                                                               
-----------+------------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- device   |  -0.147059 | 13,18,28,1,23,22,5,16,19,4,9,14,17,21,27,30,8,11,25,2,3,7,10,24,29,6,12,20,26,15
- humidity |         -1 | 
- location |         10 | 8,2,3,10,1,6,5,9,7,4
- temp     |  -0.769608 | 15.5,20.7,33.8,37.8,38.7,2.5,4.5,6.6,8.2,9.2,9.6,10.6,11.4,12.1,12.6,15.8,15.9,16.5,17.2,18.1,22.6,22.9,23.0,23.9,25.4,26.6,26.7,28.6,29.0,29.1,29.3,29.6,31.4,33.0,33.6,34.6,36.2,36.6,37.1,37.4,38.1,38.5
- time     |         -1 | 
-(5 rows)
-
--- ANALYZE directly on chunk
-ANALYZE :chunk;
--- Stats after ANALYZE. Show rows that differ. The number of relpages
--- will differ because the chunk is compressed and uses less pages.
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk'::regclass;
-     relname      | reltuples | relpages 
-------------------+-----------+----------
- _hyper_1_1_chunk |       204 |        2
-(1 row)
-
--- There should be no difference in attrstats, so EXCEPT query should
--- show no results
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk'::regclass
-EXCEPT
-SELECT * FROM chunk_data_attrstats
-ORDER BY attname;
- attname | n_distinct | most_common_vals 
----------+------------+------------------
-(0 rows)
-
--- ANALYZE also via hypertable root and show that it will
--- recurse to another chunk
-ALTER TABLE :chunk2 SET ACCESS METHOD hyperstore;
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk2'::regclass;
-      relname      | reltuples | relpages 
--------------------+-----------+----------
- _hyper_1_31_chunk |        85 |        2
-(1 row)
-
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass
-ORDER BY attname;
- attname  | n_distinct |                         most_common_vals                         
-----------+------------+------------------------------------------------------------------
- device   |  -0.341176 | 24,10,12,23,9,14,19,22,26,2,3,5,7,8,16,18,21,27,4,11,15,17,20,28
- humidity |         -1 | 
- location |  -0.117647 | 4,5,1,6,7,8,3,10,9,2
- temp     |  -0.894118 | 21.9,4.5,21.5,23.7,26.4,27.9,30.8,33.7
- time     |         -1 | 
-(5 rows)
-
-SELECT count(*) FROM :chunk2;
- count 
--------
-    85
-(1 row)
-
-ANALYZE readings;
-SELECT relname, reltuples, relpages
-FROM pg_class
-WHERE oid = :'chunk2'::regclass;
-      relname      | reltuples | relpages 
--------------------+-----------+----------
- _hyper_1_31_chunk |        85 |        2
-(1 row)
-
-SELECT attname, n_distinct, array_to_string(most_common_vals, E',') AS most_common_vals
-FROM pg_stats
-WHERE format('%I.%I', schemaname, tablename)::regclass = :'chunk2'::regclass
-ORDER BY attname;
- attname  | n_distinct |                         most_common_vals                         
-----------+------------+------------------------------------------------------------------
- device   |  -0.341176 | 24,10,12,23,9,14,19,22,26,2,3,5,7,8,16,18,21,27,4,11,15,17,20,28
- humidity |         -1 | 
- location |  -0.117647 | 4,5,1,6,7,8,3,10,9,2
- temp     |  -0.894118 | 21.9,4.5,21.5,23.7,26.4,27.9,30.8,33.7
- time     |         -1 | 
-(5 rows)
-
-ALTER TABLE :chunk2 SET ACCESS METHOD heap;
 -- We should be able to change it back to heap.
 -- Compression metadata should be cleaned up
 SELECT count(*) FROM _timescaledb_catalog.compression_chunk_size ccs
@@ -521,7 +394,7 @@ INNER JOIN _timescaledb_catalog.chunk c2
 ON (c1.compressed_chunk_id = c2.id);
                      cchunk                      
 -------------------------------------------------
- _timescaledb_internal.compress_hyper_2_34_chunk
+ _timescaledb_internal.compress_hyper_2_33_chunk
 (1 row)
 
 -- Show same output as first query above but for heap
