@@ -84,7 +84,7 @@ select setseed(1);
 -- seconds. Any other timestamps are inserted as part of the test.
 insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
@@ -101,6 +101,9 @@ select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
  where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
  order by chunk2 asc
  limit 1 offset 1 \gset
+-- Set parallel cost to zero to force parallel plans and avoid flaky test.
+set parallel_tuple_cost to 0;
+set parallel_setup_cost to 0;
 -- We need to drop the index to trigger parallel plans. Otherwise they
 -- will use the index.
 drop index hypertable_device_id_idx;
@@ -139,7 +142,7 @@ $$, :'hypertable'));
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8625
+         1 |   312
 (1 row)
 
 -- Save counts collected over entire hypertable
@@ -193,7 +196,7 @@ $$, :'hypertable'));
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8625
+         1 |   312
 (1 row)
 
 -- Enable parallel on SeqScan and check for same result
@@ -230,7 +233,7 @@ $$, :'hypertable'));
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8625
+         1 |   312
 (1 row)
 
 -- Enable ColumnarScan and check for same result
@@ -267,7 +270,7 @@ $$, :'hypertable'));
 select device_id, count(*) from :hypertable where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |  8625
+         1 |   312
 (1 row)
 
 -- Parallel plan with hyperstore on single chunk
@@ -303,7 +306,7 @@ $$, :'hypertable'));
 select device_id, count(*) from :chunk1 where device_id=1 group by device_id;
  device_id | count 
 -----------+-------
-         1 |   226
+         1 |     3
 (1 row)
 
 -- Compare hyperstore per-location counts with original counts without
