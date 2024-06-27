@@ -654,8 +654,8 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *se
 
 		for (int j = 0; j < index_info->ii_NumIndexKeyAttrs - 1; j++)
 		{
-			const char *attname =
-				get_attname(index_relation->rd_id, AttrOffsetGetAttrNumber(j), false);
+			AttrNumber attno = index_relation->rd_index->indkey.values[j];
+			const char *attname = get_attname(index_relation->rd_index->indrelid, attno, false);
 
 			if (!ts_array_is_member(settings->fd.segmentby, attname))
 			{
@@ -668,8 +668,9 @@ get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *se
 			continue;
 
 		/* Check last index column is sequence number */
-		const char *attname =
-			get_attname(index_relation->rd_id, index_info->ii_NumIndexKeyAttrs, false);
+		AttrNumber attno = index_relation->rd_index->indkey
+							   .values[AttrNumberGetAttrOffset(index_info->ii_NumIndexKeyAttrs)];
+		const char *attname = get_attname(index_relation->rd_index->indrelid, attno, false);
 
 		if (strncmp(attname, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME, NAMEDATALEN) == 0)
 			return index_relation->rd_id;
@@ -2294,8 +2295,9 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 		 */
 		for (int i = 0; i < index_rel->rd_index->indnkeyatts; i++)
 		{
-			AttrNumber attnum = AttrOffsetGetAttrNumber(i);
-			const NameData *attname = attnumAttName(index_rel, attnum);
+			AttrNumber idx_attnum = AttrOffsetGetAttrNumber(i);
+			AttrNumber in_attnum = index_rel->rd_index->indkey.values[i];
+			const NameData *attname = attnumAttName(in_rel, in_attnum);
 
 			/* Make sure we find columns in key columns in order to select the right index */
 			if (!bms_is_member(get_attnum(out_rel->rd_id, NameStr(*attname)), key_columns))
@@ -2311,7 +2313,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 			{
 				ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
 									   SK_ISNULL | SK_SEARCHNULL,
-									   attnum,
+									   idx_attnum,
 									   InvalidStrategy, /* no strategy */
 									   InvalidOid,		/* no strategy subtype */
 									   InvalidOid,		/* no collation */
@@ -2320,7 +2322,7 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 				continue;
 			}
 
-			Oid atttypid = index_rel->rd_att->attrs[AttrNumberGetAttrOffset(attnum)].atttypid;
+			Oid atttypid = attnumTypeId(index_rel, idx_attnum);
 
 			TypeCacheEntry *tce = lookup_type_cache(atttypid, TYPECACHE_BTREE_OPFAMILY);
 			if (!OidIsValid(tce->btree_opf))
@@ -2351,11 +2353,10 @@ build_index_scankeys_using_slot(Oid hypertable_relid, Relation in_rel, Relation 
 
 			ScanKeyEntryInitialize(&scankeys[(*num_scan_keys)++],
 								   0, /* flags */
-								   attnum,
+								   idx_attnum,
 								   BTEqualStrategyNumber,
 								   InvalidOid, /* No strategy subtype. */
-								   index_rel->rd_att->attrs[AttrNumberGetAttrOffset(attnum)]
-									   .attcollation,
+								   attnumCollationId(index_rel, idx_attnum),
 								   opcode,
 								   value);
 		}
@@ -3310,10 +3311,12 @@ build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
 	int flags;
 
 	/* Order scankeys based on index attribute order */
-	for (int attno = 1; attno <= index_rel->rd_index->indnatts && idx < *num_scankeys; attno++)
+	for (int idx_attno = 1; idx_attno <= index_rel->rd_index->indnkeyatts && idx < *num_scankeys;
+		 idx_attno++)
 	{
-		char *attname = get_attname(RelationGetRelid(index_rel), attno, false);
-		Oid typoid = get_atttype(RelationGetRelid(index_rel), attno);
+		AttrNumber attno = index_rel->rd_index->indkey.values[AttrNumberGetAttrOffset(idx_attno)];
+		char *attname = get_attname(index_rel->rd_index->indrelid, attno, false);
+		Oid typoid = attnumTypeId(index_rel, idx_attno);
 		foreach (lc, index_filters)
 		{
 			filter = lfirst(lc);
@@ -3331,7 +3334,7 @@ build_index_scankeys(Relation index_rel, List *index_filters, int *num_scankeys)
 
 				ScanKeyEntryInitialize(&scankey[idx++],
 									   flags,
-									   attno,
+									   idx_attno,
 									   filter->strategy,
 									   deduce_filter_subtype(filter, typoid), /* subtype */
 									   filter->collation,

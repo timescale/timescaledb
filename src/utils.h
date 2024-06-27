@@ -297,3 +297,15 @@ ts_datum_set_jsonb(const AttrNumber attno, NullableDatum *datums, const Jsonb *v
 	else
 		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
 }
+
+static inline void
+ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid value)
+{
+	if (OidIsValid(value))
+	{
+		datums[AttrNumberGetAttrOffset(attno)].value = ObjectIdGetDatum(value);
+		datums[AttrNumberGetAttrOffset(attno)].isnull = false;
+	}
+	else
+		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
+}

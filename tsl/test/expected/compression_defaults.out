@@ -410,12 +410,13 @@ ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 
 WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
 NOTICE:  default segment by for hypertable "t1" is set to ""
 RESET search_path;
--- test same named objects in different schemas with default orderbys
+-- test same named objects in different schemas with default orderbys/segmentbys
 \c :TEST_DBNAME :ROLE_SUPERUSER
 CREATE SCHEMA schema1;
 CREATE SCHEMA schema2;
 GRANT ALL ON SCHEMA schema1, schema2 to public;
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+-- test the case with default orderbys
 CREATE TABLE schema1.page_events2 (
  time        TIMESTAMPTZ         NOT NULL,
  page        TEXT              NOT NULL
@@ -446,3 +447,40 @@ ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress_segmentby = 'page'
 );
 NOTICE:  default order by for hypertable "page_events2" is set to ""time" DESC"
+DROP TABLE schema1.page_events2;
+DROP TABLE schema2.page_events2;
+-- test the case with default segmentbys
+CREATE TABLE schema1.page_events2 (
+ time        TIMESTAMPTZ         NOT NULL,
+ id          BIGSERIAL           NOT NULL,
+ page        TEXT                NOT NULL
+);
+SELECT create_hypertable('schema1.page_events2', 'time');
+      create_hypertable      
+-----------------------------
+ (19,schema1,page_events2,t)
+(1 row)
+
+ALTER TABLE schema1.page_events2 SET (
+ timescaledb.compress,
+ timescaledb.compress_orderby = 'time desc, id asc'
+);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "page_events2" is set to ""
+CREATE TABLE schema2.page_events2 (
+ time        TIMESTAMPTZ         NOT NULL UNIQUE,
+ id          BIGSERIAL           NOT NULL,
+ page        TEXT                NOT NULL
+);
+SELECT create_hypertable('schema2.page_events2', 'time');
+      create_hypertable      
+-----------------------------
+ (21,schema2,page_events2,t)
+(1 row)
+
+ALTER TABLE schema2.page_events2 SET (
+ timescaledb.compress,
+ timescaledb.compress_orderby = 'time desc'
+);
+WARNING:  there was some uncertainty picking the default segment by for the hypertable: You do not have any indexes on columns that can be used for segment_by and thus we are not using segment_by for compression. Please make sure you are not missing any indexes
+NOTICE:  default segment by for hypertable "page_events2" is set to ""

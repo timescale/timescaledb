@@ -777,7 +777,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	char *bucket_offset = NULL;
 	char *bucket_width = NULL;
 
-	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info))
+	if (IS_TIME_BUCKET_INFO_TIME_BASED(bucket_info->bf))
 	{
 		/* Bucketing on time */
 		Assert(bucket_info->bf->bucket_time_width != NULL);
@@ -802,7 +802,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 	else
 	{
 		/* Bucketing on integers */
-		bucket_width = palloc0(MAXINT8LEN + 1 * sizeof(char));
+		bucket_width = palloc0(MAXINT8LEN + 1);
 		pg_lltoa(bucket_info->bf->bucket_integer_width, bucket_width);
 
 		/* Integer buckets with origin are not supported, so noting to do. */
@@ -810,7 +810,7 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 
 		if (bucket_info->bf->bucket_integer_offset != 0)
 		{
-			bucket_offset = palloc0(MAXINT8LEN + 1 * sizeof(char));
+			bucket_offset = palloc0(MAXINT8LEN + 1);
 			pg_lltoa(bucket_info->bf->bucket_integer_offset, bucket_offset);
 		}
 	}
