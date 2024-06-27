@@ -2844,7 +2844,6 @@ SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set ON_ERROR_STOP 0
 COPY compressed_table (time,a,b,c) FROM stdin;
-ERROR:  tuple decompression limit exceeded by operation
 \set ON_ERROR_STOP 1
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
 -- Test decompression with DML which compares int8 to int4

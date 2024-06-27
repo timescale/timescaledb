@@ -216,14 +216,13 @@ discard_wal();
 
 query_generates_wal(
 	"insert into compressed chunk with pk forces decompression",
-	qq/INSERT INTO metrics VALUES ('2023-07-01 01:00:00', 1, 5555);/,
+	qq/INSERT INTO metrics VALUES ('2023-07-01 00:00:00Z', 1, 5555) ON CONFLICT DO NOTHING;/,
 	qq/BEGIN
 message: transactional: 1 prefix: ::timescaledb-decompression-start, sz: 0 content:
 table _timescaledb_internal.compress_hyper_3_4_chunk: DELETE: (no-tuple-data)
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 05:00:00-07' device_id[bigint]:1 value[double precision]:2
 message: transactional: 1 prefix: ::timescaledb-decompression-end, sz: 0 content:
-table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 01:00:00-07' device_id[bigint]:1 value[double precision]:5555
 table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:4 dropped[boolean]:false status[integer]:9 osm_chunk[boolean]:false
 COMMIT/
 );
@@ -240,8 +239,7 @@ query_generates_wal(
 table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:4 dropped[boolean]:false status[integer]:1 osm_chunk[boolean]:false
 table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07'
 table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-07-01 05:00:00-07'
-table _timescaledb_internal._hyper_1_1_chunk: DELETE: "time"[timestamp with time zone]:'2023-07-01 01:00:00-07'
-table _timescaledb_internal.compress_hyper_3_4_chunk: INSERT: _ts_meta_count[integer]:3 _ts_meta_sequence_num[integer]:10 device_id[bigint]:1 _ts_meta_min_1[timestamp with time zone]:'2023-06-30 17:00:00-07' _ts_meta_max_1[timestamp with time zone]:'2023-07-01 05:00:00-07' "time"[_timescaledb_internal.compressed_data]:'BAAAAqJqcQfwAAAAAANaTpAAAAAAAwAAAAMAAAAAAAAO7gAFRMDEOIAAAAVEs1r+P/8AAAAGtJ0f/w==' value[_timescaledb_internal.compressed_data]:'AwBAAAAAAAAAAAAAAAMAAAABAAAAAAAAAAEAAAAAAAAABwAAAAMAAAABAAAAAAAAAAEAAAAAAAAABwAAAAESAAAAAAAAgEIAAAADAAAAAQAAAAAAAAAFAAAAAAAAQuoAAAABMQABa2f9Fs//'
+table _timescaledb_internal.compress_hyper_3_4_chunk: INSERT: _ts_meta_count[integer]:2 _ts_meta_sequence_num[integer]:10 device_id[bigint]:1 _ts_meta_min_1[timestamp with time zone]:'2023-06-30 17:00:00-07' _ts_meta_max_1[timestamp with time zone]:'2023-07-01 05:00:00-07' "time"[_timescaledb_internal.compressed_data]:'BAAAAqJqcQfwAAAAAAoO67AAAAAAAgAAAAIAAAAAAAAA7gAFRMDEOIAAAAVErKZhH/8=' value[_timescaledb_internal.compressed_data]:'AwBAAAAAAAAAAAAAAAIAAAABAAAAAAAAAAEAAAAAAAAAAwAAAAIAAAABAAAAAAAAAAEAAAAAAAAAAwAAAAEMAAAAAAAAAEIAAAACAAAAAQAAAAAAAAAEAAAAAAAAALoAAAABFQAAAAAAH///'
 COMMIT)
 );
 
@@ -250,7 +248,6 @@ query_generates_wal(
 	qq(SELECT decompress_chunk('_timescaledb_internal._hyper_1_1_chunk'::regclass, TRUE);),
 	qq(BEGIN
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-06-30 17:00:00-07' device_id[bigint]:1 value[double precision]:1
-table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 01:00:00-07' device_id[bigint]:1 value[double precision]:5555
 table _timescaledb_internal._hyper_1_1_chunk: INSERT: "time"[timestamp with time zone]:'2023-07-01 05:00:00-07' device_id[bigint]:1 value[double precision]:2
 table _timescaledb_catalog.compression_chunk_size: DELETE: chunk_id[integer]:1
 table _timescaledb_catalog.chunk: UPDATE: id[integer]:1 hypertable_id[integer]:1 schema_name[name]:'_timescaledb_internal' table_name[name]:'_hyper_1_1_chunk' compressed_chunk_id[integer]:null dropped[boolean]:false status[integer]:0 osm_chunk[boolean]:false

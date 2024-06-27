@@ -1084,17 +1084,19 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
     11
 (1 row)
 
-SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
 ERROR:  tuple decompression limit exceeded by operation
-DETAIL:  current limit: 5000, tuples decompressed: 6000
+DETAIL:  current limit: 1, tuples decompressed: 1000
 HINT:  Consider increasing timescaledb.max_tuples_decompressed_per_dml_transaction or set to 0 (unlimited).
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
+ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
+DETAIL:  Key ("timestamp", id)=(1, 2) already exists.
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
