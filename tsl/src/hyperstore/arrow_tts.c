@@ -488,9 +488,11 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 	else
 	{
 		/* Value is compressed, so get it from the decompressed arrow array. */
-		const Oid typid = TupleDescAttr(slot->tts_tupleDescriptor, attoff)->atttypid;
+		const Form_pg_attribute attr = TupleDescAttr(slot->tts_tupleDescriptor, attoff);
+		const Oid typid = attr->atttypid;
+		const int16 typlen = attr->attlen;
 		const NullableDatum datum =
-			arrow_get_datum(arrow_arrays[attoff], typid, aslot->tuple_index - 1);
+			arrow_get_datum(arrow_arrays[attoff], typid, typlen, aslot->tuple_index - 1);
 		slot->tts_values[attoff] = datum.value;
 		slot->tts_isnull[attoff] = datum.isnull;
 	}

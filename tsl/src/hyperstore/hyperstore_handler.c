@@ -2401,8 +2401,10 @@ hyperstore_index_build_callback(Relation index, ItemPointer tid, Datum *values, 
 			{
 				const Form_pg_attribute attr =
 					TupleDescAttr(tupdesc, AttrNumberGetAttrOffset(attno));
-				NullableDatum datum =
-					arrow_get_datum(icstate->arrow_columns[colnum], attr->atttypid, rownum);
+				NullableDatum datum = arrow_get_datum(icstate->arrow_columns[colnum],
+													  attr->atttypid,
+													  attr->attlen,
+													  rownum);
 				values[colnum] = datum.value;
 				isnull[colnum] = datum.isnull;
 			}
