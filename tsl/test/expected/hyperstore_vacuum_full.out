@@ -84,7 +84,7 @@ select setseed(1);
 -- seconds. Any other timestamps are inserted as part of the test.
 insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
@@ -129,7 +129,7 @@ select location_id, count(*) into orig from :hypertable GROUP BY location_id;
 select count(*) from :cchunk1;
  count 
 -------
-    50
+    48
 (1 row)
 
 -- update one location_id to decompress some data
@@ -145,7 +145,7 @@ ERROR:  cannot cluster a hyperstore table
 select count(*) from :cchunk1;
  count 
 -------
-    45
+    43
 (1 row)
 
 -- run vacuum full to recompress
@@ -154,7 +154,7 @@ vacuum full :hypertable;
 select count(*) from :cchunk1;
  count 
 -------
-    50
+    48
 (1 row)
 
 -- also try vacuum full on chunk level
@@ -162,14 +162,14 @@ update :hypertable set temp=1.0 where location_id=1;
 select count(*) from :cchunk1;
  count 
 -------
-    45
+    43
 (1 row)
 
 vacuum full :hypertable;
 select count(*) from :cchunk1;
  count 
 -------
-    50
+    48
 (1 row)
 
 -- check that table data (or at least counts) is still the same

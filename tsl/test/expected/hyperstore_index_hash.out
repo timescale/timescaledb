@@ -84,7 +84,7 @@ select setseed(1);
 -- seconds. Any other timestamps are inserted as part of the test.
 insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
@@ -107,6 +107,9 @@ set max_parallel_workers_per_gather to 0;
 -- Redefine the indexes to use hash indexes
 drop index hypertable_location_id_idx;
 drop index hypertable_device_id_idx;
+-- Discourage sequence scan when there are alternatives to avoid flaky
+-- tests.
+set enable_seqscan to false;
 create index hypertable_location_id_idx on :hypertable using hash (location_id);
 create index hypertable_device_id_idx on :hypertable using hash (device_id);
 create view chunk_indexes as
@@ -169,45 +172,34 @@ alter table :chunk2 set access method hyperstore;
 --
 -- test that indexes work after updates
 --
-select _timescaledb_debug.is_compressed_tid(ctid),
-       created_at,
-       location_id,
-       temp
-  from :chunk2
-order by location_id, created_at desc limit 2;
- is_compressed_tid |          created_at          | location_id |       temp       
--------------------+------------------------------+-------------+------------------
- t                 | Wed Jun 08 16:57:50 2022 PDT |           1 | 4.61673551524566
- t                 | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
-(2 rows)
+-- find a compressed tuple in a deterministic manner and get location and timestamp
+select created_at, location_id
+from :chunk2 where _timescaledb_debug.is_compressed_tid(ctid)
+order by created_at, location_id limit 1 \gset
+select _timescaledb_debug.is_compressed_tid(ctid), *
+  from :chunk2 where location_id = :location_id and created_at = :'created_at';
+ is_compressed_tid | metric_id |          created_at          | location_id | owner_id | device_id |       temp       | humidity 
+-------------------+-----------+------------------------------+-------------+----------+-----------+------------------+----------
+ t                 |       205 | Wed Jun 01 17:00:00 2022 PDT |           1 |        5 |        18 | 39.9895349415735 |  49.7787
+(1 row)
 
 -- first update moves the value from the compressed rel to the non-compressed (seen via ctid)
-update :hypertable set temp=1.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
-select _timescaledb_debug.is_compressed_tid(ctid),
-       created_at,
-       location_id,
-       temp
-  from :chunk2
-order by location_id, created_at desc limit 2;
- is_compressed_tid |          created_at          | location_id |       temp       
--------------------+------------------------------+-------------+------------------
- f                 | Wed Jun 08 16:57:50 2022 PDT |           1 |                1
- t                 | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
-(2 rows)
+update :hypertable set temp=1.0 where location_id=:location_id and created_at=:'created_at';
+select _timescaledb_debug.is_compressed_tid(ctid), *
+  from :chunk2 where location_id = :location_id and created_at = :'created_at';
+ is_compressed_tid | metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
+-------------------+-----------+------------------------------+-------------+----------+-----------+------+----------
+ f                 |       205 | Wed Jun 01 17:00:00 2022 PDT |           1 |        5 |        18 |    1 |  49.7787
+(1 row)
 
 -- second update should be a hot update (tuple in same block after update, as shown by ctid)
-update :hypertable set temp=2.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
-select _timescaledb_debug.is_compressed_tid(ctid),
-       created_at,
-       location_id,
-       temp
-  from :chunk2
-order by location_id, created_at desc limit 2;
- is_compressed_tid |          created_at          | location_id |       temp       
--------------------+------------------------------+-------------+------------------
- f                 | Wed Jun 08 16:57:50 2022 PDT |           1 |                2
- t                 | Wed Jun 08 16:56:40 2022 PDT |           1 | 38.0183806703047
-(2 rows)
+update :hypertable set temp=2.0 where location_id=:location_id and created_at=:'created_at';
+select _timescaledb_debug.is_compressed_tid(ctid), *
+  from :chunk2 where location_id = :location_id and created_at = :'created_at';
+ is_compressed_tid | metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
+-------------------+-----------+------------------------------+-------------+----------+-----------+------+----------
+ f                 |       205 | Wed Jun 01 17:00:00 2022 PDT |           1 |        5 |        18 |    2 |  49.7787
+(1 row)
 
 -- make sure query uses a segmentby index and returns the correct data for the update value
 select explain_anonymize(format($$
@@ -223,7 +215,7 @@ $$, :'chunk2'));
 select created_at, location_id, temp from :chunk2 where location_id=1 and temp=2.0;
           created_at          | location_id | temp 
 ------------------------------+-------------+------
- Wed Jun 08 16:57:50 2022 PDT |           1 |    2
+ Wed Jun 01 17:00:00 2022 PDT |           1 |    2
 (1 row)
 
 select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
@@ -266,7 +258,7 @@ $$, :'hypertable'));
                ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                      Index Cond: (device_id = 10)
  Arrays read from cache: N
- Arrays decompressed: 998
+ Arrays decompressed: 320
 (22 rows)
 
 select explain_analyze_anonymize(format($$
@@ -279,7 +271,7 @@ $$, :'chunk1'));
    ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: (device_id = 10)
  Arrays read from cache: N
- Arrays decompressed: 197
+ Arrays decompressed: 17
 (5 rows)
 
 -- Test index scan on segmentby column
@@ -302,7 +294,7 @@ $$, :'hypertable'));
    ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: (location_id = 5)
  Arrays read from cache: N
- Arrays decompressed: 100
+ Arrays decompressed: 60
 (15 rows)
 
 select explain_analyze_anonymize(format($$
@@ -336,7 +328,7 @@ $$, :'hypertable'));
    ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: (location_id = 5)
  Arrays read from cache: N
- Arrays decompressed: 100
+ Arrays decompressed: 60
 (15 rows)
 
 select explain_analyze_anonymize(format($$

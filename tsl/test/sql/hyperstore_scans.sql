@@ -18,8 +18,8 @@ select create_hypertable('readings', 'time');
 select setseed(1);
 
 insert into readings (time, location, device, temp, humidity)
-select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t;
+select t, ceil(random()*3), ceil(random()*30), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 
 alter table readings set (
       timescaledb.compress,
@@ -96,7 +96,7 @@ group by device;
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 insert into readings (time, location, device, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5s') t
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t
 on conflict (location, device, time) do nothing;
 
 -- This should show values for all columns

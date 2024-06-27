@@ -84,7 +84,7 @@ select setseed(1);
 -- seconds. Any other timestamps are inserted as part of the test.
 insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
@@ -205,8 +205,8 @@ select location_id, count(*) into curr from :hypertable GROUP BY location_id;
 select * from :hypertable where created_at between '2022-06-01 00:00:01' and '2022-06-01 00:00:09';
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
 -----------+------------------------------+-------------+----------+-----------+------+----------
-    259204 | Wed Jun 01 00:00:02 2022 PDT |           1 |          |         1 |    1 |        1
-    259205 | Wed Jun 01 00:00:03 2022 PDT |           1 |          |         1 |    1 |        1
+      8644 | Wed Jun 01 00:00:02 2022 PDT |           1 |          |         1 |    1 |        1
+      8645 | Wed Jun 01 00:00:03 2022 PDT |           1 |          |         1 |    1 |        1
 (2 rows)
 
 select * from orig join curr using (location_id) where orig.count != curr.count;
@@ -238,14 +238,37 @@ drop table orig, curr;
 -- We have tested this above, but since different code paths are used
 -- for DO UPDATE, DO NOTHING, and plain inserts, we test this as well
 -- to be safe.
--- Insert of a value that exists in the compressed part.
+-- find a compressed tuple in a deterministic manner and get the
+-- timestamp. Make sure to find one in chunk1 since we will use that
+-- later.
+select created_at
+from :chunk1 where _timescaledb_debug.is_compressed_tid(ctid)
+order by created_at limit 1 \gset
+select * from :hypertable where created_at = :'created_at';
+ metric_id |          created_at          | location_id | owner_id | device_id |       temp       | humidity 
+-----------+------------------------------+-------------+----------+-----------+------------------+----------
+         1 | Wed Jun 01 00:00:00 2022 PDT |           4 |        2 |        23 | 16.4320374922463 |  55.2454
+(1 row)
+
+-- Insert of a value that exists in the compressed part should work
+-- when done through the hypertable.
 insert into :hypertable(created_at, location_id, device_id, temp, humidity)
-values ('2022-06-01 00:00:00', 11, 1, 1.0, 1.0)
+values (:'created_at', 11, 1, 1.0, 1.0)
 on conflict (created_at) do update set location_id = 12;
--- TODO(timescale/timescaledb-private#1087): Inserts directly into chunks do not work.
+select * from :hypertable where created_at = :'created_at';
+ metric_id |          created_at          | location_id | owner_id | device_id |       temp       | humidity 
+-----------+------------------------------+-------------+----------+-----------+------------------+----------
+         1 | Wed Jun 01 00:00:00 2022 PDT |          12 |        2 |        23 | 16.4320374922463 |  55.2454
+(1 row)
+
+-- TODO(timescale/timescaledb-private#1087): Inserts directly into a
+-- compressed tuple in a chunk do not work.
+select created_at
+from :chunk1 where _timescaledb_debug.is_compressed_tid(ctid)
+order by created_at limit 1 \gset
 \set ON_ERROR_STOP 0
 insert into :chunk1(created_at, location_id, device_id, temp, humidity)
-values ('2022-06-01  00:00:10', 13, 1, 1.0, 1.0)
+values (:'created_at', 13, 1, 1.0, 1.0)
 on conflict (created_at) do update set location_id = 14;
 ERROR:  cannot update compressed tuple
 \set ON_ERROR_STOP 1
@@ -269,8 +292,8 @@ order by location_id;
  metric_id |          created_at          | location_id | owner_id | device_id |       temp       | humidity 
 -----------+------------------------------+-------------+----------+-----------+------------------+----------
          1 | Wed Jun 01 00:00:00 2022 PDT |          12 |        2 |        23 | 16.4320374922463 |  55.2454
-    259204 | Wed Jun 01 00:00:02 2022 PDT |          20 |          |         1 |                1 |        1
-    259205 | Wed Jun 01 00:00:03 2022 PDT |          22 |          |         1 |                1 |        1
+      8644 | Wed Jun 01 00:00:02 2022 PDT |          20 |          |         1 |                1 |        1
+      8645 | Wed Jun 01 00:00:03 2022 PDT |          22 |          |         1 |                1 |        1
 (3 rows)
 
 drop table :hypertable;
