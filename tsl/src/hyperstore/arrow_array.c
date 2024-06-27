@@ -145,9 +145,9 @@ arrow_from_iterator_varlen(MemoryContext mcxt, DecompressionIterator *iterator, 
  * Fixed-Size Primitive layout ArrowArray from decompression iterator.
  */
 static ArrowArray *
-arrow_from_iterator_fixlen(MemoryContext mcxt, DecompressionIterator *iterator, Oid typid)
+arrow_from_iterator_fixlen(MemoryContext mcxt, DecompressionIterator *iterator, Oid typid,
+						   int16 typlen)
 {
-	const int typlen = get_typlen(typid);
 	const bool typbyval = get_typbyval(typid);
 	int64 data_capacity = 64 * typlen; /* Capacity of the data buffer */
 	int64 validity_capacity = sizeof(uint64) * (pad_to_multiple(64, data_capacity) / 64);
@@ -223,18 +223,18 @@ arrow_from_iterator_fixlen(MemoryContext mcxt, DecompressionIterator *iterator, 
  * Read the entire contents of a decompression iterator into the arrow array.
  */
 static ArrowArray *
-arrow_from_iterator(MemoryContext mcxt, DecompressionIterator *iterator, Oid typid)
+arrow_from_iterator(MemoryContext mcxt, DecompressionIterator *iterator, Oid typid, int16 typlen)
 {
-	const int typlen = get_typlen(typid);
 	if (typlen == TYPLEN_VARLEN)
 		return arrow_from_iterator_varlen(mcxt, iterator, typid);
 	else
-		return arrow_from_iterator_fixlen(mcxt, iterator, typid);
+		return arrow_from_iterator_fixlen(mcxt, iterator, typid, typlen);
 }
 
 static ArrowArray *
-arrow_generic_decompress_all(Datum compressed, Oid element_type, MemoryContext dest_mctx)
+arrow_generic_decompress_all(Datum compressed, Oid typid, MemoryContext dest_mctx)
 {
+	const int16 typlen = get_typlen(typid);
 	/* Slightly weird interface for passing the header, but this is what the
 	 * other decompress_all functions are using. We might want to refactor
 	 * this later. */
@@ -242,8 +242,8 @@ arrow_generic_decompress_all(Datum compressed, Oid element_type, MemoryContext d
 		(const CompressedDataHeader *) PG_DETOAST_DATUM(compressed);
 	DecompressionInitializer initializer =
 		tsl_get_decompression_iterator_init(header->compression_algorithm, false);
-	DecompressionIterator *iterator = initializer(compressed, element_type);
-	return arrow_from_iterator(dest_mctx, iterator, element_type);
+	DecompressionIterator *iterator = initializer(compressed, typid);
+	return arrow_from_iterator(dest_mctx, iterator, typid, typlen);
 }
 
 static DecompressAllFunction
@@ -317,7 +317,7 @@ arrow_from_compressed(Datum compressed, Oid typid, MemoryContext dest_mcxt, Memo
  * This will always be a reference.
  */
 static NullableDatum
-arrow_get_datum_varlen(const ArrowArray *array, Oid typid, int64 index)
+arrow_get_datum_varlen(const ArrowArray *array, Oid typid, uint16 index)
 {
 	const uint64 *restrict validity = array->buffers[0];
 	const int32 *offsets;
@@ -358,7 +358,7 @@ arrow_get_datum_varlen(const ArrowArray *array, Oid typid, int64 index)
 
 	/* We have stored the bytes of the varlen value directly in the buffer, so
 	 * this should work as expected. */
-	TS_DEBUG_LOG("retrieved varlen value '%s' row " INT64_FORMAT
+	TS_DEBUG_LOG("retrieved varlen value '%s' row %u"
 				 " from offset %d dictionary=%p in memory context %s",
 				 datum_as_string(typid, value, false),
 				 index,
@@ -378,9 +378,8 @@ arrow_get_datum_varlen(const ArrowArray *array, Oid typid, int64 index)
  * data into an arrow array.
  */
 static NullableDatum
-arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int64 index)
+arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int16 typlen, uint16 index)
 {
-	const int typlen = get_typlen(typid);
 	const bool typbyval = get_typbyval(typid);
 	const uint64 *restrict validity = array->buffers[0];
 	const char *restrict values = array->buffers[1];
@@ -395,7 +394,7 @@ arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int64 index)
 	 * taken from utils/adt/rangetypes.c */
 	Datum datum = fetch_att(&values[index * typlen], typbyval, typlen);
 
-	TS_DEBUG_LOG("retrieved fixlen value %s row " INT64_FORMAT " from offset " INT64_FORMAT
+	TS_DEBUG_LOG("retrieved fixlen value %s row %u from offset %u"
 				 " in memory context %s",
 				 datum_as_string(typid, datum, false),
 				 index,
@@ -406,12 +405,12 @@ arrow_get_datum_fixlen(ArrowArray *array, Oid typid, int64 index)
 }
 
 NullableDatum
-arrow_get_datum(ArrowArray *array, Oid typid, int64 index)
+arrow_get_datum(ArrowArray *array, Oid typid, int16 typlen, uint16 index)
 {
-	if (get_typlen(typid) == TYPLEN_VARLEN)
+	if (typlen == TYPLEN_VARLEN)
 		return arrow_get_datum_varlen(array, typid, index);
 	else
-		return arrow_get_datum_fixlen(array, typid, index);
+		return arrow_get_datum_fixlen(array, typid, typlen, index);
 }
 
 /*
