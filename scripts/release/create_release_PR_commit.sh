@@ -1,15 +1,12 @@
 #!/bin/bash
 set -eu
 
-# GITHUB_USERNAMES
-GH_USERNAME="pallavisontakke"
-
 # Folder, where we have cloned repositories' sources
 SOURCES_DIR="sources"
 
 CHANGELOG_HEADER_LINES="6"
 
-FORK_DIR="$GH_USERNAME-timescaledb"
+FORK_DIR="GH_USERNAME-timescaledb"
 
 echo "---- Deriving the release related versions from main ----"
 
@@ -32,7 +29,6 @@ cd ~/"$SOURCES_DIR"/"$FORK_DIR"
 
 
 # Derived Variables
-FORK_DIR="$GH_USERNAME-timescaledb"
 RELEASE_PR_BRANCH="release-$NEW_VERSION"
 UPDATE_FILE="$CURRENT_VERSION--$NEW_VERSION.sql"
 DOWNGRADE_FILE="$NEW_VERSION--$CURRENT_VERSION.sql"
