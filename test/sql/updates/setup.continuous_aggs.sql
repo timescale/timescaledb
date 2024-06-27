@@ -11,6 +11,12 @@
 -- on timescaledb 1.7.x
 CALL _timescaledb_testing.stop_workers();
 
+-- disable chunkwise aggregation and hash aggregation, because it might lead to
+-- different order of chunk creation in the cagg table, based on the underlying
+-- aggregation plan.
+SET timescaledb.enable_chunkwise_aggregation TO OFF;
+SET enable_hashagg TO OFF;
+
 CREATE TYPE custom_type AS (high int, low int);
 
 CREATE TABLE conditions_before (
@@ -47,7 +53,6 @@ SELECT time_bucket('1 week', timec) AS bucket,
  round(avg(humidity)) AS humidity
 FROM conditions_before
 GROUP BY bucket, location
-ORDER BY bucket, location
 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS mat_before
@@ -92,9 +97,7 @@ SELECT time_bucket('1week', timec) as bucket,
 	histogram(temperature, 0, 100, 5)
 FROM conditions_before
 GROUP BY bucket, location
-HAVING min(location) >= 'NYC' and avg(temperature) > 2
-ORDER BY bucket, location
-WITH NO DATA;
+HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
 
 ALTER MATERIALIZED VIEW rename_cols RENAME COLUMN bucket TO "time";
 
@@ -151,9 +154,7 @@ SELECT time_bucket('1week', timec) as bucket,
 	histogram(temperature, 0, 100, 5)
 FROM conditions_before
 GROUP BY bucket, location
-HAVING min(location) >= 'NYC' and avg(temperature) > 2
-ORDER BY bucket, location
-WITH NO DATA;
+HAVING min(location) >= 'NYC' and avg(temperature) > 2 WITH NO DATA;
 
 \if :WITH_SUPERUSER
 GRANT SELECT ON cagg.realtime_mat TO cagg_user;
@@ -189,9 +190,7 @@ AS
   SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
     max(temperature) as max_temp, round(avg(temperature)) as avg_temp
   FROM inval_test
-  GROUP BY bucket, location
-  ORDER BY bucket, location
-  WITH NO DATA;
+  GROUP BY bucket, location WITH NO DATA;
 
 SELECT add_continuous_aggregate_policy('mat_inval', NULL, '-20 days'::interval, '12 hours');
 
@@ -218,14 +217,14 @@ WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
 AS
   SELECT time_bucket( 2, timeval), COUNT(col1)
   FROM int_time_test
-  GROUP BY 1 ORDER BY 1 WITH NO DATA;
+  GROUP BY 1 WITH NO DATA;
 
 CREATE MATERIALIZED VIEW mat_inttime2
 WITH ( timescaledb.continuous, timescaledb.materialized_only=true )
 AS
   SELECT time_bucket( 2, timeval), COUNT(col1)
   FROM int_time_test
-  GROUP BY 1 ORDER BY 1 WITH NO DATA;
+  GROUP BY 1 WITH NO DATA;
 
 SELECT add_continuous_aggregate_policy('mat_inttime', 6, 2, '12 hours');
 SELECT add_continuous_aggregate_policy('mat_inttime2', NULL, 2, '12 hours');
@@ -243,9 +242,7 @@ AS
   SELECT time_bucket('10 minute', time) as bucket, location, min(temperature) as min_temp,
     max(temperature) as max_temp, round(avg(temperature)) as avg_temp
   FROM conflict_test
-  GROUP BY bucket, location
-  ORDER BY bucket, location
-  WITH NO DATA;
+  GROUP BY bucket, location WITH NO DATA;
 
 SELECT add_continuous_aggregate_policy('mat_conflict', '28 days', '1 day', '12 hours');
 SELECT add_retention_policy('conflict_test', '14 days'::interval) AS retention_jobid \gset
@@ -292,12 +289,15 @@ SELECT
     round(avg(temperature)) AS avg_temp
 FROM
     drop_test
-GROUP BY bucket, location
-ORDER BY bucket, location
-;
+GROUP BY
+    bucket,
+    LOCATION;
 
 SELECT add_continuous_aggregate_policy('mat_drop', '7 days', '-30 days'::interval, '20 min');
 
 CALL refresh_continuous_aggregate('mat_drop',NULL,NULL);
 
 SELECT drop_chunks('drop_test', NOW() - INTERVAL '7 days');
+
+RESET timescaledb.enable_chunkwise_aggregation;
+RESET enable_hashagg;
