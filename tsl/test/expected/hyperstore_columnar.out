@@ -98,7 +98,7 @@ $$, :'chunk'));
          Vectorized Filter: (location = 2)
          Rows Removed by Filter: 16
  Arrays read from cache: N
- Arrays decompressed: 9
+ Arrays decompressed: 3
 (7 rows)
 
 -- Save away all data from the chunk so that we can compare.
