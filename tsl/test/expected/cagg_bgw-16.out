@@ -109,7 +109,7 @@ SELECT mat_hypertable_id, user_view_schema, user_view_name FROM _timescaledb_cat
                  2 | public           | test_continuous_agg_view
 (1 row)
 
-SELECT mat_hypertable_id, bucket_width FROM _timescaledb_catalog.continuous_aggs_bucket_function;
+SELECT mat_hypertable_id, bucket_width FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id);
  mat_hypertable_id | bucket_width 
 -------------------+--------------
                  2 | 2

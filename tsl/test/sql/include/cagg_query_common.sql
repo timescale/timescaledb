@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\set TEST_BASE_NAME cagg_query
 SELECT
        format('%s/results/%s_results_view.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW",
        format('%s/results/%s_results_view_hashagg.out', :'TEST_OUTPUT_DIR', :'TEST_BASE_NAME') as "TEST_RESULTS_VIEW_HASHAGG",
@@ -360,7 +361,7 @@ INSERT INTO table_bigint VALUES(1,2);
 
 CREATE VIEW caggs_info AS
 SELECT user_view_schema, user_view_name, bucket_func, bucket_width, bucket_origin, bucket_offset, bucket_timezone, bucket_fixed_width
-FROM _timescaledb_catalog.continuous_aggs_bucket_function NATURAL JOIN _timescaledb_catalog.continuous_agg;
+FROM _timescaledb_catalog.continuous_agg, LATERAL _timescaledb_functions.cagg_get_bucket_function_info(mat_hypertable_id);
 
 ---
 -- Tests with CAgg creation
@@ -556,17 +557,6 @@ CREATE MATERIALIZED VIEW cagg_bigint_offset2
         FROM table_bigint
         GROUP BY 1 WITH NO DATA;
 SELECT * FROM caggs_info WHERE user_view_name = 'cagg_bigint_offset2';
-
--- mess with the bucket_func signature to make sure it will raise an exception
-SET ROLE :ROLE_CLUSTER_SUPERUSER;
-\set ON_ERROR_STOP 0
-BEGIN;
-UPDATE _timescaledb_catalog.continuous_aggs_bucket_function SET bucket_func = 'func_does_not_exist()';
--- should error because function does not exist
-CALL refresh_continuous_aggregate('cagg_bigint_offset2', NULL, NULL);
-ROLLBACK;
-\set ON_ERROR_STOP 1
-SET ROLE :ROLE_DEFAULT_PERM_USER;
 
 DROP MATERIALIZED VIEW cagg_bigint_offset2;
 

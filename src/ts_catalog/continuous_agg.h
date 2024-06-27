@@ -77,14 +77,7 @@ ts_continuous_agg_get_compression_defelems(const WithClauseResult *with_clauses)
  */
 typedef struct ContinuousAggsBucketFunction
 {
-	/* Oid of the bucketing function. In the catalog table, the regprocedure is used. This ensures
-	 * that the Oid is mapped to a string when a backup is taken and the string is converted back to
-	 * the Oid when the backup is restored. This way, we can use an Oid in the catalog table even
-	 * when a backup is restored and the Oid may have changed. However, the dependency management in
-	 * PostgreSQL does not track the Oid. If the function is dropped and a new one is created, the
-	 * Oid changes and this value points to a non-existing Oid. This can not happen in real-world
-	 * situations since PostgreSQL protects the bucket_function from deletion until the CAgg is
-	 * defined. */
+	/* Oid of the bucketing function */
 	Oid bucket_function;
 	Oid bucket_width_type; /* type of bucket_width */
 
@@ -98,6 +91,7 @@ typedef struct ContinuousAggsBucketFunction
 	 * Fields that are used for time based buckets
 	 */
 	Interval *bucket_time_width;
+
 	/*
 	 * Custom origin value stored as UTC timestamp.
 	 * If not specified, stores infinity.

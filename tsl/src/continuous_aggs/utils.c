@@ -8,7 +8,6 @@
 #include <commands/view.h>
 #include <storage/lmgr.h>
 #include <utils/acl.h>
-#include <utils/regproc.h>
 #include <utils/snapmgr.h>
 #include <utils/timestamp.h>
 
@@ -292,88 +291,6 @@ get_replacement_timebucket_function(const ContinuousAgg *cagg, bool *need_parame
 	return funcid;
 }
 
-/*
- * Update the cagg bucket function catalog table. During the migration, we set a new bucket
- * function and a origin if the bucket function is time based.
- */
-static ScanTupleResult
-cagg_time_bucket_update(TupleInfo *ti, void *data)
-{
-	bool should_free;
-	HeapTuple tuple = ts_scanner_fetch_heap_tuple(ti, false, &should_free);
-	TupleDesc tupleDesc = ts_scanner_get_tupledesc(ti);
-	const ContinuousAgg *cagg = (ContinuousAgg *) data;
-
-	Datum values[Natts_continuous_aggs_bucket_function] = { 0 };
-	bool isnull[Natts_continuous_aggs_bucket_function] = { 0 };
-	bool doReplace[Natts_continuous_aggs_bucket_function] = { 0 };
-
-	/* Update the bucket function */
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
-		CStringGetTextDatum(format_procedure_qualified(cagg->bucket_function->bucket_function));
-	doReplace[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] = true;
-
-	/* Set new origin if not already present. Time_bucket and time_bucket_ng use different
-	 * origin values for time based values.
-	 */
-	if (cagg->bucket_function->bucket_time_based)
-	{
-		char *origin_value = DatumGetCString(
-			DirectFunctionCall1(timestamptz_out,
-								TimestampTzGetDatum(cagg->bucket_function->bucket_time_origin)));
-
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
-			CStringGetTextDatum(origin_value);
-
-		doReplace[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
-			true;
-	}
-
-	HeapTuple new_tuple = heap_modify_tuple(tuple, tupleDesc, values, isnull, doReplace);
-
-	ts_catalog_update(ti->scanrel, new_tuple);
-
-	heap_freetuple(new_tuple);
-
-	if (should_free)
-		heap_freetuple(tuple);
-
-	return SCAN_DONE;
-}
-
-/*
- * Search for the bucket function entry in the catalog and update the values.
- */
-static int
-replace_time_bucket_function_in_catalog(ContinuousAgg *cagg)
-{
-	ScanKeyData scankey[1];
-
-	ScanKeyInit(&scankey[0],
-				Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id,
-				BTEqualStrategyNumber,
-				F_INT4EQ,
-				Int32GetDatum(cagg->data.mat_hypertable_id));
-
-	Catalog *catalog = ts_catalog_get();
-
-	ScannerCtx scanctx = {
-		.table = catalog_get_table_id(catalog, CONTINUOUS_AGGS_BUCKET_FUNCTION),
-		.index = catalog_get_index(catalog,
-								   CONTINUOUS_AGGS_BUCKET_FUNCTION,
-								   CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX),
-		.nkeys = 1,
-		.scankey = scankey,
-		.data = cagg,
-		.limit = 1,
-		.tuple_found = cagg_time_bucket_update,
-		.lockmode = AccessShareLock,
-		.scandirection = ForwardScanDirection,
-	};
-
-	return ts_scanner_scan(&scanctx);
-}
-
 typedef struct TimeBucketInfoContext
 {
 	/* The updated cagg definition */
@@ -578,12 +495,12 @@ continuous_agg_replace_function(const ContinuousAgg *cagg, Oid function_to_repla
  * Get the default origin value for time_bucket to be compatible with
  * the default origin of time_bucket_ng.
  */
-static TimestampTz
-continuous_agg_get_default_origin(Oid new_bucket_function)
+TimestampTz
+continuous_agg_get_default_origin(Oid bucket_function)
 {
-	Assert(OidIsValid(new_bucket_function));
+	Assert(OidIsValid(bucket_function));
 
-	Oid bucket_function_rettype = get_func_rettype(new_bucket_function);
+	Oid bucket_function_rettype = get_func_rettype(bucket_function);
 	Assert(OidIsValid(bucket_function_rettype));
 
 	Datum origin;
@@ -689,21 +606,18 @@ continuous_agg_migrate_to_time_bucket(PG_FUNCTION_ARGS)
 		origin_added_during_migration = true;
 	}
 
-	/* Update the catalog */
-	replace_time_bucket_function_in_catalog(cagg);
-
-	/* Fetch new CAgg definition from catalog */
-	ContinuousAgg PG_USED_FOR_ASSERTS_ONLY *new_cagg_definition =
-		cagg_get_by_relid_or_fail(cagg_relid);
-	Assert(new_cagg_definition->bucket_function->bucket_function == new_bucket_function);
-	Assert(cagg->bucket_function->bucket_time_origin ==
-		   new_cagg_definition->bucket_function->bucket_time_origin);
-
 	/* Modify the CAgg view definition */
 	continuous_agg_replace_function(cagg,
 									old_bucket_function,
 									origin_added_during_migration,
 									need_parameter_order_change);
+
+	/* Fetch new CAgg definition from catalog */
+	ContinuousAgg PG_USED_FOR_ASSERTS_ONLY *new_cagg_definition =
+		cagg_get_by_relid_or_fail(cagg_relid);
+	Assert(new_cagg_definition->bucket_function->bucket_function == old_bucket_function);
+	Assert(cagg->bucket_function->bucket_time_origin ==
+		   new_cagg_definition->bucket_function->bucket_time_origin);
 
 	/* The migration is a procedure, no return value is expected */
 	PG_RETURN_VOID();
@@ -892,7 +806,7 @@ cagg_get_bucket_function_datum(int32 mat_hypertable_id, FunctionCallInfo fcinfo)
 	if (fcinfo != NULL && get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "function returning record called in context that cannot accept type record");
 
-	ContinuousAggsBucketFunction *bf = ts_cagg_get_bucket_function_info(direct_view_oid);
+	ContinuousAggsBucketFunction *bf = tsl_cagg_get_bucket_function_info(direct_view_oid);
 
 	if (!OidIsValid(bf->bucket_function))
 	{

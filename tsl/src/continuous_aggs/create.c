@@ -81,10 +81,6 @@ static void create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char
 									  const char *partial_view, bool materialized_only,
 									  const char *direct_schema, const char *direct_view,
 									  const bool finalized, const int32 parent_mat_hypertable_id);
-static void create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function,
-												 const char *bucket_width, const char *origin,
-												 const char *offset, const char *timezone,
-												 const bool bucket_fixed_width);
 static void cagg_create_hypertable(int32 hypertable_id, Oid mat_tbloid, const char *matpartcolname,
 								   int64 mat_tbltimecol_interval);
 static void cagg_add_trigger_hypertable(Oid relid, int32 hypertable_id);
@@ -170,86 +166,6 @@ create_cagg_catalog_entry(int32 matht_id, int32 rawht_id, const char *user_schem
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_materialize_only)] =
 		BoolGetDatum(materialized_only);
 	values[AttrNumberGetAttrOffset(Anum_continuous_agg_finalized)] = BoolGetDatum(finalized);
-
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	ts_catalog_insert_values(rel, desc, values, nulls);
-	ts_catalog_restore_user(&sec_ctx);
-	table_close(rel, RowExclusiveLock);
-}
-
-/*
- * Create a entry for the materialization table in table
- * CONTINUOUS_AGGS_BUCKET_FUNCTION.
- */
-static void
-create_bucket_function_catalog_entry(int32 matht_id, Oid bucket_function, const char *bucket_width,
-									 const char *bucket_origin, const char *bucket_offset,
-									 const char *bucket_timezone, const bool bucket_fixed_width)
-{
-	Catalog *catalog = ts_catalog_get();
-	Relation rel;
-	TupleDesc desc;
-	Datum values[Natts_continuous_aggs_bucket_function];
-	bool nulls[Natts_continuous_aggs_bucket_function] = { false };
-	CatalogSecurityContext sec_ctx;
-
-	Assert(OidIsValid(bucket_function));
-	Assert(bucket_width != NULL);
-
-	rel = table_open(catalog_get_table_id(catalog, CONTINUOUS_AGGS_BUCKET_FUNCTION),
-					 RowExclusiveLock);
-	desc = RelationGetDescr(rel);
-
-	memset(values, 0, sizeof(values));
-
-	/* Hypertable ID */
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_mat_hypertable_id)] =
-		matht_id;
-
-	/* Bucket function */
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_function)] =
-		CStringGetTextDatum(format_procedure_qualified(bucket_function));
-
-	/* Bucket width */
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_width)] =
-		CStringGetTextDatum(bucket_width);
-
-	/* Bucket origin */
-	if (bucket_origin != NULL)
-	{
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] =
-			CStringGetTextDatum(bucket_origin);
-	}
-	else
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_origin)] = true;
-	}
-
-	/* Bucket offset */
-	if (bucket_offset != NULL)
-	{
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] =
-			CStringGetTextDatum(bucket_offset);
-	}
-	else
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_offset)] = true;
-	}
-
-	/* Bucket timezone */
-	if (bucket_timezone != NULL)
-	{
-		values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] =
-			CStringGetTextDatum(bucket_timezone);
-	}
-	else
-	{
-		nulls[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_timezone)] = true;
-	}
-
-	/* Bucket fixed width */
-	values[AttrNumberGetAttrOffset(Anum_continuous_aggs_bucket_function_bucket_fixed_width)] =
-		BoolGetDatum(bucket_fixed_width);
 
 	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
 	ts_catalog_insert_values(rel, desc, values, nulls);
@@ -814,14 +730,6 @@ cagg_create(const CreateTableAsStmt *create_stmt, ViewStmt *stmt, Query *panquer
 			pg_lltoa(bucket_info->bf->bucket_integer_offset, bucket_offset);
 		}
 	}
-
-	create_bucket_function_catalog_entry(materialize_hypertable_id,
-										 bucket_info->bf->bucket_function,
-										 bucket_width,
-										 bucket_origin,
-										 bucket_offset,
-										 bucket_info->bf->bucket_time_timezone,
-										 bucket_info->bf->bucket_fixed_interval);
 
 	/* Step 5: Create trigger on raw hypertable -specified in the user view query. */
 	cagg_add_trigger_hypertable(bucket_info->htoid, bucket_info->htid);

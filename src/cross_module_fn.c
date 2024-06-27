@@ -284,6 +284,13 @@ continuous_agg_call_invalidation_trigger_default(int32 hypertable_id, Relation c
 	pg_unreachable();
 }
 
+static ContinuousAggsBucketFunction *
+continuous_agg_get_bucket_function_info_internal_default(Oid view_oid)
+{
+	error_no_default_fn_community();
+	pg_unreachable();
+}
+
 TS_FUNCTION_INFO_V1(ts_tsl_loaded);
 
 PGDLLEXPORT Datum
@@ -373,6 +380,8 @@ TSDLLEXPORT CrossModuleFunctions ts_cm_functions_default = {
 	.continuous_agg_validate_query = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function = error_no_default_fn_pg_community,
 	.continuous_agg_get_bucket_function_info = error_no_default_fn_pg_community,
+	.continuous_agg_get_bucket_function_info_internal =
+		continuous_agg_get_bucket_function_info_internal_default,
 	.continuous_agg_migrate_to_time_bucket = error_no_default_fn_pg_community,
 	.cagg_try_repair = process_cagg_try_repair,
 

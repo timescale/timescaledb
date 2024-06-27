@@ -1487,16 +1487,17 @@ cagg_get_by_relid_or_fail(const Oid cagg_relid)
 
 /* Get time bucket function info based on the view definition */
 ContinuousAggsBucketFunction *
-ts_cagg_get_bucket_function_info(Oid view_oid)
+tsl_cagg_get_bucket_function_info(Oid view_oid)
 {
-	Relation view_rel = relation_open(view_oid, AccessShareLock);
+	Relation view_rel = table_open(view_oid, AccessShareLock);
 	Query *query = copyObject(get_view_query(view_rel));
-	relation_close(view_rel, NoLock);
+	table_close(view_rel, NoLock);
 
 	Assert(query != NULL);
 	Assert(query->commandType == CMD_SELECT);
 
 	ContinuousAggsBucketFunction *bf = palloc0(sizeof(ContinuousAggsBucketFunction));
+	TIMESTAMP_NOBEGIN(bf->bucket_time_origin);	
 
 	ListCell *l;
 	foreach (l, query->groupClause)

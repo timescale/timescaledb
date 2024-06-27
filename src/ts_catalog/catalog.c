@@ -97,10 +97,6 @@ static const TableInfoDef catalog_table_names[_MAX_CATALOG_TABLES + 1] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = COMPRESSION_CHUNK_SIZE_TABLE_NAME,
 	},
-	[CONTINUOUS_AGGS_BUCKET_FUNCTION] = {
-		.schema_name = CATALOG_SCHEMA_NAME,
-		.table_name = CONTINUOUS_AGGS_BUCKET_FUNCTION_TABLE_NAME,
-	},
 	[CONTINUOUS_AGGS_WATERMARK] = {
 		.schema_name = CATALOG_SCHEMA_NAME,
 		.table_name = CONTINUOUS_AGGS_WATERMARK_TABLE_NAME,
@@ -254,12 +250,6 @@ static const TableIndexDef catalog_table_index_definitions[_MAX_CATALOG_TABLES] 
 		.length =  _MAX_COMPRESSION_CHUNK_SIZE_INDEX,
 		.names = (char *[]) {
 			[COMPRESSION_CHUNK_SIZE_PKEY] = "compression_chunk_size_pkey",
-		},
-	},
-	[CONTINUOUS_AGGS_BUCKET_FUNCTION] = {
-		.length = _MAX_CONTINUOUS_AGGS_BUCKET_FUNCTION_INDEX,
-		.names = (char *[]) {
-			[CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX] = "continuous_aggs_bucket_function_pkey",
 		},
 	}
 };

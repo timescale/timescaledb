@@ -50,7 +50,6 @@ typedef enum CatalogTable
 	CONTINUOUS_AGGS_MATERIALIZATION_INVALIDATION_LOG,
 	COMPRESSION_SETTINGS,
 	COMPRESSION_CHUNK_SIZE,
-	CONTINUOUS_AGGS_BUCKET_FUNCTION,
 	CONTINUOUS_AGGS_WATERMARK,
 	TELEMETRY_EVENT,
 	CHUNK_COLUMN_STATS,
@@ -971,38 +970,6 @@ typedef enum Anum_continuous_agg_raw_hypertable_id_idx
 
 #define Natts_continuous_agg_raw_hypertable_id_idx                                                 \
 	(_Anum_continuous_agg_raw_hypertable_id_idx_max - 1)
-
-/*** continuous_aggs_bucket_function table definitions ***/
-
-#define CONTINUOUS_AGGS_BUCKET_FUNCTION_TABLE_NAME "continuous_aggs_bucket_function"
-typedef enum Anum_continuous_aggs_bucket_function
-{
-	Anum_continuous_aggs_bucket_function_mat_hypertable_id = 1,
-	Anum_continuous_aggs_bucket_function_function,
-	Anum_continuous_aggs_bucket_function_bucket_width,
-	Anum_continuous_aggs_bucket_function_bucket_origin,
-	Anum_continuous_aggs_bucket_function_bucket_offset,
-	Anum_continuous_aggs_bucket_function_bucket_timezone,
-	Anum_continuous_aggs_bucket_function_bucket_fixed_width,
-	_Anum_continuous_aggs_bucket_function_max,
-} Anum_continuous_aggs_bucket_function;
-
-#define Natts_continuous_aggs_bucket_function (_Anum_continuous_aggs_bucket_function_max - 1)
-
-enum
-{
-	CONTINUOUS_AGGS_BUCKET_FUNCTION_PKEY_IDX = 0,
-	_MAX_CONTINUOUS_AGGS_BUCKET_FUNCTION_INDEX,
-};
-
-typedef enum Anum_continuous_aggs_bucket_function_pkey
-{
-	Anum_continuous_aggs_bucket_function_pkey_mat_hypertable_id = 1,
-	_Anum_continuous_aggs_bucket_function_pkey_max,
-} Anum_continuous_aggs_bucket_function_pkey;
-
-#define Natts_continuous_aggs_bucket_function_pkey                                                 \
-	(_Anum_continuous_aggs_bucket_function_pkey_max - 1)
 
 /****** CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE definitions*/
 #define CONTINUOUS_AGGS_HYPERTABLE_INVALIDATION_LOG_TABLE_NAME                                     \
