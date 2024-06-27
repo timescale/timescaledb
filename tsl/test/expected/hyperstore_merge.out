@@ -1,0 +1,285 @@
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
+\ir include/setup_hyperstore.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+\set hypertable readings
+\ir hyperstore_helpers.sql
+-- This file and its contents are licensed under the Timescale License.
+-- Please see the included NOTICE for copyright information and
+-- LICENSE-TIMESCALE for a copy of the license.
+-- Function to run an explain analyze with and do replacements on the
+-- emitted plan. This is intended to be used when the structure of the
+-- plan is important, but not the specific chunks scanned nor the
+-- number of heap fetches, rows, loops, etc.
+create function explain_analyze_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (analyze, costs off, summary off, timing off, decompress_cache_stats) %s', $1)
+    loop
+        if trim(both from ln) like 'Group Key:%' then
+	   continue;
+	end if;
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create function explain_anonymize(text) returns setof text
+language plpgsql as
+$$
+declare
+    ln text;
+begin
+    for ln in
+        execute format('explain (costs off, summary off, timing off) %s', $1)
+    loop
+        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
+        ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
+        ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
+        ln := regexp_replace(ln, '_hyper_\d+_\d+_chunk', '_hyper_I_N_chunk', 1, 0);
+        return next ln;
+    end loop;
+end;
+$$;
+create table :hypertable(
+       metric_id serial,
+       created_at timestamptz not null unique,
+       location_id smallint,	--segmentby attribute with index
+       owner_id bigint,		--segmentby attribute without index
+       device_id bigint,	--non-segmentby attribute
+       temp float8,
+       humidity float4
+);
+create index hypertable_location_id_idx on :hypertable (location_id);
+create index hypertable_device_id_idx on :hypertable (device_id);
+select create_hypertable(:'hypertable', by_range('created_at'));
+ create_hypertable 
+-------------------
+ (1,t)
+(1 row)
+
+-- Disable incremental sort to make tests stable
+set enable_incremental_sort = false;
+select setseed(1);
+ setseed 
+---------
+ 
+(1 row)
+
+-- Insert rows into the tables.
+--
+-- The timestamps for the original rows will have timestamps every 10
+-- seconds. Any other timestamps are inserted as part of the test.
+insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
+select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
+alter table :hypertable set (
+	  timescaledb.compress,
+	  timescaledb.compress_orderby = 'created_at',
+	  timescaledb.compress_segmentby = 'location_id, owner_id'
+);
+-- Get some test chunks as global variables (first and last chunk here)
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk1
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk1 asc
+ limit 1 \gset
+select format('%I.%I', chunk_schema, chunk_name)::regclass as chunk2
+  from timescaledb_information.chunks
+ where format('%I.%I', hypertable_schema, hypertable_name)::regclass = :'hypertable'::regclass
+ order by chunk2 asc
+ limit 1 offset 1 \gset
+-- Disable merge and hash join to avoid flaky test.
+set enable_mergejoin to false;
+set enable_hashjoin to false;
+-- There are already tests to merge into uncompressed tables, so just
+-- compress all chunks using Hyperstore.
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+create table source_data (
+       created_at timestamptz not null,
+       location_id smallint,
+       device_id bigint,
+       temp float8,
+       humidity float4
+);
+INSERT INTO source_data(created_at, location_id, device_id, temp, humidity)
+VALUES ('2022-06-01 00:00:00', 1, 1, 1.0, 1.0),
+       ('2022-06-01 00:00:02', 1, 1, 1.0, 1.0),
+       ('2022-06-01 00:00:03', 1, 1, 1.0, 1.0);
+-- TODO(timescale/timescaledb-private#1170) Compression does not
+-- support UPDATE and DELETE actions for MERGE command.
+\set ON_ERROR_STOP 0
+merge into :hypertable ht
+using source_data sd on ht.created_at = sd.created_at
+when matched then update set humidity = ht.humidity + sd.humidity;
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+merge into :hypertable ht
+using source_data sd on ht.created_at = sd.created_at
+when matched then delete;
+ERROR:  The MERGE command with UPDATE/DELETE merge actions is not support on compressed hypertables
+\set ON_ERROR_STOP 1
+-- Initially, there should be no uncompressed rows
+\x on
+select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
+(0 rows)
+
+\x off
+-- Test merging into hypertable. The insert is executed since we use
+-- ANALYZE, so we should see the number of arrays decompressed.
+select explain_analyze_anonymize(format($$
+    merge into %s ht
+    using source_data sd on ht.created_at = sd.created_at
+    when not matched then
+	 insert (created_at, location_id, device_id, temp, humidity)
+	 values (created_at, location_id, device_id, temp, humidity)
+$$, :'hypertable'));
+                                                   explain_analyze_anonymize                                                   
+-------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=N loops=N)
+   ->  Merge on readings ht (actual rows=N loops=N)
+         Merge on readings ht_1
+         Merge on _hyper_I_N_chunk ht_2
+         Merge on _hyper_I_N_chunk ht_3
+         Merge on _hyper_I_N_chunk ht_4
+         Merge on _hyper_I_N_chunk ht_5
+         Merge on _hyper_I_N_chunk ht_6
+         Merge on _hyper_I_N_chunk ht_7
+         Tuples: inserted=1 skipped=2
+         ->  Custom Scan (ChunkDispatch) (actual rows=N loops=N)
+               ->  Nested Loop Left Join (actual rows=N loops=N)
+                     ->  Seq Scan on source_data sd (actual rows=N loops=N)
+                     ->  Append (actual rows=N loops=N)
+                           ->  Seq Scan on readings ht_1 (actual rows=N loops=N)
+                                 Filter: (created_at = sd.created_at)
+                           ->  Index Scan using "1_1_readings_created_at_key" on _hyper_I_N_chunk ht_2 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "2_2_readings_created_at_key" on _hyper_I_N_chunk ht_3 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "3_3_readings_created_at_key" on _hyper_I_N_chunk ht_4 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "4_4_readings_created_at_key" on _hyper_I_N_chunk ht_5 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "5_5_readings_created_at_key" on _hyper_I_N_chunk ht_6 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "6_6_readings_created_at_key" on _hyper_I_N_chunk ht_7 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+ Arrays read from cache: N
+ Arrays decompressed: 1
+(30 rows)
+
+-- Now, the inserted rows should show up, but not the ones that
+-- already exist.
+\x on
+select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
+-[ RECORD 1 ]-----------------------------
+metric_id   | 8644
+created_at  | Wed Jun 01 00:00:02 2022 PDT
+location_id | 1
+owner_id    | 
+device_id   | 1
+temp        | 1
+humidity    | 1
+-[ RECORD 2 ]-----------------------------
+metric_id   | 8646
+created_at  | Wed Jun 01 00:00:03 2022 PDT
+location_id | 1
+owner_id    | 
+device_id   | 1
+temp        | 1
+humidity    | 1
+
+\x off
+-- Recompress all and try to insert the same rows again. This there
+-- should be no rows inserted.
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+NOTICE:  chunk "_hyper_1_2_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_3_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_4_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_5_chunk" is already compressed
+NOTICE:  chunk "_hyper_1_6_chunk" is already compressed
+             compress_chunk             
+----------------------------------------
+ _timescaledb_internal._hyper_1_1_chunk
+ _timescaledb_internal._hyper_1_2_chunk
+ _timescaledb_internal._hyper_1_3_chunk
+ _timescaledb_internal._hyper_1_4_chunk
+ _timescaledb_internal._hyper_1_5_chunk
+ _timescaledb_internal._hyper_1_6_chunk
+(6 rows)
+
+\x on
+select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
+(0 rows)
+
+\x off
+-- Test merging into hypertable. The insert is executed since we use
+-- ANALYZE, so we should see the number of arrays decompressed.
+select explain_analyze_anonymize(format($$
+    merge into %s ht
+    using source_data sd on ht.created_at = sd.created_at
+    when not matched then
+	 insert (created_at, location_id, device_id, temp, humidity)
+	 values (created_at, location_id, device_id, temp, humidity)
+$$, :'hypertable'));
+                                                   explain_analyze_anonymize                                                   
+-------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=N loops=N)
+   ->  Merge on readings ht (actual rows=N loops=N)
+         Merge on readings ht_1
+         Merge on _hyper_I_N_chunk ht_2
+         Merge on _hyper_I_N_chunk ht_3
+         Merge on _hyper_I_N_chunk ht_4
+         Merge on _hyper_I_N_chunk ht_5
+         Merge on _hyper_I_N_chunk ht_6
+         Merge on _hyper_I_N_chunk ht_7
+         Tuples: skipped=3
+         ->  Custom Scan (ChunkDispatch) (actual rows=N loops=N)
+               ->  Nested Loop Left Join (actual rows=N loops=N)
+                     ->  Seq Scan on source_data sd (actual rows=N loops=N)
+                     ->  Append (actual rows=N loops=N)
+                           ->  Seq Scan on readings ht_1 (actual rows=N loops=N)
+                                 Filter: (created_at = sd.created_at)
+                           ->  Index Scan using "1_1_readings_created_at_key" on _hyper_I_N_chunk ht_2 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "2_2_readings_created_at_key" on _hyper_I_N_chunk ht_3 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "3_3_readings_created_at_key" on _hyper_I_N_chunk ht_4 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "4_4_readings_created_at_key" on _hyper_I_N_chunk ht_5 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "5_5_readings_created_at_key" on _hyper_I_N_chunk ht_6 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+                           ->  Index Scan using "6_6_readings_created_at_key" on _hyper_I_N_chunk ht_7 (actual rows=N loops=N)
+                                 Index Cond: (created_at = sd.created_at)
+ Arrays read from cache: N
+ Arrays decompressed: 2
+(30 rows)
+
+\x on
+select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
+(0 rows)
+
+\x off

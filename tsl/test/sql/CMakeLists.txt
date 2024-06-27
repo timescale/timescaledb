@@ -116,6 +116,7 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     cagg_query_using_merge.sql
     cagg_refresh_using_merge.sql
     hyperstore.sql
+    hyperstore_columnar.sql
     hyperstore_copy.sql
     hyperstore_create.sql
     hyperstore_cursor.sql
@@ -124,10 +125,10 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
     hyperstore_index_hash.sql
     hyperstore_insert.sql
     hyperstore_join.sql
+    hyperstore_merge.sql
+    hyperstore_policy.sql
     hyperstore_scans.sql
     hyperstore_stats.sql
-    hyperstore_columnar.sql
-    hyperstore_policy.sql
     hyperstore_types.sql
     hyperstore_update.sql
     hyperstore_vacuum.sql
