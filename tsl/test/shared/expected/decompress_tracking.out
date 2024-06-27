@@ -94,13 +94,11 @@ QUERY PLAN
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01 1:30','d1',random(); ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 1
-   Tuples decompressed: 10
    ->  Insert on decompress_tracking (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
                      ->  Result (actual rows=1 loops=1)
-(7 rows)
+(5 rows)
 
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking SELECT '2020-01-01','d2',random(); ROLLBACK;
 QUERY PLAN
@@ -123,12 +121,10 @@ QUERY PLAN
 BEGIN; :EXPLAIN_ANALYZE INSERT INTO decompress_tracking (VALUES ('2020-01-01 1:30','d1',random()),('2020-01-01 1:30','d2',random())); ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 2
-   Tuples decompressed: 25
    ->  Insert on decompress_tracking (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=2 loops=1)
                ->  Values Scan on "*VALUES*" (actual rows=2 loops=1)
-(6 rows)
+(4 rows)
 
 -- test prepared statements EXPLAIN still works after execution
 SET plan_cache_mode TO force_generic_plan;

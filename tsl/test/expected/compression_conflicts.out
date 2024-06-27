@@ -422,7 +422,7 @@ BEGIN;
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-  1001
+     1
 (1 row)
 
 ROLLBACK;

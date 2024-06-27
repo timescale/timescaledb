@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\set ANALYZE 'EXPLAIN (analyze, costs off, timing off, summary off)'
 -- test constraint exclusion with prepared statements and generic plans
 CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
 SELECT table_name FROM create_hypertable('i3719', 'time');
@@ -161,9 +162,9 @@ ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 QUERY PLAN
  Append (actual rows=92 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=24 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-   ->  Seq Scan on _hyper_X_X_chunk (actual rows=5 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=27 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+   ->  Seq Scan on _hyper_X_X_chunk (actual rows=2 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
 (6 rows)
@@ -202,3 +203,58 @@ SELECT FROM row_locks FOR KEY SHARE;
 ERROR:  locking compressed tuples is not supported
 \set ON_ERROR_STOP 1
 DROP TABLE row_locks;
+CREATE TABLE lazy_decompress(time timestamptz not null, device text, value float, primary key (device,time));
+SELECT table_name FROM create_hypertable('lazy_decompress', 'time');
+   table_name    
+ lazy_decompress
+(1 row)
+
+ALTER TABLE lazy_decompress SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+NOTICE:  default order by for hypertable "lazy_decompress" is set to ""time" DESC"
+INSERT INTO lazy_decompress SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', i FROM generate_series(1,6000) g(i);
+SELECT count(compress_chunk(c)) FROM show_chunks('lazy_decompress') c;
+ count 
+     1
+(1 row)
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on lazy_decompress (actual rows=0 loops=1)
+         Conflict Resolution: NOTHING
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(8 rows)
+
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT(time,device) DO UPDATE SET value=EXCLUDED.value; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on lazy_decompress (actual rows=0 loops=1)
+         Conflict Resolution: UPDATE
+         Conflict Arbiter Indexes: lazy_decompress_pkey
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(9 rows)
+
+-- should decompress 1 batch cause there is match
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Insert on lazy_decompress (actual rows=0 loops=1)
+         Conflict Resolution: NOTHING
+         Tuples Inserted: 0
+         Conflicting Tuples: 1
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(10 rows)
+
