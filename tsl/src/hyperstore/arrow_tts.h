@@ -69,8 +69,13 @@ typedef struct ArrowTupleTableSlot
 	uint16 total_row_count;
 	ArrowColumnCache arrow_cache;
 
-	/* Decompress only these columns. If no columns are set, all columns will
-	 * be decompressed. */
+	/* If referenced_attrs_valid is true, decompress only the columns in
+	 * referenced_attrs. If it is false, no analysis was made of referenced
+	 * attributes, so all columns need to be decompressed to be safe. Note, it
+	 * is not possible to use referenced_attrs==NULL as a way to indicate that
+	 * analysis did not run since an empty set (NULL) is a valid state of the
+	 * set after analysis.  */
+	bool referenced_attrs_valid;
 	Bitmapset *referenced_attrs;
 	Bitmapset *segmentby_attrs;
 	Bitmapset *valid_attrs;	 /* Per-column validity up to "tts_nvalid" */
