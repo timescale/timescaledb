@@ -69,6 +69,55 @@ where (created_at, metric_id) in (select created_at, metric_id from to_update);
 select * from :hypertable where humidity = 200.0 order by metric_id;
 commit;
 
+-- Test update of a segment-by column. The selection is to make sure
+-- that we have a mix of compressed and uncompressed tuples.
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :hypertable
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+order by metric_id;
+
+update :hypertable set location_id = 66
+where (created_at, metric_id) in (select created_at, metric_id from to_update);
+
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :hypertable
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+order by metric_id;
+
+-- Compress all chunks again before testing RETURNING
+select compress_chunk(show_chunks(:'hypertable'), compress_using => 'hyperstore');
+
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :hypertable
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+order by metric_id;
+
+-- Update a table and return values. This is just to check that the
+-- updated values are returned properly and not corrupted.
+update :hypertable set location_id = 99
+where (created_at, metric_id) in (select created_at, metric_id from to_update)
+returning _timescaledb_debug.is_compressed_tid(ctid), *;
+
+-- Test update of a segment-by column directly on the chunk. This
+-- should fail for compressed rows even for segment-by columns.
+select compress_chunk(:'chunk1', compress_using => 'hyperstore');
+
+select metric_id from :chunk1 limit 1 \gset
+
+select _timescaledb_debug.is_compressed_tid(ctid), metric_id, created_at
+from :chunk1
+where metric_id = :metric_id;
+
+\set ON_ERROR_STOP 0
+update :chunk1 set location_id = 77 where metric_id = :metric_id;
+
+update :chunk1 set location_id = 88
+where metric_id = :metric_id
+returning _timescaledb_debug.is_compressed_tid(ctid), *;
+\set ON_ERROR_STOP 1
+
 -----------------------------
 -- Test update from cursor --
 -----------------------------
