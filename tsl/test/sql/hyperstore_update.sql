@@ -100,11 +100,15 @@ select ch as chunk
 from show_chunks(:'hypertable') ch limit 1 \gset
 vacuum full :chunk;
 
+-- Pick a tuple in the compressed chunk and get the values from that
+-- tuple for the cursor.
+select metric_id from :chunk offset 5 limit 1 \gset
+
 \x on
 select _timescaledb_debug.is_compressed_tid(ctid), *
-from :hypertable order by created_at offset 898 limit 1;
+from :hypertable where metric_id = :metric_id;
 select created_at, location_id, owner_id, device_id, humidity
-from :hypertable order by created_at offset 898 limit 1 \gset
+from :hypertable where metric_id = :metric_id \gset
 \x off
 
 begin;
@@ -119,9 +123,9 @@ select humidity from :hypertable where created_at = :'created_at' and humidity =
 
 \x on
 select _timescaledb_debug.is_compressed_tid(ctid), *
-from :hypertable order by created_at offset 898 limit 1;
+from :hypertable where metric_id = :metric_id;
 select created_at, location_id, owner_id, device_id, humidity
-from :hypertable order by created_at offset 898 limit 1 \gset
+from :hypertable where metric_id = :metric_id \gset
 \x off
 
 -- Test doing the update directly on the chunk. The data should now be

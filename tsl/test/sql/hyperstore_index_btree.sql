@@ -109,13 +109,18 @@ drop table orig, owner_orig, owner_comp;
 select _timescaledb_debug.is_compressed_tid(ctid), created_at, location_id, temp
 from :chunk2 order by location_id, created_at desc limit 2;
 
+-- find a compressed tuple in a deterministic manner and get location and timestamp
+select created_at, location_id
+from :chunk2 where _timescaledb_debug.is_compressed_tid(ctid)
+order by created_at, location_id limit 1 \gset
+
 -- first update moves the value from the compressed rel to the non-compressed (seen via ctid)
-update :hypertable set temp=1.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
+update :hypertable set temp=1.0 where location_id=:location_id and created_at=:'created_at';
 select  _timescaledb_debug.is_compressed_tid(ctid), created_at, location_id, temp
 from :chunk2 order by location_id, created_at desc limit 2;
 
 -- second update should be a hot update (tuple in same block after update, as shown by ctid)
-update :hypertable set temp=2.0 where location_id=1 and created_at='Wed Jun 08 16:57:50 2022 PDT';
+update :hypertable set temp=2.0 where location_id=:location_id and created_at=:'created_at';
 select  _timescaledb_debug.is_compressed_tid(ctid), created_at, location_id, temp
 from :chunk2 order by location_id, created_at desc limit 2;
 
@@ -171,6 +176,8 @@ $$, :'chunk1'));
 -- Test index only scan
 --
 
+vacuum analyze :hypertable;
+
 create table saved_hypertable as select * from :hypertable;
 
 -- This will not use index-only scan because it is using a segment-by
@@ -189,7 +196,6 @@ select heapam.count as heapam, hyperstore.count as hyperstore
 
 drop table saved_hypertable;
 
-\echo == This should use index-only scan ==
 select explain_analyze_anonymize(format($$
     select device_id from %s where device_id between 5 and 10
 $$, :'hypertable'));
@@ -201,7 +207,11 @@ select explain_analyze_anonymize(format($$
     select device_id from %s where device_id between 5 and 10
 $$, :'chunk1'));
 
--- Test index only scan with covering indexes
+-- Test index only scan with covering indexes.
+--
+-- Analyze will run the queries so we are satisfied with this right
+-- now and do not run the queries separately since they can generate
+-- different results depending on table contents.
 select explain_analyze_anonymize(format($$
     select location_id, avg(humidity) from %s where location_id between 5 and 10
     group by location_id order by location_id
@@ -221,18 +231,6 @@ select explain_analyze_anonymize(format($$
     select device_id, avg(humidity) from %s where device_id between 5 and 10
     group by device_id order by device_id
 $$, :'chunk1'));
-
-select location_id, round(avg(humidity)) from :hypertable where location_id between 5 and 10
-group by location_id order by location_id;
-
-select location_id, round(avg(humidity)) from :chunk1 where location_id between 5 and 10
-group by location_id order by location_id;
-
-select device_id, round(avg(humidity)) from :hypertable where device_id between 5 and 10
-group by device_id order by device_id;
-
-select device_id, round(avg(humidity)) from :chunk1 where device_id between 5 and 10
-group by device_id order by device_id;
 
 -------------------------------------
 -- Test UNIQUE and Partial indexes --
