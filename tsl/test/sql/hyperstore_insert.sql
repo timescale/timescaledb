@@ -120,15 +120,33 @@ drop table orig, curr;
 -- for DO UPDATE, DO NOTHING, and plain inserts, we test this as well
 -- to be safe.
 
--- Insert of a value that exists in the compressed part.
+-- find a compressed tuple in a deterministic manner and get the
+-- timestamp. Make sure to find one in chunk1 since we will use that
+-- later.
+select created_at
+from :chunk1 where _timescaledb_debug.is_compressed_tid(ctid)
+order by created_at limit 1 \gset
+
+select * from :hypertable where created_at = :'created_at';
+
+-- Insert of a value that exists in the compressed part should work
+-- when done through the hypertable.
 insert into :hypertable(created_at, location_id, device_id, temp, humidity)
-values ('2022-06-01 00:00:00', 11, 1, 1.0, 1.0)
+values (:'created_at', 11, 1, 1.0, 1.0)
 on conflict (created_at) do update set location_id = 12;
 
--- TODO(timescale/timescaledb-private#1087): Inserts directly into chunks do not work.
+select * from :hypertable where created_at = :'created_at';
+
+-- TODO(timescale/timescaledb-private#1087): Inserts directly into a
+-- compressed tuple in a chunk do not work.
+
+select created_at
+from :chunk1 where _timescaledb_debug.is_compressed_tid(ctid)
+order by created_at limit 1 \gset
+
 \set ON_ERROR_STOP 0
 insert into :chunk1(created_at, location_id, device_id, temp, humidity)
-values ('2022-06-01  00:00:10', 13, 1, 1.0, 1.0)
+values (:'created_at', 13, 1, 1.0, 1.0)
 on conflict (created_at) do update set location_id = 14;
 \set ON_ERROR_STOP 1
 

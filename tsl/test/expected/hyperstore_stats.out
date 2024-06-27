@@ -84,7 +84,7 @@ select setseed(1);
 -- seconds. Any other timestamps are inserted as part of the test.
 insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
@@ -153,20 +153,20 @@ select * from attrstats_compare;
 -- normal table and in the right ballpark
 explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-                       QUERY PLAN                       
---------------------------------------------------------
- Seq Scan on _hyper_1_1_chunk (actual rows=605 loops=1)
+                      QUERY PLAN                       
+-------------------------------------------------------
+ Seq Scan on _hyper_1_1_chunk (actual rows=19 loops=1)
    Filter: (location_id = 1)
-   Rows Removed by Filter: 5515
+   Rows Removed by Filter: 185
 (3 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
-                    QUERY PLAN                     
----------------------------------------------------
- Seq Scan on normaltable (actual rows=605 loops=1)
+                    QUERY PLAN                    
+--------------------------------------------------
+ Seq Scan on normaltable (actual rows=19 loops=1)
    Filter: (location_id = 1)
-   Rows Removed by Filter: 5515
+   Rows Removed by Filter: 185
 (3 rows)
 
 -- Changing to hyperstore will update relstats since it process all
@@ -179,8 +179,8 @@ create index normaltable_location_id_idx on normaltable (location_id);
 select * from relstats_compare;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_1_chunk |      6120
- normaltable                            |      6120
+ _timescaledb_internal._hyper_1_1_chunk |       204
+ normaltable                            |       204
 (2 rows)
 
 select * from attrstats_compare;
@@ -195,24 +195,24 @@ drop index normaltable_location_id_idx;
 select count(*) from :chunk1 where location_id = 1;
  count 
 -------
-   605
+    19
 (1 row)
 
 explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
- Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=605 loops=1)
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=19 loops=1)
    Scankey: (location_id = 1)
 (2 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
-                    QUERY PLAN                     
----------------------------------------------------
- Seq Scan on normaltable (actual rows=605 loops=1)
+                    QUERY PLAN                    
+--------------------------------------------------
+ Seq Scan on normaltable (actual rows=19 loops=1)
    Filter: (location_id = 1)
-   Rows Removed by Filter: 5515
+   Rows Removed by Filter: 185
 (3 rows)
 
 -- ANALYZE directly on chunk
@@ -222,8 +222,8 @@ analyze normaltable;
 select * from relstats_compare;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_1_chunk |      6120
- normaltable                            |      6120
+ _timescaledb_internal._hyper_1_1_chunk |       204
+ normaltable                            |       204
 (2 rows)
 
 select * from attrstats_same;
@@ -235,19 +235,19 @@ select * from attrstats_same;
 -- Check that the estimated rows is now correct based on stats (reltuples)
 explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-                                QUERY PLAN                                
---------------------------------------------------------------------------
- Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=605 loops=1)
+                               QUERY PLAN                                
+-------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=19 loops=1)
    Scankey: (location_id = 1)
 (2 rows)
 
 explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
-                    QUERY PLAN                     
----------------------------------------------------
- Seq Scan on normaltable (actual rows=605 loops=1)
+                    QUERY PLAN                    
+--------------------------------------------------
+ Seq Scan on normaltable (actual rows=19 loops=1)
    Filter: (location_id = 1)
-   Rows Removed by Filter: 5515
+   Rows Removed by Filter: 185
 (3 rows)
 
 delete from :chunk1 where location_id=1;
@@ -255,8 +255,8 @@ delete from normaltable where location_id=1;
 select * from relstats_compare;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_1_chunk |      6120
- normaltable                            |      6120
+ _timescaledb_internal._hyper_1_1_chunk |       204
+ normaltable                            |       204
 (2 rows)
 
 select * from attrstats_same;
@@ -275,8 +275,8 @@ create index normaltable_location_id_idx on normaltable (location_id);
 select * from relstats_compare;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_1_chunk |      5515
- normaltable                            |      5515
+ _timescaledb_internal._hyper_1_1_chunk |       185
+ normaltable                            |       185
 (2 rows)
 
 vacuum :chunk1;
@@ -284,8 +284,8 @@ vacuum normaltable;
 select * from relstats_compare;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_1_chunk |      5515
- normaltable                            |      5515
+ _timescaledb_internal._hyper_1_1_chunk |       185
+ normaltable                            |       185
 (2 rows)
 
 select * from attrstats_same;
@@ -299,8 +299,8 @@ vacuum analyze normaltable;
 select * from relstats_compare;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_1_chunk |      5515
- normaltable                            |      5515
+ _timescaledb_internal._hyper_1_1_chunk |       185
+ normaltable                            |       185
 (2 rows)
 
 select * from attrstats_same;
@@ -316,7 +316,7 @@ update :hypertable set device_id = 2 where device_id = 1;
 select * from relstats where relid = :'chunk2'::regclass;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_2_chunk |     60480
+ _timescaledb_internal._hyper_1_2_chunk |      2016
 (1 row)
 
 select * from attrstats where relid = :'chunk2'::regclass;
@@ -327,14 +327,14 @@ select * from attrstats where relid = :'chunk2'::regclass;
 select count(*) from :chunk2;
  count 
 -------
- 60480
+  2016
 (1 row)
 
 analyze :hypertable;
 select * from relstats where relid = :'chunk2'::regclass;
                  relid                  | reltuples 
 ----------------------------------------+-----------
- _timescaledb_internal._hyper_1_2_chunk |     60480
+ _timescaledb_internal._hyper_1_2_chunk |      2016
 (1 row)
 
 -- Just show that there are attrstats via a count avoid flaky output

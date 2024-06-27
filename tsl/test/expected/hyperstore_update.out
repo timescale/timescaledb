@@ -85,7 +85,7 @@ select setseed(1);
 -- seconds. Any other timestamps are inserted as part of the test.
 insert into :hypertable (created_at, location_id, device_id, owner_id, temp, humidity)
 select t, ceil(random()*10), ceil(random()*30), ceil(random() * 5), random()*40, random()*100
-from generate_series('2022-06-01'::timestamptz, '2022-07-01', '10s') t;
+from generate_series('2022-06-01'::timestamptz, '2022-07-01', '5m') t;
 alter table :hypertable set (
 	  timescaledb.compress,
 	  timescaledb.compress_orderby = 'created_at',
@@ -146,7 +146,7 @@ order by relname;
 select * from :hypertable order by created_at offset 577 limit 1;
 -[ RECORD 1 ]-----------------------------
 metric_id   | 578
-created_at  | Wed Jun 01 01:36:10 2022 PDT
+created_at  | Fri Jun 03 00:05:00 2022 PDT
 location_id | 5
 owner_id    | 4
 device_id   | 19
@@ -163,17 +163,17 @@ update :hypertable set temp = 100.0 where created_at = :'created_at';
 ---------------------------------------------------------------------------------------------------------
  Custom Scan (HypertableModify)
    ->  Update on readings
-         Update on _hyper_1_1_chunk readings_1
+         Update on _hyper_1_2_chunk readings_1
          ->  Result
-               ->  Index Scan using "1_1_readings_created_at_key" on _hyper_1_1_chunk readings_1
-                     Index Cond: (created_at = 'Wed Jun 01 01:36:10 2022 PDT'::timestamp with time zone)
+               ->  Index Scan using "2_2_readings_created_at_key" on _hyper_1_2_chunk readings_1
+                     Index Cond: (created_at = 'Fri Jun 03 00:05:00 2022 PDT'::timestamp with time zone)
 (6 rows)
 
 \x on
 select * from :hypertable where created_at = :'created_at';
 -[ RECORD 1 ]-----------------------------
 metric_id   | 578
-created_at  | Wed Jun 01 01:36:10 2022 PDT
+created_at  | Fri Jun 03 00:05:00 2022 PDT
 location_id | 5
 owner_id    | 4
 device_id   | 19
@@ -184,7 +184,7 @@ update :hypertable set temp = 100.0 where created_at = :'created_at';
 select * from :hypertable where created_at = :'created_at';
 -[ RECORD 1 ]-----------------------------
 metric_id   | 578
-created_at  | Wed Jun 01 01:36:10 2022 PDT
+created_at  | Fri Jun 03 00:05:00 2022 PDT
 location_id | 5
 owner_id    | 4
 device_id   | 19
@@ -233,7 +233,7 @@ update :hypertable set humidity = 110.0 where location_id = :location_id;
 select count(*) from :hypertable where humidity = 110.0;
  count 
 -------
- 25888
+   832
 (1 row)
 
 -- Make sure there is a mix of compressed and non-compressed rows for
@@ -253,17 +253,17 @@ order by metric_id for update;
 select * from to_update order by metric_id;
  is_compressed_tid | metric_id |          created_at          
 -------------------+-----------+------------------------------
- f                 |      6330 | Wed Jun 01 17:34:50 2022 PDT
- t                 |      6331 | Wed Jun 01 17:35:00 2022 PDT
- t                 |      6332 | Wed Jun 01 17:35:10 2022 PDT
- f                 |      6333 | Wed Jun 01 17:35:20 2022 PDT
- t                 |      6334 | Wed Jun 01 17:35:30 2022 PDT
- t                 |      6335 | Wed Jun 01 17:35:40 2022 PDT
- t                 |      6336 | Wed Jun 01 17:35:50 2022 PDT
- t                 |      6337 | Wed Jun 01 17:36:00 2022 PDT
- t                 |      6338 | Wed Jun 01 17:36:10 2022 PDT
- t                 |      6339 | Wed Jun 01 17:36:20 2022 PDT
- t                 |      6340 | Wed Jun 01 17:36:30 2022 PDT
+ f                 |      6330 | Wed Jun 22 23:25:00 2022 PDT
+ t                 |      6331 | Wed Jun 22 23:30:00 2022 PDT
+ t                 |      6332 | Wed Jun 22 23:35:00 2022 PDT
+ f                 |      6333 | Wed Jun 22 23:40:00 2022 PDT
+ t                 |      6334 | Wed Jun 22 23:45:00 2022 PDT
+ t                 |      6335 | Wed Jun 22 23:50:00 2022 PDT
+ t                 |      6336 | Wed Jun 22 23:55:00 2022 PDT
+ t                 |      6337 | Thu Jun 23 00:00:00 2022 PDT
+ t                 |      6338 | Thu Jun 23 00:05:00 2022 PDT
+ t                 |      6339 | Thu Jun 23 00:10:00 2022 PDT
+ t                 |      6340 | Thu Jun 23 00:15:00 2022 PDT
 (11 rows)
 
 update :hypertable set humidity = 200.0, temp = 500.0
@@ -271,17 +271,17 @@ where (created_at, metric_id) in (select created_at, metric_id from to_update);
 select * from :hypertable where humidity = 200.0 order by metric_id;
  metric_id |          created_at          | location_id | owner_id | device_id | temp | humidity 
 -----------+------------------------------+-------------+----------+-----------+------+----------
-      6330 | Wed Jun 01 17:34:50 2022 PDT |           5 |        4 |         6 |  500 |      200
-      6331 | Wed Jun 01 17:35:00 2022 PDT |           9 |        3 |        12 |  500 |      200
-      6332 | Wed Jun 01 17:35:10 2022 PDT |           1 |        1 |        15 |  500 |      200
-      6333 | Wed Jun 01 17:35:20 2022 PDT |           5 |        1 |        24 |  500 |      200
-      6334 | Wed Jun 01 17:35:30 2022 PDT |           7 |        5 |        25 |  500 |      200
-      6335 | Wed Jun 01 17:35:40 2022 PDT |           4 |        4 |        10 |  500 |      200
-      6336 | Wed Jun 01 17:35:50 2022 PDT |           6 |        5 |        23 |  500 |      200
-      6337 | Wed Jun 01 17:36:00 2022 PDT |           2 |        3 |         1 |  500 |      200
-      6338 | Wed Jun 01 17:36:10 2022 PDT |           7 |        3 |        27 |  500 |      200
-      6339 | Wed Jun 01 17:36:20 2022 PDT |           1 |        1 |        24 |  500 |      200
-      6340 | Wed Jun 01 17:36:30 2022 PDT |          10 |        3 |        21 |  500 |      200
+      6330 | Wed Jun 22 23:25:00 2022 PDT |           5 |        4 |         6 |  500 |      200
+      6331 | Wed Jun 22 23:30:00 2022 PDT |           9 |        3 |        12 |  500 |      200
+      6332 | Wed Jun 22 23:35:00 2022 PDT |           1 |        1 |        15 |  500 |      200
+      6333 | Wed Jun 22 23:40:00 2022 PDT |           5 |        1 |        24 |  500 |      200
+      6334 | Wed Jun 22 23:45:00 2022 PDT |           7 |        5 |        25 |  500 |      200
+      6335 | Wed Jun 22 23:50:00 2022 PDT |           4 |        4 |        10 |  500 |      200
+      6336 | Wed Jun 22 23:55:00 2022 PDT |           6 |        5 |        23 |  500 |      200
+      6337 | Thu Jun 23 00:00:00 2022 PDT |           2 |        3 |         1 |  500 |      200
+      6338 | Thu Jun 23 00:05:00 2022 PDT |           7 |        3 |        27 |  500 |      200
+      6339 | Thu Jun 23 00:10:00 2022 PDT |           1 |        1 |        24 |  500 |      200
+      6340 | Thu Jun 23 00:15:00 2022 PDT |          10 |        3 |        21 |  500 |      200
 (11 rows)
 
 commit;
@@ -295,7 +295,7 @@ from :hypertable order by created_at offset 898 limit 1;
 -[ RECORD 1 ]-----+-----------------------------
 is_compressed_tid | f
 metric_id         | 899
-created_at        | Wed Jun 01 02:29:40 2022 PDT
+created_at        | Sat Jun 04 02:50:00 2022 PDT
 location_id       | 4
 owner_id          | 1
 device_id         | 5
@@ -331,28 +331,31 @@ where created_at = :'created_at' and humidity = 200.0;
 select ch as chunk
 from show_chunks(:'hypertable') ch limit 1 \gset
 vacuum full :chunk;
+-- Pick a tuple in the compressed chunk and get the values from that
+-- tuple for the cursor.
+select metric_id from :chunk offset 5 limit 1 \gset
 \x on
 select _timescaledb_debug.is_compressed_tid(ctid), *
-from :hypertable order by created_at offset 898 limit 1;
+from :hypertable where metric_id = :metric_id;
 -[ RECORD 1 ]-----+-----------------------------
 is_compressed_tid | t
-metric_id         | 899
-created_at        | Wed Jun 01 02:29:40 2022 PDT
-location_id       | 4
-owner_id          | 1
-device_id         | 5
-temp              | 32.7528003907232
-humidity          | 200
+metric_id         | 50
+created_at        | Wed Jun 01 04:05:00 2022 PDT
+location_id       | 1
+owner_id          | 2
+device_id         | 18
+temp              | 6.16907446378801
+humidity          | 33.7603
 
 select created_at, location_id, owner_id, device_id, humidity
-from :hypertable order by created_at offset 898 limit 1 \gset
+from :hypertable where metric_id = :metric_id \gset
 \x off
 begin;
 declare curs1 cursor for select humidity from :hypertable where created_at = :'created_at' for update;
 fetch forward 1 from curs1;
  humidity 
 ----------
-      200
+  33.7603
 (1 row)
 
 update :hypertable set humidity = 400.0 where current of curs1;
@@ -367,19 +370,19 @@ select humidity from :hypertable where created_at = :'created_at' and humidity =
 
 \x on
 select _timescaledb_debug.is_compressed_tid(ctid), *
-from :hypertable order by created_at offset 898 limit 1;
+from :hypertable where metric_id = :metric_id;
 -[ RECORD 1 ]-----+-----------------------------
 is_compressed_tid | f
-metric_id         | 899
-created_at        | Wed Jun 01 02:29:40 2022 PDT
-location_id       | 4
-owner_id          | 1
-device_id         | 5
-temp              | 32.7528003907232
-humidity          | 200
+metric_id         | 50
+created_at        | Wed Jun 01 04:05:00 2022 PDT
+location_id       | 1
+owner_id          | 2
+device_id         | 18
+temp              | 6.16907446378801
+humidity          | 33.7603
 
 select created_at, location_id, owner_id, device_id, humidity
-from :hypertable order by created_at offset 898 limit 1 \gset
+from :hypertable where metric_id = :metric_id \gset
 \x off
 -- Test doing the update directly on the chunk. The data should now be
 -- decompressed again due to DML decompression in the previous query.
@@ -388,7 +391,7 @@ declare curs1 cursor for select humidity from :chunk where created_at = :'create
 fetch forward 1 from curs1;
  humidity 
 ----------
-      200
+  33.7603
 (1 row)
 
 update :chunk set humidity = 400.0 where current of curs1;
