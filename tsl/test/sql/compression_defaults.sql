@@ -215,7 +215,7 @@ SELECT public.create_hypertable('public.t1', 'time');
 ALTER TABLE public.t1 SET (timescaledb.compress, timescaledb.compress_orderby = 'segment_value');
 RESET search_path;
 
--- test same named objects in different schemas with default orderbys
+-- test same named objects in different schemas with default orderbys/segmentbys
 \c :TEST_DBNAME :ROLE_SUPERUSER
 
 CREATE SCHEMA schema1;
@@ -223,6 +223,8 @@ CREATE SCHEMA schema2;
 GRANT ALL ON SCHEMA schema1, schema2 to public;
 
 \c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+-- test the case with default orderbys
 CREATE TABLE schema1.page_events2 (
  time        TIMESTAMPTZ         NOT NULL,
  page        TEXT              NOT NULL
@@ -243,4 +245,31 @@ SELECT create_hypertable('schema2.page_events2', 'time');
 ALTER TABLE schema2.page_events2 SET (
  timescaledb.compress,
  timescaledb.compress_segmentby = 'page'
+);
+DROP TABLE schema1.page_events2;
+DROP TABLE schema2.page_events2;
+
+-- test the case with default segmentbys
+CREATE TABLE schema1.page_events2 (
+ time        TIMESTAMPTZ         NOT NULL,
+ id          BIGSERIAL           NOT NULL,
+ page        TEXT                NOT NULL
+);
+
+SELECT create_hypertable('schema1.page_events2', 'time');
+ALTER TABLE schema1.page_events2 SET (
+ timescaledb.compress,
+ timescaledb.compress_orderby = 'time desc, id asc'
+);
+
+CREATE TABLE schema2.page_events2 (
+ time        TIMESTAMPTZ         NOT NULL UNIQUE,
+ id          BIGSERIAL           NOT NULL,
+ page        TEXT                NOT NULL
+);
+
+SELECT create_hypertable('schema2.page_events2', 'time');
+ALTER TABLE schema2.page_events2 SET (
+ timescaledb.compress,
+ timescaledb.compress_orderby = 'time desc'
 );
