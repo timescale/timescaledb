@@ -1971,7 +1971,7 @@ enum Anum_compressed_info
 extern Datum
 tsl_compressed_data_info(PG_FUNCTION_ARGS)
 {
-	const CompressedDataHeader *header = (CompressedDataHeader *) PG_GETARG_VARLENA_P(0);
+	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
 	TupleDesc tupdesc;
 	HeapTuple tuple;
 	bool has_nulls = false;
@@ -2049,7 +2049,7 @@ compression_get_default_algorithm(Oid typeoid)
 
 		default:
 		{
-			/* use dictitionary if possible, otherwise use array */
+			/* use dictionary if possible, otherwise use array */
 			TypeCacheEntry *tentry =
 				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
 			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)
