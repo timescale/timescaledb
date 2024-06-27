@@ -5,12 +5,14 @@
  */
 #include <postgres.h>
 #include <access/attnum.h>
+#include <access/skey.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
 #include <nodes/extensible.h>
 #include <nodes/nodeFuncs.h>
 #include <nodes/pathnodes.h>
+#include <nodes/pg_list.h>
 #include <optimizer/cost.h>
 #include <optimizer/optimizer.h>
 #include <optimizer/pathnode.h>
@@ -107,25 +109,45 @@ vector_qual_state_init(VectorQualState *vqstate, ExprContext *econtext)
 }
 
 /*
- * Extract clauses that can be used as scan keys from the scan qualifiers.
+ * Utility function to extract quals that can be used as scankeys. The
+ * remaining "normal" quals are optionally collected in the corresponding
+ * argument.
  *
- * Remaining qualifiers will be used as filters for the ColumnarScan.
+ * Returns:
+ *
+ * 1. A list of scankey quals if scankeys is NULL, or
+ *
+ * 2. NIL if scankeys is non-NULL.
+ *
+ * Thus, this function is designed to be called over two passes: one at plan
+ * time to split the quals into scankey quals and remaining quals, and one at
+ * execution time to populate a scankey array with the scankey quals found in
+ * the first pass.
+ *
+ * The scankey quals returned in pass 1 is used for EXPLAIN.
  */
-static ScanKey
-extract_scan_keys(const HyperstoreInfo *hsinfo, Scan *scan, int *num_keys, List **scankey_quals)
+static List *
+process_scan_key_quals(const HyperstoreInfo *hsinfo, Index relid, const List *quals,
+					   List **remaining_quals, ScanKey scankeys, unsigned scankeys_capacity)
 {
+	List *scankey_quals = NIL;
+	unsigned nkeys = 0;
 	ListCell *lc;
-	ScanKey scankeys = palloc0(sizeof(ScanKeyData) * list_length(scan->plan.qual));
-	int nkeys = 0;
-	const Index relid = scan->scanrelid;
 
-	foreach (lc, scan->plan.qual)
+	Assert(scankeys == NULL || (scankeys_capacity >= (unsigned) list_length(quals)));
+
+	foreach (lc, quals)
 	{
 		Expr *qual = lfirst(lc);
+		bool scankey_found = false;
 
 		/* ignore volatile expressions */
 		if (contain_volatile_functions((Node *) qual))
+		{
+			if (remaining_quals != NULL)
+				*remaining_quals = lappend(*remaining_quals, qual);
 			continue;
+		}
 
 		switch (nodeTag(qual))
 		{
@@ -193,6 +215,7 @@ extract_scan_keys(const HyperstoreInfo *hsinfo, Scan *scan, int *num_keys, List 
 						Oid op_lefttype;
 						Oid op_righttype;
 
+						scankey_found = true;
 						get_op_opfamily_properties(opno,
 												   tce->btree_opf,
 												   false,
@@ -202,39 +225,50 @@ extract_scan_keys(const HyperstoreInfo *hsinfo, Scan *scan, int *num_keys, List 
 
 						Assert(relvar != NULL);
 
-						ScanKeyEntryInitialize(&scankeys[nkeys++],
-											   0 /* flags */,
-											   relvar->varattno,	/* attribute number to scan */
-											   op_strategy,			/* op's strategy */
-											   op_righttype,		/* strategy subtype */
-											   opexpr->inputcollid, /* collation */
-											   opexpr->opfuncid,	/* reg proc to use */
-											   scanvalue);			/* constant */
-
-						/* Append to quals list for explain and delete it from
-						 * the list of qualifiers. */
-						*scankey_quals = lappend(*scankey_quals, qual);
-						scan->plan.qual = foreach_delete_current(scan->plan.qual, lc);
+						if (scankeys != NULL)
+						{
+							ScanKeyEntryInitialize(&scankeys[nkeys++],
+												   0 /* flags */,
+												   relvar->varattno, /* attribute number to scan */
+												   op_strategy,		 /* op's strategy */
+												   op_righttype,	 /* strategy subtype */
+												   opexpr->inputcollid, /* collation */
+												   opexpr->opfuncid,	/* reg proc to use */
+												   scanvalue);			/* constant */
+						}
+						else
+						{
+							scankey_quals = lappend(scankey_quals, qual);
+						}
 					}
 				}
 				break;
 			}
-
 			default:
 				break;
 		}
+
+		if (!scankey_found && remaining_quals != NULL)
+			*remaining_quals = lappend(*remaining_quals, qual);
 	}
 
-	if (nkeys > 0)
-	{
-		*num_keys = nkeys;
-		return scankeys;
-	}
+	return scankey_quals;
+}
 
-	*num_keys = 0;
-	pfree(scankeys);
+static List *
+extract_scankey_quals(const HyperstoreInfo *hsinfo, Index relid, const List *quals,
+					  List **remaining_quals)
+{
+	return process_scan_key_quals(hsinfo, relid, quals, remaining_quals, NULL, 0);
+}
 
-	return NULL;
+static ScanKey
+create_scankeys_from_quals(const HyperstoreInfo *hsinfo, Index relid, const List *quals)
+{
+	unsigned capacity = list_length(quals);
+	ScanKey scankeys = palloc0(sizeof(ScanKeyData) * capacity);
+	process_scan_key_quals(hsinfo, relid, quals, NULL, scankeys, capacity);
+	return scankeys;
 }
 
 /*
@@ -412,9 +446,6 @@ static void
 columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 {
 	ColumnarScanState *cstate = (ColumnarScanState *) state;
-	Scan *scan = (Scan *) state->ss.ps.plan;
-	Relation rel = state->ss.ss_currentRelation;
-	const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(rel);
 
 #if PG16_LT
 	/* Since PG16, one can specify state->slotOps to initialize a CustomScan
@@ -426,6 +457,7 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	 * relation. It is not necessary (or possible) to drop the existing slot
 	 * since it is registered in the tuple table and will be released when the
 	 * executor finishes. */
+	Relation rel = state->ss.ss_currentRelation;
 	ExecInitScanTupleSlot(estate,
 						  &state->ss,
 						  RelationGetDescr(rel),
@@ -435,10 +467,17 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 	 * ExecQual state for the new slot. */
 	ExecInitResultTypeTL(&state->ss.ps);
 	ExecAssignScanProjectionInfo(&state->ss);
-	state->ss.ps.qual = ExecInitQual(scan->plan.qual, (PlanState *) state);
+	state->ss.ps.qual = ExecInitQual(state->ss.ps.plan->qual, (PlanState *) state);
 #endif
 	vector_qual_state_init(&cstate->vqstate, state->ss.ps.ps_ExprContext);
-	cstate->scankeys = extract_scan_keys(hsinfo, scan, &cstate->nscankeys, &cstate->scankey_quals);
+
+	if (cstate->nscankeys > 0)
+	{
+		const HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(state->ss.ss_currentRelation);
+		Scan *scan = (Scan *) state->ss.ps.plan;
+		cstate->scankeys =
+			create_scankeys_from_quals(hsinfo, scan->scanrelid, cstate->scankey_quals);
+	}
 
 	PlannerGlobal glob = {
 		.boundParams = state->ss.ps.state->es_param_list_info,
@@ -581,9 +620,13 @@ columnar_scan_state_create(CustomScan *cscan)
 	cstate = (ColumnarScanState *) newNode(sizeof(ColumnarScanState), T_CustomScanState);
 	cstate->css.methods = &columnar_scan_state_methods;
 	cstate->vectorized_quals_orig = linitial(cscan->custom_exprs);
+	cstate->scankey_quals = lsecond(cscan->custom_exprs);
+	cstate->nscankeys = list_length(cstate->scankey_quals);
+	cstate->scankeys = NULL;
 #if PG16_GE
 	cstate->css.slotOps = &TTSOpsArrowTuple;
 #endif
+
 	return (Node *) cstate;
 }
 
@@ -627,6 +670,8 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 	HyperstoreInfo *hsinfo = RelationGetHyperstoreInfo(relation);
 	List *vectorized_quals = NIL;
 	List *nonvectorized_quals = NIL;
+	List *scankey_quals = NIL;
+	List *remaining_quals = NIL;
 	ListCell *lc;
 
 	VectorQualInfoHyperstore vqih = {
@@ -665,10 +710,20 @@ columnar_scan_plan_create(PlannerInfo *root, RelOptInfo *rel, CustomPath *best_p
 		}
 	}
 
-	RelationClose(relation);
+	/* Need to split the nonvectorized quals into scankey quals and remaining
+	 * quals before ExecInitQual() in CustomScanState::begin() since the qual
+	 * execution state is created from the remaining quals. Note that it is
+	 * not possible to create the scankeys themselves here because the only
+	 * way to pass those on to the scan state is via custom_private. And
+	 * anything that goes into custom_private needs to be a Node that is
+	 * printable with nodeToString(). */
+	scankey_quals =
+		extract_scankey_quals(vqih.hsinfo, rel->relid, nonvectorized_quals, &remaining_quals);
 
-	columnar_scan_plan->scan.plan.qual = nonvectorized_quals;
-	columnar_scan_plan->custom_exprs = list_make1(vectorized_quals);
+	columnar_scan_plan->scan.plan.qual = remaining_quals;
+	columnar_scan_plan->custom_exprs = list_make2(vectorized_quals, scankey_quals);
+
+	RelationClose(relation);
 
 	return &columnar_scan_plan->scan.plan;
 }
