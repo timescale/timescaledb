@@ -92,6 +92,8 @@ tts_arrow_init(TupleTableSlot *slot)
 	aslot->attrs_offset_map = NULL;
 	aslot->tuple_index = InvalidTupleIndex;
 	aslot->total_row_count = 0;
+	aslot->referenced_attrs_valid = false;
+
 	/*
 	 * Set up child slots, one for the non-compressed relation and one for the
 	 * compressed relation.
@@ -795,6 +797,7 @@ arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs)
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
+	aslot->referenced_attrs_valid = true;
 	TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, { aslot->referenced_attrs = bms_copy(attrs); });
 }
 
