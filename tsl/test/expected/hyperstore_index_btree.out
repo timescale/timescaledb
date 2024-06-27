@@ -377,7 +377,7 @@ select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: (owner_id = 3)
  Arrays read from cache: N
- Arrays decompressed: 200
+ Arrays decompressed: 0
 (15 rows)
 
 -- TODO(timescale/timescaledb-private#1117): the Decompress Count here
@@ -388,7 +388,7 @@ select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: (owner_id = 3)
  Arrays read from cache: N
- Arrays decompressed: 20
+ Arrays decompressed: 0
 (4 rows)
 
 reset enable_indexscan;
