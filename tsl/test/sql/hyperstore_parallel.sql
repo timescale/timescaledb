@@ -4,6 +4,10 @@
 
 \ir include/setup_hyperstore.sql
 
+-- Set parallel cost to zero to force parallel plans and avoid flaky test.
+set parallel_tuple_cost to 0;
+set parallel_setup_cost to 0;
+
 -- We need to drop the index to trigger parallel plans. Otherwise they
 -- will use the index.
 drop index hypertable_device_id_idx;
@@ -11,6 +15,7 @@ drop index hypertable_device_id_idx;
 -- Show parallel plan and count on uncompressed (non-hyperstore)
 -- hypertable
 set max_parallel_workers_per_gather=2;
+
 select explain_anonymize(format($$
        select device_id, count(*) from %s where device_id=1 group by device_id
 $$, :'hypertable'));
