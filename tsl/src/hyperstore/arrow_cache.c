@@ -163,7 +163,7 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 	 * should read all columns up to the attribute number.
 	 */
 	if (is_compressed_col(compressed_tupdesc, cattno) &&
-		(!aslot->referenced_attrs || bms_is_member(attno, aslot->referenced_attrs)))
+		(!aslot->referenced_attrs_valid || bms_is_member(attno, aslot->referenced_attrs)))
 	{
 		if (entry->arrow_arrays[attoff] == NULL)
 		{

@@ -394,8 +394,8 @@ select count(*) from :chunk where device = 1;
  Aggregate (actual rows=1 loops=1)
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=827 loops=1)
          Scankey: (device = 1)
- Arrays read from cache: 850
- Arrays decompressed: 2
+ Arrays read from cache: 0
+ Arrays decompressed: 0
 (5 rows)
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
