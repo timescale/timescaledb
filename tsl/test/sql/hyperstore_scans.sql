@@ -151,3 +151,30 @@ where location = 1::text
 order by time desc)
 except
 select * from chunk_saved;
+
+-- Test that a ColumnarScan doesn't decompress anything if there are
+-- no referenced columns, or the referenced column is a segmentby
+-- column
+set timescaledb.enable_columnarscan=true;
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select count(*) from :chunk where device = 1;
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select device from :chunk where device = 1;
+
+-- Using a non-segmentby column will decompress that column
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select count(*) from :chunk where location = 1::text;
+
+-- Testing same thing with SeqScan. It still decompresses in the
+-- count(*) case, although it shouldn't have to. So, probably an
+-- opportunity to optimize.
+set timescaledb.enable_columnarscan=false;
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select count(*) from :chunk where device = 1;
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select device from :chunk where device = 1;
+
+explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
+select count(*) from :chunk where location = 1::text;
