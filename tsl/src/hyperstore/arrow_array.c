@@ -72,8 +72,9 @@ arrow_release_buffers(ArrowArray *array)
 static ArrowArray *
 arrow_from_iterator_varlen(MemoryContext mcxt, DecompressionIterator *iterator, Oid typid)
 {
-	int64 offsets_capacity =
-		sizeof(int32) * 128; /* Starting capacity of the offset buffer in bytes */
+	/* Starting capacity of the offset buffer in bytes. This is probably an
+	 * over-estimation in some cases, but avoids reallocation for the common case. */
+	int64 offsets_capacity = sizeof(int32) * (TARGET_COMPRESSED_BATCH_SIZE + 1);
 	int64 data_capacity = 4 * offsets_capacity; /* Starting capacity of the data buffer in bytes */
 	int64 validity_capacity = sizeof(uint64) * (pad_to_multiple(64, offsets_capacity) / 64);
 	int32 endpos = 0; /* Can be 32 or 64 bits signed integers */
