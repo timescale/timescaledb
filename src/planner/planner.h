@@ -22,6 +22,9 @@
  */
 #define PLANNER_LOCATION_MAGIC -29811
 
+#define IS_UPDL_CMD(parse)                                                                         \
+	((parse)->commandType == CMD_UPDATE || (parse)->commandType == CMD_DELETE)
+
 typedef struct Chunk Chunk;
 typedef struct Hypertable Hypertable;
 typedef struct TimescaleDBPrivate

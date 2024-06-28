@@ -76,39 +76,25 @@ generate_series(1,3) device;
                                                     QUERY PLAN                                                     
 -------------------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Merge Append (actual rows=1 loops=1)
-         Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
-         ->  Sort (actual rows=1 loops=1)
+   ->  Gather Merge (actual rows=1 loops=1)
+         Workers Planned: 1
+         Workers Launched: 1
+         ->  Sort (actual rows=0 loops=2)
                Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
                Sort Method: top-N heapsort 
-               ->  Result (actual rows=81 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=81 loops=1)
-                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk."time")) DESC, _hyper_1_1_chunk.device
-               Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=54 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")) DESC, _hyper_1_2_chunk.device
-               Sort Method: top-N heapsort 
-               ->  Result (actual rows=84 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=84 loops=1)
-                           ->  Seq Scan on compress_hyper_2_5_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk."time")) DESC, _hyper_1_2_chunk.device
-               Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=57 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")) DESC, _hyper_1_3_chunk.device
-               Sort Method: top-N heapsort 
-               ->  Result (actual rows=30 loops=1)
-                     ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=30 loops=1)
-                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-         ->  Sort (actual rows=1 loops=1)
-               Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_3_chunk."time")) DESC, _hyper_1_3_chunk.device
-               Sort Method: top-N heapsort 
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
-(33 rows)
+               Worker 0:  Sort Method: quicksort 
+               ->  Result (actual rows=162 loops=2)
+                     ->  Append (actual rows=162 loops=2)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=40 loops=2)
+                                 ->  Parallel Seq Scan on compress_hyper_2_4_chunk (actual rows=2 loops=2)
+                           ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=27 loops=2)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=42 loops=2)
+                                 ->  Parallel Seq Scan on compress_hyper_2_5_chunk (actual rows=2 loops=2)
+                           ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=28 loops=2)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=15 loops=2)
+                                 ->  Parallel Seq Scan on compress_hyper_2_6_chunk (actual rows=2 loops=2)
+                           ->  Parallel Seq Scan on _hyper_1_3_chunk (actual rows=9 loops=2)
+(19 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time desc limit 10;
                                              QUERY PLAN                                             
@@ -148,48 +134,32 @@ generate_series(1,3) device;
 (32 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed ORDER BY time_bucket('2d',time) DESC LIMIT 1;
-                                                QUERY PLAN                                                
-----------------------------------------------------------------------------------------------------------
+                                                QUERY PLAN                                                 
+-----------------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
-   ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
-         Order: time_bucket('@ 2 days'::interval, ht_metrics_compressed."time") DESC
-         ->  Merge Append (actual rows=1 loops=1)
+   ->  Gather Merge (actual rows=1 loops=1)
+         Workers Planned: 1
+         Workers Launched: 1
+         ->  Sort (actual rows=0 loops=2)
                Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
-                     Sort Method: top-N heapsort 
-                     ->  Result (actual rows=30 loops=1)
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=30 loops=1)
-                                 ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-               ->  Sort (actual rows=1 loops=1)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_3_chunk."time")) DESC
-                     Sort Method: top-N heapsort 
-                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=18 loops=1)
-         ->  Merge Append (never executed)
-               Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
-                     ->  Result (never executed)
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
-                                 ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_2_chunk."time")) DESC
-                     ->  Seq Scan on _hyper_1_2_chunk (never executed)
-         ->  Merge Append (never executed)
-               Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
-                     ->  Result (never executed)
-                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
-                                 ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
-               ->  Sort (never executed)
-                     Sort Key: (time_bucket('@ 2 days'::interval, _hyper_1_1_chunk."time")) DESC
-                     ->  Seq Scan on _hyper_1_1_chunk (never executed)
-(35 rows)
+               Sort Method: top-N heapsort 
+               Worker 0:  Sort Method: quicksort 
+               ->  Result (actual rows=162 loops=2)
+                     ->  Append (actual rows=162 loops=2)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=15 loops=2)
+                                 ->  Parallel Seq Scan on compress_hyper_2_6_chunk (actual rows=2 loops=2)
+                           ->  Parallel Seq Scan on _hyper_1_3_chunk (actual rows=9 loops=2)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (actual rows=42 loops=2)
+                                 ->  Parallel Seq Scan on compress_hyper_2_5_chunk (actual rows=2 loops=2)
+                           ->  Parallel Seq Scan on _hyper_1_2_chunk (actual rows=28 loops=2)
+                           ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=40 loops=2)
+                                 ->  Parallel Seq Scan on compress_hyper_2_4_chunk (actual rows=2 loops=2)
+                           ->  Parallel Seq Scan on _hyper_1_1_chunk (actual rows=27 loops=2)
+(19 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time DESC LIMIT 1;
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time" DESC
@@ -200,8 +170,8 @@ generate_series(1,3) device;
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (actual rows=30 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_6_chunk (actual rows=3 loops=1)
-                                 Index Cond: (device = ANY ('{1,2,3}'::integer[]))
+                           ->  Seq Scan on compress_hyper_2_6_chunk (actual rows=3 loops=1)
+                                 Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_1_3_chunk."time" DESC
                      Sort Method: top-N heapsort 
@@ -213,8 +183,8 @@ generate_series(1,3) device;
                      Sort Key: _hyper_1_2_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Index Scan using compress_hyper_2_5_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (never executed)
-                                 Index Cond: (device = ANY ('{1,2,3}'::integer[]))
+                           ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
+                                 Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time" DESC
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
@@ -225,8 +195,8 @@ generate_series(1,3) device;
                      Sort Key: _hyper_1_1_chunk."time" DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (never executed)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Index Scan using compress_hyper_2_4_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk (never executed)
-                                 Index Cond: (device = ANY ('{1,2,3}'::integer[]))
+                           ->  Seq Scan on compress_hyper_2_4_chunk (never executed)
+                                 Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (never executed)
                      Sort Key: _hyper_1_1_chunk."time" DESC
                      ->  Seq Scan on _hyper_1_1_chunk (never executed)
@@ -234,8 +204,8 @@ generate_series(1,3) device;
 (41 rows)
 
 :PREFIX SELECT * FROM ht_metrics_compressed WHERE device IN (1,2,3) ORDER BY time, device DESC LIMIT 1;
-                                                                          QUERY PLAN                                                                          
---------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                             QUERY PLAN                                             
+----------------------------------------------------------------------------------------------------
  Limit (actual rows=1 loops=1)
    ->  Custom Scan (ChunkAppend) on ht_metrics_compressed (actual rows=1 loops=1)
          Order: ht_metrics_compressed."time", ht_metrics_compressed.device DESC
@@ -246,8 +216,8 @@ generate_series(1,3) device;
                      Sort Method: top-N heapsort 
                      ->  Custom Scan (DecompressChunk) on _hyper_1_1_chunk (actual rows=81 loops=1)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Index Scan using compress_hyper_2_4_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_4_chunk (actual rows=3 loops=1)
-                                 Index Cond: (device = ANY ('{1,2,3}'::integer[]))
+                           ->  Seq Scan on compress_hyper_2_4_chunk (actual rows=3 loops=1)
+                                 Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (actual rows=1 loops=1)
                      Sort Key: _hyper_1_1_chunk."time", _hyper_1_1_chunk.device DESC
                      Sort Method: top-N heapsort 
@@ -259,8 +229,8 @@ generate_series(1,3) device;
                      Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_2_chunk (never executed)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Index Scan using compress_hyper_2_5_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_5_chunk (never executed)
-                                 Index Cond: (device = ANY ('{1,2,3}'::integer[]))
+                           ->  Seq Scan on compress_hyper_2_5_chunk (never executed)
+                                 Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (never executed)
                      Sort Key: _hyper_1_2_chunk."time", _hyper_1_2_chunk.device DESC
                      ->  Seq Scan on _hyper_1_2_chunk (never executed)
@@ -271,8 +241,8 @@ generate_series(1,3) device;
                      Sort Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device DESC
                      ->  Custom Scan (DecompressChunk) on _hyper_1_3_chunk (never executed)
                            Filter: (device = ANY ('{1,2,3}'::integer[]))
-                           ->  Index Scan using compress_hyper_2_6_chunk_device__ts_meta_sequence_num_idx on compress_hyper_2_6_chunk (never executed)
-                                 Index Cond: (device = ANY ('{1,2,3}'::integer[]))
+                           ->  Seq Scan on compress_hyper_2_6_chunk (never executed)
+                                 Filter: (device = ANY ('{1,2,3}'::integer[]))
                ->  Sort (never executed)
                      Sort Key: _hyper_1_3_chunk."time", _hyper_1_3_chunk.device DESC
                      ->  Seq Scan on _hyper_1_3_chunk (never executed)
