@@ -88,7 +88,6 @@ tts_arrow_init(TupleTableSlot *slot)
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
 	aslot->segmentby_attrs = NULL;
-	aslot->valid_attrs = NULL;
 	aslot->attrs_offset_map = NULL;
 	aslot->tuple_index = InvalidTupleIndex;
 	aslot->total_row_count = 0;
@@ -109,6 +108,7 @@ tts_arrow_init(TupleTableSlot *slot)
 		aslot->noncompressed_slot =
 			MakeSingleTupleTableSlot(slot->tts_tupleDescriptor, &TTSOpsBufferHeapTuple);
 		aslot->child_slot = aslot->noncompressed_slot;
+		aslot->valid_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	});
 	ItemPointerSetInvalid(&slot->tts_tid);
 
@@ -257,6 +257,9 @@ tts_arrow_clear(TupleTableSlot *slot)
 
 	/* Clear parent */
 	clear_arrow_parent(slot);
+
+	/* Clear arrow slot fields */
+	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 }
 
 static inline void
@@ -323,14 +326,10 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;
-
-	if (aslot->valid_attrs != NULL)
-	{
-		pfree(aslot->valid_attrs);
-		aslot->valid_attrs = NULL;
-	}
 	aslot->child_slot = child_slot;
 	aslot->tuple_index = tuple_index;
+	/* Clear valid attributes */
+	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 }
 
 /*
@@ -457,7 +456,7 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 	TS_DEBUG_LOG("attnum: %d, cattnum: %d, valid: %s, segmentby: %s, array: %s",
 				 attnum,
 				 cattnum,
-				 yes_no(bms_is_member(attnum, aslot->valid_attrs)),
+				 yes_no(aslot->valid_attrs[attoff]),
 				 yes_no(bms_is_member(attnum, aslot->segmentby_attrs)),
 				 yes_no(arrow_arrays[attoff]));
 
@@ -469,7 +468,7 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 	}
 
 	/* Check if value is already set */
-	if (bms_is_member(attnum, aslot->valid_attrs))
+	if (aslot->valid_attrs[attoff])
 		return;
 
 	if (bms_is_member(attnum, aslot->segmentby_attrs))
@@ -499,8 +498,7 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 		slot->tts_isnull[attoff] = datum.isnull;
 	}
 
-	TS_WITH_MEMORY_CONTEXT(slot->tts_mcxt,
-						   { aslot->valid_attrs = bms_add_member(aslot->valid_attrs, attnum); });
+	aslot->valid_attrs[attoff] = true;
 }
 
 static void
