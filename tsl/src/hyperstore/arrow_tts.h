@@ -77,7 +77,7 @@ typedef struct ArrowTupleTableSlot
 	 * set after analysis.  */
 	bool referenced_attrs_valid;
 	Bitmapset *referenced_attrs;
-	Bitmapset *segmentby_attrs;
+	bool *segmentby_attrs;
 	bool *valid_attrs;		 /* Per-column validity up to "tts_nvalid" */
 	Bitmapset *index_attrs;	 /* Columns in index during index scan */
 	int16 *attrs_offset_map; /* Offset number mappings between the

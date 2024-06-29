@@ -109,6 +109,7 @@ tts_arrow_init(TupleTableSlot *slot)
 			MakeSingleTupleTableSlot(slot->tts_tupleDescriptor, &TTSOpsBufferHeapTuple);
 		aslot->child_slot = aslot->noncompressed_slot;
 		aslot->valid_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+		aslot->segmentby_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
 	});
 	ItemPointerSetInvalid(&slot->tts_tid);
 
@@ -144,17 +145,16 @@ tts_arrow_release(TupleTableSlot *slot)
 	aslot->noncompressed_slot = NULL;
 }
 
-static Bitmapset *
-build_segmentby_attrs(TupleTableSlot *slot)
+static void
+fill_segmentby_attrs(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 	const TupleDesc tupdesc = slot->tts_tupleDescriptor;
 	const TupleDesc ctupdesc = aslot->compressed_slot->tts_tupleDescriptor;
 	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(slot);
-	Bitmapset *segmentby_attrs = NULL;
 
 	/*
-	 * Populate the segmentby bitmap with information about *all* attributes in
+	 * Populate the segmentby map with information about *all* attributes in
 	 * the non-compressed version of the tuple. That way we do not have to
 	 * update this field if we start fetching more attributes.
 	 */
@@ -162,15 +162,12 @@ build_segmentby_attrs(TupleTableSlot *slot)
 	{
 		if (!TupleDescAttr(tupdesc, i)->attisdropped)
 		{
-			const AttrNumber attno = AttrOffsetGetAttrNumber(i);
 			const AttrNumber cattno = AttrOffsetGetAttrNumber(attrs_offset_map[i]);
 
 			if (!is_compressed_col(ctupdesc, cattno))
-				segmentby_attrs = bms_add_member(segmentby_attrs, attno);
+				aslot->segmentby_attrs[i] = true;
 		}
 	}
-
-	return segmentby_attrs;
 }
 
 /*
@@ -218,7 +215,7 @@ arrow_slot_get_compressed_slot(TupleTableSlot *slot, const TupleDesc tupdesc)
 			   "missing count metadata in compressed relation");
 
 		/* Build a bitmap for segmentby columns/attributes */
-		aslot->segmentby_attrs = build_segmentby_attrs(slot);
+		fill_segmentby_attrs(slot);
 		MemoryContextSwitchTo(oldmctx);
 	}
 
@@ -457,7 +454,7 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 				 attnum,
 				 cattnum,
 				 yes_no(aslot->valid_attrs[attoff]),
-				 yes_no(bms_is_member(attnum, aslot->segmentby_attrs)),
+				 yes_no(aslot->segmentby_attrs[atttoff]),
 				 yes_no(arrow_arrays[attoff]));
 
 	/* Nothing to do for dropped attribute */
@@ -471,7 +468,7 @@ set_attr_value(TupleTableSlot *slot, ArrowArray **arrow_arrays, const AttrNumber
 	if (aslot->valid_attrs[attoff])
 		return;
 
-	if (bms_is_member(attnum, aslot->segmentby_attrs))
+	if (aslot->segmentby_attrs[attoff])
 	{
 		/* Segment-by column. Value is not compressed so get directly from
 		 * child slot. */
@@ -543,7 +540,6 @@ tts_arrow_getsomeattrs(TupleTableSlot *slot, int natts)
 		if (AttrOffsetGetAttrNumber(coff) > cattnum)
 			cattnum = AttrOffsetGetAttrNumber(coff);
 	}
-
 	Assert(cattnum > 0);
 	slot_getsomeattrs(aslot->child_slot, cattnum);
 
