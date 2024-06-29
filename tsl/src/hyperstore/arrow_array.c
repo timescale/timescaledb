@@ -22,6 +22,9 @@ typedef struct ArrowPrivate
 	size_t value_capacity;
 	struct varlena *value; /* For text types, a reusable memory area to create
 							* the varlena version of the c-string */
+	bool typbyval;		   /* Cached typbyval for the type in the arrow array. This
+							* avoids having to do get_typbyval() syscache lookups on
+							* hot paths. */
 } ArrowPrivate;
 
 static Datum
@@ -57,6 +60,7 @@ arrow_private_create(ArrowArray *array, Oid typid)
 	Assert(NULL == array->private_data);
 	private = palloc0(sizeof(ArrowPrivate));
 	private->mcxt = CurrentMemoryContext;
+	private->typbyval = get_typbyval(typid);
 	array->private_data = private;
 
 	return private;
@@ -454,9 +458,9 @@ arrow_get_datum_varlen(const ArrowArray *array, Oid typid, uint16 index)
 static NullableDatum
 arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 index)
 {
-	const bool typbyval = get_typbyval(typid);
 	const uint64 *restrict validity = array->buffers[0];
 	const char *restrict values = array->buffers[1];
+	const ArrowPrivate *apriv = arrow_private_get(array);
 
 	Assert(typlen > 0);
 
@@ -466,7 +470,7 @@ arrow_get_datum_fixlen(const ArrowArray *array, Oid typid, int16 typlen, uint16 
 	/* In order to handle fixed-length values of arbitrary size that are byref
 	 * and byval, we use fetch_all() rather than rolling our own. This is
 	 * taken from utils/adt/rangetypes.c */
-	Datum datum = fetch_att(&values[index * typlen], typbyval, typlen);
+	Datum datum = fetch_att(&values[index * typlen], apriv->typbyval, typlen);
 
 	TS_DEBUG_LOG("retrieved fixlen value %s row %u from offset %u"
 				 " in memory context %s",
