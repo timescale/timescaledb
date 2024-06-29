@@ -78,7 +78,7 @@ typedef struct ArrowTupleTableSlot
 	bool referenced_attrs_valid;
 	Bitmapset *referenced_attrs;
 	Bitmapset *segmentby_attrs;
-	Bitmapset *valid_attrs;	 /* Per-column validity up to "tts_nvalid" */
+	bool *valid_attrs;		 /* Per-column validity up to "tts_nvalid" */
 	Bitmapset *index_attrs;	 /* Columns in index during index scan */
 	int16 *attrs_offset_map; /* Offset number mappings between the
 							  * non-compressed and compressed
@@ -306,12 +306,7 @@ ExecIncrOrDecrArrowTuple(TupleTableSlot *slot, int32 amount)
 	aslot->tuple_index = (uint16) tuple_index;
 	slot->tts_flags &= ~TTS_FLAG_EMPTY;
 	slot->tts_nvalid = 0;
-
-	if (aslot->valid_attrs != NULL)
-	{
-		pfree(aslot->valid_attrs);
-		aslot->valid_attrs = NULL;
-	}
+	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 
 	return slot;
 }
