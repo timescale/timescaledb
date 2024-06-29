@@ -6,6 +6,7 @@
 #include <postgres.h>
 #include <access/attnum.h>
 #include <access/tupdesc.h>
+#include <c.h>
 #include <catalog/pg_attribute.h>
 #include <nodes/bitmapset.h>
 #include <stdint.h>
@@ -221,11 +222,9 @@ arrow_cache_clear_entry(ArrowColumnCacheEntry *restrict entry)
  * If the entry does not exist, a new entry is created via LRU eviction.
  */
 static ArrowColumnCacheEntry *
-arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
+arrow_cache_get_entry_resolve(ArrowColumnCache *acache, const TupleDesc tupdesc,
+							  const ItemPointer compressed_tid)
 {
-	ArrowColumnCache *acache = &aslot->arrow_cache;
-	const TupleDesc tupdesc = aslot->base.base.tts_tupleDescriptor;
-	const ItemPointer compressed_tid = &aslot->compressed_slot->tts_tid;
 	const ArrowColumnKey key = { .ctid = *compressed_tid };
 	bool found;
 
@@ -287,6 +286,18 @@ arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
 	}
 
 	return entry;
+}
+
+static pg_attribute_always_inline ArrowColumnCacheEntry *
+arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
+{
+	if (aslot->arrow_cache_entry == NULL)
+		aslot->arrow_cache_entry =
+			arrow_cache_get_entry_resolve(&aslot->arrow_cache,
+										  aslot->base.base.tts_tupleDescriptor,
+										  &aslot->compressed_slot->tts_tid);
+
+	return aslot->arrow_cache_entry;
 }
 
 /*

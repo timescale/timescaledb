@@ -26,6 +26,8 @@
 
 #include <limits.h>
 
+typedef struct ArrowColumnCacheEntry ArrowColumnCacheEntry;
+
 /*
  * An Arrow tuple slot is a meta-slot representing a compressed and columnar
  * relation that stores data in two separate child relations: one for
@@ -68,6 +70,7 @@ typedef struct ArrowTupleTableSlot
 							  * child slot points to a non-compressed tuple. */
 	uint16 total_row_count;
 	ArrowColumnCache arrow_cache;
+	ArrowColumnCacheEntry *arrow_cache_entry;
 	bool *referenced_attrs;
 	bool *segmentby_attrs;
 	bool *valid_attrs;		 /* Per-column validity up to "tts_nvalid" */
