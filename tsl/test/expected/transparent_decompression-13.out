@@ -9865,3 +9865,31 @@ SELECT count(*) from motion_table;
 (1 row)
 
 --END of test for page settings
+CREATE TABLE repro(time timestamptz NOT NULL, device_id text, room_id text NOT NULL, score_type int NOT NULL, algorithm_version text NOT NULL, adjusted_score float NOT NULL);
+SELECT create_hypertable('repro','time');
+  create_hypertable  
+---------------------
+ (17,public,repro,t)
+(1 row)
+
+ALTER TABLE repro SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'device_id, room_id, score_type, algorithm_version',
+  timescaledb.compress_orderby='"time" DESC'
+);
+SELECT _timescaledb_functions.create_chunk('repro','{"time": [1717632000000000,1718236800000000]}');
+                                                create_chunk                                                 
+-------------------------------------------------------------------------------------------------------------
+ (1441,17,_timescaledb_internal,_hyper_17_1441_chunk,r,"{""time"": [1717632000000000, 1718236800000000]}",t)
+(1 row)
+
+select compress_chunk(show_chunks('repro'));
+               compress_chunk               
+--------------------------------------------
+ _timescaledb_internal._hyper_17_1441_chunk
+(1 row)
+
+select from repro where room_id = 'foo' order by device_id, algorithm_version, score_type, time desc;
+--
+(0 rows)
+
