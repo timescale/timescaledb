@@ -87,6 +87,7 @@ tts_arrow_init(TupleTableSlot *slot)
 {
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
 
+	aslot->arrow_cache_entry = NULL;
 	aslot->segmentby_attrs = NULL;
 	aslot->attrs_offset_map = NULL;
 	aslot->tuple_index = InvalidTupleIndex;
@@ -145,6 +146,7 @@ tts_arrow_release(TupleTableSlot *slot)
 	/* Do we need these? The slot is being released after all. */
 	aslot->compressed_slot = NULL;
 	aslot->noncompressed_slot = NULL;
+	aslot->arrow_cache_entry = NULL;
 }
 
 static void
@@ -256,8 +258,10 @@ tts_arrow_clear(TupleTableSlot *slot)
 
 	/* Clear parent */
 	clear_arrow_parent(slot);
+
 	/* Clear arrow slot fields */
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
+	aslot->arrow_cache_entry = NULL;
 }
 
 static inline void
@@ -326,6 +330,7 @@ tts_arrow_store_tuple(TupleTableSlot *slot, TupleTableSlot *child_slot, uint16 t
 	slot->tts_nvalid = 0;
 	aslot->child_slot = child_slot;
 	aslot->tuple_index = tuple_index;
+	aslot->arrow_cache_entry = NULL;
 	/* Clear valid attributes */
 	memset(aslot->valid_attrs, 0, sizeof(bool) * slot->tts_tupleDescriptor->natts);
 }
