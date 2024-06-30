@@ -91,7 +91,7 @@ tts_arrow_init(TupleTableSlot *slot)
 	aslot->attrs_offset_map = NULL;
 	aslot->tuple_index = InvalidTupleIndex;
 	aslot->total_row_count = 0;
-	aslot->referenced_attrs_valid = false;
+	aslot->referenced_attrs = NULL;
 
 	/*
 	 * Set up child slots, one for the non-compressed relation and one for the
@@ -110,6 +110,8 @@ tts_arrow_init(TupleTableSlot *slot)
 		aslot->child_slot = aslot->noncompressed_slot;
 		aslot->valid_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
 		aslot->segmentby_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+		/* Note that aslot->referenced_attrs is initialized on demand, and not
+		 * here, because NULL is a valid state for referenced_attrs. */
 	});
 	ItemPointerSetInvalid(&slot->tts_tid);
 
@@ -791,8 +793,15 @@ arrow_slot_set_referenced_attrs(TupleTableSlot *slot, Bitmapset *attrs)
 	Assert(TTS_IS_ARROWTUPLE(slot));
 
 	ArrowTupleTableSlot *aslot = (ArrowTupleTableSlot *) slot;
-	aslot->referenced_attrs_valid = true;
-	TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, { aslot->referenced_attrs = bms_copy(attrs); });
+	if (aslot->referenced_attrs == NULL)
+	{
+		TS_WITH_MEMORY_CONTEXT(aslot->arrow_cache.mcxt, {
+			aslot->referenced_attrs = palloc0(sizeof(bool) * slot->tts_tupleDescriptor->natts);
+		});
+
+		for (int i = 0; i < slot->tts_tupleDescriptor->natts; i++)
+			aslot->referenced_attrs[i] = bms_is_member(AttrOffsetGetAttrNumber(i), attrs);
+	}
 }
 
 void
