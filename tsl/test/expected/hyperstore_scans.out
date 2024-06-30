@@ -334,7 +334,7 @@ order by time desc;
    ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=88 loops=1)
          Vectorized Filter: (location = '1'::text)
          Rows Removed by Filter: 319
- Arrays read from cache: 168
+ Arrays read from cache: 158
  Arrays decompressed: 84
 (8 rows)
 
@@ -433,7 +433,7 @@ select count(*) from :chunk where device = 1;
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=17 loops=1)
          Filter: (device = 1)
          Rows Removed by Filter: 392
- Arrays read from cache: 350
+ Arrays read from cache: 348
  Arrays decompressed: 62
 (6 rows)
 
@@ -456,7 +456,7 @@ select count(*) from :chunk where location = 1::text;
    ->  Seq Scan on _hyper_1_1_chunk (actual rows=89 loops=1)
          Filter: (location = '1'::text)
          Rows Removed by Filter: 320
- Arrays read from cache: 350
+ Arrays read from cache: 348
  Arrays decompressed: 62
 (6 rows)
 
