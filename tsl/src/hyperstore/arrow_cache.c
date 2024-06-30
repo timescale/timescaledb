@@ -138,15 +138,24 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 {
 	const ArrowColumnCache *acache = &aslot->arrow_cache;
 	const TupleDesc tupdesc = aslot->base.base.tts_tupleDescriptor;
-	const TupleDesc compressed_tupdesc = aslot->compressed_slot->tts_tupleDescriptor;
+	const TupleDesc PG_USED_FOR_ASSERTS_ONLY compressed_tupdesc =
+		aslot->compressed_slot->tts_tupleDescriptor;
 	const int16 attoff = AttrNumberGetAttrOffset(attno);
 
-	if (TupleDescAttr(tupdesc, attoff)->attisdropped)
-		return;
+	Assert(!TupleDescAttr(tupdesc, attoff)->attisdropped &&
+		   (aslot->referenced_attrs == NULL || aslot->referenced_attrs[attoff]));
+
+	/* Should never try to decompress a dropped attribute */
+	Ensure(!TupleDescAttr(tupdesc, attoff)->attisdropped,
+		   "cannot decompress dropped column %s",
+		   NameStr(TupleDescAttr(compressed_tupdesc, AttrNumberGetAttrOffset(cattno))->attname));
 
 	Assert(namestrcmp(&TupleDescAttr(tupdesc, attoff)->attname,
 					  NameStr(TupleDescAttr(compressed_tupdesc, AttrNumberGetAttrOffset(cattno))
 								  ->attname)) == 0);
+
+	/* Should not try to decompress something that is not compressed */
+	Assert(is_compressed_col(compressed_tupdesc, cattno));
 
 	TS_DEBUG_LOG("name: %s, attno: %d, cattno: %d, referenced: %s",
 				 NameStr(TupleDescAttr(tupdesc, attoff)->attname),
@@ -162,33 +171,26 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 	 * decompression columns are not set up at all and in these cases we
 	 * should read all columns up to the attribute number.
 	 */
-	if (is_compressed_col(compressed_tupdesc, cattno) &&
-		(!aslot->referenced_attrs || aslot->referenced_attrs[attoff]))
+	if (entry->arrow_arrays[attoff] == NULL)
 	{
-		if (entry->arrow_arrays[attoff] == NULL)
-		{
-			bool isnull;
-			Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
+		bool isnull;
+		Datum value = slot_getattr(aslot->child_slot, cattno, &isnull);
 
-			/* Can this ever be NULL? */
-			if (!isnull)
-			{
-				const Form_pg_attribute attr = TupleDescAttr(tupdesc, attoff);
-				entry->arrow_arrays[attoff] = arrow_from_compressed(value,
-																	attr->atttypid,
-																	acache->mcxt,
-																	acache->decompression_mcxt);
-
-				if (decompress_cache_print)
-					decompress_cache_misses++;
-			}
-		}
-		else
+		/* Can this ever be NULL? */
+		if (!isnull)
 		{
+			const Form_pg_attribute attr = TupleDescAttr(tupdesc, attoff);
+			entry->arrow_arrays[attoff] = arrow_from_compressed(value,
+																attr->atttypid,
+																acache->mcxt,
+																acache->decompression_mcxt);
+
 			if (decompress_cache_print)
-				decompress_cache_hits++;
+				decompress_cache_misses++;
 		}
 	}
+	else if (decompress_cache_print)
+		decompress_cache_hits++;
 }
 
 static void
@@ -288,38 +290,6 @@ arrow_cache_get_entry(ArrowTupleTableSlot *aslot)
 }
 
 /*
- * Fetch and decompress data into arrow arrays for the first N attributes.
- *
- * Note that only "referenced attributes" are decompressed (i.e., those that
- * are actually referenced in a query), so some of the "natts" returned arrays
- * may be NULL for this reason.
- */
-ArrowArray **
-arrow_column_cache_read_many(ArrowTupleTableSlot *aslot, unsigned int natts)
-{
-	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
-	ArrowColumnCacheEntry *restrict entry = arrow_cache_get_entry(aslot);
-
-	Assert(natts > 0);
-
-	/*
-	 * Decompress any missing columns in the cache entry.
-	 *
-	 * Note that this will skip columns that are already dealt with before
-	 * and stored in the cache.
-	 */
-	for (unsigned int i = 0; i < natts; i++)
-	{
-		const int16 cattoff = attrs_offset_map[i];
-		const AttrNumber attno = AttrOffsetGetAttrNumber(i);
-		const AttrNumber cattno = AttrOffsetGetAttrNumber(cattoff);
-		decompress_one_attr(aslot, entry, attno, cattno);
-	}
-
-	return entry->arrow_arrays;
-}
-
-/*
  * Fetch and decompress data into an arrow array for the given
  * attribute. Arrays for other attributes are returned too, and these may be
  * valid if decompressed via a previous call.
@@ -328,14 +298,17 @@ arrow_column_cache_read_many(ArrowTupleTableSlot *aslot, unsigned int natts)
  * are actually referenced in a query), so some returned arrays may be NULL
  * for this reason.
  */
-ArrowArray **
+pg_attribute_always_inline ArrowArray **
 arrow_column_cache_read_one(ArrowTupleTableSlot *aslot, AttrNumber attno)
 {
 	const int16 *attrs_offset_map = arrow_slot_get_attribute_offset_map(&aslot->base.base);
-	ArrowColumnCacheEntry *restrict entry = arrow_cache_get_entry(aslot);
 	const AttrNumber cattno =
 		AttrOffsetGetAttrNumber(attrs_offset_map[AttrNumberGetAttrOffset(attno)]);
+	const TupleDesc compressed_tupdesc = aslot->compressed_slot->tts_tupleDescriptor;
+	ArrowColumnCacheEntry *restrict entry = arrow_cache_get_entry(aslot);
 
-	decompress_one_attr(aslot, entry, attno, cattno);
+	if (is_compressed_col(compressed_tupdesc, cattno))
+		decompress_one_attr(aslot, entry, attno, cattno);
+
 	return entry->arrow_arrays;
 }
