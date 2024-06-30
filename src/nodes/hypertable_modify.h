@@ -15,10 +15,6 @@
 typedef struct HypertableModifyPath
 {
 	CustomPath cpath;
-	/* A bitmapset to remember which subpaths are using data node dispatching. */
-	Bitmapset *distributed_insert_plans;
-	/* List of server oids for the hypertable's data nodes */
-	List *serveroids;
 } HypertableModifyPath;
 
 typedef struct HypertableModifyState
