@@ -164,6 +164,8 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 				 cattno,
 				 yes_no(!aslot->referenced_attrs || aslot->referenced_attrs[attoff]));
 
+	DECOMPRESS_CACHE_STATS_INCREMENT(decompress_calls);
+
 	/*
 	 * Only decompress columns that are actually needed, but only if the
 	 * node is marked for decompression.
@@ -186,12 +188,9 @@ decompress_one_attr(const ArrowTupleTableSlot *aslot, ArrowColumnCacheEntry *ent
 																acache->mcxt,
 																acache->decompression_mcxt);
 
-			if (decompress_cache_print)
-				decompress_cache_misses++;
+			DECOMPRESS_CACHE_STATS_INCREMENT(decompressions);
 		}
 	}
-	else if (decompress_cache_print)
-		decompress_cache_hits++;
 }
 
 static void
@@ -234,6 +233,8 @@ arrow_cache_get_entry_resolve(ArrowColumnCache *acache, const TupleDesc tupdesc,
 	 * allocating a new entry */
 	if (!found)
 	{
+		DECOMPRESS_CACHE_STATS_INCREMENT(misses);
+
 		if (acache->arrow_column_cache_lru_count >= acache->maxsize)
 		{
 			/* If we don't have room in the cache for the new entry, pick the
@@ -252,6 +253,8 @@ arrow_cache_get_entry_resolve(ArrowColumnCache *acache, const TupleDesc tupdesc,
 			 * recycled so should not be freed here.
 			 */
 			arrow_cache_clear_entry(entry);
+
+			DECOMPRESS_CACHE_STATS_INCREMENT(evictions);
 		}
 
 		/* Allocate a new entry in the hash table. */
@@ -262,6 +265,7 @@ arrow_cache_get_entry_resolve(ArrowColumnCache *acache, const TupleDesc tupdesc,
 	}
 	else
 	{
+		DECOMPRESS_CACHE_STATS_INCREMENT(hits);
 		dlist_move_tail(&acache->arrow_column_cache_lru, &entry->node);
 	}
 
