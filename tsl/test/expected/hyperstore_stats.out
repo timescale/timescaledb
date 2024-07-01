@@ -151,20 +151,20 @@ select * from attrstats_compare;
 
 -- Check that the estimated rows is the same for the chunk and the
 -- normal table and in the right ballpark
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-                                          QUERY PLAN                                          
-----------------------------------------------------------------------------------------------
- Seq Scan on _hyper_1_1_chunk  (cost=0.00..156.80 rows=37 width=42) (actual rows=605 loops=1)
+                       QUERY PLAN                       
+--------------------------------------------------------
+ Seq Scan on _hyper_1_1_chunk (actual rows=605 loops=1)
    Filter: (location_id = 1)
    Rows Removed by Filter: 5515
 (3 rows)
 
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Seq Scan on normaltable  (cost=0.00..156.80 rows=37 width=42) (actual rows=605 loops=1)
+                    QUERY PLAN                     
+---------------------------------------------------
+ Seq Scan on normaltable (actual rows=605 loops=1)
    Filter: (location_id = 1)
    Rows Removed by Filter: 5515
 (3 rows)
@@ -198,19 +198,19 @@ select count(*) from :chunk1 where location_id = 1;
    605
 (1 row)
 
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-                                                  QUERY PLAN                                                   
----------------------------------------------------------------------------------------------------------------
- Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.00..70.65 rows=31 width=42) (actual rows=605 loops=1)
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=605 loops=1)
    Scankey: (location_id = 1)
 (2 rows)
 
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
-                                       QUERY PLAN                                        
------------------------------------------------------------------------------------------
- Seq Scan on normaltable  (cost=0.00..140.50 rows=31 width=42) (actual rows=605 loops=1)
+                    QUERY PLAN                     
+---------------------------------------------------
+ Seq Scan on normaltable (actual rows=605 loops=1)
    Filter: (location_id = 1)
    Rows Removed by Filter: 5515
 (3 rows)
@@ -233,19 +233,19 @@ select * from attrstats_same;
 (1 row)
 
 -- Check that the estimated rows is now correct based on stats (reltuples)
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-                                                   QUERY PLAN                                                   
-----------------------------------------------------------------------------------------------------------------
- Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.00..70.65 rows=605 width=42) (actual rows=605 loops=1)
+                                QUERY PLAN                                
+--------------------------------------------------------------------------
+ Custom Scan (ColumnarScan) on _hyper_1_1_chunk (actual rows=605 loops=1)
    Scankey: (location_id = 1)
 (2 rows)
 
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
-                                        QUERY PLAN                                        
-------------------------------------------------------------------------------------------
- Seq Scan on normaltable  (cost=0.00..140.50 rows=605 width=42) (actual rows=605 loops=1)
+                    QUERY PLAN                     
+---------------------------------------------------
+ Seq Scan on normaltable (actual rows=605 loops=1)
    Filter: (location_id = 1)
    Rows Removed by Filter: 5515
 (3 rows)
