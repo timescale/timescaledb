@@ -552,3 +552,43 @@ DROP TABLE conditions CASCADE;
 DROP TABLE devices CASCADE;
 DROP TABLE conditions_dup CASCADE;
 DROP TABLE devices_dup CASCADE;
+
+\set VERBOSITY default
+
+-- SDC #1859
+CREATE TABLE conditions(
+  time TIMESTAMPTZ NOT NULL,
+  value FLOAT8 NOT NULL,
+  device_id int NOT NULL
+);
+
+SELECT create_hypertable('conditions', 'time', chunk_time_interval => INTERVAL '1 day');
+
+INSERT INTO conditions (time, value, device_id)
+SELECT t, 1, 1 FROM generate_series('2024-01-01 00:00:00-00'::timestamptz, '2024-12-31 00:00:00-00'::timestamptz, '1 hour'::interval) AS t;
+
+CREATE TABLE devices (device_id int not null, name text, location text);
+INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
+
+CREATE MATERIALIZED VIEW cagg_realtime
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', time) AS bucket,
+   MAX(value),
+   MIN(value),
+   AVG(value),
+   devices.name,
+   devices.location
+FROM conditions
+JOIN devices ON conditions.device_id = devices.device_id
+GROUP BY name, location, bucket
+WITH NO DATA;
+
+\c :TEST_DBNAME :ROLE_CLUSTER_SUPERUSER
+VACUUM ANALYZE;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER
+
+SELECT a.* FROM cagg_realtime a WHERE a.location = 'Moscow' ORDER BY bucket LIMIT 2;
+
+\set VERBOSITY terse
+DROP TABLE conditions CASCADE;
+DROP TABLE devices CASCADE;
