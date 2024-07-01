@@ -494,3 +494,20 @@ select count(*) from :chunk where location = 1::text;
  Array Decompressions: 62
 (8 rows)
 
+-- ColumnarScan declares itself as projection capable. This query
+-- would add a Result node on top if ColumnarScan couldn't project.
+set timescaledb.enable_columnarscan=true;
+explain
+select time, device+device as device_x2 from :chunk limit 1;
+                                        QUERY PLAN                                         
+-------------------------------------------------------------------------------------------
+ Limit  (cost=0.00..0.02 rows=1 width=12)
+   ->  Custom Scan (ColumnarScan) on _hyper_1_1_chunk  (cost=0.00..4.15 rows=204 width=12)
+(2 rows)
+
+select time, device+device as device_x2 from :chunk limit 1;
+             time             | device_x2 
+------------------------------+-----------
+ Wed Jun 01 00:55:00 2022 PDT |         2
+(1 row)
+
