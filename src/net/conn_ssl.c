@@ -5,11 +5,69 @@
  */
 #include <postgres.h>
 
+#ifdef _MSC_VER
+// #define ERR_clear_error ERR_clear_error_orig
+// #define ERR_get_error ERR_get_error_orig
+// #define ERR_reason_error_string ERR_reason_error_string_orig
+// #define OPENSSL_init_ssl OPENSSL_init_ssl_orig
+// #define SSL_connect SSL_connect_orig
+// #define SSL_CTX_ctrl SSL_CTX_ctrl_orig
+// #define SSL_CTX_free SSL_CTX_free_orig
+// #define SSL_CTX_new SSL_CTX_new_orig
+// #define SSL_CTX_set_options SSL_CTX_set_options_orig
+// #define SSL_free SSL_free_orig
+// #define SSL_get_error SSL_get_error_orig
+// #define SSL_new SSL_new_orig
+// #define SSL_read SSL_read_orig
+// #define SSL_set_fd SSL_set_fd_orig
+// #define SSL_write SSL_write_orig
+// #define TLS_method TLS_method_orig
+// #include <openssl/err.h>
+// #include <openssl/ssl.h>
+// #undef ERR_clear_error
+// #undef ERR_get_error
+// #undef ERR_reason_error_string
+// #undef OPENSSL_init_ssl
+// #undef SSL_connect
+// #undef SSL_CTX_ctrl
+// #undef SSL_CTX_free
+// #undef SSL_CTX_new
+// #undef SSL_CTX_set_options
+// #undef SSL_free
+// #undef SSL_get_error
+// #undef SSL_new
+// #undef SSL_read
+// #undef SSL_set_fd
+// #undef SSL_write
+// #undef TLS_method
+struct OPENSSL_INIT_SETTINGS;
+struct SSL;
+struct SSL_CTX;
+extern __declspec(dllimport) void ERR_clear_error(void);
+extern __declspec(dllimport) unsigned long ERR_get_error(void);
+extern __declspec(dllimport) const char *ERR_reason_error_string(unsigned long ecode);
+extern __declspec(dllimport) int OPENSSL_init_ssl(uint64_t opts, const OPENSSL_INIT_SETTINGS *settings);
+extern __declspec(dllimport) int SSL_connect(SSL *ssl);
+extern __declspec(dllimport) long SSL_CTX_ctrl(SSL_CTX *ctx, int cmd, long larg, void *parg);
+extern __declspec(dllimport) void SSL_CTX_free(SSL_CTX *ctx);
+extern __declspec(dllimport) SSL_CTX *SSL_CTX_new(const SSL_METHOD *method);
+extern __declspec(dllimport) long SSL_CTX_set_options(SSL_CTX *ctx, long options);
+extern __declspec(dllimport) void SSL_free(SSL *ssl);
+extern __declspec(dllimport) int SSL_get_error(const SSL *ssl, int ret);
+extern __declspec(dllimport) SSL *SSL_new(SSL_CTX *ctx);
+extern __declspec(dllimport) int SSL_read(SSL *ssl, void *buf, int num);
+extern __declspec(dllimport) int SSL_set_fd(SSL *ssl, int fd);
+extern __declspec(dllimport) int SSL_write(SSL *ssl, const void *buf, int num);
+extern __declspec(dllimport) const SSL_METHOD *TLS_method(void);
+#else
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#endif
 
 #include "conn_internal.h"
 #include "conn_plain.h"
+
+
 
 typedef struct SSLConnection
 {
