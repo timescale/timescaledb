@@ -112,25 +112,35 @@ select * from mat_m1 order by sumh, sumt, minl, timec ;
 
 :EXPLAIN
 select * from regview order by timec desc;
-                                                                                                QUERY PLAN                                                                                                
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+                                                                                                                     QUERY PLAN                                                                                                                     
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Sort
    Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
    Sort Key: (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) DESC
-   ->  GroupAggregate
+   ->  Finalize GroupAggregate
          Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
          Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
          ->  Sort
-               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+               Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (PARTIAL min(_hyper_1_1_chunk.location)), (PARTIAL sum(_hyper_1_1_chunk.temperature)), (PARTIAL sum(_hyper_1_1_chunk.humidity))
                Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
-               ->  Result
-                     Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
-                     ->  Append
-                           ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                                 Output: _hyper_1_1_chunk.location, _hyper_1_1_chunk.timec, _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
-                           ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                                 Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
-(16 rows)
+               ->  Append
+                     ->  Partial GroupAggregate
+                           Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), PARTIAL min(_hyper_1_1_chunk.location), PARTIAL sum(_hyper_1_1_chunk.temperature), PARTIAL sum(_hyper_1_1_chunk.humidity)
+                           Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                           ->  Sort
+                                 Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                                 Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                       Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                     ->  Partial GroupAggregate
+                           Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), PARTIAL min(_hyper_1_2_chunk.location), PARTIAL sum(_hyper_1_2_chunk.temperature), PARTIAL sum(_hyper_1_2_chunk.humidity)
+                           Group Key: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec))
+                           ->  Sort
+                                 Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                 Sort Key: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec))
+                                 ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                       Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+(26 rows)
 
 -- PUSHDOWN cases --
 -- all group by elts in order by , reorder group by elts to match
@@ -446,19 +456,29 @@ select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec
    ->  Hash Join
          Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh, _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (min(_hyper_1_1_chunk.location)), (sum(_hyper_1_1_chunk.temperature)), (sum(_hyper_1_1_chunk.humidity))
          Hash Cond: ((time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)) = _hyper_2_4_chunk.timec)
-         ->  GroupAggregate
+         ->  Finalize GroupAggregate
                Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), min(_hyper_1_1_chunk.location), sum(_hyper_1_1_chunk.temperature), sum(_hyper_1_1_chunk.humidity)
                Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
                ->  Sort
-                     Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                     Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), (PARTIAL min(_hyper_1_1_chunk.location)), (PARTIAL sum(_hyper_1_1_chunk.temperature)), (PARTIAL sum(_hyper_1_1_chunk.humidity))
                      Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
-                     ->  Result
-                           Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
-                           ->  Append
-                                 ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
-                                       Output: _hyper_1_1_chunk.location, _hyper_1_1_chunk.timec, _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
-                                 ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
-                                       Output: _hyper_1_2_chunk.location, _hyper_1_2_chunk.timec, _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                     ->  Append
+                           ->  Partial GroupAggregate
+                                 Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), PARTIAL min(_hyper_1_1_chunk.location), PARTIAL sum(_hyper_1_1_chunk.temperature), PARTIAL sum(_hyper_1_1_chunk.humidity)
+                                 Group Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                                 ->  Sort
+                                       Output: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec)), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                                       Sort Key: _hyper_1_1_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec))
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_1_chunk
+                                             Output: _hyper_1_1_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_1_chunk.timec), _hyper_1_1_chunk.temperature, _hyper_1_1_chunk.humidity
+                           ->  Partial GroupAggregate
+                                 Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), PARTIAL min(_hyper_1_2_chunk.location), PARTIAL sum(_hyper_1_2_chunk.temperature), PARTIAL sum(_hyper_1_2_chunk.humidity)
+                                 Group Key: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec))
+                                 ->  Sort
+                                       Output: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec)), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
+                                       Sort Key: _hyper_1_2_chunk.location, (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec))
+                                       ->  Seq Scan on _timescaledb_internal._hyper_1_2_chunk
+                                             Output: _hyper_1_2_chunk.location, time_bucket('@ 1 day'::interval, _hyper_1_2_chunk.timec), _hyper_1_2_chunk.temperature, _hyper_1_2_chunk.humidity
          ->  Hash
                Output: _hyper_2_4_chunk.location, _hyper_2_4_chunk.timec, _hyper_2_4_chunk.minl, _hyper_2_4_chunk.sumt, _hyper_2_4_chunk.sumh
                ->  Append
@@ -477,7 +497,7 @@ select * from mat_m1, regview where mat_m1.timec > '2018-10-01' and mat_m1.timec
                                              Output: _hyper_1_2_chunk_1.location, _hyper_1_2_chunk_1.timec, _hyper_1_2_chunk_1.temperature, _hyper_1_2_chunk_1.humidity
                                              Index Cond: ((_hyper_1_2_chunk_1.timec >= 'Sat Nov 03 17:00:00 2018 PDT'::timestamp with time zone) AND (_hyper_1_2_chunk_1.timec > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone))
                                              Filter: (time_bucket('@ 1 day'::interval, _hyper_1_2_chunk_1.timec) > 'Mon Oct 01 00:00:00 2018 PDT'::timestamp with time zone)
-(37 rows)
+(47 rows)
 
 select l.locid, mat_m1.* from mat_m1 , location_tab l where timec > '2018-10-01' and l.locname = mat_m1.location order by timec desc;
  locid | location |            timec             | minl | sumt | sumh 

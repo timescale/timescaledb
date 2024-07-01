@@ -450,21 +450,36 @@ INSERT INTO btest_numeric VALUES('2020-01-20T09:00:43', 30.5);
 
 -- can't do index scan when using group by
 :PREFIX SELECT last(temp, time) FROM btest GROUP BY gp ORDER BY gp;
-                               QUERY PLAN                               
-------------------------------------------------------------------------
+                                  QUERY PLAN                                  
+------------------------------------------------------------------------------
  Sort (actual rows=2 loops=1)
    Sort Key: _hyper_1_1_chunk.gp
    Sort Method: quicksort 
-   ->  HashAggregate (actual rows=2 loops=1)
+   ->  Finalize HashAggregate (actual rows=2 loops=1)
          Group Key: _hyper_1_1_chunk.gp
          Batches: 1 
-         ->  Append (actual rows=11 loops=1)
-               ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
-               ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
-               ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
-               ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
-(12 rows)
+         ->  Append (actual rows=6 loops=1)
+               ->  Partial HashAggregate (actual rows=2 loops=1)
+                     Group Key: _hyper_1_1_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_1_chunk (actual rows=6 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_2_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_2_chunk (actual rows=2 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_3_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_3_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_4_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_4_chunk (actual rows=1 loops=1)
+               ->  Partial HashAggregate (actual rows=1 loops=1)
+                     Group Key: _hyper_1_5_chunk.gp
+                     Batches: 1 
+                     ->  Seq Scan on _hyper_1_5_chunk (actual rows=1 loops=1)
+(27 rows)
 
 -- do index scan when agg function is used in CTE subquery
 :PREFIX WITH last_temp AS (SELECT last(temp, time) FROM btest) SELECT * from last_temp;

@@ -14,6 +14,7 @@ set(TEST_FILES
     cagg_query.sql
     cagg_refresh.sql
     cagg_utils.sql
+    cagg_watermark.sql
     compress_auto_sparse_index.sql
     compress_default.sql
     compress_dml_copy.sql
@@ -138,7 +139,6 @@ set(SOLO_TESTS
     telemetry_stats)
 
 set(TEST_TEMPLATES
-    cagg_watermark.sql.in
     compression_sorted_merge.sql.in
     cagg_union_view.sql.in
     plan_skip_scan.sql.in
