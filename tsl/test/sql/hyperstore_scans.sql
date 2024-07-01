@@ -178,3 +178,11 @@ select device from :chunk where device = 1;
 
 explain (analyze, costs off, timing off, summary off, decompress_cache_stats)
 select count(*) from :chunk where location = 1::text;
+
+-- ColumnarScan declares itself as projection capable. This query
+-- would add a Result node on top if ColumnarScan couldn't project.
+set timescaledb.enable_columnarscan=true;
+explain
+select time, device+device as device_x2 from :chunk limit 1;
+select time, device+device as device_x2 from :chunk limit 1;
+
