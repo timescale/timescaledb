@@ -26,7 +26,9 @@ begin
         if trim(both from ln) like 'Group Key:%' then
 	   continue;
 	end if;
-        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
@@ -44,7 +46,9 @@ begin
     for ln in
         execute format('explain (costs off, summary off, timing off) %s', $1)
     loop
-        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
@@ -257,9 +261,11 @@ $$, :'hypertable'));
          ->  Partial GroupAggregate (actual rows=N loops=N)
                ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                      Index Cond: (device_id = 10)
- Arrays read from cache: N
- Arrays decompressed: 320
-(22 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 320
+(24 rows)
 
 select explain_analyze_anonymize(format($$
    select device_id, avg(temp) from %s where device_id = 10
@@ -270,9 +276,11 @@ $$, :'chunk1'));
  GroupAggregate (actual rows=N loops=N)
    ->  Index Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: (device_id = 10)
- Arrays read from cache: N
- Arrays decompressed: 17
-(5 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 17
+(7 rows)
 
 -- Test index scan on segmentby column
 select explain_analyze_anonymize(format($$
@@ -293,9 +301,11 @@ $$, :'hypertable'));
          Index Cond: (location_id = 5)
    ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: (location_id = 5)
- Arrays read from cache: N
- Arrays decompressed: 60
-(15 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 60
+(17 rows)
 
 select explain_analyze_anonymize(format($$
     select created_at, location_id, temp from %s where location_id = 5
@@ -304,9 +314,11 @@ $$, :'chunk1'));
 ----------------------------------------------------------------------------------------------------------
  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
    Index Cond: (location_id = 5)
- Arrays read from cache: N
- Arrays decompressed: 10
-(4 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 10
+(6 rows)
 
 -- These should generate decompressions as above, but for all columns.
 select explain_analyze_anonymize(format($$
@@ -327,9 +339,11 @@ $$, :'hypertable'));
          Index Cond: (location_id = 5)
    ->  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: (location_id = 5)
- Arrays read from cache: N
- Arrays decompressed: 60
-(15 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 60
+(17 rows)
 
 select explain_analyze_anonymize(format($$
     select * from %s where location_id = 5
@@ -338,9 +352,11 @@ $$, :'chunk1'));
 ----------------------------------------------------------------------------------------------------------
  Index Scan using _hyper_I_N_chunk_hypertable_location_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
    Index Cond: (location_id = 5)
- Arrays read from cache: N
- Arrays decompressed: 10
-(4 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 10
+(6 rows)
 
 drop table :hypertable cascade;
 NOTICE:  drop cascades to view chunk_indexes

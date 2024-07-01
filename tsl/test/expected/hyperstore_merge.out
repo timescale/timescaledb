@@ -27,7 +27,9 @@ begin
         if trim(both from ln) like 'Group Key:%' then
 	   continue;
 	end if;
-        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
@@ -45,7 +47,9 @@ begin
     for ln in
         execute format('explain (costs off, summary off, timing off) %s', $1)
     loop
-        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
@@ -186,9 +190,11 @@ $$, :'hypertable'));
                                  Index Cond: (created_at = sd.created_at)
                            ->  Index Scan using "6_6_readings_created_at_key" on _hyper_I_N_chunk ht_7 (actual rows=N loops=N)
                                  Index Cond: (created_at = sd.created_at)
- Arrays read from cache: N
- Arrays decompressed: 1
-(30 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 1
+(32 rows)
 
 -- Now, the inserted rows should show up, but not the ones that
 -- already exist.
@@ -274,9 +280,11 @@ $$, :'hypertable'));
                                  Index Cond: (created_at = sd.created_at)
                            ->  Index Scan using "6_6_readings_created_at_key" on _hyper_I_N_chunk ht_7 (actual rows=N loops=N)
                                  Index Cond: (created_at = sd.created_at)
- Arrays read from cache: N
- Arrays decompressed: 2
-(30 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 2
+(32 rows)
 
 \x on
 select * from :hypertable where not _timescaledb_debug.is_compressed_tid(ctid);
