@@ -14,10 +14,8 @@
 #include <compat/compat.h>
 #include "arrow_cache_explain.h"
 
-bool decompress_cache_print;
-size_t decompress_cache_hits;
-size_t decompress_cache_misses;
-
+bool decompress_cache_print = false;
+struct DecompressCacheStats decompress_cache_stats;
 static ExplainOneQuery_hook_type prev_ExplainOneQuery_hook = NULL;
 
 #if PG17_LT
@@ -65,24 +63,39 @@ standard_ExplainOneQuery(Query *query, int cursorOptions, IntoClause *into, Expl
 
 static struct
 {
-	const char *hits_text; /* Number of arrays read from cache */
-	const char *miss_text; /* Number of arrays decompressed */
+	const char *hits_text;			   /* Number of cache hits */
+	const char *miss_text;			   /* Number of cache misses */
+	const char *evict_text;			   /* Number of cache evictions */
+	const char *decompress_text;	   /* Number of arrays decompressed */
+	const char *decompress_calls_text; /* Number of calls to decompress an array */
 } format_texts[] = {
 	[EXPLAIN_FORMAT_TEXT] = {
-		.hits_text = "Arrays read from cache",
-		.miss_text = "Arrays decompressed",
+		.hits_text = "Array Cache Hits",
+		.miss_text = "Array Cache Misses",
+		.evict_text = "Array Cache Evictions",
+		.decompress_text = "Array Decompressions",
+		.decompress_calls_text = "Array Decompression Calls",
 	},
 	[EXPLAIN_FORMAT_XML]= {
-		.hits_text = "read from cache",
-		.miss_text = "decompressed",
+		.hits_text = "hits",
+		.miss_text = "misses",
+		.evict_text = "evictions",
+		.decompress_text = "decompressions",
+		.decompress_calls_text = "decompression calls",
 	},
 	[EXPLAIN_FORMAT_JSON] = {
-		.hits_text = "read from cache",
-		.miss_text = "decompressed",
+		.hits_text = "hits",
+		.miss_text = "misses",
+		.evict_text = "evictions",
+		.decompress_text = "decompressions",
+		.decompress_calls_text = "decompression calls",
 	},
 	[EXPLAIN_FORMAT_YAML] = {
-		.hits_text = "read from cache",
-		.miss_text = "decompressed",
+		.hits_text = "hits",
+		.miss_text = "misses",
+		.evict_text = "evictions",
+		.decompress_text = "decompressions",
+		.decompress_calls_text = "decompression calls",
 	},
 };
 
@@ -95,17 +108,34 @@ explain_decompression(Query *query, int cursorOptions, IntoClause *into, Explain
 	{
 		Assert(es->format < sizeof(format_texts) / sizeof(*format_texts));
 
-		ExplainOpenGroup("Array cache", NULL, true, es);
-		ExplainPropertyInteger(format_texts[es->format].hits_text, NULL, decompress_cache_hits, es);
+		ExplainOpenGroup("Array cache", "Arrow Array Cache", true, es);
+		ExplainPropertyInteger(format_texts[es->format].hits_text,
+							   NULL,
+							   decompress_cache_stats.hits,
+							   es);
 		ExplainPropertyInteger(format_texts[es->format].miss_text,
 							   NULL,
-							   decompress_cache_misses,
+							   decompress_cache_stats.misses,
 							   es);
-		ExplainCloseGroup("Array cache", NULL, true, es);
+		ExplainPropertyInteger(format_texts[es->format].evict_text,
+							   NULL,
+							   decompress_cache_stats.evictions,
+							   es);
+		ExplainPropertyInteger(format_texts[es->format].decompress_text,
+							   NULL,
+							   decompress_cache_stats.decompressions,
+							   es);
+
+		if (es->verbose)
+			ExplainPropertyInteger(format_texts[es->format].decompress_calls_text,
+								   NULL,
+								   decompress_cache_stats.decompress_calls,
+								   es);
+
+		ExplainCloseGroup("Array cache", "Arrow Array Cache", true, es);
 
 		decompress_cache_print = false;
-		decompress_cache_hits = 0;
-		decompress_cache_misses = 0;
+		memset(&decompress_cache_stats, 0, sizeof(struct DecompressCacheStats));
 	}
 }
 

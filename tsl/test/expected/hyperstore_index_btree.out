@@ -29,7 +29,9 @@ begin
         if trim(both from ln) like 'Group Key:%' then
 	   continue;
 	end if;
-        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
@@ -47,7 +49,9 @@ begin
     for ln in
         execute format('explain (costs off, summary off, timing off) %s', $1)
     loop
-        ln := regexp_replace(ln, 'Arrays read from cache: \d+', 'Arrays read from cache: N');
+        ln := regexp_replace(ln, 'Array Cache Hits: \d+', 'Array Cache Hits: N');
+        ln := regexp_replace(ln, 'Array Cache Misses: \d+', 'Array Cache Misses: N');
+        ln := regexp_replace(ln, 'Array Cache Evictions: \d+', 'Array Cache Evictions: N');
         ln := regexp_replace(ln, 'Heap Fetches: \d+', 'Heap Fetches: N');
         ln := regexp_replace(ln, 'Workers Launched: \d+', 'Workers Launched: N');
         ln := regexp_replace(ln, 'actual rows=\d+ loops=\d+', 'actual rows=N loops=N');
@@ -380,9 +384,11 @@ select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :
          Scankey: (owner_id = 3)
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: (owner_id = 3)
- Arrays read from cache: N
- Arrays decompressed: 0
-(15 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(17 rows)
 
 -- TODO(timescale/timescaledb-private#1117): the Decompress Count here
 -- is not correct, but the result shows correctly.
@@ -391,9 +397,11 @@ select explain_analyze_anonymize(format('select * from %s where owner_id = 3', :
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: (owner_id = 3)
- Arrays read from cache: N
- Arrays decompressed: 0
-(4 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(6 rows)
 
 reset enable_indexscan;
 -- Test index scan on non-segmentby column
@@ -432,9 +440,11 @@ $$, :'hypertable'));
                ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
                      Vectorized Filter: ((device_id >= 10) AND (device_id <= 20))
                      Rows Removed by Filter: 234
- Arrays read from cache: N
- Arrays decompressed: 578
-(31 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 578
+(33 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(temp) from %s where device_id between 10 and 20
@@ -447,9 +457,11 @@ $$, :'chunk1'));
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Vectorized Filter: ((device_id >= 10) AND (device_id <= 20))
          Rows Removed by Filter: 133
- Arrays read from cache: N
- Arrays decompressed: 83
-(7 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 83
+(9 rows)
 
 -- Test index scan on segmentby column
 select explain_analyze_anonymize(format($$
@@ -470,9 +482,11 @@ $$, :'hypertable'));
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 360
-(15 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 360
+(17 rows)
 
 select explain_analyze_anonymize(format($$
     select created_at, location_id, temp from %s where location_id between 5 and 10
@@ -481,9 +495,11 @@ $$, :'chunk1'));
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 60
-(4 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 60
+(6 rows)
 
 -- These should generate decompressions as above, but for all columns.
 select explain_analyze_anonymize(format($$
@@ -504,9 +520,11 @@ $$, :'hypertable'));
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 0
-(15 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(17 rows)
 
 select explain_analyze_anonymize(format($$
     select * from %s where location_id between 5 and 10
@@ -515,9 +533,11 @@ $$, :'chunk1'));
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 0
-(4 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(6 rows)
 
 --
 -- Test index only scan
@@ -547,9 +567,11 @@ $$, :'hypertable'));
          Index Cond: ((location_id >= 5) AND (location_id <= 10))
    ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
          Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 0
-(15 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(17 rows)
 
 -- We just compare the counts here, not the full content.
 select heapam.count as heapam, hyperstore.count as hyperstore
@@ -585,9 +607,11 @@ $$, :'hypertable'));
    ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((device_id >= 5) AND (device_id <= 10))
          Heap Fetches: N
- Arrays read from cache: N
- Arrays decompressed: 0
-(21 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(23 rows)
 
 select explain_analyze_anonymize(format($$
     select location_id from %s where location_id between 5 and 10
@@ -596,9 +620,11 @@ $$, :'chunk1'));
 ------------------------------------------------------------------------
  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
    Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 0
-(4 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(6 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id from %s where device_id between 5 and 10
@@ -608,9 +634,11 @@ $$, :'chunk1'));
  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
    Index Cond: ((device_id >= 5) AND (device_id <= 10))
    Heap Fetches: N
- Arrays read from cache: N
- Arrays decompressed: 0
-(5 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(7 rows)
 
 -- Test index only scan with covering indexes.
 --
@@ -653,9 +681,11 @@ $$, :'hypertable'));
                      Batches: 1 
                      ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
                            Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 180
-(32 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 180
+(34 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(humidity) from %s where device_id between 5 and 10
@@ -692,9 +722,11 @@ $$, :'hypertable'));
                      ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
                            Index Cond: ((device_id >= 5) AND (device_id <= 10))
                            Heap Fetches: N
- Arrays read from cache: N
- Arrays decompressed: 0
-(31 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(33 rows)
 
 select explain_analyze_anonymize(format($$
     select location_id, avg(humidity) from %s where location_id between 5 and 10
@@ -709,9 +741,11 @@ $$, :'chunk1'));
          Batches: 1 
          ->  Custom Scan (ColumnarScan) on _hyper_I_N_chunk (actual rows=N loops=N)
                Scankey: ((location_id >= 5) AND (location_id <= 10))
- Arrays read from cache: N
- Arrays decompressed: 30
-(9 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 30
+(11 rows)
 
 select explain_analyze_anonymize(format($$
     select device_id, avg(humidity) from %s where device_id between 5 and 10
@@ -723,9 +757,11 @@ $$, :'chunk1'));
    ->  Index Only Scan using _hyper_I_N_chunk_hypertable_device_id_idx on _hyper_I_N_chunk (actual rows=N loops=N)
          Index Cond: ((device_id >= 5) AND (device_id <= 10))
          Heap Fetches: N
- Arrays read from cache: N
- Arrays decompressed: 0
-(6 rows)
+ Array Cache Hits: N
+ Array Cache Misses: N
+ Array Cache Evictions: N
+ Array Decompressions: 0
+(8 rows)
 
 -------------------------------------
 -- Test UNIQUE and Partial indexes --
