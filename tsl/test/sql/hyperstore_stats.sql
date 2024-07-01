@@ -54,9 +54,9 @@ select * from attrstats_compare;
 
 -- Check that the estimated rows is the same for the chunk and the
 -- normal table and in the right ballpark
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
 
 -- Changing to hyperstore will update relstats since it process all
@@ -76,9 +76,9 @@ drop index normaltable_location_id_idx;
 -- Check that the estimated rows is the same for the chunk and the
 -- normal table and in the right ballpark
 select count(*) from :chunk1 where location_id = 1;
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
 
 -- ANALYZE directly on chunk
@@ -90,9 +90,9 @@ select * from relstats_compare;
 select * from attrstats_same;
 
 -- Check that the estimated rows is now correct based on stats (reltuples)
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from :chunk1 where location_id = 1;
-explain (analyze, timing off, summary off)
+explain (analyze, costs off, timing off, summary off)
 select * from normaltable where location_id = 1;
 
 delete from :chunk1 where location_id=1;
