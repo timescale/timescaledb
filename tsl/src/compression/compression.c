@@ -55,6 +55,11 @@ static const char *compression_algorithm_name[] = {
 const char *
 compression_get_algorithm_name(CompressionAlgorithm alg)
 {
+	if (!(0 <= alg && alg < _END_COMPRESSION_ALGORITHMS))
+		ereport(ERROR,
+				errcode(ERRCODE_DATA_CORRUPTED),
+				errmsg("not a valid compression algorithm"),
+				errdetail("alg: %d", alg));
 	return compression_algorithm_name[alg];
 }
 
@@ -2000,7 +2005,7 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 
 	tupdesc = BlessTupleDesc(tupdesc);
 
-	Datum values[Natts_compressed_info];
+	Datum values[Natts_compressed_info] = { 0 };
 	bool nulls[Natts_compressed_info] = { false };
 
 	values[AttrNumberGetAttrOffset(Anum_compressed_info_algorithm)] =
