@@ -21,6 +21,7 @@ If you are migrating from TimescaleDB v2.15.0, v2.15.1 or v2.15.2, no changes ar
 * #7080: Fix the `corresponding equivalence member not found` error.
 * #7088: Fix the leaks in the DML functions.
 * #7035: Fix the error when acquiring a tuple lock on the OSM chunks on the replica.
+* #7091: Fix ORDER BY/GROUP BY expression not found in targetlist on PG16
 
 **Thanks**
 * @Kazmirchuk for reporting the issue about leaks with the functions in DML.
