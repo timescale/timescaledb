@@ -100,7 +100,6 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     TEST_FILES
     bgw_launcher.sql
     c_unit_tests.sql
-    copy_memory_usage.sql
     metadata.sql
     multi_transaction_index.sql
     net.sql
@@ -111,6 +110,9 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
     ${LOADER_TEST_FILE}.sql)
   if(USE_TELEMETRY)
     list(APPEND TEST_FILES telemetry.sql)
+  endif()
+  if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
+    list(APPEND TEST_FILES copy_memory_usage.sql)
   endif()
 endif(CMAKE_BUILD_TYPE MATCHES Debug)
 
