@@ -1575,7 +1575,9 @@ timescaledb_create_upper_paths_hook(PlannerInfo *root, UpperRelationKind stage,
 			ts_pushdown_partial_agg(root, ht, input_rel, output_rel, extra);
 
 		if (!partials_found)
-			ts_plan_add_hashagg(root, input_rel, output_rel);
+		{
+			// ts_plan_add_hashagg(root, input_rel, output_rel);
+		}
 	}
 }
 
