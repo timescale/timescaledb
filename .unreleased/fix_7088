@@ -1,0 +1,2 @@
+Fixes: #7088 Fix leaks with functions in DML
+Thanks: @Kazmirchuk for reporting this
