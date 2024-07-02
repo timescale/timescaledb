@@ -718,14 +718,14 @@ ALTER TABLE test_limit SET (
 );
 SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
 
-SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
 \set ON_ERROR_STOP 1
 
 DROP TABLE test_limit;
