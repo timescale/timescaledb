@@ -20,16 +20,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [ "centos:centos7", "rockylinux:8", "rockylinux:9" ]
+        image: [ "rockylinux:8", "rockylinux:9" ]
         pg: [ 14, 15, 16 ]
         license: [ "TSL", "Apache"]
         include:
           - license: Apache
             pkg_suffix: "-oss"
-        exclude:
-          # PG 16 is not available on centos7
-          - image: centos:centos7
-            pg: 16
 
     steps:
     - name: Add postgres repositories
@@ -37,12 +33,6 @@ jobs:
         EL-$(rpm -E %{rhel})-x86_64/pgdg-redhat-repo-latest.noarch.rpm\""
     - name: Add other repositories
       run: |
-        # we need EPEL on centos 7 to satisfy PG15 dependencies
-        if [[ "$(rpm -E %{rhel})" -eq "7" ]]
-        then
-          yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-        fi
-
         tee /etc/yum.repos.d/timescale_timescaledb.repo <<EOL
         [timescale_timescaledb]
         name=timescale_timescaledb
