@@ -7,20 +7,23 @@ accidentally triggering the load of a previous DB version.**
 
 ## 2.15.3 (2024-07-02)
 
-This release contains performance improvements and bug fixes since
-the 2.15.2 release. Best practice is to upgrade at the next
-available opportunity.
+This release contains bug fixes since the 2.15.2 release.
+Best practice is to upgrade at the next available opportunity.
 
+**Migrating from self-hosted TimescaleDB v2.14.x and earlier**
 
-**Features**
+After you run `ALTER EXTENSION`, you must run [this SQL script](https://github.com/timescale/timescaledb-extras/blob/master/utils/2.15.X-fix_hypertable_foreign_keys.sql). For more details, see the following pull request [#6797](https://github.com/timescale/timescaledb/pull/6797).
+
+If you are migrating from TimescaleDB v2.15.0, v2.15.1 or v2.15.2, no changes are required.
 
 **Bugfixes**
-* #7061 Fix handling of multiple unique indexes in compressed INSERT
-* #7080 Fix `corresponding equivalence member not found` error
-* #7088 Fix leaks with functions in DML
+* #7061: Fix the handling of multiple unique indexes in a compressed INSERT.
+* #7080: Fix the `corresponding equivalence member not found` error.
+* #7088: Fix the leaks in the DML functions.
+* #7035: Fix the error when acquiring a tuple lock on the OSM chunks on the replica.
 
 **Thanks**
-* @Kazmirchuk for reporting this
+* @Kazmirchuk for reporting the issue about leaks with the functions in DML.
 
 ## 2.15.2 (2024-06-07)
 
