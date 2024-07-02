@@ -7,6 +7,7 @@
 #include <access/attnum.h>
 #include <access/sdir.h>
 #include <access/skey.h>
+#include <access/tableam.h>
 #include <catalog/pg_attribute.h>
 #include <executor/tuptable.h>
 #include <nodes/execnodes.h>
@@ -33,6 +34,15 @@
 #include "import/ts_explain.h"
 #include "nodes/decompress_chunk/vector_quals.h"
 
+typedef struct SimpleProjInfo
+{
+	ProjectionInfo *pi;	 /* Original projection info for falling back to PG projection */
+	int16 *projmap;		 /* Map of attribute numbers from scan tuple to projection tuple */
+	int16 numprojattrs;	 /* Number of projected attributes */
+	int16 maxprojattoff; /* Max attribute number in scan tuple that is part of
+						  * projected tuple */
+} SimpleProjInfo;
+
 typedef struct ColumnarScanState
 {
 	CustomScanState css;
@@ -41,6 +51,7 @@ typedef struct ColumnarScanState
 	int nscankeys;
 	List *scankey_quals;
 	List *vectorized_quals_orig;
+	SimpleProjInfo sprojinfo;
 } ColumnarScanState;
 
 static bool
@@ -329,6 +340,45 @@ ExecVectorQual(VectorQualState *vqstate, ExprContext *econtext)
 	return nfiltered;
 }
 
+static pg_attribute_always_inline TupleTableSlot *
+exec_projection(SimpleProjInfo *spi)
+{
+	TupleTableSlot *result_slot = spi->pi->pi_state.resultslot;
+
+	/* Check for special case when projecting zero scan attributes. This could
+	 * be, e.g., count(*)-type queries. */
+	if (spi->numprojattrs == 0)
+	{
+		if (TTS_EMPTY(result_slot))
+			return ExecStoreVirtualTuple(result_slot);
+
+		return result_slot;
+	}
+
+	/* If there's a projection map, it is possible to do a simple projection,
+	 * i.e., return a subset of the scan attributes (or a different order). */
+	if (spi->projmap != NULL)
+	{
+		TupleTableSlot *slot = spi->pi->pi_exprContext->ecxt_scantuple;
+
+		slot_getsomeattrs(slot, AttrOffsetGetAttrNumber(spi->maxprojattoff));
+
+		for (int i = 0; i < spi->numprojattrs; i++)
+		{
+			result_slot->tts_values[i] = slot->tts_values[spi->projmap[i]];
+			result_slot->tts_isnull[i] = slot->tts_isnull[spi->projmap[i]];
+		}
+
+		ExecClearTuple(result_slot);
+		return ExecStoreVirtualTuple(result_slot);
+	}
+
+	/* Fall back to regular projection */
+	ResetExprContext(spi->pi->pi_exprContext);
+
+	return ExecProject(spi->pi);
+}
+
 static pg_attribute_always_inline bool
 getnextslot(TableScanDesc scandesc, ScanDirection direction, TupleTableSlot *slot)
 {
@@ -378,17 +428,31 @@ columnar_scan_exec(CustomScanState *state)
 	}
 
 	/*
-	 * If we have neither a qual to check nor a projection, do the fast path
-	 * and just return the raw scan tuple.
+	 * If no quals to check, do the fast path and just return the raw scan
+	 * tuple or a projected one.
 	 */
-	if (!qual && !projinfo && !has_vecquals)
+	if (!qual && !has_vecquals)
 	{
-		CHECK_FOR_INTERRUPTS();
-		ResetExprContext(econtext);
+		bool gottuple = getnextslot(scandesc, direction, slot);
 
-		if (getnextslot(scandesc, direction, slot))
-			return slot;
-		return NULL;
+		if (!projinfo)
+		{
+			return gottuple ? slot : NULL;
+		}
+		else
+		{
+			if (!gottuple)
+			{
+				/* Nothing to return, but be careful to use the projection result
+				 * slot so it has correct tupleDesc. */
+				return ExecClearTuple(projinfo->pi_state.resultslot);
+			}
+			else
+			{
+				econtext->ecxt_scantuple = slot;
+				return exec_projection(&cstate->sprojinfo);
+			}
+		}
 	}
 
 	ResetExprContext(econtext);
@@ -446,7 +510,8 @@ columnar_scan_exec(CustomScanState *state)
 		if (qual == NULL || ExecQual(qual, econtext))
 		{
 			if (projinfo)
-				return ExecProject(projinfo);
+				return exec_projection(&cstate->sprojinfo);
+
 			return slot;
 		}
 
@@ -454,6 +519,85 @@ columnar_scan_exec(CustomScanState *state)
 		ResetExprContext(econtext);
 		InstrCountFiltered1(state, 1);
 	}
+}
+
+/*
+ * Try to create simple projection state.
+ *
+ * A simple projection is one where it is possible to just copy a subset of
+ * attribute values to the projection slot, or the attributes are in a
+ * different order. No reason to fire up PostgreSQL's expression execution
+ * engine for those simple cases.
+ *
+ * If simple projection is not possible (e.g., there are some non-Var
+ * attributes), then fall back to PostgreSQL projection.
+ */
+static void
+create_simple_projection_state_if_possible(ColumnarScanState *cstate)
+{
+	ScanState *ss = &cstate->css.ss;
+	ProjectionInfo *projinfo = ss->ps.ps_ProjInfo;
+	const TupleDesc projdesc = ss->ps.ps_ResultTupleDesc;
+	const List *targetlist = ss->ps.plan->targetlist;
+	SimpleProjInfo *sprojinfo = &cstate->sprojinfo;
+	int16 *projmap;
+	ListCell *lc;
+	int i = 0;
+
+	/* Should not try to create simple projection if there is no projection */
+	Assert(projinfo);
+	Assert(list_length(targetlist) == projdesc->natts);
+
+	sprojinfo->numprojattrs = list_length(targetlist);
+	sprojinfo->maxprojattoff = -1;
+	sprojinfo->pi = projinfo;
+
+	/* If there's nothing to projecct, just return */
+	if (sprojinfo->numprojattrs == 0)
+		return;
+
+	projmap = palloc(sizeof(int16) * projdesc->natts);
+
+	/* Check for attributes referenced in targetlist and create the simple
+	 * projection map. */
+	foreach (lc, targetlist)
+	{
+		const TargetEntry *tle = lfirst_node(TargetEntry, lc);
+		Expr *expr = tle->expr;
+
+		switch (expr->type)
+		{
+			case T_Var:
+			{
+				const Var *var = castNode(Var, expr);
+				AttrNumber attno = var->varattno;
+				int16 attoff;
+
+				if (!AttrNumberIsForUserDefinedAttr(attno))
+				{
+					/* Special Var, so assume simple projection is not possible */
+					pfree(projmap);
+					return;
+				}
+
+				attoff = AttrNumberGetAttrOffset(attno);
+				Assert((Index) var->varno == ((Scan *) ss->ps.plan)->scanrelid);
+				projmap[i++] = attoff;
+
+				if (attoff > sprojinfo->maxprojattoff)
+					sprojinfo->maxprojattoff = attoff;
+
+				break;
+			}
+			default:
+				/* Targetlist has a non-Var node, so simple projection not possible */
+				pfree(projmap);
+				return;
+		}
+	}
+
+	Assert(i == sprojinfo->numprojattrs);
+	sprojinfo->projmap = projmap;
 }
 
 static void
@@ -506,12 +650,19 @@ columnar_scan_begin(CustomScanState *state, EState *estate, int eflags)
 		cstate->vqstate.vectorized_quals_constified =
 			lappend(cstate->vqstate.vectorized_quals_constified, constified);
 	}
+
+	/* If the node is supposed to project, then try to make it a simple
+	 * projection. If not possible, it will fall back to standard PostgreSQL
+	 * projection. */
+	if (cstate->css.ss.ps.ps_ProjInfo)
+		create_simple_projection_state_if_possible(cstate);
 }
 
 static void
 columnar_scan_end(CustomScanState *state)
 {
 	TableScanDesc scandesc = state->ss.ss_currentScanDesc;
+
 	/*
 	 * Free the exprcontext
 	 */
