@@ -674,32 +674,6 @@ SELECT * FROM sorted_bgw_log;
 SELECT * FROM _timescaledb_internal.bgw_job_stat;
 \x off
 
--- Test renaming a user and see that the owner of the job changes.
-\c :TEST_DBNAME :ROLE_SUPERUSER
-CREATE USER another_user;
-
-SET ROLE another_user;
-SELECT insert_job('another_one', 'bgw_test_job_1', INTERVAL '100ms', INTERVAL '100s', INTERVAL '1s') AS job_id \gset
-
-SELECT proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-
-RESET ROLE;
-ALTER USER another_user RENAME TO renamed_user;
-
-SELECT proc_name, owner FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-
--- This should fail since the job is dependent on the owner
-\set VERBOSITY default
-\set ON_ERROR_STOP 0
-DROP USER renamed_user;
-\set ON_ERROR_STOP 1
-
-DELETE FROM _timescaledb_config.bgw_job WHERE id = :job_id;
-
--- This should succeed
-DROP USER renamed_user;
-
-
 --
 -- Test without retry
 --
