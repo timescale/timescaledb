@@ -268,6 +268,6 @@ END;
 $$ LANGUAGE PLPGSQL;
 
 CREATE FUNCTION _timescaledb_functions.compressed_data_info(_timescaledb_internal.compressed_data)
-    RETURNS TABLE (algorithm name, has_nulls bool)
+    RETURNS TABLE (algorithm cstring, has_nulls bool)
     LANGUAGE C STRICT IMMUTABLE
     AS '@MODULE_PATHNAME@', 'ts_compressed_data_info';
