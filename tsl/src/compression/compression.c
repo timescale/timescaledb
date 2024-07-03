@@ -46,16 +46,18 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
 
-static const char *compression_algorithm_name[] = {
-	[_INVALID_COMPRESSION_ALGORITHM] = "INVALID",	   [COMPRESSION_ALGORITHM_ARRAY] = "ARRAY",
-	[COMPRESSION_ALGORITHM_DICTIONARY] = "DICTIONARY", [COMPRESSION_ALGORITHM_GORILLA] = "GORILLA",
-	[COMPRESSION_ALGORITHM_DELTADELTA] = "DELTADELTA",
+static NameData compression_algorithm_name[] = {
+	[_INVALID_COMPRESSION_ALGORITHM] = { "INVALID" },
+	[COMPRESSION_ALGORITHM_ARRAY] = { "ARRAY" },
+	[COMPRESSION_ALGORITHM_DICTIONARY] = { "DICTIONARY" },
+	[COMPRESSION_ALGORITHM_GORILLA] = { "GORILLA" },
+	[COMPRESSION_ALGORITHM_DELTADELTA] = { "DELTADELTA" },
 };
 
-const char *
+Name
 compression_get_algorithm_name(CompressionAlgorithm alg)
 {
-	return compression_algorithm_name[alg];
+	return &compression_algorithm_name[alg];
 }
 
 static Compressor *
@@ -2041,7 +2043,7 @@ tsl_compressed_data_info(PG_FUNCTION_ARGS)
 	bool nulls[Natts_compressed_info] = { false };
 
 	values[AttrNumberGetAttrOffset(Anum_compressed_info_algorithm)] =
-		CStringGetDatum(compression_get_algorithm_name(header->compression_algorithm));
+		NameGetDatum(compression_get_algorithm_name(header->compression_algorithm));
 	values[AttrNumberGetAttrOffset(Anum_compressed_info_has_nulls)] = BoolGetDatum(has_nulls);
 	tuple = heap_form_tuple(tupdesc, values, nulls);
 
