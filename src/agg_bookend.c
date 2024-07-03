@@ -40,10 +40,18 @@ typedef struct PolyDatum
 	Datum datum;
 } PolyDatum;
 
+typedef struct TypeInfoCache
+{
+	Oid typoid;
+	int16 typlen;
+	bool typbyval;
+} TypeInfoCache;
+
 /* PolyDatumIOState is internal state used by  polydatum_serialize and	polydatum_deserialize  */
 typedef struct PolyDatumIOState
 {
-	Oid io_type_oid;
+	TypeInfoCache type;
+
 	FmgrInfo proc;
 	Oid typeioparam;
 } PolyDatumIOState;
@@ -90,8 +98,8 @@ polydatum_serialize(PolyDatum *pd, StringInfo buf, PolyDatumIOState *state, Func
 {
 	bytea *outputbytes;
 
-	Assert(OidIsValid(state->io_type_oid));
-	polydatum_serialize_type(buf, state->io_type_oid);
+	Assert(OidIsValid(state->type.typoid));
+	polydatum_serialize_type(buf, state->type.typoid);
 
 	if (pd->is_null)
 	{
@@ -180,14 +188,15 @@ polydatum_deserialize(MemoryContext mem_ctx, PolyDatum *result, StringInfo buf,
 	}
 
 	/* Now call the column's receiveproc */
-	if (state->io_type_oid != deserialized_type)
+	if (state->type.typoid != deserialized_type)
 	{
-		Assert(!OidIsValid(state->io_type_oid));
+		Assert(!OidIsValid(state->type.typoid));
 
 		Oid func;
 		getTypeBinaryInputInfo(deserialized_type, &func, &state->typeioparam);
 		fmgr_info_cxt(func, &state->proc, fcinfo->flinfo->fn_mcxt);
-		state->io_type_oid = deserialized_type;
+		state->type.typoid = deserialized_type;
+		get_typlenbyval(state->type.typoid, &state->type.typlen, &state->type.typbyval);
 	}
 
 	result->datum = ReceiveFunctionCall(&state->proc, bufptr, state->typeioparam, -1);
@@ -207,13 +216,6 @@ polydatum_deserialize(MemoryContext mem_ctx, PolyDatum *result, StringInfo buf,
 
 	return result;
 }
-
-typedef struct TypeInfoCache
-{
-	Oid good_type_oid;
-	int16 typelen;
-	bool typebyval;
-} TypeInfoCache;
 
 typedef struct TransCache
 {
@@ -251,9 +253,9 @@ typedef struct InternalCmpAggStoreIOState
 inline static void
 typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *output)
 {
-	Assert(OidIsValid(tic->good_type_oid));
+	Assert(OidIsValid(tic->typoid));
 
-	if (!tic->typebyval && !output->is_null)
+	if (!tic->typbyval && !output->is_null)
 	{
 		pfree(DatumGetPointer(output->datum));
 	}
@@ -262,7 +264,7 @@ typeinfocache_polydatumcopy(TypeInfoCache *tic, PolyDatum input, PolyDatum *outp
 
 	if (!input.is_null)
 	{
-		output->datum = datumCopy(input.datum, tic->typebyval, tic->typelen);
+		output->datum = datumCopy(input.datum, tic->typbyval, tic->typlen);
 		output->is_null = false;
 	}
 	else
@@ -318,21 +320,26 @@ bookend_sfunc(MemoryContext aggcontext, InternalCmpAggStore *state, char *opname
 		TransCache *cache = &state->aggstate_type_cache;
 
 		TypeInfoCache *v = &cache->value_type_cache;
-		v->good_type_oid = get_fn_expr_argtype(fcinfo->flinfo, 1);
-		get_typlenbyval(v->good_type_oid, &v->typelen, &v->typebyval);
+		v->typoid = get_fn_expr_argtype(fcinfo->flinfo, 1);
+		get_typlenbyval(v->typoid, &v->typlen, &v->typbyval);
 
 		TypeInfoCache *c = &cache->cmp_type_cache;
-		c->good_type_oid = get_fn_expr_argtype(fcinfo->flinfo, 2);
-		get_typlenbyval(c->good_type_oid, &c->typelen, &c->typebyval);
+		c->typoid = get_fn_expr_argtype(fcinfo->flinfo, 2);
+		get_typlenbyval(c->typoid, &c->typlen, &c->typbyval);
 
 		typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
 		typeinfocache_polydatumcopy(&cache->cmp_type_cache, cmp, &state->cmp);
-		cmpproc_init(fcinfo, &cache->cmp_proc, cache->cmp_type_cache.good_type_oid, opname);
 	}
 	else if (!cmp.is_null)
 	{
-		/* only do comparison if cmp is not NULL */
 		TransCache *cache = &state->aggstate_type_cache;
+
+		if (cache->cmp_proc.fn_addr == NULL)
+		{
+			cmpproc_init(fcinfo, &cache->cmp_proc, cache->cmp_type_cache.typoid, opname);
+		}
+
+		/* only do comparison if cmp is not NULL */
 		if (state->cmp.is_null || cmpproc_cmp(&cache->cmp_proc, fcinfo, cmp, state->cmp))
 		{
 			typeinfocache_polydatumcopy(&cache->value_type_cache, value, &state->value);
@@ -365,12 +372,11 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 		old_context = MemoryContextSwitchTo(aggcontext);
 
 		state1 = init_store(aggcontext);
-		Assert(OidIsValid(state2->aggstate_type_cache.value_type_cache.good_type_oid));
-		Assert(OidIsValid(state2->aggstate_type_cache.cmp_type_cache.good_type_oid));
+		Assert(OidIsValid(state2->aggstate_type_cache.value_type_cache.typoid));
+		Assert(OidIsValid(state2->aggstate_type_cache.cmp_type_cache.typoid));
 		TransCache *cache1 = &state1->aggstate_type_cache;
 		TransCache *cache2 = &state2->aggstate_type_cache;
 		*cache1 = *cache2;
-		cmpproc_init(fcinfo, &cache1->cmp_proc, cache1->cmp_type_cache.good_type_oid, opname);
 
 		typeinfocache_polydatumcopy(&cache1->value_type_cache, state2->value, &state1->value);
 		typeinfocache_polydatumcopy(&cache1->cmp_type_cache, state2->cmp, &state1->cmp);
@@ -392,6 +398,10 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 	}
 
 	TransCache *cache1 = &state1->aggstate_type_cache;
+	if (cache1->cmp_proc.fn_addr == NULL)
+	{
+		cmpproc_init(fcinfo, &cache1->cmp_proc, cache1->cmp_type_cache.typoid, opname);
+	}
 	if (cmpproc_cmp(&cache1->cmp_proc, fcinfo, state2->cmp, state1->cmp))
 	{
 		old_context = MemoryContextSwitchTo(aggcontext);
@@ -494,16 +504,16 @@ ts_bookend_serializefunc(PG_FUNCTION_ARGS)
 		Oid func;
 		bool is_varlena;
 
-		my_extra->value.io_type_oid = state->aggstate_type_cache.value_type_cache.good_type_oid;
-		Assert(OidIsValid(my_extra->value.io_type_oid));
+		my_extra->value.type = state->aggstate_type_cache.value_type_cache;
+		Assert(OidIsValid(my_extra->value.type.typoid));
 
-		getTypeBinaryOutputInfo(my_extra->value.io_type_oid, &func, &is_varlena);
+		getTypeBinaryOutputInfo(my_extra->value.type.typoid, &func, &is_varlena);
 		fmgr_info_cxt(func, &my_extra->value.proc, fcinfo->flinfo->fn_mcxt);
 
-		my_extra->cmp.io_type_oid = state->aggstate_type_cache.cmp_type_cache.good_type_oid;
-		Assert(OidIsValid(my_extra->cmp.io_type_oid));
+		my_extra->cmp.type = state->aggstate_type_cache.cmp_type_cache;
+		Assert(OidIsValid(my_extra->cmp.type.typoid));
 
-		getTypeBinaryOutputInfo(my_extra->cmp.io_type_oid, &func, &is_varlena);
+		getTypeBinaryOutputInfo(my_extra->cmp.type.typoid, &func, &is_varlena);
 		fmgr_info_cxt(func, &my_extra->cmp.proc, fcinfo->flinfo->fn_mcxt);
 	}
 	pq_begintypsend(&buf);
@@ -546,14 +556,9 @@ ts_bookend_deserializefunc(PG_FUNCTION_ARGS)
 	polydatum_deserialize(aggcontext, &result->value, &buf, &my_extra->value, fcinfo);
 	polydatum_deserialize(aggcontext, &result->cmp, &buf, &my_extra->cmp, fcinfo);
 
-	TypeInfoCache *v = &result->aggstate_type_cache.value_type_cache;
-	v->good_type_oid = my_extra->value.io_type_oid;
-	/* FIXME cache the typlen in io state. */
-	get_typlenbyval(v->good_type_oid, &v->typelen, &v->typebyval);
+	result->aggstate_type_cache.value_type_cache = my_extra->value.type;
+	result->aggstate_type_cache.cmp_type_cache = my_extra->cmp.type;
 
-	TypeInfoCache *c = &result->aggstate_type_cache.cmp_type_cache;
-	c->good_type_oid = my_extra->cmp.io_type_oid;
-	get_typlenbyval(c->good_type_oid, &c->typelen, &c->typebyval);
 	PG_RETURN_POINTER(result);
 }
 
