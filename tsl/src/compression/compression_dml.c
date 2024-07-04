@@ -42,6 +42,7 @@ decompress_batches_seqscan(Relation in_rel, Relation out_rel, Snapshot snapshot,
 
 static bool batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys);
 static void process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
+							   ScanKeyData **mem_scankeys, int *num_mem_scankeys,
 							   List **heap_filters, List **index_filters, List **is_null);
 static Relation find_matching_index(Relation comp_chunk_rel, List **index_filters,
 									List **heap_filters);
@@ -89,13 +90,17 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	struct decompress_batches_stats stats;
 
 	/* the scan keys used for in memory tests of the decompressed tuples */
-	int num_mem_scankeys;
-	ScanKeyData *mem_scankeys = build_scankeys_for_uncompressed(cis->hypertable_relid,
-																settings,
-																out_rel,
-																key_columns,
-																slot,
-																&num_mem_scankeys);
+	int num_mem_scankeys = 0;
+	ScanKeyData *mem_scankeys = NULL;
+	if (ts_guc_enable_dml_decompression_tuple_filtering)
+	{
+		mem_scankeys = build_mem_scankeys_from_slot(cis->hypertable_relid,
+													settings,
+													out_rel,
+													key_columns,
+													slot,
+													&num_mem_scankeys);
+	}
 
 	int num_index_scankeys;
 	Relation index_rel = NULL;
@@ -211,11 +216,20 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 	ScanKeyData *index_scankeys = NULL;
 	int num_index_scankeys = 0;
 	struct decompress_batches_stats stats;
+	int num_mem_scankeys = 0;
+	ScanKeyData *mem_scankeys = NULL;
 
 	comp_chunk = ts_chunk_get_by_id(chunk->fd.compressed_chunk_id, true);
 	CompressionSettings *settings = ts_compression_settings_get(comp_chunk->table_id);
 
-	process_predicates(chunk, settings, predicates, &heap_filters, &index_filters, &is_null);
+	process_predicates(chunk,
+					   settings,
+					   predicates,
+					   &mem_scankeys,
+					   &num_mem_scankeys,
+					   &heap_filters,
+					   &index_filters,
+					   &is_null);
 
 	chunk_rel = table_open(chunk->table_id, RowExclusiveLock);
 	comp_chunk_rel = table_open(comp_chunk->table_id, RowExclusiveLock);
@@ -244,8 +258,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 											 num_index_scankeys,
 											 scankeys,
 											 num_scankeys,
-											 NULL,
-											 0,
+											 mem_scankeys,
+											 num_mem_scankeys,
 											 null_columns,
 											 is_null);
 		/* close the selected index */
@@ -258,8 +272,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 										   GetTransactionSnapshot(),
 										   scankeys,
 										   num_scankeys,
-										   NULL,
-										   0,
+										   mem_scankeys,
+										   num_mem_scankeys,
 										   null_columns,
 										   is_null);
 	}
@@ -389,6 +403,12 @@ decompress_batches_indexscan(Relation in_rel, Relation out_rel, Relation index_r
 						  decompressor.in_desc,
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
+
+		if (num_mem_scankeys && !batch_matches(&decompressor, mem_scankeys, num_mem_scankeys))
+		{
+			row_decompressor_reset(&decompressor);
+			continue;
+		}
 
 		write_logical_replication_msg_decompression_start();
 		result = delete_compressed_tuple(&decompressor, snapshot, compressed_tuple);
@@ -791,10 +811,17 @@ compressed_insert_key_columns(Relation relation)
  * filters are put into heap_filters list.
  */
 static void
-process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, List **heap_filters,
+process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
+				   ScanKeyData **mem_scankeys, int *num_mem_scankeys, List **heap_filters,
 				   List **index_filters, List **is_null)
 {
 	ListCell *lc;
+	if (ts_guc_enable_dml_decompression_tuple_filtering)
+	{
+		*mem_scankeys = palloc0(sizeof(ScanKeyData) * list_length(predicates));
+	}
+	*num_mem_scankeys = 0;
+
 	/*
 	 * We dont want to forward boundParams from the execution state here
 	 * as we dont want to constify join params in the predicates.
@@ -837,6 +864,7 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, L
 				column_name = get_attname(ch->table_id, var->varattno, false);
 				TypeCacheEntry *tce = lookup_type_cache(var->vartype, TYPECACHE_BTREE_OPFAMILY);
 				int op_strategy = get_op_opfamily_strategy(opno, tce->btree_opf);
+
 				if (ts_array_is_member(settings->fd.segmentby, column_name))
 				{
 					switch (op_strategy)
@@ -862,6 +890,21 @@ process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates, L
 						}
 					}
 					continue;
+				}
+
+				/*
+				 * Segmentby columns are checked as part of batch scan so no need to redo the check.
+				 */
+				if (ts_guc_enable_dml_decompression_tuple_filtering)
+				{
+					ScanKeyEntryInitialize(&(*mem_scankeys)[(*num_mem_scankeys)++],
+										   arg_value->constisnull ? SK_ISNULL : 0,
+										   var->varattno,
+										   op_strategy,
+										   arg_value->consttype,
+										   arg_value->constcollid,
+										   opcode,
+										   arg_value->constisnull ? 0 : arg_value->constvalue);
 				}
 
 				int min_attno = compressed_column_metadata_attno(settings,
