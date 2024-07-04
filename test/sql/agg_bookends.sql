@@ -47,5 +47,7 @@ SELECT first(time, quantity) FROM partial_aggregation;
 SELECT last(time, quantity) FROM partial_aggregation;
 SELECT first(longvalue, quantity) FROM partial_aggregation;
 SELECT last(longvalue, quantity) FROM partial_aggregation;
+SELECT last(longvalue, quantity) FROM partial_aggregation WHERE quantity IS NULL;
+SELECT last(longvalue, quantity) FROM partial_aggregation WHERE quantity IS NOT NULL;
 SET enable_partitionwise_aggregate = OFF;
 

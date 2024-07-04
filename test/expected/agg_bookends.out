@@ -1641,4 +1641,16 @@ SELECT last(longvalue, quantity) FROM partial_aggregation;
  World
 (1 row)
 
+SELECT last(longvalue, quantity) FROM partial_aggregation WHERE quantity IS NULL;
+ last 
+------
+ 
+(1 row)
+
+SELECT last(longvalue, quantity) FROM partial_aggregation WHERE quantity IS NOT NULL;
+ last  
+-------
+ World
+(1 row)
+
 SET enable_partitionwise_aggregate = OFF;
