@@ -372,6 +372,7 @@ extern RowDecompressor build_decompressor(Relation in_rel, Relation out_rel);
 extern void row_decompressor_reset(RowDecompressor *decompressor);
 extern void row_decompressor_close(RowDecompressor *decompressor);
 extern enum CompressionAlgorithms compress_get_default_algorithm(Oid typeoid);
+extern int decompress_batch(RowDecompressor *decompressor);
 /*
  * A convenience macro to throw an error about the corrupted compressed data, if
  * the argument is false. When fuzzing is enabled, we don't show the message not
@@ -406,3 +407,9 @@ consumeCompressedData(StringInfo si, int bytes)
 #define GLOBAL_MAX_ROWS_PER_COMPRESSION INT16_MAX
 
 const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm algo);
+
+struct decompress_batches_stats
+{
+	int64 batches_decompressed;
+	int64 tuples_decompressed;
+};

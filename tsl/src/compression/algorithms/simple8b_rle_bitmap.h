@@ -10,7 +10,7 @@
  * elements are only 0 and 1. It also counts the number of ones.
  */
 
-#include "compression/simple8b_rle.h"
+#include "simple8b_rle.h"
 
 typedef struct Simple8bRleBitmap
 {

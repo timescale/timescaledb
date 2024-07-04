@@ -4,7 +4,7 @@
  * LICENSE-TIMESCALE for a copy of the license.
  */
 
-#include "compression/deltadelta.h"
+#include "deltadelta.h"
 
 #include <access/htup_details.h>
 #include <catalog/pg_aggregate.h>
@@ -22,8 +22,8 @@
 
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
-#include "compression/simple8b_rle.h"
-#include "compression/simple8b_rle_bitmap.h"
+#include "simple8b_rle.h"
+#include "simple8b_rle_bitmap.h"
 
 static uint64 zig_zag_encode(uint64 value);
 static uint64 zig_zag_decode(uint64 value);
