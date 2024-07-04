@@ -40,14 +40,29 @@ INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
 INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
 INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 1, 'Hello');
 INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 2, 'World');
+INSERT INTO partial_aggregation VALUES('2020-01-20T09:00:43', 3, 'some');
+INSERT INTO partial_aggregation VALUES('2020-01-20T09:00:43', 3, 'more');
+INSERT INTO partial_aggregation VALUES('2021-01-20T09:00:43', 3, 'some');
+INSERT INTO partial_aggregation VALUES('2021-01-20T09:00:43', 3, 'more');
+INSERT INTO partial_aggregation VALUES('2022-01-20T09:00:43', 4, 'words');
+INSERT INTO partial_aggregation VALUES('2022-01-20T09:00:43', 5, 'words');
+INSERT INTO partial_aggregation VALUES('2023-01-20T09:00:43', 6, 'words');
+INSERT INTO partial_aggregation VALUES('2023-01-20T09:00:43', 7, 'words');
 
 -- Use enable_partitionwise_aggregate to create partial aggregates per chunk
 SET enable_partitionwise_aggregate = ON;
-SELECT first(time, quantity) FROM partial_aggregation;
-SELECT last(time, quantity) FROM partial_aggregation;
-SELECT first(longvalue, quantity) FROM partial_aggregation;
-SELECT last(longvalue, quantity) FROM partial_aggregation;
-SELECT last(longvalue, quantity) FROM partial_aggregation WHERE quantity IS NULL;
-SELECT last(longvalue, quantity) FROM partial_aggregation WHERE quantity IS NOT NULL;
+
+select format('select %3$s, %1$s from partial_aggregation where %2$s group by %3$s order by 1, 2',
+    function, condition, grouping)
+from unnest(array['first(time, quantity), last(time, quantity)',
+        'last(longvalue, quantity)', 'last(quantity, longvalue)',
+        'last(quantity, time)', 'last(time, longvalue)']) function,
+    unnest(array['true', 'time < ''2021-01-01''', 'quantity is null',
+        'quantity is not null']) condition,
+    unnest(array['777::text' /* dummy grouping column */, 'longvalue',
+        'quantity', 'time_bucket(''3 year'', time)',
+        'time_bucket(''3 year'', time)']) grouping
+\gexec
+
 SET enable_partitionwise_aggregate = OFF;
 

@@ -376,7 +376,14 @@ bookend_combinefunc(MemoryContext aggcontext, InternalCmpAggStore *state1,
 		Assert(OidIsValid(state2->aggstate_type_cache.cmp_type_cache.typoid));
 		TransCache *cache1 = &state1->aggstate_type_cache;
 		TransCache *cache2 = &state2->aggstate_type_cache;
-		*cache1 = *cache2;
+		/*
+		 * Initialize the type information from the right-hand state. Note that
+		 * we will have to re-lookup the comparison procedure on demand, because
+		 * the comparison procedure from the right-hand state might have been
+		 * allocated in a different memory context.
+		 */
+		cache1->value_type_cache = cache2->value_type_cache;
+		cache1->cmp_type_cache = cache2->cmp_type_cache;
 
 		typeinfocache_polydatumcopy(&cache1->value_type_cache, state2->value, &state1->value);
 		typeinfocache_polydatumcopy(&cache1->cmp_type_cache, state2->cmp, &state1->cmp);
