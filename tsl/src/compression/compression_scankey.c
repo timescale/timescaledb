@@ -16,6 +16,11 @@
 #include "ts_catalog/array_utils.h"
 
 static Oid deduce_filter_subtype(BatchFilter *filter, Oid att_typoid);
+static int create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
+										 StrategyNumber strategy, Oid subtype,
+										 ScanKeyData *scankeys, int num_scankeys,
+										 Bitmapset **null_columns, Datum value, bool is_null_check,
+										 bool is_array_op);
 
 /*
  * Build scankeys for decompressed tuple to check if it is part of the batch.
@@ -23,12 +28,13 @@ static Oid deduce_filter_subtype(BatchFilter *filter, Oid att_typoid);
  * The key_columns are the columns of the uncompressed chunk.
  */
 ScanKeyData *
-build_scankeys_for_uncompressed(Oid ht_relid, CompressionSettings *settings, Relation out_rel,
-								Bitmapset *key_columns, TupleTableSlot *slot, int *num_scankeys)
+build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relation out_rel,
+							 Bitmapset *key_columns, TupleTableSlot *slot, int *num_scankeys)
 {
 	ScanKeyData *scankeys = NULL;
 	int key_index = 0;
 	TupleDesc out_desc = RelationGetDescr(out_rel);
+	TupleDesc in_desc = slot->tts_tupleDescriptor;
 
 	if (bms_is_empty(key_columns))
 	{
@@ -93,8 +99,8 @@ build_scankeys_for_uncompressed(Oid ht_relid, CompressionSettings *settings, Rel
 							   isnull ? SK_ISNULL | SK_SEARCHNULL : 0,
 							   attno,
 							   BTEqualStrategyNumber,
-							   InvalidOid,
-							   out_desc->attrs[AttrNumberGetAttrOffset(attno)].attcollation,
+							   in_desc->attrs[AttrNumberGetAttrOffset(ht_attno)].atttypid,
+							   in_desc->attrs[AttrNumberGetAttrOffset(ht_attno)].attcollation,
 							   get_opcode(opr),
 							   isnull ? 0 : value);
 	}
@@ -437,7 +443,7 @@ build_update_delete_scankeys(Relation in_rel, List *heap_filters, int *num_scank
 	return scankeys;
 }
 
-int
+static int
 create_segment_filter_scankey(Relation in_rel, char *segment_filter_col_name,
 							  StrategyNumber strategy, Oid subtype, ScanKeyData *scankeys,
 							  int num_scankeys, Bitmapset **null_columns, Datum value,

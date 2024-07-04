@@ -69,6 +69,7 @@ TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify = true;
 TSDLLEXPORT int ts_guc_cagg_max_individual_materializations = 10;
 bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
+TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
 TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
@@ -430,6 +431,18 @@ _guc_init(void)
 							 "Enable DML decompression",
 							 "Enable DML decompression when modifying compressed hypertable",
 							 &ts_guc_enable_dml_decompression,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_dml_decompression_tuple_filtering"),
+							 "Enable DML decompression tuple filtering",
+							 "Recheck tuples during DML decompression to only decompress batches "
+							 "with matching tuples",
+							 &ts_guc_enable_dml_decompression_tuple_filtering,
 							 true,
 							 PGC_USERSET,
 							 0,

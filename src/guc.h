@@ -29,6 +29,7 @@ extern bool ts_guc_enable_now_constify;
 extern TSDLLEXPORT bool ts_guc_enable_cagg_watermark_constify;
 extern bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
+extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
 extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;
