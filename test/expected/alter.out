@@ -29,24 +29,25 @@ SELECT * FROM alter_before;
 
 -- Show that deleted column is marked as dropped and that attnums are
 -- now different for the root table and the chunk
-SELECT c.relname, a.attname, a.attnum, a.attoptions, a.attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+-- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
+SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_1%_chunk' OR c.relname = 'alter_before')
 AND a.attnum > 0
 ORDER BY c.relname, a.attnum;
      relname      |           attname            | attnum |   attoptions    | attstattarget | attstorage 
 ------------------+------------------------------+--------+-----------------+---------------+------------
- _hyper_1_1_chunk | time                         |      1 |                 |            -1 | p
+ _hyper_1_1_chunk | time                         |      1 |                 |               | p
  _hyper_1_1_chunk | temp                         |      2 | {n_distinct=10} |           100 | p
- _hyper_1_1_chunk | colorid                      |      3 |                 |            -1 | p
- _hyper_1_1_chunk | notes                        |      4 |                 |            -1 | e
- _hyper_1_1_chunk | notes_2                      |      5 |                 |            -1 | x
+ _hyper_1_1_chunk | colorid                      |      3 |                 |               | p
+ _hyper_1_1_chunk | notes                        |      4 |                 |               | e
+ _hyper_1_1_chunk | notes_2                      |      5 |                 |               | x
  alter_before     | ........pg.dropped.1........ |      1 |                 |             0 | p
- alter_before     | time                         |      2 |                 |            -1 | p
+ alter_before     | time                         |      2 |                 |               | p
  alter_before     | temp                         |      3 | {n_distinct=10} |           100 | p
- alter_before     | colorid                      |      4 |                 |            -1 | p
- alter_before     | notes                        |      5 |                 |            -1 | e
- alter_before     | notes_2                      |      6 |                 |            -1 | x
+ alter_before     | colorid                      |      4 |                 |               | p
+ alter_before     | notes                        |      5 |                 |               | e
+ alter_before     | notes_2                      |      6 |                 |               | x
 (11 rows)
 
 -- DROP a table's column after making it a hypertable and having data
@@ -126,7 +127,8 @@ ALTER TABLE  _timescaledb_internal._hyper_2_3_chunk ALTER COLUMN temp RESET (n_d
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET (n_distinct = 20);
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN temp SET STATISTICS 201;
 ALTER TABLE  _timescaledb_internal._hyper_2_4_chunk ALTER COLUMN notes SET STORAGE EXTERNAL;
-SELECT c.relname, a.attname, a.attnum, a.attoptions, a.attstattarget, a.attstorage FROM pg_attribute a, pg_class c
+-- PG17 made attstattarget NULLABLE and changed the default from -1 to NULL
+SELECT c.relname, a.attname, a.attnum, a.attoptions, CASE WHEN a.attstattarget = -1 THEN NULL ELSE a.attstattarget END attstattarget, a.attstorage FROM pg_attribute a, pg_class c
 WHERE a.attrelid = c.oid
 AND (c.relname LIKE '_hyper_2%_chunk' OR c.relname = 'alter_after')
 AND a.attnum > 0
@@ -134,31 +136,31 @@ ORDER BY c.relname, a.attnum;
      relname      |           attname            | attnum |   attoptions    | attstattarget | attstorage 
 ------------------+------------------------------+--------+-----------------+---------------+------------
  _hyper_2_2_chunk | ........pg.dropped.1........ |      1 |                 |             0 | p
- _hyper_2_2_chunk | time                         |      2 |                 |            -1 | p
- _hyper_2_2_chunk | temp                         |      3 | {n_distinct=10} |            -1 | p
+ _hyper_2_2_chunk | time                         |      2 |                 |               | p
+ _hyper_2_2_chunk | temp                         |      3 | {n_distinct=10} |               | p
  _hyper_2_2_chunk | colorid                      |      4 |                 |           101 | p
- _hyper_2_2_chunk | notes                        |      5 |                 |            -1 | x
- _hyper_2_2_chunk | notes_2                      |      6 |                 |            -1 | e
- _hyper_2_2_chunk | id                           |      7 |                 |            -1 | p
- _hyper_2_3_chunk | time                         |      1 |                 |            -1 | p
- _hyper_2_3_chunk | temp                         |      2 |                 |            -1 | p
+ _hyper_2_2_chunk | notes                        |      5 |                 |               | x
+ _hyper_2_2_chunk | notes_2                      |      6 |                 |               | e
+ _hyper_2_2_chunk | id                           |      7 |                 |               | p
+ _hyper_2_3_chunk | time                         |      1 |                 |               | p
+ _hyper_2_3_chunk | temp                         |      2 |                 |               | p
  _hyper_2_3_chunk | colorid                      |      3 |                 |           101 | p
- _hyper_2_3_chunk | notes                        |      4 |                 |            -1 | x
- _hyper_2_3_chunk | notes_2                      |      5 |                 |            -1 | e
- _hyper_2_3_chunk | id                           |      6 |                 |            -1 | p
- _hyper_2_4_chunk | time                         |      1 |                 |            -1 | p
+ _hyper_2_3_chunk | notes                        |      4 |                 |               | x
+ _hyper_2_3_chunk | notes_2                      |      5 |                 |               | e
+ _hyper_2_3_chunk | id                           |      6 |                 |               | p
+ _hyper_2_4_chunk | time                         |      1 |                 |               | p
  _hyper_2_4_chunk | temp                         |      2 | {n_distinct=20} |           201 | p
  _hyper_2_4_chunk | colorid                      |      3 |                 |           101 | p
- _hyper_2_4_chunk | notes                        |      4 |                 |            -1 | e
- _hyper_2_4_chunk | notes_2                      |      5 |                 |            -1 | e
- _hyper_2_4_chunk | id                           |      6 |                 |            -1 | p
+ _hyper_2_4_chunk | notes                        |      4 |                 |               | e
+ _hyper_2_4_chunk | notes_2                      |      5 |                 |               | e
+ _hyper_2_4_chunk | id                           |      6 |                 |               | p
  alter_after      | ........pg.dropped.1........ |      1 |                 |             0 | p
- alter_after      | time                         |      2 |                 |            -1 | p
- alter_after      | temp                         |      3 | {n_distinct=10} |            -1 | p
+ alter_after      | time                         |      2 |                 |               | p
+ alter_after      | temp                         |      3 | {n_distinct=10} |               | p
  alter_after      | colorid                      |      4 |                 |           101 | p
- alter_after      | notes                        |      5 |                 |            -1 | x
- alter_after      | notes_2                      |      6 |                 |            -1 | e
- alter_after      | id                           |      7 |                 |            -1 | p
+ alter_after      | notes                        |      5 |                 |               | x
+ alter_after      | notes_2                      |      6 |                 |               | e
+ alter_after      | id                           |      7 |                 |               | p
 (26 rows)
 
 SELECT * FROM alter_after;
