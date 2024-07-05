@@ -11,6 +11,7 @@ SELECT format('include/%s_load.sql', :'TEST_BASE_NAME') AS "TEST_LOAD_NAME",
 SELECT format('\! diff %s %s', :'TEST_RESULTS_UNCOMPRESSED', :'TEST_RESULTS_COMPRESSED') AS "DIFF_CMD" \gset
 
 SET work_mem TO '50MB';
+SET enable_incremental_sort TO off;
 
 -- disable memoize node to make EXPLAIN output comparable between PG14 and previous versions
 SELECT CASE WHEN current_setting('server_version_num')::int/10000 >= 14 THEN set_config('enable_memoize','off',false) ELSE 'off' END AS enable_memoize;
@@ -196,6 +197,8 @@ CREATE INDEX ON metrics_space (device_id DESC, device_id_peer DESC, v0, v1 DESC,
 
 VACUUM ANALYZE metrics_space;
 
+SET enable_incremental_sort TO off;
+
 -- run queries on compressed hypertable and store result
 \set PREFIX ''
 \set PREFIX_VERBOSE ''
@@ -254,6 +257,7 @@ $sql$;
 -- should have decompresschunk node
 :PREFIX SELECT * FROM ht_func();
 \c
+SET enable_incremental_sort TO off;
 -- plan should be identical to previous plan in fresh session
 :PREFIX SELECT * FROM ht_func();
 
