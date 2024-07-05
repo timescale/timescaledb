@@ -1613,8 +1613,8 @@ SELECT schema_name, table_name, created FROM create_hypertable('partial_aggregat
 
 INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
 INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
-INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 1, 'Hello');
-INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 2, 'World');
+INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 1, 'hello');
+INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 2, 'world');
 INSERT INTO partial_aggregation VALUES('2020-01-20T09:00:43', 3, 'some');
 INSERT INTO partial_aggregation VALUES('2020-01-20T09:00:43', 3, 'more');
 INSERT INTO partial_aggregation VALUES('2021-01-20T09:00:43', 3, 'some');
@@ -1651,7 +1651,7 @@ select 777::text, last(longvalue, quantity) from partial_aggregation where true 
 select 777::text, last(quantity, longvalue) from partial_aggregation where true group by 777::text order by 1, 2
  text | last 
 ------+------
- 777  |    4
+ 777  |    2
 (1 row)
 
 select 777::text, last(quantity, time) from partial_aggregation where true group by 777::text order by 1, 2
@@ -1663,7 +1663,7 @@ select 777::text, last(quantity, time) from partial_aggregation where true group
 select 777::text, last(time, longvalue) from partial_aggregation where true group by 777::text order by 1, 2
  text |             last             
 ------+------------------------------
- 777  | Thu Jan 20 09:00:43 2022 PST
+ 777  | Sun Jan 20 09:00:43 2019 PST
 (1 row)
 
 select 777::text, first(time, quantity), last(time, quantity) from partial_aggregation where time < '2021-01-01' group by 777::text order by 1, 2
@@ -1681,7 +1681,7 @@ select 777::text, last(longvalue, quantity) from partial_aggregation where time 
 select 777::text, last(quantity, longvalue) from partial_aggregation where time < '2021-01-01' group by 777::text order by 1, 2
  text | last 
 ------+------
- 777  |    3
+ 777  |    2
 (1 row)
 
 select 777::text, last(quantity, time) from partial_aggregation where time < '2021-01-01' group by 777::text order by 1, 2
@@ -1693,7 +1693,7 @@ select 777::text, last(quantity, time) from partial_aggregation where time < '20
 select 777::text, last(time, longvalue) from partial_aggregation where time < '2021-01-01' group by 777::text order by 1, 2
  text |             last             
 ------+------------------------------
- 777  | Mon Jan 20 09:00:43 2020 PST
+ 777  | Sun Jan 20 09:00:43 2019 PST
 (1 row)
 
 select 777::text, first(time, quantity), last(time, quantity) from partial_aggregation where quantity is null group by 777::text order by 1, 2
@@ -1741,7 +1741,7 @@ select 777::text, last(longvalue, quantity) from partial_aggregation where quant
 select 777::text, last(quantity, longvalue) from partial_aggregation where quantity is not null group by 777::text order by 1, 2
  text | last 
 ------+------
- 777  |    4
+ 777  |    2
 (1 row)
 
 select 777::text, last(quantity, time) from partial_aggregation where quantity is not null group by 777::text order by 1, 2
@@ -1753,111 +1753,111 @@ select 777::text, last(quantity, time) from partial_aggregation where quantity i
 select 777::text, last(time, longvalue) from partial_aggregation where quantity is not null group by 777::text order by 1, 2
  text |             last             
 ------+------------------------------
- 777  | Thu Jan 20 09:00:43 2022 PST
+ 777  | Sun Jan 20 09:00:43 2019 PST
 (1 row)
 
 select longvalue, first(time, quantity), last(time, quantity) from partial_aggregation where true group by longvalue order by 1, 2
  longvalue |            first             |             last             
 -----------+------------------------------+------------------------------
- Hello     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
- World     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
+ hello     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
  more      | Mon Jan 20 09:00:43 2020 PST | Mon Jan 20 09:00:43 2020 PST
  some      | Mon Jan 20 09:00:43 2020 PST | Mon Jan 20 09:00:43 2020 PST
  words     | Thu Jan 20 09:00:43 2022 PST | Fri Jan 20 09:00:43 2023 PST
+ world     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
            |                              | 
 (6 rows)
 
 select longvalue, last(longvalue, quantity) from partial_aggregation where true group by longvalue order by 1, 2
  longvalue | last  
 -----------+-------
- Hello     | Hello
- World     | World
+ hello     | hello
  more      | more
  some      | some
  words     | words
+ world     | world
            | 
 (6 rows)
 
 select longvalue, last(quantity, longvalue) from partial_aggregation where true group by longvalue order by 1, 2
  longvalue | last 
 -----------+------
- Hello     |    1
- World     |    2
+ hello     |    1
  more      |    3
  some      |    3
  words     |    4
+ world     |    2
            |     
 (6 rows)
 
 select longvalue, last(quantity, time) from partial_aggregation where true group by longvalue order by 1, 2
  longvalue | last 
 -----------+------
- Hello     |    1
- World     |    2
+ hello     |    1
  more      |    3
  some      |    3
  words     |    6
+ world     |    2
            |     
 (6 rows)
 
 select longvalue, last(time, longvalue) from partial_aggregation where true group by longvalue order by 1, 2
  longvalue |             last             
 -----------+------------------------------
- Hello     | Sun Jan 20 09:00:43 2019 PST
- World     | Sun Jan 20 09:00:43 2019 PST
+ hello     | Sun Jan 20 09:00:43 2019 PST
  more      | Mon Jan 20 09:00:43 2020 PST
  some      | Mon Jan 20 09:00:43 2020 PST
  words     | Thu Jan 20 09:00:43 2022 PST
+ world     | Sun Jan 20 09:00:43 2019 PST
            | 
 (6 rows)
 
 select longvalue, first(time, quantity), last(time, quantity) from partial_aggregation where time < '2021-01-01' group by longvalue order by 1, 2
  longvalue |            first             |             last             
 -----------+------------------------------+------------------------------
- Hello     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
- World     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
+ hello     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
  more      | Mon Jan 20 09:00:43 2020 PST | Mon Jan 20 09:00:43 2020 PST
  some      | Mon Jan 20 09:00:43 2020 PST | Mon Jan 20 09:00:43 2020 PST
+ world     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
            |                              | 
 (5 rows)
 
 select longvalue, last(longvalue, quantity) from partial_aggregation where time < '2021-01-01' group by longvalue order by 1, 2
  longvalue | last  
 -----------+-------
- Hello     | Hello
- World     | World
+ hello     | hello
  more      | more
  some      | some
+ world     | world
            | 
 (5 rows)
 
 select longvalue, last(quantity, longvalue) from partial_aggregation where time < '2021-01-01' group by longvalue order by 1, 2
  longvalue | last 
 -----------+------
- Hello     |    1
- World     |    2
+ hello     |    1
  more      |    3
  some      |    3
+ world     |    2
            |     
 (5 rows)
 
 select longvalue, last(quantity, time) from partial_aggregation where time < '2021-01-01' group by longvalue order by 1, 2
  longvalue | last 
 -----------+------
- Hello     |    1
- World     |    2
+ hello     |    1
  more      |    3
  some      |    3
+ world     |    2
            |     
 (5 rows)
 
 select longvalue, last(time, longvalue) from partial_aggregation where time < '2021-01-01' group by longvalue order by 1, 2
  longvalue |             last             
 -----------+------------------------------
- Hello     | Sun Jan 20 09:00:43 2019 PST
- World     | Sun Jan 20 09:00:43 2019 PST
+ hello     | Sun Jan 20 09:00:43 2019 PST
  more      | Mon Jan 20 09:00:43 2020 PST
  some      | Mon Jan 20 09:00:43 2020 PST
+ world     | Sun Jan 20 09:00:43 2019 PST
            | 
 (5 rows)
 
@@ -1894,51 +1894,51 @@ select longvalue, last(time, longvalue) from partial_aggregation where quantity 
 select longvalue, first(time, quantity), last(time, quantity) from partial_aggregation where quantity is not null group by longvalue order by 1, 2
  longvalue |            first             |             last             
 -----------+------------------------------+------------------------------
- Hello     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
- World     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
+ hello     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
  more      | Mon Jan 20 09:00:43 2020 PST | Mon Jan 20 09:00:43 2020 PST
  some      | Mon Jan 20 09:00:43 2020 PST | Mon Jan 20 09:00:43 2020 PST
  words     | Thu Jan 20 09:00:43 2022 PST | Fri Jan 20 09:00:43 2023 PST
+ world     | Sun Jan 20 09:00:43 2019 PST | Sun Jan 20 09:00:43 2019 PST
 (5 rows)
 
 select longvalue, last(longvalue, quantity) from partial_aggregation where quantity is not null group by longvalue order by 1, 2
  longvalue | last  
 -----------+-------
- Hello     | Hello
- World     | World
+ hello     | hello
  more      | more
  some      | some
  words     | words
+ world     | world
 (5 rows)
 
 select longvalue, last(quantity, longvalue) from partial_aggregation where quantity is not null group by longvalue order by 1, 2
  longvalue | last 
 -----------+------
- Hello     |    1
- World     |    2
+ hello     |    1
  more      |    3
  some      |    3
  words     |    4
+ world     |    2
 (5 rows)
 
 select longvalue, last(quantity, time) from partial_aggregation where quantity is not null group by longvalue order by 1, 2
  longvalue | last 
 -----------+------
- Hello     |    1
- World     |    2
+ hello     |    1
  more      |    3
  some      |    3
  words     |    6
+ world     |    2
 (5 rows)
 
 select longvalue, last(time, longvalue) from partial_aggregation where quantity is not null group by longvalue order by 1, 2
  longvalue |             last             
 -----------+------------------------------
- Hello     | Sun Jan 20 09:00:43 2019 PST
- World     | Sun Jan 20 09:00:43 2019 PST
+ hello     | Sun Jan 20 09:00:43 2019 PST
  more      | Mon Jan 20 09:00:43 2020 PST
  some      | Mon Jan 20 09:00:43 2020 PST
  words     | Thu Jan 20 09:00:43 2022 PST
+ world     | Sun Jan 20 09:00:43 2019 PST
 (5 rows)
 
 select quantity, first(time, quantity), last(time, quantity) from partial_aggregation where true group by quantity order by 1, 2
@@ -1957,8 +1957,8 @@ select quantity, first(time, quantity), last(time, quantity) from partial_aggreg
 select quantity, last(longvalue, quantity) from partial_aggregation where true group by quantity order by 1, 2
  quantity | last  
 ----------+-------
-        1 | Hello
-        2 | World
+        1 | hello
+        2 | world
         3 | some
         4 | words
         5 | words
@@ -2018,8 +2018,8 @@ select quantity, first(time, quantity), last(time, quantity) from partial_aggreg
 select quantity, last(longvalue, quantity) from partial_aggregation where time < '2021-01-01' group by quantity order by 1, 2
  quantity | last  
 ----------+-------
-        1 | Hello
-        2 | World
+        1 | hello
+        2 | world
         3 | some
           | 
 (4 rows)
@@ -2096,8 +2096,8 @@ select quantity, first(time, quantity), last(time, quantity) from partial_aggreg
 select quantity, last(longvalue, quantity) from partial_aggregation where quantity is not null group by quantity order by 1, 2
  quantity | last  
 ----------+-------
-        1 | Hello
-        2 | World
+        1 | hello
+        2 | world
         3 | some
         4 | words
         5 | words
@@ -2158,7 +2158,7 @@ select time_bucket('3 year', time), last(longvalue, quantity) from partial_aggre
 select time_bucket('3 year', time), last(quantity, longvalue) from partial_aggregation where true group by time_bucket('3 year', time) order by 1, 2
          time_bucket          | last 
 ------------------------------+------
- Sun Dec 31 16:00:00 2017 PST |    3
+ Sun Dec 31 16:00:00 2017 PST |    2
  Thu Dec 31 16:00:00 2020 PST |    4
 (2 rows)
 
@@ -2172,7 +2172,7 @@ select time_bucket('3 year', time), last(quantity, time) from partial_aggregatio
 select time_bucket('3 year', time), last(time, longvalue) from partial_aggregation where true group by time_bucket('3 year', time) order by 1, 2
          time_bucket          |             last             
 ------------------------------+------------------------------
- Sun Dec 31 16:00:00 2017 PST | Mon Jan 20 09:00:43 2020 PST
+ Sun Dec 31 16:00:00 2017 PST | Sun Jan 20 09:00:43 2019 PST
  Thu Dec 31 16:00:00 2020 PST | Thu Jan 20 09:00:43 2022 PST
 (2 rows)
 
@@ -2191,7 +2191,7 @@ select time_bucket('3 year', time), last(longvalue, quantity) from partial_aggre
 select time_bucket('3 year', time), last(quantity, longvalue) from partial_aggregation where time < '2021-01-01' group by time_bucket('3 year', time) order by 1, 2
          time_bucket          | last 
 ------------------------------+------
- Sun Dec 31 16:00:00 2017 PST |    3
+ Sun Dec 31 16:00:00 2017 PST |    2
 (1 row)
 
 select time_bucket('3 year', time), last(quantity, time) from partial_aggregation where time < '2021-01-01' group by time_bucket('3 year', time) order by 1, 2
@@ -2203,7 +2203,7 @@ select time_bucket('3 year', time), last(quantity, time) from partial_aggregatio
 select time_bucket('3 year', time), last(time, longvalue) from partial_aggregation where time < '2021-01-01' group by time_bucket('3 year', time) order by 1, 2
          time_bucket          |             last             
 ------------------------------+------------------------------
- Sun Dec 31 16:00:00 2017 PST | Mon Jan 20 09:00:43 2020 PST
+ Sun Dec 31 16:00:00 2017 PST | Sun Jan 20 09:00:43 2019 PST
 (1 row)
 
 select time_bucket('3 year', time), first(time, quantity), last(time, quantity) from partial_aggregation where quantity is null group by time_bucket('3 year', time) order by 1, 2
@@ -2253,7 +2253,7 @@ select time_bucket('3 year', time), last(longvalue, quantity) from partial_aggre
 select time_bucket('3 year', time), last(quantity, longvalue) from partial_aggregation where quantity is not null group by time_bucket('3 year', time) order by 1, 2
          time_bucket          | last 
 ------------------------------+------
- Sun Dec 31 16:00:00 2017 PST |    3
+ Sun Dec 31 16:00:00 2017 PST |    2
  Thu Dec 31 16:00:00 2020 PST |    4
 (2 rows)
 
@@ -2267,7 +2267,7 @@ select time_bucket('3 year', time), last(quantity, time) from partial_aggregatio
 select time_bucket('3 year', time), last(time, longvalue) from partial_aggregation where quantity is not null group by time_bucket('3 year', time) order by 1, 2
          time_bucket          |             last             
 ------------------------------+------------------------------
- Sun Dec 31 16:00:00 2017 PST | Mon Jan 20 09:00:43 2020 PST
+ Sun Dec 31 16:00:00 2017 PST | Sun Jan 20 09:00:43 2019 PST
  Thu Dec 31 16:00:00 2020 PST | Thu Jan 20 09:00:43 2022 PST
 (2 rows)
 
@@ -2288,7 +2288,7 @@ select time_bucket('3 year', time), last(longvalue, quantity) from partial_aggre
 select time_bucket('3 year', time), last(quantity, longvalue) from partial_aggregation where true group by time_bucket('3 year', time) order by 1, 2
          time_bucket          | last 
 ------------------------------+------
- Sun Dec 31 16:00:00 2017 PST |    3
+ Sun Dec 31 16:00:00 2017 PST |    2
  Thu Dec 31 16:00:00 2020 PST |    4
 (2 rows)
 
@@ -2302,7 +2302,7 @@ select time_bucket('3 year', time), last(quantity, time) from partial_aggregatio
 select time_bucket('3 year', time), last(time, longvalue) from partial_aggregation where true group by time_bucket('3 year', time) order by 1, 2
          time_bucket          |             last             
 ------------------------------+------------------------------
- Sun Dec 31 16:00:00 2017 PST | Mon Jan 20 09:00:43 2020 PST
+ Sun Dec 31 16:00:00 2017 PST | Sun Jan 20 09:00:43 2019 PST
  Thu Dec 31 16:00:00 2020 PST | Thu Jan 20 09:00:43 2022 PST
 (2 rows)
 
@@ -2321,7 +2321,7 @@ select time_bucket('3 year', time), last(longvalue, quantity) from partial_aggre
 select time_bucket('3 year', time), last(quantity, longvalue) from partial_aggregation where time < '2021-01-01' group by time_bucket('3 year', time) order by 1, 2
          time_bucket          | last 
 ------------------------------+------
- Sun Dec 31 16:00:00 2017 PST |    3
+ Sun Dec 31 16:00:00 2017 PST |    2
 (1 row)
 
 select time_bucket('3 year', time), last(quantity, time) from partial_aggregation where time < '2021-01-01' group by time_bucket('3 year', time) order by 1, 2
@@ -2333,7 +2333,7 @@ select time_bucket('3 year', time), last(quantity, time) from partial_aggregatio
 select time_bucket('3 year', time), last(time, longvalue) from partial_aggregation where time < '2021-01-01' group by time_bucket('3 year', time) order by 1, 2
          time_bucket          |             last             
 ------------------------------+------------------------------
- Sun Dec 31 16:00:00 2017 PST | Mon Jan 20 09:00:43 2020 PST
+ Sun Dec 31 16:00:00 2017 PST | Sun Jan 20 09:00:43 2019 PST
 (1 row)
 
 select time_bucket('3 year', time), first(time, quantity), last(time, quantity) from partial_aggregation where quantity is null group by time_bucket('3 year', time) order by 1, 2
@@ -2383,7 +2383,7 @@ select time_bucket('3 year', time), last(longvalue, quantity) from partial_aggre
 select time_bucket('3 year', time), last(quantity, longvalue) from partial_aggregation where quantity is not null group by time_bucket('3 year', time) order by 1, 2
          time_bucket          | last 
 ------------------------------+------
- Sun Dec 31 16:00:00 2017 PST |    3
+ Sun Dec 31 16:00:00 2017 PST |    2
  Thu Dec 31 16:00:00 2020 PST |    4
 (2 rows)
 
@@ -2397,7 +2397,7 @@ select time_bucket('3 year', time), last(quantity, time) from partial_aggregatio
 select time_bucket('3 year', time), last(time, longvalue) from partial_aggregation where quantity is not null group by time_bucket('3 year', time) order by 1, 2
          time_bucket          |             last             
 ------------------------------+------------------------------
- Sun Dec 31 16:00:00 2017 PST | Mon Jan 20 09:00:43 2020 PST
+ Sun Dec 31 16:00:00 2017 PST | Sun Jan 20 09:00:43 2019 PST
  Thu Dec 31 16:00:00 2020 PST | Thu Jan 20 09:00:43 2022 PST
 (2 rows)
 

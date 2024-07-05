@@ -38,8 +38,8 @@ SELECT schema_name, table_name, created FROM create_hypertable('partial_aggregat
 
 INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
 INSERT INTO partial_aggregation VALUES('2018-01-20T09:00:43', NULL, NULL);
-INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 1, 'Hello');
-INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 2, 'World');
+INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 1, 'hello');
+INSERT INTO partial_aggregation VALUES('2019-01-20T09:00:43', 2, 'world');
 INSERT INTO partial_aggregation VALUES('2020-01-20T09:00:43', 3, 'some');
 INSERT INTO partial_aggregation VALUES('2020-01-20T09:00:43', 3, 'more');
 INSERT INTO partial_aggregation VALUES('2021-01-20T09:00:43', 3, 'some');
