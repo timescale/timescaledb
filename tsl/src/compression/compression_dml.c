@@ -34,25 +34,32 @@ decompress_batches_indexscan(Relation in_rel, Relation out_rel, Relation index_r
 							 Snapshot snapshot, ScanKeyData *index_scankeys, int num_index_scankeys,
 							 ScanKeyData *heap_scankeys, int num_heap_scankeys,
 							 ScanKeyData *mem_scankeys, int num_mem_scankeys,
+							 tuple_filtering_constraints *constraints, bool *skip_current_tuple,
 							 Bitmapset *null_columns, List *is_nulls);
 static struct decompress_batches_stats
 decompress_batches_seqscan(Relation in_rel, Relation out_rel, Snapshot snapshot,
 						   ScanKeyData *scankeys, int num_scankeys, ScanKeyData *mem_scankeys,
-						   int num_mem_scankeys, Bitmapset *null_columns, List *is_nulls);
+						   int num_mem_scankeys, tuple_filtering_constraints *constraints,
+						   bool *skip_current_tuple, Bitmapset *null_columns, List *is_nulls);
 
-static bool batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys);
+static bool batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+						  tuple_filtering_constraints *constraints, bool *skip_current_tuple);
 static void process_predicates(Chunk *ch, CompressionSettings *settings, List *predicates,
 							   ScanKeyData **mem_scankeys, int *num_mem_scankeys,
 							   List **heap_filters, List **index_filters, List **is_null);
 static Relation find_matching_index(Relation comp_chunk_rel, List **index_filters,
 									List **heap_filters);
-static Bitmapset *compressed_insert_key_columns(Relation relation);
+static tuple_filtering_constraints *
+get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation relation);
 static BatchFilter *make_batchfilter(char *column_name, StrategyNumber strategy, Oid collation,
 									 RegProcedure opcode, Const *value, bool is_null_check,
 									 bool is_null, bool is_array_op);
 static inline TM_Result delete_compressed_tuple(RowDecompressor *decompressor, Snapshot snapshot,
 												HeapTuple compressed_tuple);
 static void report_error(TM_Result result);
+
+static bool key_column_is_null(tuple_filtering_constraints *constraints, Relation chunk_rel,
+							   Oid ht_relid, TupleTableSlot *slot);
 
 void
 decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
@@ -79,12 +86,21 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 				 errmsg("inserting into compressed chunk with unique constraints disabled"),
 				 errhint("Set timescaledb.enable_dml_decompression to TRUE.")));
 
+	tuple_filtering_constraints *constraints = get_batch_keys_for_unique_constraints(cis, out_rel);
+	if (key_column_is_null(constraints, out_rel, cis->hypertable_relid, slot))
+	{
+		/* When any key column is NULL and NULLs are distinct there is no
+		 * decompression to be done as the tuple will not conflict with any
+		 * existing tuples.
+		 */
+		return;
+	}
+
 	Assert(OidIsValid(cis->compressed_chunk_table_id));
 	Relation in_rel = relation_open(cis->compressed_chunk_table_id, RowExclusiveLock);
 	CompressionSettings *settings = ts_compression_settings_get(cis->compressed_chunk_table_id);
 	Assert(settings);
 
-	Bitmapset *key_columns = compressed_insert_key_columns(out_rel);
 	Bitmapset *index_columns = NULL;
 	Bitmapset *null_columns = NULL;
 	struct decompress_batches_stats stats;
@@ -92,34 +108,37 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 	/* the scan keys used for in memory tests of the decompressed tuples */
 	int num_mem_scankeys = 0;
 	ScanKeyData *mem_scankeys = NULL;
+	int num_index_scankeys = 0;
+	ScanKeyData *index_scankeys = NULL;
+	Relation index_rel = NULL;
+
 	if (ts_guc_enable_dml_decompression_tuple_filtering)
 	{
 		mem_scankeys = build_mem_scankeys_from_slot(cis->hypertable_relid,
 													settings,
 													out_rel,
-													key_columns,
+													constraints,
 													slot,
 													&num_mem_scankeys);
+
+		index_scankeys = build_index_scankeys_using_slot(cis->hypertable_relid,
+														 in_rel,
+														 out_rel,
+														 constraints->key_columns,
+														 slot,
+														 &index_rel,
+														 &index_columns,
+														 &num_index_scankeys);
 	}
 
-	int num_index_scankeys;
-	Relation index_rel = NULL;
-	ScanKeyData *index_scankeys = build_index_scankeys_using_slot(cis->hypertable_relid,
-																  in_rel,
-																  out_rel,
-																  key_columns,
-																  slot,
-																  &index_rel,
-																  &index_columns,
-																  &num_index_scankeys);
-
+	bool skip_current_tuple = false;
 	if (index_rel)
 	{
 		/*
 		 * Prepare the heap scan keys for all
 		 * key columns not found in the index
 		 */
-		key_columns = bms_difference(key_columns, index_columns);
+		Bitmapset *key_columns = bms_difference(constraints->key_columns, index_columns);
 
 		int num_heap_scankeys;
 		ScanKeyData *heap_scankeys = build_heap_scankeys(cis->hypertable_relid,
@@ -130,7 +149,6 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 														 &null_columns,
 														 slot,
 														 &num_heap_scankeys);
-		bms_free(key_columns);
 
 		/*
 		 * Using latest snapshot to scan the heap since we are doing this to build
@@ -147,6 +165,8 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 											 num_heap_scankeys,
 											 mem_scankeys,
 											 num_mem_scankeys,
+											 constraints,
+											 &skip_current_tuple,
 											 NULL, /* no null column check for non-segmentby
 													  columns */
 											 NIL);
@@ -159,7 +179,7 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 														 in_rel,
 														 out_rel,
 														 settings,
-														 key_columns,
+														 constraints->key_columns,
 														 &null_columns,
 														 slot,
 														 &num_heap_scankeys);
@@ -171,12 +191,18 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 										   num_heap_scankeys,
 										   mem_scankeys,
 										   num_mem_scankeys,
+										   constraints,
+										   &skip_current_tuple,
 										   null_columns,
 										   NIL);
-		bms_free(key_columns);
 	}
 
 	Assert(cis->cds != NULL);
+	if (skip_current_tuple)
+	{
+		cis->cds->skip_current_tuple = true;
+	}
+
 	cis->cds->batches_decompressed += stats.batches_decompressed;
 	cis->cds->tuples_decompressed += stats.tuples_decompressed;
 
@@ -260,6 +286,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 											 num_scankeys,
 											 mem_scankeys,
 											 num_mem_scankeys,
+											 NULL,
+											 NULL,
 											 null_columns,
 											 is_null);
 		/* close the selected index */
@@ -274,6 +302,8 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 										   num_scankeys,
 										   mem_scankeys,
 										   num_mem_scankeys,
+										   NULL,
+										   NULL,
 										   null_columns,
 										   is_null);
 	}
@@ -318,6 +348,7 @@ decompress_batches_indexscan(Relation in_rel, Relation out_rel, Relation index_r
 							 Snapshot snapshot, ScanKeyData *index_scankeys, int num_index_scankeys,
 							 ScanKeyData *heap_scankeys, int num_heap_scankeys,
 							 ScanKeyData *mem_scankeys, int num_mem_scankeys,
+							 tuple_filtering_constraints *constraints, bool *skip_current_tuple,
 							 Bitmapset *null_columns, List *is_nulls)
 {
 	HeapTuple compressed_tuple;
@@ -404,10 +435,23 @@ decompress_batches_indexscan(Relation in_rel, Relation out_rel, Relation index_r
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		if (num_mem_scankeys && !batch_matches(&decompressor, mem_scankeys, num_mem_scankeys))
+		if (num_mem_scankeys && !batch_matches(&decompressor,
+											   mem_scankeys,
+											   num_mem_scankeys,
+											   constraints,
+											   skip_current_tuple))
 		{
 			row_decompressor_reset(&decompressor);
 			continue;
+		}
+
+		if (skip_current_tuple && *skip_current_tuple)
+		{
+			row_decompressor_close(&decompressor);
+			index_endscan(scan);
+			index_close(index_rel, AccessShareLock);
+			ExecDropSingleTupleTableSlot(slot);
+			return stats;
 		}
 
 		write_logical_replication_msg_decompression_start();
@@ -470,7 +514,8 @@ decompress_batches_indexscan(Relation in_rel, Relation out_rel, Relation index_r
 static struct decompress_batches_stats
 decompress_batches_seqscan(Relation in_rel, Relation out_rel, Snapshot snapshot,
 						   ScanKeyData *scankeys, int num_scankeys, ScanKeyData *mem_scankeys,
-						   int num_mem_scankeys, Bitmapset *null_columns, List *is_nulls)
+						   int num_mem_scankeys, tuple_filtering_constraints *constraints,
+						   bool *skip_current_tuple, Bitmapset *null_columns, List *is_nulls)
 {
 	RowDecompressor decompressor;
 	bool decompressor_initialized = false;
@@ -534,10 +579,22 @@ decompress_batches_seqscan(Relation in_rel, Relation out_rel, Snapshot snapshot,
 						  decompressor.compressed_datums,
 						  decompressor.compressed_is_nulls);
 
-		if (num_mem_scankeys && !batch_matches(&decompressor, mem_scankeys, num_mem_scankeys))
+		if (num_mem_scankeys && !batch_matches(&decompressor,
+											   mem_scankeys,
+											   num_mem_scankeys,
+											   constraints,
+											   skip_current_tuple))
 		{
 			row_decompressor_reset(&decompressor);
 			continue;
+		}
+
+		if (skip_current_tuple && *skip_current_tuple)
+		{
+			row_decompressor_close(&decompressor);
+			ExecDropSingleTupleTableSlot(slot);
+			table_endscan(scan);
+			return stats;
 		}
 
 		write_logical_replication_msg_decompression_start();
@@ -582,7 +639,8 @@ decompress_batches_seqscan(Relation in_rel, Relation out_rel, Snapshot snapshot,
 }
 
 static bool
-batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys)
+batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scankeys,
+			  tuple_filtering_constraints *constraints, bool *skip_current_tuple)
 {
 	int num_tuples = decompress_batch(decompressor);
 
@@ -599,6 +657,22 @@ batch_matches(RowDecompressor *decompressor, ScanKeyData *scankeys, int num_scan
 #endif
 		if (valid)
 		{
+			if (constraints)
+			{
+				if (constraints->on_conflict == ONCONFLICT_NONE)
+				{
+					ereport(ERROR,
+							(errcode(ERRCODE_UNIQUE_VIOLATION),
+							 errmsg("duplicate key value violates unique constraint \"%s\"",
+									get_rel_name(constraints->index_relid))
+
+								 ));
+				}
+				if (constraints->on_conflict == ONCONFLICT_NOTHING)
+				{
+					*skip_current_tuple = true;
+				}
+			}
 			return true;
 		}
 	}
@@ -743,26 +817,28 @@ decompress_chunk_walker(PlanState *ps, struct decompress_chunk_context *ctx)
  * In case of multiple unique indexes we have to return the shared columns.
  * For expression indexes we ignore the columns with expressions, for partial
  * indexes we ignore predicate.
+ *
  */
-static Bitmapset *
-compressed_insert_key_columns(Relation relation)
+static tuple_filtering_constraints *
+get_batch_keys_for_unique_constraints(const ChunkInsertState *cis, Relation relation)
 {
-	Bitmapset *shared_attrs = NULL; /* indexed columns */
-	ListCell *l;
+	tuple_filtering_constraints *constraints = palloc0(sizeof(tuple_filtering_constraints));
+	constraints->on_conflict = ONCONFLICT_UPDATE;
+	ListCell *lc;
 
 	/* Fast path if definitely no indexes */
 	if (!RelationGetForm(relation)->relhasindex)
-		return NULL;
+		return constraints;
 
 	List *indexoidlist = RelationGetIndexList(relation);
 
 	/* Fall out if no indexes (but relhasindex was set) */
 	if (indexoidlist == NIL)
-		return NULL;
+		return constraints;
 
-	foreach (l, indexoidlist)
+	foreach (lc, indexoidlist)
 	{
-		Oid indexOid = lfirst_oid(l);
+		Oid indexOid = lfirst_oid(lc);
 		Relation indexDesc = index_open(indexOid, AccessShareLock);
 
 		/*
@@ -783,22 +859,50 @@ compressed_insert_key_columns(Relation relation)
 		 */
 		for (int i = 0; i < indexDesc->rd_index->indnkeyatts; i++)
 		{
-			int attrnum = indexDesc->rd_index->indkey.values[i];
-			/* We are not interested in expression columns which will have attrnum = 0 */
-			if (!attrnum)
+			int attno = indexDesc->rd_index->indkey.values[i];
+			/* We are not interested in expression columns which will have attno = 0 */
+			if (!attno)
 				continue;
 
-			idx_attrs = bms_add_member(idx_attrs, attrnum - FirstLowInvalidHeapAttributeNumber);
+			idx_attrs = bms_add_member(idx_attrs, attno - FirstLowInvalidHeapAttributeNumber);
 		}
 		index_close(indexDesc, AccessShareLock);
 
-		shared_attrs = shared_attrs ? bms_intersect(idx_attrs, shared_attrs) : idx_attrs;
+		if (!constraints->key_columns)
+		{
+			/* First iteration */
+			constraints->key_columns = bms_copy(idx_attrs);
+			/*
+			 * We only optimize unique constraint checks for non-partial and
+			 * non-expression indexes. For partial and expression indexes we
+			 * can still do batch filtering, just not make decisions about
+			 * constraint violations.
+			 */
+			constraints->covered = indexDesc->rd_indexprs == NIL && indexDesc->rd_indpred == NIL;
+			constraints->index_relid = indexDesc->rd_id;
+		}
+		else
+		{
+			/* more than one unique constraint */
+			constraints->key_columns = bms_intersect(idx_attrs, constraints->key_columns);
+			constraints->covered = false;
+		}
 
-		if (!shared_attrs)
-			return NULL;
+		/* When multiple unique indexes are present, in theory there could be no shared
+		 * columns even though that is very unlikely as they will probably at least share
+		 * the partitioning columns. But since we are looking at chunk indexes here that
+		 * is not guaranteed.
+		 */
+		if (!constraints->key_columns)
+			return constraints;
 	}
 
-	return shared_attrs;
+	if (constraints->covered && cis->cds->dispatch)
+	{
+		constraints->on_conflict = ts_chunk_dispatch_get_on_conflict_action(cis->cds->dispatch);
+	}
+
+	return constraints;
 }
 
 /*
@@ -1281,4 +1385,35 @@ report_error(TM_Result result)
 		}
 		break;
 	}
+}
+
+/*
+ * If key_columns are including all unique constraint columns and NULLS
+ * are not DISTINCT any NULL value in the key columns allows us to skip
+ * finding matching batches as it will not create a constraint violation.
+ */
+static bool
+key_column_is_null(tuple_filtering_constraints *constraints, Relation chunk_rel, Oid ht_relid,
+				   TupleTableSlot *slot)
+{
+	if (!constraints->covered || constraints->nullsnotdistinct)
+		return false;
+
+	int i = -1;
+	while ((i = bms_next_member(constraints->key_columns, i)) > 0)
+	{
+		AttrNumber chunk_attno = i + FirstLowInvalidHeapAttributeNumber;
+
+		/*
+		 * slot has the physical layout of the hypertable, so we need to
+		 * get the attribute number of the hypertable for the column.
+		 */
+		const NameData *attname = attnumAttName(chunk_rel, chunk_attno);
+
+		AttrNumber ht_attno = get_attnum(ht_relid, NameStr(*attname));
+		if (slot_attisnull(slot, ht_attno))
+			return true;
+	}
+
+	return false;
 }

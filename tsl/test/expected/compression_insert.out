@@ -1090,14 +1090,11 @@ SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
 INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
-ERROR:  tuple decompression limit exceeded by operation
-DETAIL:  current limit: 1, tuples decompressed: 1000
-HINT:  Consider increasing timescaledb.max_tuples_decompressed_per_dml_transaction or set to 0 (unlimited).
+ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
 ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
-DETAIL:  Key ("timestamp", id)=(1, 2) already exists.
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
@@ -1152,7 +1149,6 @@ SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
 -- all INSERTS should fail with constraint violation
 BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
 ERROR:  duplicate key value violates unique constraint "78_3_unique_null_time_u1_u2_key"
-DETAIL:  Key ("time", u1, u2)=(Mon Jan 01 00:00:00 2024 PST, 0, 0) already exists.
 \set ON_ERROR_STOP 1
 -- neither of these should need to decompress
 :ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);

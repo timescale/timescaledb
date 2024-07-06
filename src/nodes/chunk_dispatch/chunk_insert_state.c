@@ -80,7 +80,7 @@ chunk_dispatch_get_returning_clauses(const ChunkDispatch *dispatch)
 }
 
 OnConflictAction
-chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
+ts_chunk_dispatch_get_on_conflict_action(const ChunkDispatch *dispatch)
 {
 	if (!dispatch->dispatch_state || !dispatch->dispatch_state->mtstate)
 		return ONCONFLICT_NONE;
@@ -265,7 +265,7 @@ setup_on_conflict_state(ChunkInsertState *state, const ChunkDispatch *dispatch,
 	ModifyTableState *mtstate = castNode(ModifyTableState, dispatch->dispatch_state->mtstate);
 	ModifyTable *mt = castNode(ModifyTable, mtstate->ps.plan);
 
-	Assert(chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
+	Assert(ts_chunk_dispatch_get_on_conflict_action(dispatch) == ONCONFLICT_UPDATE);
 
 	OnConflictSetState *onconfl = makeNode(OnConflictSetState);
 	memcpy(onconfl, hyper_rri->ri_onConflict, sizeof(OnConflictSetState));
@@ -433,7 +433,7 @@ adjust_projections(ChunkInsertState *cis, const ChunkDispatch *dispatch, Oid row
 	Relation hyper_rel = dispatch->hypertable_result_rel_info->ri_RelationDesc;
 	Relation chunk_rel = cis->rel;
 	TupleConversionMap *chunk_map = NULL;
-	OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
+	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 
 	if (chunk_dispatch_has_returning(dispatch))
 	{
@@ -479,7 +479,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 	MemoryContext cis_context = AllocSetContextCreate(dispatch->estate->es_query_cxt,
 													  "chunk insert state memory context",
 													  ALLOCSET_DEFAULT_SIZES);
-	OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
+	OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 	ResultRelInfo *relinfo;
 	const Chunk *chunk;
 

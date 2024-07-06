@@ -29,23 +29,24 @@ static int create_segment_filter_scankey(Relation in_rel, char *segment_filter_c
  */
 ScanKeyData *
 build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relation out_rel,
-							 Bitmapset *key_columns, TupleTableSlot *slot, int *num_scankeys)
+							 tuple_filtering_constraints *constraints, TupleTableSlot *slot,
+							 int *num_scankeys)
 {
 	ScanKeyData *scankeys = NULL;
 	int key_index = 0;
 	TupleDesc out_desc = RelationGetDescr(out_rel);
 	TupleDesc in_desc = slot->tts_tupleDescriptor;
 
-	if (bms_is_empty(key_columns))
+	if (bms_is_empty(constraints->key_columns))
 	{
 		*num_scankeys = key_index;
 		return scankeys;
 	}
 
-	scankeys = palloc(sizeof(ScanKeyData) * bms_num_members(key_columns));
+	scankeys = palloc(sizeof(ScanKeyData) * bms_num_members(constraints->key_columns));
 
 	int i = -1;
-	while ((i = bms_next_member(key_columns, i)) > 0)
+	while ((i = bms_next_member(constraints->key_columns, i)) > 0)
 	{
 		AttrNumber attno = i + FirstLowInvalidHeapAttributeNumber;
 		bool isnull;
@@ -96,7 +97,7 @@ build_mem_scankeys_from_slot(Oid ht_relid, CompressionSettings *settings, Relati
 			elog(ERROR, "no operator found for type \"%s\"", format_type_be(atttypid));
 
 		ScanKeyEntryInitialize(&scankeys[key_index++],
-							   isnull ? SK_ISNULL | SK_SEARCHNULL : 0,
+							   isnull ? SK_ISNULL : 0,
 							   attno,
 							   BTEqualStrategyNumber,
 							   in_desc->attrs[AttrNumberGetAttrOffset(ht_attno)].atttypid,
