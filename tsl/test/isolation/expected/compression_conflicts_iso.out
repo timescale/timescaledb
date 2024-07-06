@@ -407,7 +407,7 @@ step Ic: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
-      10|           10
+      10|            0
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -474,7 +474,7 @@ step Ic: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
-      10|           10
+      10|            0
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;
@@ -541,7 +541,7 @@ step Ic: COMMIT;
 step SC1: SELECT (count_chunktable(ch)).* FROM show_chunks('ts_device_table') AS ch LIMIT 1;
 count(*)|count(*) only
 --------+-------------
-      10|           10
+      10|            0
 (1 row)
 
 step SA: SELECT * FROM ts_device_table;

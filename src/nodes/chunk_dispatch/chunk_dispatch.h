@@ -76,6 +76,9 @@ typedef struct ChunkDispatchState
 	bool is_dropped_attr_exists;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
+
+	/* Should this INSERT be skipped due to ON CONFLICT DO NOTHING */
+	bool skip_current_tuple;
 } ChunkDispatchState;
 
 extern TSDLLEXPORT bool ts_is_chunk_dispatch_state(PlanState *state);

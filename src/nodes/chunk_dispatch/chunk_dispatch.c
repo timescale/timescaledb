@@ -173,7 +173,7 @@ ts_chunk_dispatch_decompress_batches_for_insert(ChunkDispatch *dispatch, ChunkIn
 		if (ts_cm_functions->decompress_batches_for_insert)
 		{
 			ts_cm_functions->decompress_batches_for_insert(cis, slot);
-			OnConflictAction onconflict_action = chunk_dispatch_get_on_conflict_action(dispatch);
+			OnConflictAction onconflict_action = ts_chunk_dispatch_get_on_conflict_action(dispatch);
 			/* mark rows visible */
 			if (onconflict_action == ONCONFLICT_UPDATE)
 				dispatch->estate->es_output_cid = GetCurrentCommandId(true);

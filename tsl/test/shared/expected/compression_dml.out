@@ -247,8 +247,6 @@ QUERY PLAN
 BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
-   Batches decompressed: 1
-   Tuples decompressed: 1000
    ->  Insert on lazy_decompress (actual rows=0 loops=1)
          Conflict Resolution: NOTHING
          Tuples Inserted: 0
@@ -256,7 +254,7 @@ QUERY PLAN
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
                      ->  Result (actual rows=1 loops=1)
-(10 rows)
+(8 rows)
 
 -- no decompression cause no match in batch
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
