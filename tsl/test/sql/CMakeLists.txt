@@ -41,8 +41,7 @@ set(TEST_FILES
     skip_scan.sql
     transparent_decompression_join_index.sql
     vector_agg_default.sql
-    vector_agg_param.sql
-    vectorized_aggregation.sql)
+    vector_agg_param.sql)
 
 if(USE_TELEMETRY)
   list(APPEND TEST_FILES bgw_telemetry.sql)
@@ -149,6 +148,9 @@ set(TEST_TEMPLATES
 # This test runs only with PG version >= 14
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   set(TEST_FILES_ON_VERSION_GE_14 modify_exclusion.sql.in)
+  # This is a test for a prototype feature that has different outputs on PG14,
+  # so we disable it not to have to work with multiple references.
+  list(APPEND TEST_FILES vectorized_aggregation.sql)
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES Debug)
