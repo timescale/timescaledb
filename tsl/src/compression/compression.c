@@ -155,7 +155,7 @@ truncate_relation(Oid table_oid)
 
 	ReindexParams params = { 0 };
 	ReindexParams *options = &params;
-	reindex_relation(table_oid, REINDEX_REL_PROCESS_TOAST, options);
+	reindex_relation_compat(NULL, table_oid, REINDEX_REL_PROCESS_TOAST, options);
 	rel = table_open(table_oid, AccessExclusiveLock);
 	CommandCounterIncrement();
 	table_close(rel, NoLock);

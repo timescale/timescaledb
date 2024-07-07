@@ -382,9 +382,13 @@ ht_ExecMergeMatched(ModifyTableContext * context, ResultRelInfo * resultRelInfo,
 	/*
 	 * If there are no WHEN MATCHED actions, we are done.
 	 */
+#if PG17_GE
+	if (resultRelInfo->ri_MergeActions[MERGE_WHEN_MATCHED] == NIL)
+		return true;
+#else
 	if (resultRelInfo->ri_matchedMergeAction == NIL)
 		return true;
-
+#endif
 	/*
 	 * Make tuple and any needed join variables available to ExecQual and
 	 * ExecProject. The target's existing tuple is installed in the
@@ -412,8 +416,11 @@ lmerge_matched:;
 					   SnapshotAny,
 					   resultRelInfo->ri_oldTupleSlot))
 		elog(ERROR, "failed to fetch the target tuple");
-
+#if PG17_GE
+	foreach(l, resultRelInfo->ri_MergeActions[MERGE_WHEN_MATCHED]) {
+#else
 	foreach(l, resultRelInfo->ri_matchedMergeAction) {
+#endif
 		MergeActionState *relaction = (MergeActionState *) lfirst(l);
 		CmdType		commandType = relaction->mas_action->commandType;
 		List	       *recheckIndexes = NIL;
@@ -762,9 +769,15 @@ ht_ExecMergeNotMatched(ModifyTableContext * context, ResultRelInfo * resultRelIn
 	 *
 	 * XXX does this mean that we can avoid creating copies of
 	 * actionStates on partitioned tables, for not-matched actions?
+	 *
+	 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+	 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
 	 */
+#if PG17_GE
+	actionStates = cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#else
 	actionStates = cds->rri->ri_notMatchedMergeAction;
-
+#endif
 	/*
 	 * Make source tuple available to ExecQual and ExecProject. We don't
 	 * need the target tuple, since the WHEN quals and targetlist can't

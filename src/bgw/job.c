@@ -701,7 +701,7 @@ get_job_lock_for_delete(int32 job_id)
 
 		if (VirtualTransactionIdIsValid(*vxid))
 		{
-			proc = BackendIdGetProc(vxid->backendId);
+			proc = VirtualTransactionGetProcCompat(vxid);
 			if (proc != NULL && proc->isBackgroundWorker)
 			{
 				/* Simply assuming that this pid corresponds to the background worker

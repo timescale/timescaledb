@@ -691,8 +691,17 @@ ExecModifyTable(CustomScanState *cs_node, PlanState *pstate)
 		if (TupIsNull(context.planSlot))
 			break;
 
-#if PG15_GE
-		/* copy INSERT merge action list to result relation info of corresponding chunk */
+			/*
+			 * copy INSERT merge action list to result relation info of corresponding chunk
+			 *
+			 * XXX do we need an additional support of NOT MATCHED BY SOURCE
+			 * for PG >= 17? See PostgreSQL commit 0294df2f1f84
+			 */
+#if PG17_GE
+		if (cds && cds->rri && operation == CMD_MERGE)
+			cds->rri->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET] =
+				resultRelInfo->ri_MergeActions[MERGE_WHEN_NOT_MATCHED_BY_TARGET];
+#elif PG15_GE
 		if (cds && cds->rri && operation == CMD_MERGE)
 			cds->rri->ri_notMatchedMergeAction = resultRelInfo->ri_notMatchedMergeAction;
 #endif
