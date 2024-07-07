@@ -34,7 +34,7 @@ write_logical_replication_msg_compression_start()
 {
 	if (is_compression_wal_markers_enabled())
 	{
-		LogLogicalMessage(COMPRESSION_MARKER_START, "", 0, true);
+		LogLogicalMessageCompat(COMPRESSION_MARKER_START, "", 0, true, true);
 	}
 }
 
@@ -43,7 +43,7 @@ write_logical_replication_msg_compression_end()
 {
 	if (is_compression_wal_markers_enabled())
 	{
-		LogLogicalMessage(COMPRESSION_MARKER_END, "", 0, true);
+		LogLogicalMessageCompat(COMPRESSION_MARKER_END, "", 0, true, true);
 	}
 }
 
@@ -52,7 +52,7 @@ write_logical_replication_msg_decompression_start()
 {
 	if (is_compression_wal_markers_enabled())
 	{
-		LogLogicalMessage(DECOMPRESSION_MARKER_START, "", 0, true);
+		LogLogicalMessageCompat(DECOMPRESSION_MARKER_START, "", 0, true, true);
 	}
 }
 
@@ -61,6 +61,6 @@ write_logical_replication_msg_decompression_end()
 {
 	if (is_compression_wal_markers_enabled())
 	{
-		LogLogicalMessage(DECOMPRESSION_MARKER_END, "", 0, true);
+		LogLogicalMessageCompat(DECOMPRESSION_MARKER_END, "", 0, true, true);
 	}
 }

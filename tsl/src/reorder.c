@@ -1139,6 +1139,10 @@ swap_relation_files(Oid r1, Oid r2, bool swap_toast_by_content, bool is_internal
 	 * itself, the smgr close on pg_class must happen after all accesses in
 	 * this function.
 	 */
+
+#if PG17_LT
+	/* Not needed as of 21d9c3ee4ef7 in the upstream */
 	RelationCloseSmgrByOid(r1);
 	RelationCloseSmgrByOid(r2);
+#endif
 }

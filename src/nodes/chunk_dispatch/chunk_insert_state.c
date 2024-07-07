@@ -511,7 +511,7 @@ ts_chunk_insert_state_create(Oid chunk_relid, const ChunkDispatch *dispatch)
 
 	MemoryContext old_mcxt = MemoryContextSwitchTo(cis_context);
 	relinfo = create_chunk_result_relation_info(dispatch, rel);
-	CheckValidResultRel(relinfo, chunk_dispatch_get_cmd_type(dispatch));
+	CheckValidResultRelCompat(relinfo, chunk_dispatch_get_cmd_type(dispatch), NIL);
 
 	state = palloc0(sizeof(ChunkInsertState));
 	state->cds = dispatch->dispatch_state;

@@ -92,13 +92,20 @@ transaction_row_counter(void)
 {
 	static LocalTransactionId last_lxid = 0;
 	static int rows_seen = 0;
-
-	if (last_lxid != MyProc->lxid)
+#if PG17_GE
+	if (last_lxid != MyProc->vxid.lxid)
 	{
 		/* Reset it for each new transaction for predictable results. */
 		rows_seen = 0;
+		last_lxid = MyProc->vxid.lxid;
+	}
+#else
+	if (last_lxid != MyProc->lxid)
+	{
+		rows_seen = 0;
 		last_lxid = MyProc->lxid;
 	}
+#endif
 
 	return rows_seen++;
 }
@@ -205,12 +212,20 @@ ts_debug_sleepy_function()
 	static LocalTransactionId last_lxid = 0;
 	static int rows_seen = 0;
 
-	if (last_lxid != MyProc->lxid)
+#if PG17_GE
+	if (last_lxid != MyProc->vxid.lxid)
 	{
 		/* Reset it for each new transaction for predictable results. */
 		rows_seen = 0;
+		last_lxid = MyProc->vxid.lxid;
+	}
+#else
+	if (last_lxid != MyProc->lxid)
+	{
+		rows_seen = 0;
 		last_lxid = MyProc->lxid;
 	}
+#endif
 
 	rows_seen++;
 

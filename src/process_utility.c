@@ -721,9 +721,9 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		relid = classform->oid;
 
 		/* check permissions of relation */
-		if (!vacuum_is_relation_owner(relid,
-									  classform,
-									  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+		if (!vacuum_is_permitted_for_relation_compat(relid,
+													 classform,
+													 is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
 			continue;
 
 		/*
@@ -3738,7 +3738,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ColumnDefault:
 		case AT_CookedColumnDefault:
 		case AT_SetNotNull:
-		case AT_CheckNotNull:
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:
