@@ -24,7 +24,7 @@ BEGIN
     INNER JOIN pg_namespace n ON (n.oid = c.relnamespace)
     WHERE c.oid = relation;
 
-    SELECT * INTO STRICT _hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.table_name = _table_name AND h.schema_name = schema_name;
+    SELECT * INTO STRICT _hypertable_row FROM _timescaledb_catalog.hypertable h WHERE h.table_name = _table_name AND h.schema_name = _schema_name;
 
     --STEP 1 if column stats exist use unique indexes. Pick the column that comes first in any such indexes. Ties are broken arbitrarily.
     --Note: this will only pick a column that is NOT unique in a multi-column unique index.
