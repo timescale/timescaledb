@@ -13,6 +13,7 @@
 #include <time_utils.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
+#include <utils/guc.h>
 #include <utils/palloc.h>
 #include <utils/rel.h>
 #include <utils/relcache.h>
