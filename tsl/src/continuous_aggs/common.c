@@ -667,17 +667,12 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 	CAggTimebucketInfo bucket_info = { 0 };
 	CAggTimebucketInfo bucket_info_parent = { 0 };
 	Hypertable *ht = NULL, *ht_parent = NULL;
-	RangeTblRef *rtref = NULL, *rtref_other = NULL;
-	RangeTblEntry *rte = NULL, *rte_other = NULL;
-	JoinType jointype = JOIN_FULL;
-	OpExpr *op = NULL;
-	List *fromList = NIL;
+	RangeTblEntry *rte = NULL;
 	StringInfo hint = makeStringInfo();
 	StringInfo detail = makeStringInfo();
 	bool is_hierarchical = false;
 	Query *prev_query = NULL;
 	ContinuousAgg *cagg_parent = NULL;
-	Oid normal_table_id = InvalidOid;
 
 	if (!cagg_query_supported(query, hint, detail, finalized))
 	{
@@ -688,145 +683,72 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
 	}
 
-	/* Check if there are only two tables in the from list. */
-	fromList = query->jointree->fromlist;
-	if (list_length(fromList) > CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+	int num_tables = 0, num_hypertables = 0;
+	ListCell *lc;
+	foreach (lc, query->rtable)
+	{
+		RangeTblEntry *inner_rte = lfirst_node(RangeTblEntry, lc);
+
+		if (inner_rte->rtekind == RTE_RELATION)
+		{
+			if (ts_is_hypertable(inner_rte->relid) ||
+				ts_continuous_agg_find_by_relid(inner_rte->relid))
+			{
+				num_hypertables++;
+				if (rte == NULL)
+					rte = copyObject(inner_rte);
+			}
+			else
+			{
+				num_tables++;
+				if (inner_rte->relkind == RELKIND_VIEW)
+					ereport(ERROR,
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("invalid continuous aggregate view"),
+							 errdetail("Views are not supported in continuous aggregates.")));
+			}
+
+			if (inner_rte->inh == false)
+				ereport(ERROR,
+						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+						 errmsg("invalid continuous aggregate view"),
+						 errdetail("FROM ONLY is not allowed in continuous aggregate.")));
+		}
+
+		/* Only inner joins are allowed. */
+		if (inner_rte->jointype != JOIN_INNER && inner_rte->jointype != JOIN_LEFT)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("only INNER or LEFT joins are supported in continuous aggregates")));
+
+		/* Subquery only using LATERAL */
+		if (inner_rte->subquery && !inner_rte->lateral)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid continuous aggregate view"),
+					 errdetail("Sub-queries are not supported in FROM clause.")));
+
+		/* TABLESAMPLE not allowed */
+		if (inner_rte->tablesample)
+			ereport(ERROR,
+					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+					 errmsg("invalid continuous aggregate view"),
+					 errdetail("TABLESAMPLE is not supported in continuous aggregate.")));
+	}
+
+	if (num_hypertables > 1)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("Only one hypertable is allowed in continuous aggregate view.")));
+
+	if (rte == NULL)
 	{
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("only two tables with one hypertable and one normal table "
-						"are allowed in continuous aggregate view")));
+				 errmsg("invalid continuous aggregate view"),
+				 errdetail("At least one hypertable should be used in the view definition.")));
 	}
-	/* Extra checks for joins in Caggs. */
-	if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
-		!IsA(linitial(query->jointree->fromlist), RangeTblRef))
-	{
-		if (list_length(fromList) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
-		{
-			if (!IsA(linitial(fromList), RangeTblRef) || !IsA(lsecond(fromList), RangeTblRef))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("invalid continuous aggregate view"),
-						 errdetail(
-							 "From clause can only have one hypertable and one normal table.")));
-
-			rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
-			rte = list_nth(query->rtable, rtref->rtindex - 1);
-			rtref_other = lsecond_node(RangeTblRef, query->jointree->fromlist);
-			rte_other = list_nth(query->rtable, rtref_other->rtindex - 1);
-			jointype = rte->jointype || rte_other->jointype;
-
-			if (query->jointree->quals != NULL && IsA(query->jointree->quals, OpExpr))
-				op = (OpExpr *) query->jointree->quals;
-		}
-		else
-		{
-			ListCell *l;
-			foreach (l, query->jointree->fromlist)
-			{
-				Node *jtnode = (Node *) lfirst(l);
-				JoinExpr *join = NULL;
-				if (IsA(jtnode, JoinExpr))
-				{
-					join = castNode(JoinExpr, jtnode);
-					jointype = join->jointype;
-					op = (OpExpr *) join->quals;
-					rte = list_nth(query->rtable, ((RangeTblRef *) join->larg)->rtindex - 1);
-					rte_other = list_nth(query->rtable, ((RangeTblRef *) join->rarg)->rtindex - 1);
-					if (rte->subquery != NULL || rte_other->subquery != NULL)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("invalid continuous aggregate view"),
-								 errdetail("Sub-queries are not supported in FROM clause.")));
-					RangeTblEntry *jrte = rt_fetch(join->rtindex, query->rtable);
-					if (jrte->joinaliasvars == NIL)
-						ereport(ERROR,
-								(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-								 errmsg("invalid continuous aggregate view")));
-				}
-			}
-		}
-
-		/*
-		 * Error out if there is aynthing else than one normal table and one hypertable
-		 * in the from clause, e.g. sub-query, lateral, two hypertables, etc.
-		 */
-		if (rte->lateral || rte_other->lateral)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Lateral joins are not supported in FROM clause.")));
-		if ((rte->relkind == RELKIND_VIEW && ts_is_hypertable(rte_other->relid)) ||
-			(rte_other->relkind == RELKIND_VIEW && ts_is_hypertable(rte->relid)))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Views are not supported in FROM clause.")));
-		if (rte->relkind != RELKIND_VIEW && rte_other->relkind != RELKIND_VIEW &&
-			(ts_is_hypertable(rte->relid) == ts_is_hypertable(rte_other->relid)))
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Multiple hypertables or normal tables are not supported in FROM "
-							   "clause.")));
-
-		/* Only inner joins are allowed. */
-		if (jointype != JOIN_INNER)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("only inner joins are supported in continuous aggregates")));
-
-		/* Only equality conditions are permitted on joins. */
-		if (op && IsA(op, OpExpr) &&
-			list_length(castNode(OpExpr, op)->args) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
-		{
-			Oid left_type = exprType(linitial(op->args));
-			Oid right_type = exprType(lsecond(op->args));
-			if (!ts_is_equality_operator(op->opno, left_type, right_type))
-				ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("invalid continuous aggregate view"),
-						 errdetail(
-							 "Only equality conditions are supported in continuous aggregates.")));
-		}
-		else
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view"),
-					 errdetail("Unsupported expression in join clause."),
-					 errhint("Only equality conditions are supported in continuous aggregates.")));
-		/*
-		 * Record the table oid of the normal table. This is required so
-		 * that we know which one is hypertable to carry out the related
-		 * processing in later parts of code.
-		 */
-		if (rte->relkind == RELKIND_VIEW)
-			normal_table_id = rte_other->relid;
-		else if (rte_other->relkind == RELKIND_VIEW)
-			normal_table_id = rte->relid;
-		else
-			normal_table_id = ts_is_hypertable(rte->relid) ? rte_other->relid : rte->relid;
-		if (normal_table_id == rte->relid)
-			rte = rte_other;
-	}
-	else
-	{
-		/* Check if we have a hypertable in the FROM clause. */
-		rtref = linitial_node(RangeTblRef, query->jointree->fromlist);
-		rte = list_nth(query->rtable, rtref->rtindex - 1);
-	}
-	/* FROM only <tablename> sets rte->inh to false. */
-	if (rte->rtekind != RTE_JOIN)
-	{
-		if ((rte->relkind != RELKIND_RELATION && rte->relkind != RELKIND_VIEW) ||
-			rte->tablesample || rte->inh == false)
-			ereport(ERROR,
-					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-					 errmsg("invalid continuous aggregate view")));
-	}
-
-	Ensure(rte->relkind == RELKIND_RELATION || rte->relkind == RELKIND_VIEW,
-		   "invalid continuous aggregate view");
 
 	const Dimension *part_dimension = NULL;
 	int32 parent_mat_hypertable_id = INVALID_HYPERTABLE_ID;

@@ -100,7 +100,7 @@ typedef enum CaggRefreshCallContext
 		(selquery)->rtable = NULL;                                                                 \
 	} while (0);
 
-extern CAggTimebucketInfo cagg_validate_query(const Query *query, const bool finalized,
+extern CAggTimebucketInfo cagg_validate_query(const Query *orig_query, const bool finalized,
 											  const char *cagg_schema, const char *cagg_name,
 											  const bool is_cagg_create);
 extern Query *destroy_union_query(Query *q);
