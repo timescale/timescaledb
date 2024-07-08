@@ -1,20 +1,17 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
-\set ON_ERROR_STOP 0
 \set VERBOSITY default
 CREATE TABLE conditions(
   day TIMESTAMPTZ NOT NULL,
   city text NOT NULL,
   temperature INT NOT NULL,
-device_id int NOT NULL);
-SELECT create_hypertable(
-  'conditions', 'day',
-  chunk_time_interval => INTERVAL '1 day'
+  device_id int NOT NULL
 );
-    create_hypertable    
--------------------------
- (1,public,conditions,t)
+SELECT table_name FROM create_hypertable('conditions', 'day', chunk_time_interval => INTERVAL '1 day');
+ table_name 
+------------
+ conditions
 (1 row)
 
 INSERT INTO conditions (day, city, temperature, device_id) VALUES
@@ -33,25 +30,22 @@ INSERT INTO conditions (day, city, temperature, device_id) VALUES
   ('2021-06-26', 'Moscow', 32,3),
   ('2021-06-27', 'Moscow', 31,3);
 CREATE TABLE conditions_dup AS SELECT * FROM conditions;
-SELECT create_hypertable(
-  'conditions_dup', 'day',
-  chunk_time_interval => INTERVAL '1 day',
-  migrate_data => true
-);
+SELECT table_name FROM create_hypertable('conditions_dup', 'day', chunk_time_interval => INTERVAL '1 day', migrate_data => true);
 NOTICE:  adding not-null constraint to column "day"
 DETAIL:  Dimensions cannot have NULL values.
 NOTICE:  migrating data to chunks
 DETAIL:  Migration might take a while depending on the amount of data.
-      create_hypertable      
------------------------------
- (2,public,conditions_dup,t)
+   table_name   
+----------------
+ conditions_dup
 (1 row)
 
 CREATE TABLE devices ( device_id int not null, name text, location text);
 INSERT INTO devices values (1, 'thermo_1', 'Moscow'), (2, 'thermo_2', 'Berlin'),(3, 'thermo_3', 'London'),(4, 'thermo_4', 'Stockholm');
+CREATE TABLE location (location_id INTEGER, name TEXT);
+INSERT INTO location VALUES (1, 'Moscow'), (2, 'Berlin'), (3, 'London'), (4, 'Stockholm');
 CREATE TABLE devices_dup AS SELECT * FROM devices;
 CREATE VIEW devices_view AS SELECT * FROM devices;
--- Working cases
 -- Cagg with inner join + realtime  aggregate
 CREATE MATERIALIZED VIEW cagg_realtime
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
@@ -289,7 +283,7 @@ SELECT * FROM cagg_realtime_using ORDER BY bucket, name;
 (15 rows)
 
 -- Reorder tables in FROM clause
--- Cagg with inner join + realtime  aggregate
+-- Cagg with inner join + realtime aggregate
 CREATE MATERIALIZED VIEW cagg_realtime_reorder
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -730,7 +724,39 @@ SELECT * FROM cagg_reorder_using;
  Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
 (16 rows)
 
---Create CAgg with join and additional WHERE conditions
+-- Cagg join with another table using FROM ONLY
+CREATE MATERIALIZED VIEW cagg_from_only
+WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   name
+FROM ONLY devices JOIN conditions USING (device_id)
+GROUP BY name, bucket
+ORDER BY bucket;
+NOTICE:  refreshing continuous aggregate "cagg_from_only"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+SELECT * FROM cagg_from_only;
+            bucket            |         avg         |   name   
+------------------------------+---------------------+----------
+ Sun Jun 13 17:00:00 2021 PDT | 26.0000000000000000 | thermo_1
+ Mon Jun 14 17:00:00 2021 PDT | 22.0000000000000000 | thermo_2
+ Tue Jun 15 17:00:00 2021 PDT | 24.0000000000000000 | thermo_3
+ Wed Jun 16 17:00:00 2021 PDT | 24.0000000000000000 | thermo_4
+ Thu Jun 17 17:00:00 2021 PDT | 27.0000000000000000 | thermo_4
+ Fri Jun 18 17:00:00 2021 PDT | 28.0000000000000000 | thermo_4
+ Sat Jun 19 17:00:00 2021 PDT | 30.0000000000000000 | thermo_1
+ Sun Jun 20 17:00:00 2021 PDT | 31.0000000000000000 | thermo_1
+ Mon Jun 21 17:00:00 2021 PDT | 34.0000000000000000 | thermo_1
+ Tue Jun 22 17:00:00 2021 PDT | 34.0000000000000000 | thermo_2
+ Wed Jun 23 17:00:00 2021 PDT | 34.0000000000000000 | thermo_2
+ Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
+ Fri Jun 25 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
+ Sat Jun 26 17:00:00 2021 PDT | 31.0000000000000000 | thermo_3
+ Tue Jun 29 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
+ Wed Jun 30 17:00:00 2021 PDT | 28.0000000000000000 | thermo_3
+(16 rows)
+
+-- Create CAgg with join and additional WHERE conditions
 CREATE MATERIALIZED VIEW cagg_more_conds
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -749,7 +775,7 @@ SELECT * FROM cagg_more_conds ORDER BY bucket;
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
 (2 rows)
 
---Cagg with more conditions and USING clause
+-- Cagg with more conditions and USING clause
 CREATE MATERIALIZED VIEW cagg_more_conds_using
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -768,7 +794,7 @@ SELECT * FROM cagg_more_conds_using ORDER BY bucket;
  Thu Jun 24 17:00:00 2021 PDT | 32.0000000000000000 | thermo_3
 (2 rows)
 
--- Nested CAgg over a CAgg with join
+-- Hierarchical CAgg with join
 CREATE MATERIALIZED VIEW cagg_on_cagg
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
 SELECT time_bucket(INTERVAL '1 day', bucket) AS bucket,
@@ -801,8 +827,8 @@ SELECT * FROM cagg_on_cagg;
 
 DROP MATERIALIZED VIEW cagg_on_cagg CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_17_59_chunk
-drop cascades to table _timescaledb_internal._hyper_17_60_chunk
+DETAIL:  drop cascades to table _timescaledb_internal._hyper_18_61_chunk
+drop cascades to table _timescaledb_internal._hyper_18_62_chunk
 -- Nested CAgg over a CAgg with JOIN clause
 CREATE MATERIALIZED VIEW cagg_on_cagg_join
 WITH (timescaledb.continuous, timescaledb.materialized_only=true) AS
@@ -836,9 +862,9 @@ SELECT * FROM cagg_on_cagg_join;
 
 DROP MATERIALIZED VIEW cagg_on_cagg_join CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_18_61_chunk
-drop cascades to table _timescaledb_internal._hyper_18_62_chunk
---Create CAgg with join and ORDER BY
+DETAIL:  drop cascades to table _timescaledb_internal._hyper_19_63_chunk
+drop cascades to table _timescaledb_internal._hyper_19_64_chunk
+-- Create CAgg with join and ORDER BY
 CREATE MATERIALIZED VIEW cagg_ordered
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -919,10 +945,9 @@ NOTICE:  refreshing continuous aggregate "cagg_nested"
 HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
 DROP MATERIALIZED VIEW cagg_nested CASCADE;
 NOTICE:  drop cascades to 2 other objects
-DETAIL:  drop cascades to table _timescaledb_internal._hyper_23_71_chunk
-drop cascades to table _timescaledb_internal._hyper_23_72_chunk
---Error cases
---CAgg with multiple join conditions without JOIN clause
+DETAIL:  drop cascades to table _timescaledb_internal._hyper_24_73_chunk
+drop cascades to table _timescaledb_internal._hyper_24_74_chunk
+-- CAgg with multiple join conditions without JOIN clause
 CREATE MATERIALIZED VIEW cagg_more_joins_conds
 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -934,19 +959,18 @@ FROM conditions JOIN devices ON conditions.device_id = devices.device_id
 AND conditions.city = devices.location AND
       conditions.temperature > 28
 GROUP BY name, bucket;
-ERROR:  invalid continuous aggregate view
-DETAIL:  Unsupported expression in join clause.
-HINT:  Only equality conditions are supported in continuous aggregates.
-CREATE  TABLE mat_t1( a integer, b integer,c TEXT);
---With LATERAL multiple tables in new format
+NOTICE:  refreshing continuous aggregate "cagg_more_joins_conds"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+-- With LATERAL multiple tables in new format
+CREATE TABLE mat_t1(a integer, b integer, c TEXT);
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only = FALSE)
-as
-select temperature, count(*) from conditions,
-LATERAL (Select * from mat_t1 where a = conditions.temperature) q
-group by temperature WITH NO DATA;
-ERROR:  invalid continuous aggregate view
-DETAIL:  Lateral joins are not supported in FROM clause.
---With FROM clause has view
+AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket, temperature, count(*) from conditions,
+LATERAL (SELECT * FROM mat_t1 WHERE mat_t1.a = conditions.temperature) q
+GROUP BY bucket, temperature;
+NOTICE:  refreshing continuous aggregate "mat_m1"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+-- Joining a hypertable and view
 CREATE MATERIALIZED VIEW cagg_view
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -956,11 +980,12 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions, devices_view
 WHERE conditions.device_id = devices_view.device_id
 GROUP BY name, bucket, devices_view.device_id;
-ERROR:  invalid continuous aggregate view
-DETAIL:  Views are not supported in FROM clause.
+NOTICE:  refreshing continuous aggregate "cagg_view"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
 CREATE TABLE cities(name text, currency text);
 INSERT INTO cities VALUES ('Berlin', 'EUR'), ('London', 'PND');
 --Error out when FROM clause has sub selects
+\set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW conditions_summary_subselect
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1036,7 +1061,7 @@ FROM conditions, conditions_dup
 WHERE conditions.device_id = conditions_dup.device_id
 GROUP BY bucket;
 ERROR:  invalid continuous aggregate view
-DETAIL:  Multiple hypertables or normal tables are not supported in FROM clause.
+DETAIL:  Only one hypertable is allowed in continuous aggregate view.
 --Error out when join is between two normal tables
 CREATE MATERIALIZED VIEW cagg_nt
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
@@ -1047,9 +1072,10 @@ FROM devices, devices_dup
 WHERE devices.device_id = devices_dup.device_id
 GROUP BY devices.name, devices.location;
 ERROR:  invalid continuous aggregate view
-DETAIL:  Multiple hypertables or normal tables are not supported in FROM clause.
---Error out when join is on non-equality condition
-CREATE MATERIALIZED VIEW cagg_unequal
+DETAIL:  At least one hypertable should be used in the view definition.
+\set ON_ERROR_STOP 1
+-- JOIN with non-equality condition
+CREATE MATERIALIZED VIEW cagg_unequal1
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
@@ -1057,10 +1083,10 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions, devices
 WHERE conditions.device_id <> devices.device_id
 GROUP BY name, bucket;
-ERROR:  invalid continuous aggregate view
-DETAIL:  Only equality conditions are supported in continuous aggregates.
---Unsupported join condition
-CREATE MATERIALIZED VIEW cagg_unequal
+NOTICE:  refreshing continuous aggregate "cagg_unequal1"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+-- JOIN with non-equality condition
+CREATE MATERIALIZED VIEW cagg_unequal2
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
@@ -1069,23 +1095,21 @@ FROM conditions, devices
 WHERE conditions.device_id = devices.device_id AND
       conditions.city like '%cow*'
 GROUP BY name, bucket;
-ERROR:  invalid continuous aggregate view
-DETAIL:  Unsupported expression in join clause.
-HINT:  Only equality conditions are supported in continuous aggregates.
---Unsupported join condition
-CREATE MATERIALIZED VIEW cagg_unequal
+NOTICE:  refreshing continuous aggregate "cagg_unequal2"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+-- JOIN with non-equality condition
+CREATE MATERIALIZED VIEW cagg_unequal3
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
    name
-FROM conditions, devices
-WHERE conditions.device_id = devices.device_id OR
-      conditions.city like '%cow*'
+FROM conditions
+JOIN devices ON conditions.device_id = devices.device_id OR conditions.city LIKE '%cow*'
 GROUP BY name, bucket;
-ERROR:  invalid continuous aggregate view
-DETAIL:  Unsupported expression in join clause.
-HINT:  Only equality conditions are supported in continuous aggregates.
---Error out when join type is not inner
+NOTICE:  refreshing continuous aggregate "cagg_unequal3"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+-- Error out when join type is not INNER or LEFT
+\set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW cagg_outer
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
@@ -1094,8 +1118,19 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions FULL JOIN devices
 ON conditions.device_id = devices.device_id
 GROUP BY name, bucket;
-ERROR:  only inner joins are supported in continuous aggregates
-CREATE MATERIALIZED VIEW cagg_outer
+ERROR:  only INNER or LEFT joins are supported in continuous aggregates
+CREATE MATERIALIZED VIEW cagg_right
+WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
+SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
+   AVG(temperature),
+   name
+FROM conditions RIGHT JOIN devices
+ON conditions.device_id = devices.device_id
+GROUP BY name, bucket;
+ERROR:  only INNER or LEFT joins are supported in continuous aggregates
+\set ON_ERROR_STOP 1
+-- LEFT JOIN is allowed
+CREATE MATERIALIZED VIEW cagg_left_join
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
    AVG(temperature),
@@ -1103,8 +1138,10 @@ SELECT time_bucket(INTERVAL '1 day', day) AS bucket,
 FROM conditions LEFT JOIN devices
 ON conditions.device_id = devices.device_id
 GROUP BY name, bucket;
-ERROR:  only inner joins are supported in continuous aggregates
---Error out for join between cagg and hypertable
+NOTICE:  refreshing continuous aggregate "cagg_left_join"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+-- Error out for join between cagg and hypertable
+\set ON_ERROR_STOP 0
 CREATE MATERIALIZED VIEW cagg_nested_ht
 WITH (timescaledb.continuous, timescaledb.materialized_only = TRUE) AS
 SELECT time_bucket(INTERVAL '1 day', cagg.bucket) AS bucket,
@@ -1114,32 +1151,56 @@ FROM cagg_cagg cagg, conditions
 WHERE cagg.device_id = conditions.device_id
 GROUP BY 1,2,3;
 ERROR:  invalid continuous aggregate view
-DETAIL:  Views are not supported in FROM clause.
+DETAIL:  Only one hypertable is allowed in continuous aggregate view.
+\set ON_ERROR_STOP 1
+-- Multiple JOINS are supported
+CREATE MATERIALIZED VIEW conditions_by_day WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 day', conditions.day) AS bucket,
+   AVG(conditions.temperature),
+   devices.name AS device,
+   location.name AS location
+FROM conditions
+JOIN devices ON conditions.device_id = devices.device_id
+JOIN location ON location.name = devices.location
+GROUP BY bucket, devices.name, location.name;
+NOTICE:  refreshing continuous aggregate "conditions_by_day"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
+-- JOIN with a foreign table
+\c :TEST_DBNAME :ROLE_SUPERUSER
+SELECT current_setting('port') AS "PGPORT", current_database() AS "PGDATABASE" \gset
+CREATE EXTENSION postgres_fdw;
+CREATE SERVER loopback
+   FOREIGN DATA WRAPPER postgres_fdw
+   OPTIONS (host 'localhost', dbname :'PGDATABASE', port :'PGPORT');
+CREATE USER MAPPING FOR :ROLE_DEFAULT_PERM_USER
+   SERVER loopback
+   OPTIONS (user :'ROLE_DEFAULT_PERM_USER', password 'nopassword');
+ALTER USER MAPPING FOR :ROLE_DEFAULT_PERM_USER
+   SERVER loopback
+   OPTIONS (ADD password_required 'false');
+GRANT USAGE ON FOREIGN SERVER loopback TO :ROLE_DEFAULT_PERM_USER;
+\c :TEST_DBNAME :ROLE_DEFAULT_PERM_USER;
+CREATE FOREIGN TABLE devices_fdw (
+   device_id int not null,
+   name text,
+   location text
+) SERVER loopback OPTIONS (table_name 'devices');
+CREATE MATERIALIZED VIEW conditions_fdw WITH (timescaledb.continuous) AS
+SELECT time_bucket(INTERVAL '1 day', conditions.day) AS bucket,
+   AVG(conditions.temperature),
+   devices.name AS device
+FROM conditions
+JOIN devices_fdw AS devices ON conditions.device_id = devices.device_id
+GROUP BY bucket, devices.name;
+NOTICE:  refreshing continuous aggregate "conditions_fdw"
+HINT:  Use WITH NO DATA if you do not want to refresh the continuous aggregate on creation.
 \set VERBOSITY terse
+SET client_min_messages TO WARNING;
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 51 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
-NOTICE:  drop cascades to 2 other objects
 DROP TABLE devices CASCADE;
-NOTICE:  drop cascades to view devices_view
 DROP TABLE conditions_dup CASCADE;
 DROP TABLE devices_dup CASCADE;
+RESET client_min_messages;
 \set VERBOSITY default
 -- SDC #1859
 CREATE TABLE conditions(
@@ -1147,10 +1208,10 @@ CREATE TABLE conditions(
   value FLOAT8 NOT NULL,
   device_id int NOT NULL
 );
-SELECT create_hypertable('conditions', 'time', chunk_time_interval => INTERVAL '1 day');
-    create_hypertable     
---------------------------
- (24,public,conditions,t)
+SELECT table_name FROM create_hypertable('conditions', 'time', chunk_time_interval => INTERVAL '1 day');
+ table_name 
+------------
+ conditions
 (1 row)
 
 INSERT INTO conditions (time, value, device_id)
@@ -1180,6 +1241,7 @@ SELECT a.* FROM cagg_realtime a WHERE a.location = 'Moscow' ORDER BY bucket LIMI
 (2 rows)
 
 \set VERBOSITY terse
+SET client_min_messages TO WARNING;
 DROP TABLE conditions CASCADE;
-NOTICE:  drop cascades to 3 other objects
 DROP TABLE devices CASCADE;
+RESET client_min_messages;
