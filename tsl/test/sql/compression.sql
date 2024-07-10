@@ -1171,3 +1171,31 @@ UPDATE hyper_84 SET temp = 100 where device = 1;
 SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
 -- indexscan for decompression: DELETE
 DELETE FROM hyper_84 WHERE device = 1;
+
+-- Test using DELETE instead of TRUNCATE after compression
+CREATE TABLE hyper_delete (time timestamptz, device int, location int, temp float, t text);
+SELECT table_name FROM create_hypertable('hyper_delete', 'time');
+INSERT INTO hyper_delete VALUES ('2024-07-10', 1, 1, 1.0, repeat('X', 10000));
+ANALYZE hyper_delete;
+SELECT ch AS "CHUNK" FROM show_chunks('hyper_delete') ch \gset
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+
+-- One uncompressed row
+SELECT count(*) FROM :CHUNK;
+
+ALTER TABLE hyper_delete SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+
+SET timescaledb.enable_delete_after_compression TO true;
+SELECT FROM compress_chunk(:'CHUNK');
+
+-- still have more than one tuple
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+ANALYZE hyper_delete;
+
+-- after ANALYZE we should have no tuples
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+
+-- One compressed row
+SELECT count(*) FROM :CHUNK;
+
+RESET timescaledb.enable_delete_after_compression;
