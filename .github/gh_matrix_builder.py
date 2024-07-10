@@ -181,6 +181,17 @@ m["include"].append(
     )
 )
 
+m["include"].append(
+    build_debug_config(
+        {
+            "pg": "17",
+            "snapshot": "snapshot",
+            "tsdb_build_args": "-DEXPERIMENTAL=ON",
+            "skipped_tests": "merge_compress merge_dml merge size_utils ts_merge-17",
+        }
+    )
+)
+
 # if this is not a pull request e.g. a scheduled run or a push
 # to a specific branch like prerelease_test we add additional
 # entries to the matrix
