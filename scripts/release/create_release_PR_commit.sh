@@ -6,7 +6,9 @@ SOURCES_DIR="sources"
 
 CHANGELOG_HEADER_LINES="6"
 
-FORK_DIR="GH_USERNAME-timescaledb"
+GH_USERNAME=$(gh auth status | grep 'Logged in to' |cut -d ' ' -f 9)
+
+FORK_DIR="$GH_USERNAME-timescaledb"
 
 echo "---- Deriving the release related versions from main ----"
 
