@@ -1,6 +1,9 @@
 #!/bin/bash
 set -eu
 
+
+echo "---- Setting git user parameters as per current global git configuration ----"
+
 # GITHUB_USERNAMES
 GH_EMAIL=$(git config user.email)
 GH_FULL_USERNAME=$(git config user.name)
