@@ -53,6 +53,11 @@ static const struct config_enum_entry loglevel_options[] = {
 	{ "log", LOG, false },		 { NULL, 0, false }
 };
 
+static const struct config_enum_entry transparent_decompression_options[] = {
+	{ "on", 1, false },	   { "true", 1, false },	   { "off", 0, false },
+	{ "false", 0, false }, { "hyperstore", 2, false }, { NULL, 0, false }
+};
+
 bool ts_guc_enable_deprecation_warnings = true;
 bool ts_guc_enable_optimizations = true;
 bool ts_guc_restoring = false;
@@ -71,7 +76,7 @@ bool ts_guc_enable_osm_reads = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression = true;
 TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering = true;
 TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml = 100000;
-TSDLLEXPORT bool ts_guc_enable_transparent_decompression = true;
+TSDLLEXPORT int ts_guc_enable_transparent_decompression = 1;
 TSDLLEXPORT bool ts_guc_enable_compression_wal_markers = false;
 TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge = true;
 bool ts_guc_enable_chunkwise_aggregation = true;
@@ -79,6 +84,7 @@ bool ts_guc_enable_vectorized_aggregation = true;
 TSDLLEXPORT bool ts_guc_enable_compression_indexscan = false;
 TSDLLEXPORT bool ts_guc_enable_bulk_decompression = true;
 TSDLLEXPORT bool ts_guc_auto_sparse_indexes = true;
+TSDLLEXPORT bool ts_guc_enable_columnarscan = true;
 TSDLLEXPORT int ts_guc_bgw_log_level = WARNING;
 TSDLLEXPORT bool ts_guc_enable_skip_scan = true;
 static char *ts_guc_default_segmentby_fn = NULL;
@@ -467,11 +473,12 @@ _guc_init(void)
 							NULL,
 							NULL);
 
-	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
+	DefineCustomEnumVariable(MAKE_EXTOPTION("enable_transparent_decompression"),
 							 "Enable transparent decompression",
 							 "Enable transparent decompression when querying hypertable",
 							 &ts_guc_enable_transparent_decompression,
-							 true,
+							 1,
+							 transparent_decompression_options,
 							 PGC_USERSET,
 							 0,
 							 NULL,
@@ -630,6 +637,17 @@ _guc_init(void)
 							 "suitable sparse indexes when compressed. Must be set at the moment "
 							 "of chunk compression, e.g. when the `compress_chunk()` is called.",
 							 &ts_guc_auto_sparse_indexes,
+							 true,
+							 PGC_USERSET,
+							 0,
+							 NULL,
+							 NULL,
+							 NULL);
+
+	DefineCustomBoolVariable(MAKE_EXTOPTION("enable_columnarscan"),
+							 "Enable columnar-optimized scans for supported access methods",
+							 "Use scan optimizations for columnar-oriented storage",
+							 &ts_guc_enable_columnarscan,
 							 true,
 							 PGC_USERSET,
 							 0,

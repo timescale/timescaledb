@@ -22,6 +22,7 @@ file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/testtablespace)
 # Tests to ignore
 set(PG_IGNORE_TESTS
     advisory_lock
+    amutils
     event_trigger
     foreign_data
     identity
@@ -30,7 +31,9 @@ set(PG_IGNORE_TESTS
     rules
     sanity_check
     security_label
-    type_sanity)
+    type_sanity
+    create_am
+    psql)
 
 # Modify the test schedule to ignore some tests
 foreach(IGNORE_TEST ${PG_IGNORE_TESTS})

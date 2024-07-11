@@ -31,3 +31,5 @@ SELECT * FROM (
        (_timescaledb_functions.makeaclitem(:'TMP_USER', 0, 'insert,select', true))
     ) AS t(item);
 DROP USER :TMP_USER;
+
+SELECT _timescaledb_debug.extension_state();

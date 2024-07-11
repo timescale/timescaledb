@@ -62,6 +62,13 @@ typedef struct CompressedGorillaData
 	Simple8bRleSerialized *nulls; /* NULL if no nulls */
 } CompressedGorillaData;
 
+bool
+gorilla_compressed_has_nulls(const CompressedDataHeader *header)
+{
+	const GorillaCompressed *gc = (const GorillaCompressed *) header;
+	return gc->has_nulls;
+}
+
 static void
 pg_attribute_unused() assertions(void)
 {

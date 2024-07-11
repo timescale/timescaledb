@@ -11,6 +11,8 @@
 #include <access/tableam.h>
 #include <access/xact.h>
 #include <catalog/dependency.h>
+#include <catalog/index.h>
+#include <commands/event_trigger.h>
 #include <commands/tablecmds.h>
 #include <commands/trigger.h>
 #include <libpq-fe.h>
@@ -19,13 +21,17 @@
 #include <nodes/parsenodes.h>
 #include <nodes/pg_list.h>
 #include <parser/parse_func.h>
+#include <postgres_ext.h>
 #include <storage/lmgr.h>
+#include <storage/lockdefs.h>
+#include <tcop/utility.h>
 #include <trigger.h>
 #include <utils/builtins.h>
 #include <utils/elog.h>
 #include <utils/fmgrprotos.h>
 #include <utils/inval.h>
 #include <utils/snapmgr.h>
+#include <utils/syscache.h>
 
 #include "compat/compat.h"
 #include "api.h"
@@ -37,6 +43,8 @@
 #include "error_utils.h"
 #include "errors.h"
 #include "hypercube.h"
+#include "hyperstore/hyperstore_handler.h"
+#include "hyperstore/utils.h"
 #include "hypertable.h"
 #include "hypertable_cache.h"
 #include "scan_iterator.h"
@@ -59,7 +67,16 @@ typedef struct CompressChunkCxt
 static Oid get_compressed_chunk_index_for_recompression(Chunk *uncompressed_chunk);
 static Oid recompress_chunk_segmentwise_impl(Chunk *chunk);
 
-static void
+static Node *
+create_dummy_query()
+{
+	RawStmt *query = NULL;
+	query = makeNode(RawStmt);
+	query->stmt = (Node *) makeNode(SelectStmt);
+	return (Node *) query;
+}
+
+void
 compression_chunk_size_catalog_insert(int32 src_chunk_id, const RelationSize *src_size,
 									  int32 compress_chunk_id, const RelationSize *compress_size,
 									  int64 rowcnt_pre_compression, int64 rowcnt_post_compression,
@@ -413,6 +430,14 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 	mergable_chunk = find_chunk_to_merge_into(cxt.srcht, cxt.srcht_chunk);
 	if (!mergable_chunk)
 	{
+		/*
+		 * Set up a dummy parsetree since we're calling AlterTableInternal
+		 * inside create_compress_chunk(). We can use anything here because we
+		 * are not calling EventTriggerDDLCommandEnd but we use a parse tree
+		 * type that CreateCommandTag can handle to avoid spurious printouts
+		 * in the event that EventTriggerDDLCommandEnd is called.
+		 */
+		EventTriggerAlterTableStart(create_dummy_query());
 		/* create compressed chunk and a new table */
 		compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, InvalidOid);
 		new_compressed_chunk = true;
@@ -420,6 +445,7 @@ compress_chunk_impl(Oid hypertable_relid, Oid chunk_relid)
 				(errmsg("new compressed chunk \"%s.%s\" created",
 						NameStr(compress_ht_chunk->fd.schema_name),
 						NameStr(compress_ht_chunk->fd.table_name))));
+		EventTriggerAlterTableEnd();
 	}
 	else
 	{
@@ -656,8 +682,16 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	/* Acquire locks on catalog tables to keep till end of txn */
 	LockRelationOid(catalog_get_table_id(ts_catalog_get(), CHUNK), RowExclusiveLock);
 
+	/*
+	 * Set up a dummy parsetree since we're calling AlterTableInternal inside
+	 * create_compress_chunk(). We can use anything here because we are not
+	 * calling EventTriggerDDLCommandEnd but we use a parse tree type that
+	 * CreateCommandTag can handle to avoid spurious printouts.
+	 */
+	EventTriggerAlterTableStart(create_dummy_query());
 	/* Create compressed chunk using existing table */
 	compress_ht_chunk = create_compress_chunk(cxt.compress_ht, cxt.srcht_chunk, chunk_table);
+	EventTriggerAlterTableEnd();
 
 	/* Copy chunk constraints (including fkey) to compressed chunk */
 	ts_chunk_constraints_create(cxt.compress_ht, compress_ht_chunk);
@@ -686,19 +720,111 @@ tsl_create_compressed_chunk(PG_FUNCTION_ARGS)
 	PG_RETURN_OID(chunk_relid);
 }
 
+static Oid
+set_access_method(Oid relid, const char *amname)
+{
+#if PG15_GE
+	AlterTableCmd cmd = {
+		.type = T_AlterTableCmd,
+		.subtype = AT_SetAccessMethod,
+		.name = pstrdup(amname),
+	};
+	bool to_hyperstore = strcmp(amname, "hyperstore") == 0;
+	Oid amoid = ts_get_rel_am(relid);
+
+	/* Setting the same access method is a no-op */
+	if (amoid == get_am_oid(amname, false))
+		return relid;
+
+	hyperstore_alter_access_method_begin(relid, !to_hyperstore);
+	AlterTableInternal(relid, list_make1(&cmd), false);
+	hyperstore_alter_access_method_finish(relid, !to_hyperstore);
+
+#else
+	ereport(ERROR,
+			(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+			 errmsg("compression using hyperstore is not supported")));
+#endif
+	return relid;
+}
+
 Datum
 tsl_compress_chunk(PG_FUNCTION_ARGS)
 {
 	Oid uncompressed_chunk_id = PG_ARGISNULL(0) ? InvalidOid : PG_GETARG_OID(0);
 	bool if_not_compressed = PG_ARGISNULL(1) ? true : PG_GETARG_BOOL(1);
 	bool recompress = PG_ARGISNULL(2) ? false : PG_GETARG_BOOL(2);
+	const char *compress_using = PG_ARGISNULL(3) ? NULL : NameStr(*PG_GETARG_NAME(3));
 
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
 	Chunk *chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
+	bool rel_is_hyperstore =
+		(get_table_am_oid("hyperstore", false) == ts_get_rel_am(uncompressed_chunk_id));
+	bool arg_is_heap = false;
+	bool arg_is_hyperstore = false;
+	bool is_hyperstore_recompression = false;
 
-	uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+	if (compress_using != NULL)
+	{
+		if (strcmp(compress_using, "heap") == 0)
+			arg_is_heap = true;
+		else if (strcmp(compress_using, "hyperstore") == 0)
+			arg_is_hyperstore = true;
+	}
+
+	if (ts_chunk_is_compressed(chunk) && !rel_is_hyperstore && arg_is_hyperstore)
+	{
+		/* Do quick migration to hyperstore of already compressed data by
+		 * simply changing the access method to hyperstore in pg_am. */
+		hyperstore_set_am(uncompressed_chunk_id);
+		PG_RETURN_OID(uncompressed_chunk_id);
+	}
+
+	/*
+	 * If the chunk is already a hyperstore we recompress it even if
+	 * compress_using=>heap.
+	 */
+	if (rel_is_hyperstore && arg_is_heap)
+	{
+		elog(NOTICE,
+			 "cannot compress hyperstore \"%s\" using heap, recompressing instead",
+			 get_rel_name(uncompressed_chunk_id));
+		compress_using = NULL;
+		arg_is_heap = false;
+	}
+
+	is_hyperstore_recompression =
+		(rel_is_hyperstore && (arg_is_hyperstore || NULL == compress_using));
+
+	if (compress_using == NULL || arg_is_heap || is_hyperstore_recompression)
+	{
+		/* If compress_chunk() is called on an already compressed heap, or, a
+		 * hyperstore with compress_using=>'hyperstore', then this is a
+		 * recompression and should be allowed. Otherwise, generate error. */
+		if (rel_is_hyperstore && arg_is_heap)
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("cannot compress a hyperstore"),
+					 errhint("Decompress the chunk before converting it to a hyperstore.")));
+
+		uncompressed_chunk_id = tsl_compress_chunk_wrapper(chunk, if_not_compressed, recompress);
+	}
+	else if (arg_is_hyperstore)
+	{
+		if (!if_not_compressed && rel_is_hyperstore)
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("chunk \"%s\" is already a hyperstore",
+							get_rel_name(uncompressed_chunk_id))));
+
+		set_access_method(uncompressed_chunk_id, compress_using);
+	}
+	else
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("can only compress using \"heap\" or \"hyperstore\"")));
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -765,6 +891,7 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	ts_feature_flag_check(FEATURE_HYPERTABLE_COMPRESSION);
 
 	TS_PREVENT_FUNC_IF_READ_ONLY();
+
 	Chunk *uncompressed_chunk = ts_chunk_get_by_relid(uncompressed_chunk_id, true);
 
 	Hypertable *ht = ts_hypertable_get_by_id(uncompressed_chunk->fd.hypertable_id);
@@ -773,7 +900,9 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 	if (!ht->fd.compressed_hypertable_id)
 		ereport(ERROR, (errcode(ERRCODE_INTERNAL_ERROR), errmsg("missing compressed hypertable")));
 
-	if (!ts_chunk_is_compressed(uncompressed_chunk))
+	if (ts_relation_uses_hyperstore(uncompressed_chunk_id))
+		set_access_method(uncompressed_chunk_id, "heap");
+	else if (!ts_chunk_is_compressed(uncompressed_chunk))
 	{
 		ereport((if_compressed ? NOTICE : ERROR),
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
@@ -781,8 +910,8 @@ tsl_decompress_chunk(PG_FUNCTION_ARGS)
 
 		PG_RETURN_NULL();
 	}
-
-	decompress_chunk_impl(uncompressed_chunk, if_compressed);
+	else
+		decompress_chunk_impl(uncompressed_chunk, if_compressed);
 
 	PG_RETURN_OID(uncompressed_chunk_id);
 }
@@ -922,8 +1051,13 @@ fetch_unmatched_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tuples
 	TableScanDesc scan;
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 	Snapshot snapshot = GetLatestSnapshot();
+	ScanKeyData scankey = {
+		/* Let compression TAM know it should only return tuples from the
+		 * non-compressed relation. No actual scankey necessary */
+		.sk_flags = SK_NO_COMPRESSED,
+	};
 
-	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, NULL);
+	scan = table_beginscan(uncompressed_chunk_rel, snapshot, 0, &scankey);
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -948,6 +1082,7 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	Snapshot snapshot;
 	int index = 0;
 	int nsegbycols_nonnull = 0;
+	int num_scankeys = 1;
 	Bitmapset *null_segbycols = NULL;
 	bool matching_exist = false;
 
@@ -963,8 +1098,10 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 		}
 	}
 
-	ScanKeyData *scankey =
-		(nsegbycols_nonnull > 0) ? palloc0(sizeof(*scankey) * nsegbycols_nonnull) : NULL;
+	if (nsegbycols_nonnull > 0)
+		num_scankeys = nsegbycols_nonnull;
+
+	ScanKeyData *scankey = palloc0(sizeof(*scankey) * num_scankeys);
 
 	for (int seg_col = 0; seg_col < nsegmentby_cols; seg_col++)
 	{
@@ -987,6 +1124,9 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	}
 
 	snapshot = GetLatestSnapshot();
+	/* Let compression TAM know it should only return tuples from the
+	 * non-compressed relation. */
+	scankey->sk_flags = SK_NO_COMPRESSED;
 	scan = table_beginscan(uncompressed_chunk_rel, snapshot, nsegbycols_nonnull, scankey);
 	TupleTableSlot *slot = table_slot_create(uncompressed_chunk_rel, NULL);
 
@@ -1019,8 +1159,8 @@ fetch_matching_uncompressed_chunk_into_tuplesort(Tuplesortstate *segment_tupleso
 	if (null_segbycols != NULL)
 		pfree(null_segbycols);
 
-	if (scankey != NULL)
-		pfree(scankey);
+	pfree(scankey);
+
 	return matching_exist;
 }
 
@@ -1342,6 +1482,24 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 
 	/* changed chunk status, so invalidate any plans involving this chunk */
 	CacheInvalidateRelcacheByRelid(uncompressed_chunk_id);
+
+	/* Need to rebuild indexes if the relation is using hyperstore
+	 * TAM. Alternatively, we could insert into indexes when inserting into
+	 * the compressed rel. */
+	if (uncompressed_chunk_rel->rd_tableam == hyperstore_routine())
+	{
+#if PG14_GE
+		ReindexParams params = {
+			.options = 0,
+			.tablespaceOid = InvalidOid,
+		};
+
+		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, &params);
+#else
+		reindex_relation(RelationGetRelid(uncompressed_chunk_rel), 0, 0);
+#endif
+	}
+
 	table_close(uncompressed_chunk_rel, NoLock);
 	table_close(compressed_chunk_rel, NoLock);
 

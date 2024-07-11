@@ -49,3 +49,9 @@ UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_nulls'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid='skip_scan_ht'::regclass;
 UPDATE pg_statistic SET stadistinct=1, stanullfrac=0.5 WHERE starelid IN (select inhrelid from pg_inherits where inhparent='skip_scan_ht'::regclass);
+
+-- Turn off autovacuum to not trigger new vacuums that restores the
+-- adjusted statistics
+alter table skip_scan set (autovacuum_enabled = off);
+alter table skip_scan_nulls set (autovacuum_enabled = off);
+alter table skip_scan_ht set (autovacuum_enabled = off);

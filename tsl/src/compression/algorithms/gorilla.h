@@ -71,6 +71,7 @@ typedef struct GorillaCompressor GorillaCompressor;
 typedef struct GorillaCompressed GorillaCompressed;
 typedef struct GorillaDecompressionIterator GorillaDecompressionIterator;
 
+extern bool gorilla_compressed_has_nulls(const CompressedDataHeader *header);
 extern Compressor *gorilla_compressor_for_type(Oid element_type);
 
 extern GorillaCompressor *gorilla_compressor_alloc(void);

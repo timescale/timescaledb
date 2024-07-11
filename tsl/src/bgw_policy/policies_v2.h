@@ -25,6 +25,7 @@
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_AFTER "compress_after"
 #define POL_COMPRESSION_CONF_KEY_MAXCHUNKS_TO_COMPRESS "maxchunks_to_compress"
 #define POL_COMPRESSION_CONF_KEY_COMPRESS_CREATED_BEFORE "compress_created_before"
+#define POL_COMPRESSION_CONF_KEY_COMPRESS_USING "compress_using"
 
 #define POLICY_RECOMPRESSION_PROC_NAME "policy_recompression"
 #define POL_RECOMPRESSION_CONF_KEY_RECOMPRESS_AFTER "recompress_after"
@@ -88,6 +89,7 @@ typedef struct compression_policy
 	Datum compress_after;
 	Oid compress_after_type;
 	bool create_policy;
+	const char *compress_using;
 } compression_policy;
 
 typedef struct retention_policy

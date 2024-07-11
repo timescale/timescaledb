@@ -27,14 +27,15 @@
 #include <optimizer/plancat.h>
 #include <optimizer/planner.h>
 #include <optimizer/prep.h>
+#include <parser/parsetree.h>
 #include <utils/lsyscache.h>
 #include <utils/rel.h>
 
 #include <math.h>
 
-#include "compat/compat.h"
 #include "allpaths.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "planner/planner.h"
 
 static void set_rel_pathlist(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte);
@@ -142,6 +143,9 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 {
 	List *live_childrels = NIL;
 	ListCell *l;
+	Hypertable *parent_ht =
+		ts_planner_get_hypertable(planner_rt_fetch(parent_rel->relid, root)->relid,
+								  CACHE_FLAG_MISSING_OK);
 
 	/*
 	 * Generate access paths for each member relation, and remember the
@@ -183,11 +187,12 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 		 * For standalone chunks or UPDATE/DELETE, we do the same thing in
 		 * timescaledb_get_relation_info_hook().
 		 */
-		Hypertable *ht;
-		TsRelType reltype = ts_classify_relation(root, child_rel, &ht);
-		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht))
+		Hypertable *child_ht;
+		TsRelType reltype = ts_classify_relation(root, child_rel, &child_ht);
+		if (reltype == TS_REL_CHUNK_CHILD && !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(child_ht))
 		{
 			TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) child_rel->fdw_private;
+			const RangeTblEntry *rte = planner_rt_fetch(appinfo->child_relid, root);
 
 			/*
 			 * This function is called only in tandem with our own hypertable
@@ -195,7 +200,26 @@ ts_set_append_rel_pathlist(PlannerInfo *root, RelOptInfo *parent_rel, Index pare
 			 */
 			Assert(fdw_private->cached_chunk_struct != NULL);
 
-			if (!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
+			const bool use_transparent_decompression =
+				ts_should_use_transparent_decompression(parent_ht, rte->relid);
+
+			/*
+			 * We only clear the index list if we have enabled transparent
+			 * decompression and there is an associated compressed hypertable
+			 * for the parent table.
+			 *
+			 * If we have disabled transparent decompression we should read
+			 * the chunk directly since it might have indexes defined that we
+			 * should honor. For example, if they are covering indexes or if a
+			 * table access method is used.
+			 *
+			 * If there is no associated compression table, there will be no
+			 * compressed chunks, so there is no need to check if the chunk is
+			 * compressed.
+			 */
+
+			if (use_transparent_decompression &&
+				!ts_chunk_is_partial(fdw_private->cached_chunk_struct) &&
 				ts_chunk_is_compressed(fdw_private->cached_chunk_struct))
 			{
 				child_rel->indexlist = NIL;

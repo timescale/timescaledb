@@ -12,6 +12,7 @@
 #include <common/base64.h>
 #include <funcapi.h>
 #include <lib/stringinfo.h>
+#include <stdbool.h>
 #include <utils/builtins.h>
 #include <utils/date.h>
 #include <utils/lsyscache.h>
@@ -75,6 +76,13 @@ typedef struct ExtendedCompressor
 	Compressor base;
 	DeltaDeltaCompressor *internal;
 } ExtendedCompressor;
+
+bool
+deltadelta_compressed_has_nulls(const CompressedDataHeader *header)
+{
+	const DeltaDeltaCompressed *ddc = (const DeltaDeltaCompressed *) header;
+	return ddc->has_nulls;
+}
 
 static void
 deltadelta_compressor_append_bool(Compressor *compressor, Datum val)

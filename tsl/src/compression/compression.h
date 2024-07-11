@@ -166,13 +166,14 @@ typedef enum
 	TOAST_STORAGE_EXTENDED
 } CompressionStorage;
 
+typedef DecompressionIterator *(*DecompressionInitializer)(Datum, Oid);
 typedef ArrowArray *(*DecompressAllFunction)(Datum compressed, Oid element_type,
 											 MemoryContext dest_mctx);
 
 typedef struct CompressionAlgorithmDefinition
 {
-	DecompressionIterator *(*iterator_init_forward)(Datum, Oid element_type);
-	DecompressionIterator *(*iterator_init_reverse)(Datum, Oid element_type);
+	DecompressionInitializer iterator_init_forward;
+	DecompressionInitializer iterator_init_reverse;
 	DecompressAllFunction decompress_all;
 	void (*compressed_data_send)(CompressedDataHeader *, StringInfo);
 	Datum (*compressed_data_recv)(StringInfo);
@@ -265,6 +266,10 @@ typedef struct RowCompressor
 	bool first_iteration;
 	/* the heap insert options */
 	int insert_options;
+
+	/* Callback called on every flush. The ntuples argument is the number of
+	 * tuples flushed. Typically used for progress reporting. */
+	void (*on_flush)(struct RowCompressor *rowcompress, uint64 ntuples);
 } RowCompressor;
 
 /*
@@ -296,6 +301,7 @@ extern Datum tsl_compressed_data_send(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_recv(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_in(PG_FUNCTION_ARGS);
 extern Datum tsl_compressed_data_out(PG_FUNCTION_ARGS);
+extern Datum tsl_compressed_data_info(PG_FUNCTION_ARGS);
 
 static void
 pg_attribute_unused() assert_num_compression_algorithms_sane(void)
@@ -320,6 +326,7 @@ pg_attribute_unused() assert_num_compression_algorithms_sane(void)
 					 "number of algorithms have changed, the asserts should be updated");
 }
 
+extern const char *compression_get_algorithm_name(CompressionAlgorithm alg);
 extern CompressionStorage compression_get_toast_storage(CompressionAlgorithm algo);
 extern CompressionAlgorithm compression_get_default_algorithm(Oid typeoid);
 
@@ -350,20 +357,23 @@ extern void compress_row_destroy(CompressSingleRowState *cr);
 extern int row_decompressor_decompress_row_to_table(RowDecompressor *row_decompressor);
 extern void row_decompressor_decompress_row_to_tuplesort(RowDecompressor *row_decompressor,
 														 Tuplesortstate *tuplesortstate);
-extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
-														 const char *attname, AttrNumber *att_nums,
-														 Oid *sort_operator, Oid *collation,
-														 bool *nulls_first);
-extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+extern void compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings,
+														 Oid table, const char *attname,
+														 AttrNumber *att_nums, Oid *sort_operator,
+														 Oid *collation, bool *nulls_first);
+extern Tuplesortstate *compression_create_tuplesort_state(const CompressionSettings *settings,
+														  Relation rel);
+extern void row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
 								bool reset_sequence, int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
-extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
-											  Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
-											  Relation in_rel);
-extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings);
+extern int64 row_compressor_append_sorted_rows(RowCompressor *row_compressor,
+											   Tuplesortstate *sorted_rel, TupleDesc sorted_desc,
+											   Relation in_rel);
+extern Oid get_compressed_chunk_index(ResultRelInfo *resultRelInfo,
+									  const CompressionSettings *settings);
 
 extern void segment_info_update(SegmentInfo *segment_info, Datum val, bool is_null);
 

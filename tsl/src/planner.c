@@ -13,11 +13,11 @@
 #include <parser/parsetree.h>
 
 #include "compat/compat.h"
-#include "chunk.h"
 #include "continuous_aggs/planner.h"
 #include "guc.h"
+#include "hyperstore/hyperstore_handler.h"
 #include "hypertable.h"
-#include "hypertable_cache.h"
+#include "nodes/columnar_scan/columnar_scan.h"
 #include "nodes/decompress_chunk/decompress_chunk.h"
 #include "nodes/frozen_chunk_dml/frozen_chunk_dml.h"
 #include "nodes/gapfill/gapfill.h"
@@ -69,6 +69,9 @@ void
 tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeTblEntry *rte,
 						   Hypertable *ht)
 {
+	bool ishyperstore = ts_relation_uses_hyperstore(rte->relid);
+	const bool use_transparent_decompression =
+		ts_should_use_transparent_decompression(ht, rte->relid);
 	/* We can get here via query on hypertable in that case reloptkind
 	 * will be RELOPT_OTHER_MEMBER_REL or via direct query on chunk
 	 * in that case reloptkind will be RELOPT_BASEREL.
@@ -78,10 +81,9 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 	 * Respecting ONLY here is important to not break postgres tools like pg_dump.
 	 */
 	TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;
-	if (ts_guc_enable_transparent_decompression && ht &&
+	if (use_transparent_decompression &&
 		(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
-		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))) &&
-		TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht))
+		 (rel->reloptkind == RELOPT_BASEREL && ts_rte_is_marked_for_expansion(rte))))
 	{
 		if (fdw_private->cached_chunk_struct == NULL)
 		{
@@ -92,6 +94,8 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 			 * Caching is done by our hypertable expansion, which doesn't run in
 			 * these cases.
 			 */
+			Assert(rel->reloptkind == RELOPT_OTHER_MEMBER_REL ||
+				   rel->reloptkind == RELOPT_BASEREL || root->parse->commandType != CMD_SELECT);
 			fdw_private->cached_chunk_struct =
 				ts_chunk_get_by_relid(rte->relid, /* fail_if_not_found = */ true);
 		}
@@ -100,6 +104,14 @@ tsl_set_rel_pathlist_query(PlannerInfo *root, RelOptInfo *rel, Index rti, RangeT
 		{
 			ts_decompress_chunk_generate_paths(root, rel, ht, fdw_private->cached_chunk_struct);
 		}
+	}
+
+	if (ishyperstore)
+	{
+		if (ts_guc_enable_transparent_decompression != 2 && ts_guc_enable_columnarscan)
+			columnar_scan_set_rel_pathlist(root, rel, ht);
+
+		hyperstore_set_rel_pathlist(root, rel, ht);
 	}
 }
 

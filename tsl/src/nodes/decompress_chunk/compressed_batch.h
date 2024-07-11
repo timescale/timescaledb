@@ -7,6 +7,7 @@
 
 #include "compression/compression.h"
 #include "nodes/decompress_chunk/decompress_context.h"
+#include <executor/tuptable.h>
 
 typedef struct ArrowArray ArrowArray;
 

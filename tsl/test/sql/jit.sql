@@ -19,6 +19,9 @@ SET jit_inline_above_cost=0;
 SET jit_optimize_above_cost=0;
 SET jit_tuple_deforming=on;
 
+-- disable hash aggregates to get stable tests
+set enable_hashagg to false;
+
 \ir :TEST_LOAD_NAME
 \set PREFIX 'EXPLAIN (VERBOSE, TIMING OFF, COSTS OFF, SUMMARY OFF)'
 \ir :TEST_QUERY_NAME

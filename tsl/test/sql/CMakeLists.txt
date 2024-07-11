@@ -112,7 +112,32 @@ if((${PG_VERSION_MAJOR} GREATER_EQUAL "15"))
   if(CMAKE_BUILD_TYPE MATCHES Debug)
     list(APPEND TEST_FILES bgw_scheduler_control.sql)
   endif()
-  list(APPEND TEST_FILES merge_compress.sql)
+  list(
+    APPEND
+    TEST_FILES
+    hyperstore.sql
+    hyperstore_columnar.sql
+    hyperstore_copy.sql
+    hyperstore_create.sql
+    hyperstore_cursor.sql
+    hyperstore_delete.sql
+    hyperstore_index_btree.sql
+    hyperstore_index_hash.sql
+    hyperstore_insert.sql
+    hyperstore_join.sql
+    hyperstore_merge.sql
+    hyperstore_policy.sql
+    hyperstore_scans.sql
+    hyperstore_stats.sql
+    hyperstore_types.sql
+    hyperstore_update.sql
+    hyperstore_vacuum.sql
+    hyperstore_vacuum_full.sql
+    merge_compress.sql)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER_EQUAL "16"))
+  list(APPEND TEST_FILES hyperstore_parallel.sql)
 endif()
 
 set(SOLO_TESTS
@@ -173,6 +198,7 @@ if(EXISTS ${PG_CONFIG_H})
   file(STRINGS "${PG_CONFIG_H}" PG_USE_LLVM
        REGEX "^#[\t ]*define[\t ]+USE_LLVM[\t ]+1.*")
   if(PG_USE_LLVM)
+    message(STATUS "Building with JIT support")
     list(APPEND TEST_FILES jit.sql)
   endif()
 endif()

@@ -34,6 +34,7 @@ ts_compression_chunk_size_delete(int32 uncompressed_chunk_id)
 	{
 		TupleInfo *ti = ts_scan_iterator_tuple_info(&iterator);
 		ts_catalog_delete_tid(ti->scanrel, ts_scanner_get_tuple_tid(ti));
+		count++;
 	}
 	return count;
 }

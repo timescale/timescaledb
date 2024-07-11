@@ -8,6 +8,7 @@
 #include <postgres.h>
 
 #include <access/htup_details.h>
+#include <access/tupdesc.h>
 #include <catalog/namespace.h>
 #include <catalog/pg_proc.h>
 #include <common/int.h>
@@ -20,6 +21,81 @@
 #include <utils/jsonb.h>
 
 #include "compat/compat.h"
+
+/* Convenience macro to execute a simple or complex statement inside a memory
+ * context */
+#define TS_WITH_MEMORY_CONTEXT(MCXT, STMT)                                                         \
+	do                                                                                             \
+	{                                                                                              \
+		MemoryContext _oldmcxt = MemoryContextSwitchTo((MCXT));                                    \
+		do                                                                                         \
+			STMT while (0);                                                                        \
+		MemoryContextSwitchTo(_oldmcxt);                                                           \
+	} while (0)
+
+/*
+ * Macro for debug messages that should *only* be present in debug builds but
+ * which should be removed in release builds. This is typically used for
+ * debug builds for development purposes.
+ *
+ * Note that some debug messages might be relevant to deploy in release build
+ * for debugging production systems. This macro is *not* for those cases.
+ */
+#ifdef TS_DEBUG
+#define TS_DEBUG_LOG(FMT, ...) elog(DEBUG2, "%s - " FMT, __func__, ##__VA_ARGS__)
+#else
+#define TS_DEBUG_LOG(FMT, ...)
+#endif
+
+#ifdef TS_DEBUG
+
+static inline const char *
+yes_no(bool value)
+{
+	return value ? "yes" : "no";
+}
+
+/* Convert datum to string using the output function. */
+static inline const char *
+datum_as_string(Oid typid, Datum value, bool is_null)
+{
+	Oid typoutput;
+	bool typIsVarlena;
+
+	if (is_null)
+		return "<NULL>";
+
+	getTypeOutputInfo(typid, &typoutput, &typIsVarlena);
+	return OidOutputFunctionCall(typoutput, value);
+}
+
+static inline const char *
+slot_as_string(TupleTableSlot *slot)
+{
+	StringInfoData info;
+	initStringInfo(&info);
+	appendStringInfoString(&info, "{");
+	for (int i = 0; i < slot->tts_tupleDescriptor->natts; i++)
+	{
+		Form_pg_attribute att = TupleDescAttr(slot->tts_tupleDescriptor, i);
+		Oid typid = att->atttypid;
+		Datum datum = slot->tts_values[i];
+		bool isnull = slot->tts_isnull[i];
+
+		if (att->attisdropped)
+			continue;
+		appendStringInfo(&info,
+						 "%s: %s",
+						 NameStr(att->attname),
+						 datum_as_string(typid, datum, isnull));
+		if (i + 1 < slot->tts_tupleDescriptor->natts)
+			appendStringInfoString(&info, ", ");
+	}
+	appendStringInfoString(&info, "}");
+	return info.data;
+}
+
+#endif /* TS_DEBUG */
 
 /*
  * Get the function name in a PG_FUNCTION.
@@ -239,6 +315,8 @@ ts_get_relation_relid(char const *schema_name, char const *relation_name, bool r
 	}
 }
 
+struct Hypertable;
+
 void replace_now_mock_walker(PlannerInfo *root, Node *clause, Oid funcid);
 
 extern TSDLLEXPORT HeapTuple ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums);
@@ -309,3 +387,7 @@ ts_datum_set_objectid(const AttrNumber attno, NullableDatum *datums, const Oid v
 	else
 		datums[AttrNumberGetAttrOffset(attno)].isnull = true;
 }
+
+TSDLLEXPORT bool ts_relation_uses_hyperstore(Oid relid);
+TSDLLEXPORT bool ts_should_use_transparent_decompression(const struct Hypertable *ht, Oid relid);
+TSDLLEXPORT Oid ts_get_rel_am(Oid relid);

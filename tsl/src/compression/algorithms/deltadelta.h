@@ -27,6 +27,7 @@ typedef struct DeltaDeltaCompressor DeltaDeltaCompressor;
 typedef struct DeltaDeltaCompressed DeltaDeltaCompressed;
 typedef struct DeltaDeltaDecompressionIterator DeltaDeltaDecompressionIterator;
 
+extern bool deltadelta_compressed_has_nulls(const CompressedDataHeader *header);
 extern Compressor *delta_delta_compressor_for_type(Oid element_type);
 extern DeltaDeltaCompressor *delta_delta_compressor_alloc(void);
 extern void delta_delta_compressor_append_null(DeltaDeltaCompressor *compressor);

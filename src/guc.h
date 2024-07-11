@@ -31,7 +31,7 @@ extern bool ts_guc_enable_osm_reads;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_dml_decompression_tuple_filtering;
 extern TSDLLEXPORT int ts_guc_max_tuples_decompressed_per_dml;
-extern TSDLLEXPORT bool ts_guc_enable_transparent_decompression;
+extern TSDLLEXPORT int ts_guc_enable_transparent_decompression;
 extern TSDLLEXPORT bool ts_guc_enable_compression_wal_markers;
 extern TSDLLEXPORT bool ts_guc_enable_decompression_sorted_merge;
 extern TSDLLEXPORT bool ts_guc_enable_skip_scan;
@@ -62,6 +62,7 @@ extern TSDLLEXPORT bool ts_guc_enable_2pc;
 extern TSDLLEXPORT bool ts_guc_enable_compression_indexscan;
 extern TSDLLEXPORT bool ts_guc_enable_bulk_decompression;
 extern TSDLLEXPORT bool ts_guc_auto_sparse_indexes;
+extern TSDLLEXPORT bool ts_guc_enable_columnarscan;
 extern TSDLLEXPORT int ts_guc_bgw_log_level;
 
 #ifdef TS_DEBUG

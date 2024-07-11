@@ -220,6 +220,11 @@ RESET client_min_messages;
 
 SET max_parallel_workers_per_gather TO 0;
 
+ -- To avoid flakiness in the test, we disable incremental sort and
+ -- just use normal sort. This do not make a different for how
+ -- DecompressChunk nodes are used.
+SET enable_incremental_sort to false;
+
 -- get explain for queries on hypertable with compression
 \set TEST_TABLE 'metrics'
 \ir :TEST_QUERY_NAME

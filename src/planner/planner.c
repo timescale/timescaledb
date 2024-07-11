@@ -1348,11 +1348,12 @@ timescaledb_get_relation_info_hook(PlannerInfo *root, Oid relation_objectid, boo
 			 * in cases when these functions don't run, we have to do it here.
 			 */
 			const bool use_transparent_decompression =
-				ts_guc_enable_transparent_decompression && TS_HYPERTABLE_HAS_COMPRESSION_TABLE(ht);
+				ts_should_use_transparent_decompression(ht, rte->relid);
 			const bool is_standalone_chunk = (type == TS_REL_CHUNK_STANDALONE) &&
 											 !TS_HYPERTABLE_IS_INTERNAL_COMPRESSION_TABLE(ht);
 			const bool is_child_chunk_in_update =
 				(type == TS_REL_CHUNK_CHILD) && IS_UPDL_CMD(query);
+
 			if (use_transparent_decompression && (is_standalone_chunk || is_child_chunk_in_update))
 			{
 				TimescaleDBPrivate *fdw_private = (TimescaleDBPrivate *) rel->fdw_private;

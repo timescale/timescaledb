@@ -46,6 +46,23 @@ static const CompressionAlgorithmDefinition definitions[_END_COMPRESSION_ALGORIT
 	[COMPRESSION_ALGORITHM_DELTADELTA] = DELTA_DELTA_ALGORITHM_DEFINITION,
 };
 
+static const char *compression_algorithm_name[] = {
+	[_INVALID_COMPRESSION_ALGORITHM] = "INVALID",	   [COMPRESSION_ALGORITHM_ARRAY] = "ARRAY",
+	[COMPRESSION_ALGORITHM_DICTIONARY] = "DICTIONARY", [COMPRESSION_ALGORITHM_GORILLA] = "GORILLA",
+	[COMPRESSION_ALGORITHM_DELTADELTA] = "DELTADELTA",
+};
+
+const char *
+compression_get_algorithm_name(CompressionAlgorithm alg)
+{
+	if (!(0 <= alg && alg < _END_COMPRESSION_ALGORITHMS))
+		ereport(ERROR,
+				errcode(ERRCODE_DATA_CORRUPTED),
+				errmsg("not a valid compression algorithm"),
+				errdetail("alg: %d", alg));
+	return compression_algorithm_name[alg];
+}
+
 static Compressor *
 compressor_for_type(Oid type)
 {
@@ -56,8 +73,8 @@ compressor_for_type(Oid type)
 	return definitions[algorithm].compressor_for_type(type);
 }
 
-DecompressionIterator *(*tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm,
-															 bool reverse))(Datum, Oid)
+DecompressionInitializer
+tsl_get_decompression_iterator_init(CompressionAlgorithm algorithm, bool reverse)
 {
 	if (algorithm >= _END_COMPRESSION_ALGORITHMS)
 		elog(ERROR, "invalid compression algorithm %d", algorithm);
@@ -84,7 +101,8 @@ tsl_get_decompress_all_function(CompressionAlgorithm algorithm, Oid type)
 	return definitions[algorithm].decompress_all;
 }
 
-static Tuplesortstate *compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel);
+static Tuplesortstate *compress_chunk_sort_relation(const CompressionSettings *settings,
+													Relation in_rel);
 static void row_compressor_process_ordered_slot(RowCompressor *row_compressor, TupleTableSlot *slot,
 												CommandId mycid);
 static void row_compressor_update_group(RowCompressor *row_compressor, TupleTableSlot *row);
@@ -472,18 +490,13 @@ compress_chunk(Oid in_table, Oid out_table, int insert_options)
 	return cstat;
 }
 
-static Tuplesortstate *
-compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
+Tuplesortstate *
+compression_create_tuplesort_state(const CompressionSettings *settings, Relation rel)
 {
-	TupleDesc tupDesc = RelationGetDescr(in_rel);
-	Tuplesortstate *tuplesortstate;
-	TableScanDesc scan;
-	TupleTableSlot *slot;
-
+	TupleDesc tupdesc = RelationGetDescr(rel);
 	int num_segmentby = ts_array_length(settings->fd.segmentby);
 	int num_orderby = ts_array_length(settings->fd.orderby);
 	int n_keys = num_segmentby + num_orderby;
-
 	AttrNumber *sort_keys = palloc(sizeof(*sort_keys) * n_keys);
 	Oid *sort_operators = palloc(sizeof(*sort_operators) * n_keys);
 	Oid *sort_collations = palloc(sizeof(*sort_collations) * n_keys);
@@ -505,7 +518,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 			attname = ts_array_get_element_text(settings->fd.orderby, position);
 		}
 		compress_chunk_populate_sort_info_for_column(settings,
-													 RelationGetRelid(in_rel),
+													 RelationGetRelid(rel),
 													 attname,
 													 &sort_keys[n],
 													 &sort_operators[n],
@@ -513,16 +526,25 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 													 &nulls_first[n]);
 	}
 
-	tuplesortstate = tuplesort_begin_heap(tupDesc,
-										  n_keys,
-										  sort_keys,
-										  sort_operators,
-										  sort_collations,
-										  nulls_first,
-										  maintenance_work_mem,
-										  NULL,
-										  false /*=randomAccess*/);
+	return tuplesort_begin_heap(tupdesc,
+								n_keys,
+								sort_keys,
+								sort_operators,
+								sort_collations,
+								nulls_first,
+								maintenance_work_mem,
+								NULL,
+								false /*=randomAccess*/);
+}
 
+static Tuplesortstate *
+compress_chunk_sort_relation(const CompressionSettings *settings, Relation in_rel)
+{
+	Tuplesortstate *tuplesortstate;
+	TableScanDesc scan;
+	TupleTableSlot *slot;
+
+	tuplesortstate = compression_create_tuplesort_state(settings, in_rel);
 	scan = table_beginscan(in_rel, GetLatestSnapshot(), 0, (ScanKey) NULL);
 	slot = table_slot_create(in_rel, NULL);
 
@@ -548,7 +570,7 @@ compress_chunk_sort_relation(CompressionSettings *settings, Relation in_rel)
 }
 
 void
-compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid table,
+compress_chunk_populate_sort_info_for_column(const CompressionSettings *settings, Oid table,
 											 const char *attname, AttrNumber *att_nums,
 											 Oid *sort_operator, Oid *collation, bool *nulls_first)
 {
@@ -600,7 +622,7 @@ compress_chunk_populate_sort_info_for_column(CompressionSettings *settings, Oid 
  * we are trying to roll up chunks while compressing
  */
 Oid
-get_compressed_chunk_index(ResultRelInfo *resultRelInfo, CompressionSettings *settings)
+get_compressed_chunk_index(ResultRelInfo *resultRelInfo, const CompressionSettings *settings)
 {
 	int num_segmentby_columns = ts_array_length(settings->fd.segmentby);
 
@@ -794,7 +816,7 @@ get_sequence_number_for_current_group(Relation table_rel, Oid index_oid,
 }
 
 static void
-build_column_map(CompressionSettings *settings, Relation uncompressed_table,
+build_column_map(const CompressionSettings *settings, Relation uncompressed_table,
 				 Relation compressed_table, PerColumn **pcolumns, int16 **pmap)
 {
 	Oid compressed_data_type_oid = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
@@ -888,7 +910,7 @@ build_column_map(CompressionSettings *settings, Relation uncompressed_table,
  ** row_compressor **
  ********************/
 void
-row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
+row_compressor_init(const CompressionSettings *settings, RowCompressor *row_compressor,
 					Relation uncompressed_table, Relation compressed_table,
 					int16 num_columns_in_compressed_table, bool need_bistate, bool reset_sequence,
 					int insert_options)
@@ -945,7 +967,7 @@ row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor
 	row_compressor->index_oid = get_compressed_chunk_index(row_compressor->resultRelInfo, settings);
 }
 
-void
+int64
 row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate *sorted_rel,
 								  TupleDesc sorted_desc, Relation in_rel)
 {
@@ -985,6 +1007,8 @@ row_compressor_append_sorted_rows(RowCompressor *row_compressor, Tuplesortstate 
 		 RelationGetRelationName(in_rel));
 
 	ExecDropSingleTupleTableSlot(slot);
+
+	return nrows_processed;
 }
 
 static void
@@ -1260,6 +1284,11 @@ row_compressor_flush(RowCompressor *row_compressor, CommandId mycid, bool change
 		row_compressor->compressed_values[compressed_col] = 0;
 		row_compressor->compressed_is_null[compressed_col] = true;
 	}
+
+	if (NULL != row_compressor->on_flush)
+		row_compressor->on_flush(row_compressor,
+								 row_compressor->rows_compressed_into_current_value);
+
 	row_compressor->rowcnt_pre_compression += row_compressor->rows_compressed_into_current_value;
 	row_compressor->num_compressed_rows++;
 	row_compressor->rows_compressed_into_current_value = 0;
@@ -1934,6 +1963,59 @@ tsl_compressed_data_out(PG_FUNCTION_ARGS)
 	PG_RETURN_CSTRING(encoded);
 }
 
+/* create_hypertable record attribute numbers */
+enum Anum_compressed_info
+{
+	Anum_compressed_info_algorithm = 1,
+	Anum_compressed_info_has_nulls,
+	_Anum_compressed_info_max,
+};
+
+#define Natts_compressed_info (_Anum_compressed_info_max - 1)
+
+extern Datum
+tsl_compressed_data_info(PG_FUNCTION_ARGS)
+{
+	const CompressedDataHeader *header = get_compressed_data_header(PG_GETARG_DATUM(0));
+	TupleDesc tupdesc;
+	HeapTuple tuple;
+	bool has_nulls = false;
+
+	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+		ereport(ERROR,
+				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+				 errmsg("function returning record called in "
+						"context that cannot accept type record")));
+
+	switch (header->compression_algorithm)
+	{
+		case COMPRESSION_ALGORITHM_GORILLA:
+			has_nulls = gorilla_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DICTIONARY:
+			has_nulls = dictionary_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_DELTADELTA:
+			has_nulls = deltadelta_compressed_has_nulls(header);
+			break;
+		case COMPRESSION_ALGORITHM_ARRAY:
+			has_nulls = array_compressed_has_nulls(header);
+			break;
+	}
+
+	tupdesc = BlessTupleDesc(tupdesc);
+
+	Datum values[Natts_compressed_info] = { 0 };
+	bool nulls[Natts_compressed_info] = { false };
+
+	values[AttrNumberGetAttrOffset(Anum_compressed_info_algorithm)] =
+		CStringGetDatum(compression_get_algorithm_name(header->compression_algorithm));
+	values[AttrNumberGetAttrOffset(Anum_compressed_info_has_nulls)] = BoolGetDatum(has_nulls);
+	tuple = heap_form_tuple(tupdesc, values, nulls);
+
+	return HeapTupleGetDatum(tuple);
+}
+
 extern CompressionStorage
 compression_get_toast_storage(CompressionAlgorithm algorithm)
 {
@@ -1972,7 +2054,7 @@ compression_get_default_algorithm(Oid typeoid)
 
 		default:
 		{
-			/* use dictitionary if possible, otherwise use array */
+			/* use dictionary if possible, otherwise use array */
 			TypeCacheEntry *tentry =
 				lookup_type_cache(typeoid, TYPECACHE_EQ_OPR_FINFO | TYPECACHE_HASH_PROC_FINFO);
 			if (tentry->hash_proc_finfo.fn_addr == NULL || tentry->eq_opr_finfo.fn_addr == NULL)

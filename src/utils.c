@@ -12,6 +12,7 @@
 #include <access/xact.h>
 #include <catalog/indexing.h>
 #include <catalog/namespace.h>
+#include <catalog/pg_am.h>
 #include <catalog/pg_cast.h>
 #include <catalog/pg_inherits.h>
 #include <catalog/pg_operator.h>
@@ -37,6 +38,7 @@
 
 #include "compat/compat.h"
 #include "chunk.h"
+#include "cross_module_fn.h"
 #include "debug_point.h"
 #include "guc.h"
 #include "hypertable_cache.h"
@@ -1728,4 +1730,62 @@ ts_heap_form_tuple(TupleDesc tupleDescriptor, NullableDatum *datums)
 	}
 
 	return heap_form_tuple(tupleDescriptor, values, nulls);
+}
+
+/*
+ * Check if a relation is using hyperstore AM.
+ *
+ * Assumes that the relation already has appropriate locks.
+ */
+bool
+ts_relation_uses_hyperstore(Oid relid)
+{
+	HeapTuple tup;
+	Oid clamoid = InvalidOid;
+	Oid amoid = get_am_oid("hyperstore", false);
+
+	tup = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (HeapTupleIsValid(tup))
+	{
+		Form_pg_class clform = (Form_pg_class) GETSTRUCT(tup);
+
+		clamoid = clform->relam;
+		ReleaseSysCache(tup);
+	}
+
+	return amoid == clamoid;
+}
+
+bool
+ts_should_use_transparent_decompression(const Hypertable *ht, Oid relid)
+{
+	if (!ht)
+		return false;
+
+	if (!TS_HYPERTABLE_HAS_COMPRESSION_ENABLED(ht))
+		return false;
+	else if (ts_relation_uses_hyperstore(relid))
+		return ts_guc_enable_transparent_decompression == 2;
+
+	return ts_guc_enable_transparent_decompression > 0;
+}
+
+Oid
+ts_get_rel_am(Oid relid)
+{
+	HeapTuple tuple;
+	Form_pg_class cform;
+	Oid amoid;
+
+	tuple = SearchSysCache1(RELOID, ObjectIdGetDatum(relid));
+
+	if (!HeapTupleIsValid(tuple))
+		elog(ERROR, "cache lookup failed for relation %u", relid);
+
+	cform = (Form_pg_class) GETSTRUCT(tuple);
+	amoid = cform->relam;
+	ReleaseSysCache(tuple);
+
+	return amoid;
 }
