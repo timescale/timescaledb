@@ -1,1 +1,1 @@
-Fixes: #7074: Fix the bug in default `segment by` calculation in compression.
+Fixes: #7074: Fix the bug in the default `segment by` calculation in compression.

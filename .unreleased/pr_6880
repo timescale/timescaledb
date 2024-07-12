@@ -1,1 +1,1 @@
-Implements: #6880: Add support for the array operators to compressed DML batch filtering.
+Implements: #6880: Add support for the array operators used for compressed DML batch filtering.

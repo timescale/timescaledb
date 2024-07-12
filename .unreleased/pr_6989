@@ -1,1 +1,1 @@
-Implements: #6989: Add support for the foreign keys from plain tables to hypertables.
+Implements: #6989: Add support for foreign keys when converting plain tables to hypertables.

@@ -1,1 +1,1 @@
-Fixes: #7055: Fix the `scankey` for `segment by` columns, where constant type is different from variable.
+Fixes: #7055: Fix the `scankey` for `segment by` columns, where the type `constant` is different to `variable`.

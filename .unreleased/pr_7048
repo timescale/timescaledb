@@ -1,1 +1,1 @@
-Implements: #7048: Add the index scan to INSERT DML decompression.
+Implements: #7048: Add an index scan for INSERT DML decompression.
