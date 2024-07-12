@@ -1,1 +1,1 @@
-Fixes: #7064 Fix a bug in default orderby calc. in compression 
+Fixes: #7064: Fix the bug in default `order by` calculation in compression.

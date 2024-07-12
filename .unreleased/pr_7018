@@ -1,1 +1,1 @@
-Fixes: #7018 Fix search_path quoting in compression defaults function
+Fixes: #7018: Fix the `search_path` quoting in the compression defaults function.

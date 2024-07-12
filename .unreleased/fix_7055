@@ -1,1 +1,1 @@
-Fixes: #7055 Fix scankey where consttype is different from var
+Fixes: #7055: Fix the `scankey` for `segment by` columns, where constant type is different from variable.
