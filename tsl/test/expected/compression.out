@@ -1144,10 +1144,9 @@ SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
  (22,public,table1,t)
 (1 row)
 
--- Trying to list an incomplete set of fields of the compound key (should fail with a nice message)
+-- Trying to list an incomplete set of fields of the compound key
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 NOTICE:  default order by for hypertable "table1" is set to ""
-ERROR:  column "col2" must be used for segmenting
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
 NOTICE:  default order by for hypertable "table1" is set to ""

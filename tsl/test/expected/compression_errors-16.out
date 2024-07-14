@@ -356,10 +356,6 @@ BEGIN;
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id');
 WARNING:  column "location" should be used for segmenting or ordering
 ROLLBACK;
-alter table table_constr add constraint table_constr_fk FOREIGN KEY(d) REFERENCES fortable(col) on delete cascade;
-ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location');
-ERROR:  column "d" must be used for segmenting
-DETAIL:  The foreign key constraint "table_constr_fk" cannot be enforced with the given compression configuration.
 --exclusion constraints not allowed
 alter table table_constr add constraint table_constr_exclu exclude using btree (timec with = );
 ALTER TABLE table_constr set (timescaledb.compress, timescaledb.compress_orderby = 'timec', timescaledb.compress_segmentby = 'device_id, location, d');
@@ -452,10 +448,7 @@ INSERT INTO fortable VALUES( 99 );
 INSERT INTO table_constr2 VALUES( 1000, 10, 5, 99);
 ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id');
 NOTICE:  default order by for hypertable "table_constr2" is set to "timec DESC"
-ERROR:  column "d" must be used for segmenting
-DETAIL:  The foreign key constraint "table_constr2_d_fkey" cannot be enforced with the given compression configuration.
  ALTER TABLE table_constr2 SET (timescaledb.compress, timescaledb.compress_segmentby = 'device_id, d');
-NOTICE:  default order by for hypertable "table_constr2" is set to "timec DESC"
 --compress a chunk and try to disable compression, it should fail --
 SELECT ch1.schema_name|| '.' || ch1.table_name AS "CHUNK_NAME"
 FROM _timescaledb_catalog.chunk ch1, _timescaledb_catalog.hypertable ht

@@ -462,7 +462,7 @@ CREATE TABLE table2(col1 INT, col2 int, primary key (col1,col2));
 CREATE TABLE table1(col1 INT NOT NULL, col2 INT);
 ALTER TABLE table1 ADD CONSTRAINT fk_table1 FOREIGN KEY (col1,col2) REFERENCES table2(col1,col2);
 SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
--- Trying to list an incomplete set of fields of the compound key (should fail with a nice message)
+-- Trying to list an incomplete set of fields of the compound key
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');

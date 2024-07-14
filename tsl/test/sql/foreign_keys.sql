@@ -590,17 +590,42 @@ ROLLBACK;
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
 
--- set default is not supported for hypertables so these will fail
+-- ON UPDATE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
 SELECT * FROM ht;
 UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
 ROLLBACK;
+
+-- ON UPDATE SET DEFAULT with compression
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+ROLLBACK;
+
+-- ON DELETE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
 SELECT * FROM ht;
 DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+ROLLBACK;
+
+-- ON DELETE SET DEFAULT with compression
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+SELECT * FROM ht;
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
 ROLLBACK;
 
