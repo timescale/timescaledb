@@ -396,6 +396,49 @@ preprocess_query(Node *node, PreprocessQueryContext *context)
 		 */
 
 		/*
+		 * RI_FKey_cascade_del
+		 *
+		 * DELETE FROM [ONLY] <fktable> WHERE $1 = fkatt1 [AND ...]
+		 */
+		if (query->commandType == CMD_DELETE && list_length(query->rtable) == 1 &&
+			context->root->glob->boundParams && query->jointree->quals &&
+			IsA(query->jointree->quals, OpExpr))
+		{
+			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+			if (!rte->inh && rte->rtekind == RTE_RELATION)
+			{
+				Hypertable *ht =
+					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+				if (ht)
+				{
+					rte->inh = true;
+				}
+			}
+		}
+
+		/*
+		 * RI_FKey_cascade_upd
+		 *
+		 *  UPDATE [ONLY] <fktable> SET fkatt1 = $1 [, ...]
+		 *      WHERE $n = fkatt1 [AND ...]
+		 */
+		if (query->commandType == CMD_UPDATE && list_length(query->rtable) == 1 &&
+			context->root->glob->boundParams && query->jointree->quals &&
+			IsA(query->jointree->quals, OpExpr))
+		{
+			RangeTblEntry *rte = linitial_node(RangeTblEntry, query->rtable);
+			if (!rte->inh && rte->rtekind == RTE_RELATION)
+			{
+				Hypertable *ht =
+					ts_hypertable_cache_get_entry(hcache, rte->relid, CACHE_FLAG_MISSING_OK);
+				if (ht)
+				{
+					rte->inh = true;
+				}
+			}
+		}
+
+		/*
 		 * RI_FKey_check
 		 *
 		 * The RI_FKey_check query string built is

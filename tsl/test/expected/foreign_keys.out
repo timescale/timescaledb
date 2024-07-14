@@ -739,11 +739,13 @@ SELECT * FROM ht;
 (2 rows)
 
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=2 loops=1)
-   ->  Seq Scan on compress_hyper_14_19_chunk (actual rows=2 loops=1)
-(2 rows)
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_14_19_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_13_14_chunk (actual rows=1 loops=1)
+(4 rows)
 
 ROLLBACK;
 -- ON DELETE CASCADE
@@ -778,11 +780,13 @@ SELECT * FROM ht;
 (1 row)
 
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=1 loops=1)
-   ->  Seq Scan on compress_hyper_14_20_chunk (actual rows=1 loops=1)
-(2 rows)
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=1 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_14_20_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_13_14_chunk (actual rows=0 loops=1)
+(4 rows)
 
 ROLLBACK;
 -- SET NULL
@@ -823,11 +827,13 @@ SELECT * FROM ht;
 (2 rows)
 
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=2 loops=1)
-   ->  Seq Scan on compress_hyper_14_21_chunk (actual rows=2 loops=1)
-(2 rows)
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_14_21_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_13_14_chunk (actual rows=1 loops=1)
+(4 rows)
 
 ROLLBACK;
 -- ON DELETE SET NULL
@@ -864,18 +870,20 @@ SELECT * FROM ht;
 (2 rows)
 
 EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
-                                 QUERY PLAN                                  
------------------------------------------------------------------------------
- Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=2 loops=1)
-   ->  Seq Scan on compress_hyper_14_22_chunk (actual rows=2 loops=1)
-(2 rows)
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_14_22_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_13_14_chunk (actual rows=1 loops=1)
+(4 rows)
 
 ROLLBACK;
 -- SET DEFAULT
 -- should fail with foreign key violation
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
 ERROR:  insert or update on table "_hyper_13_14_chunk" violates foreign key constraint "14_16_ht_fk_set_default_fkey"
--- set default is not supported for hypertables so these will fail
+-- ON UPDATE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
@@ -887,8 +895,50 @@ SELECT * FROM ht;
 (2 rows)
 
 UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
-ERROR:  update or delete on table "fk_set_default" violates foreign key constraint "ht_fk_set_default_fkey" on table "ht"
+SELECT * FROM ht;
+             time             | fk_no_action | fk_restrict | fk_cascade | fk_set_null | fk_set_default 
+------------------------------+--------------+-------------+------------+-------------+----------------
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+(2 rows)
+
 ROLLBACK;
+-- ON UPDATE SET DEFAULT with compression
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM ht;
+             time             | fk_no_action | fk_restrict | fk_cascade | fk_set_null | fk_set_default 
+------------------------------+--------------+-------------+------------+-------------+----------------
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | fk_set_default
+(2 rows)
+
+UPDATE fk_set_default SET fk_set_default = 'fk_set_default_updated' WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+             time             | fk_no_action | fk_restrict | fk_cascade | fk_set_null | fk_set_default 
+------------------------------+--------------+-------------+------------+-------------+----------------
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+(2 rows)
+
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_14_23_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_13_14_chunk (actual rows=1 loops=1)
+(4 rows)
+
+ROLLBACK;
+-- ON DELETE SET DEFAULT
 BEGIN;
 INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
 INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
@@ -900,5 +950,39 @@ SELECT * FROM ht;
 (2 rows)
 
 DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
-ERROR:  update or delete on table "fk_set_default" violates foreign key constraint "ht_fk_set_default_fkey" on table "ht"
+ROLLBACK;
+-- ON DELETE SET DEFAULT with compression
+BEGIN;
+INSERT INTO fk_set_default(fk_set_default) VALUES ('fk_set_default');
+INSERT INTO ht(time, fk_set_default) VALUES ('2020-01-01', 'fk_set_default');
+SELECT count(compress_chunk(ch)) FROM show_chunks('ht') ch;
+ count 
+-------
+     1
+(1 row)
+
+SELECT * FROM ht;
+             time             | fk_no_action | fk_restrict | fk_cascade | fk_set_null | fk_set_default 
+------------------------------+--------------+-------------+------------+-------------+----------------
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | fk_set_default
+(2 rows)
+
+DELETE FROM fk_set_default WHERE fk_set_default = 'fk_set_default';
+SELECT * FROM ht;
+             time             | fk_no_action | fk_restrict | fk_cascade | fk_set_null | fk_set_default 
+------------------------------+--------------+-------------+------------+-------------+----------------
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+ Wed Jan 01 00:00:00 2020 PST |              |             |            |             | default
+(2 rows)
+
+EXPLAIN (analyze, costs off, timing off, summary off) SELECT * FROM ht;
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Append (actual rows=2 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_13_14_chunk (actual rows=1 loops=1)
+         ->  Seq Scan on compress_hyper_14_24_chunk (actual rows=1 loops=1)
+   ->  Seq Scan on _hyper_13_14_chunk (actual rows=1 loops=1)
+(4 rows)
+
 ROLLBACK;

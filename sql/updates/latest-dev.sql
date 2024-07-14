@@ -65,3 +65,22 @@ SELECT pg_catalog.pg_extension_config_dump(pg_get_serial_sequence('_timescaledb_
 
 GRANT SELECT ON _timescaledb_catalog.chunk_column_stats TO PUBLIC;
 GRANT SELECT ON _timescaledb_catalog.chunk_column_stats_id_seq TO PUBLIC;
+
+-- Remove foreign key constraints from compressed chunks
+DO $$
+DECLARE
+  conrelid regclass;
+  conname name;
+BEGIN
+  FOR conrelid, conname IN
+  SELECT
+    con.conrelid::regclass,
+    con.conname
+  FROM _timescaledb_catalog.chunk ch
+  JOIN pg_constraint con ON con.conrelid = format('%I.%I',schema_name,table_name)::regclass AND con.contype='f'
+  WHERE NOT ch.dropped AND EXISTS(SELECT FROM _timescaledb_catalog.chunk ch2 WHERE NOT ch2.dropped AND ch2.compressed_chunk_id=ch.id)
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', conrelid, conname);
+  END LOOP;
+END $$;
+

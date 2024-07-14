@@ -52,8 +52,6 @@
 static void set_toast_tuple_target_on_chunk(Oid compressed_table_id);
 static void set_statistics_on_compressed_chunk(Oid compressed_table_id);
 static void create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings);
-static void clone_constraints_to_chunk(Oid ht_reloid, const Chunk *compressed_chunk);
-static List *get_fk_constraints(Oid reloid);
 
 int32
 compression_hypertable_create(Hypertable *ht, Oid owner, Oid tablespace_oid)
@@ -148,8 +146,6 @@ compression_chunk_create(Chunk *src_chunk, Chunk *chunk, List *column_defs, Oid 
 	set_toast_tuple_target_on_chunk(chunk->table_id);
 
 	create_compressed_chunk_indexes(chunk, settings);
-
-	clone_constraints_to_chunk(src_chunk->hypertable_relid, chunk);
 
 	return chunk->table_id;
 }
@@ -345,55 +341,4 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		 buf->data);
 
 	ReleaseSysCache(index_tuple);
-}
-
-static void
-clone_constraints_to_chunk(Oid ht_reloid, const Chunk *compressed_chunk)
-{
-	CatalogSecurityContext sec_ctx;
-	List *constraint_list = get_fk_constraints(ht_reloid);
-
-	ListCell *lc;
-	ts_catalog_database_info_become_owner(ts_catalog_database_info_get(), &sec_ctx);
-	foreach (lc, constraint_list)
-	{
-		Oid conoid = lfirst_oid(lc);
-		CatalogInternalCall2(DDL_CONSTRAINT_CLONE,
-							 Int32GetDatum(conoid),
-							 Int32GetDatum(compressed_chunk->table_id));
-	}
-	ts_catalog_restore_user(&sec_ctx);
-}
-
-static List *
-get_fk_constraints(Oid reloid)
-{
-	SysScanDesc scan;
-	ScanKeyData scankey;
-	HeapTuple tuple;
-	List *conlist = NIL;
-
-	Relation pg_constr = table_open(ConstraintRelationId, AccessShareLock);
-
-	ScanKeyInit(&scankey,
-				Anum_pg_constraint_conrelid,
-				BTEqualStrategyNumber,
-				F_OIDEQ,
-				ObjectIdGetDatum(reloid));
-
-	scan = systable_beginscan(pg_constr, ConstraintRelidTypidNameIndexId, true, NULL, 1, &scankey);
-	while (HeapTupleIsValid(tuple = systable_getnext(scan)))
-	{
-		Form_pg_constraint form = (Form_pg_constraint) GETSTRUCT(tuple);
-
-		if (form->contype == CONSTRAINT_FOREIGN)
-		{
-			conlist = lappend_oid(conlist, form->oid);
-		}
-	}
-
-	systable_endscan(scan);
-	table_close(pg_constr, AccessShareLock);
-
-	return conlist;
 }
