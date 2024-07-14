@@ -260,27 +260,30 @@ QUERY PLAN
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
    ->  Update on lazy_decompress (actual rows=0 loops=1)
          Update on _hyper_X_X_chunk lazy_decompress_1
          ->  Result (actual rows=0 loops=1)
                ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
                      Filter: (value = '0'::double precision)
-(6 rows)
+(7 rows)
 
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
    ->  Update on lazy_decompress (actual rows=0 loops=1)
          Update on _hyper_X_X_chunk lazy_decompress_1
          ->  Result (actual rows=0 loops=1)
                ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
                      Filter: ((value = '0'::double precision) AND (device = 'd1'::text))
-(6 rows)
+(7 rows)
 
 -- 1 batch decompression
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Update on lazy_decompress (actual rows=0 loops=1)
@@ -289,11 +292,12 @@ QUERY PLAN
                ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=1 loops=1)
                      Filter: (value = '2300'::double precision)
                      Rows Removed by Filter: 999
-(9 rows)
+(10 rows)
 
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND value < 3200; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Update on lazy_decompress (actual rows=0 loops=1)
@@ -302,11 +306,12 @@ QUERY PLAN
                ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=99 loops=1)
                      Filter: ((value > '3100'::double precision) AND (value < '3200'::double precision))
                      Rows Removed by Filter: 901
-(9 rows)
+(10 rows)
 
 BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Update on lazy_decompress (actual rows=0 loops=1)
@@ -315,7 +320,7 @@ QUERY PLAN
                ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=101 loops=1)
                      Filter: ((value >= '3100'::double precision) AND (value <= '3200'::double precision))
                      Rows Removed by Filter: 899
-(9 rows)
+(10 rows)
 
 -- check GUC is working, should be 6 batches and 6000 tuples decompresed
 SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
@@ -337,25 +342,28 @@ RESET timescaledb.enable_dml_decompression_tuple_filtering;
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
    ->  Delete on lazy_decompress (actual rows=0 loops=1)
          Delete on _hyper_X_X_chunk lazy_decompress_1
          ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
                Filter: (value = '0'::double precision)
-(5 rows)
+(6 rows)
 
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
    ->  Delete on lazy_decompress (actual rows=0 loops=1)
          Delete on _hyper_X_X_chunk lazy_decompress_1
          ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
                Filter: ((value = '0'::double precision) AND (device = 'd1'::text))
-(5 rows)
+(6 rows)
 
 -- 1 batch decompression
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Delete on lazy_decompress (actual rows=0 loops=1)
@@ -363,11 +371,12 @@ QUERY PLAN
          ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=1 loops=1)
                Filter: (value = '2300'::double precision)
                Rows Removed by Filter: 999
-(8 rows)
+(9 rows)
 
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Delete on lazy_decompress (actual rows=0 loops=1)
@@ -375,11 +384,12 @@ QUERY PLAN
          ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=99 loops=1)
                Filter: ((value > '3100'::double precision) AND (value < '3200'::double precision))
                Rows Removed by Filter: 901
-(8 rows)
+(9 rows)
 
 BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
    Batches decompressed: 1
    Tuples decompressed: 1000
    ->  Delete on lazy_decompress (actual rows=0 loops=1)
@@ -387,7 +397,7 @@ QUERY PLAN
          ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=101 loops=1)
                Filter: ((value >= '3100'::double precision) AND (value <= '3200'::double precision))
                Rows Removed by Filter: 899
-(8 rows)
+(9 rows)
 
 -- check GUC is working, should be 6 batches and 6000 tuples decompresed
 SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
