@@ -410,6 +410,7 @@ const CompressionAlgorithmDefinition *algorithm_definition(CompressionAlgorithm 
 
 struct decompress_batches_stats
 {
+	int64 batches_filtered;
 	int64 batches_decompressed;
 	int64 tuples_decompressed;
 };

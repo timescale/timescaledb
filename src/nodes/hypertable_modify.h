@@ -17,6 +17,12 @@ typedef struct HypertableModifyPath
 	CustomPath cpath;
 } HypertableModifyPath;
 
+/*
+ * State for the hypertable_modify custom scan node.
+ *
+ * This struct definition is also used in ts_stat_statements, so any new fields
+ * should only be added at the end of the struct.
+ */
 typedef struct HypertableModifyState
 {
 	CustomScanState cscan_state;
@@ -25,6 +31,7 @@ typedef struct HypertableModifyState
 	Snapshot snapshot;
 	int64 tuples_decompressed;
 	int64 batches_decompressed;
+	int64 batches_filtered;
 } HypertableModifyState;
 
 extern void ts_hypertable_modify_fixup_tlist(Plan *plan);

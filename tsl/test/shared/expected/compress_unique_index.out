@@ -27,10 +27,11 @@ ERROR:  duplicate key value violates unique constraint "_hyper_X_X_chunk_uniq_ex
 EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c2','2000-01-02');
 QUERY PLAN
  Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 1
    ->  Insert on compress_unique (actual rows=0 loops=1)
          ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
                ->  Result (actual rows=1 loops=1)
-(4 rows)
+(5 rows)
 
 -- should decompress no batches
 EXPLAIN (analyze,costs off,summary off,timing off) INSERT INTO compress_unique VALUES ('2000-01-01','m1','c3','2000-01-02');

@@ -203,6 +203,7 @@ decompress_batches_for_insert(const ChunkInsertState *cis, TupleTableSlot *slot)
 		cis->cds->skip_current_tuple = true;
 	}
 
+	cis->cds->batches_filtered += stats.batches_filtered;
 	cis->cds->batches_decompressed += stats.batches_decompressed;
 	cis->cds->tuples_decompressed += stats.tuples_decompressed;
 
@@ -328,6 +329,7 @@ decompress_batches_for_update_delete(HypertableModifyState *ht_state, Chunk *chu
 		filter = lfirst(lc);
 		pfree(filter);
 	}
+	ht_state->batches_filtered += stats.batches_filtered;
 	ht_state->batches_decompressed += stats.batches_decompressed;
 	ht_state->tuples_decompressed += stats.tuples_decompressed;
 
@@ -358,10 +360,7 @@ decompress_batches_indexscan(Relation in_rel, Relation out_rel, Relation index_r
 	int num_segmentby_filtered_rows = 0;
 	int num_heap_filtered_rows = 0;
 
-	struct decompress_batches_stats stats = {
-		.batches_decompressed = 0,
-		.tuples_decompressed = 0,
-	};
+	struct decompress_batches_stats stats = { 0 };
 
 	/* TODO: Optimization by reusing the index scan while working on a single chunk */
 	IndexScanDesc scan = index_beginscan(in_rel, index_rel, snapshot, num_index_scankeys, 0);
@@ -442,6 +441,7 @@ decompress_batches_indexscan(Relation in_rel, Relation out_rel, Relation index_r
 											   skip_current_tuple))
 		{
 			row_decompressor_reset(&decompressor);
+			stats.batches_filtered++;
 			continue;
 		}
 
@@ -524,10 +524,7 @@ decompress_batches_seqscan(Relation in_rel, Relation out_rel, Snapshot snapshot,
 	TableScanDesc scan = table_beginscan(in_rel, snapshot, num_scankeys, scankeys);
 	int num_scanned_rows = 0;
 	int num_filtered_rows = 0;
-	struct decompress_batches_stats stats = {
-		.batches_decompressed = 0,
-		.tuples_decompressed = 0,
-	};
+	struct decompress_batches_stats stats = { 0 };
 
 	while (table_scan_getnextslot(scan, ForwardScanDirection, slot))
 	{
@@ -586,6 +583,7 @@ decompress_batches_seqscan(Relation in_rel, Relation out_rel, Snapshot snapshot,
 											   skip_current_tuple))
 		{
 			row_decompressor_reset(&decompressor);
+			stats.batches_filtered++;
 			continue;
 		}
 
