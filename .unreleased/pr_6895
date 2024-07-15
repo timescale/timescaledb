@@ -1,1 +1,1 @@
-Implements: #6895 Improve compressed DML expression pushdown
+Implements: #6895: Improve the compressed DML expression pushdown.
