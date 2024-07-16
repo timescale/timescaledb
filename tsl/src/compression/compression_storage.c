@@ -178,7 +178,11 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 	Relation table_rel = table_open(compressed_table_id, ShareUpdateExclusiveLock);
 	Relation attrelation = table_open(AttributeRelationId, RowExclusiveLock);
 	TupleDesc table_desc = RelationGetDescr(table_rel);
+#if PG17_LT
+	/* see comments about PG17+ below */
 	Oid compressed_data_type = ts_custom_type_cache_get(CUSTOM_TYPE_COMPRESSED_DATA)->type_oid;
+#endif
+
 	for (int i = 0; i < table_desc->natts; i++)
 	{
 		Form_pg_attribute attrtuple;
@@ -200,16 +204,19 @@ set_statistics_on_compressed_chunk(Oid compressed_table_id)
 
 		attrtuple = (Form_pg_attribute) GETSTRUCT(tuple);
 
-		/* the planner should never look at compressed column statistics because
+#if PG17_LT
+		/* The planner should never look at compressed column statistics because
 		 * it will not understand them. Statistics on the other columns,
 		 * segmentbys and metadata, are very important, so we increase their
 		 * target.
+		 *
+		 * There are no 'attstattarget' and 'attstattarget' fields in PG17+.
 		 */
 		if (col_attr->atttypid == compressed_data_type)
 			attrtuple->attstattarget = 0;
 		else
 			attrtuple->attstattarget = 1000;
-
+#endif
 		CatalogTupleUpdate(attrelation, &tuple->t_self, tuple);
 
 		InvokeObjectPostAlterHook(RelationRelationId, compressed_table_id, attrtuple->attnum);

@@ -56,3 +56,25 @@ select * from portal_memory_log where (
         from portal_memory_log
 );
 
+-- Test plpgsql leaks
+CREATE TABLE test_ht(tm timestamptz, val float8);
+SELECT * FROM create_hypertable('test_ht', 'tm');
+-- Use a plpgsql function to insert into the hypertable
+CREATE OR REPLACE FUNCTION to_double(_in text, INOUT _out double precision)
+LANGUAGE plpgsql IMMUTABLE parallel safe
+AS $$
+BEGIN
+    SELECT CAST(_in AS double precision) INTO _out;
+EXCEPTION WHEN others THEN
+    --do nothing: _out already carries default
+END;
+$$;
+
+-- TopTransactionContext usage needs to remain the same after every insert
+-- There was a leak earlier in the child CurTransactionContext
+BEGIN;
+INSERT INTO test_ht VALUES ('1980-01-01 00:00:00-00', to_double('23.11', 0));
+SELECT sum(total_bytes) from pg_backend_memory_contexts where parent = 'TopTransactionContext';
+INSERT INTO test_ht VALUES ('1980-02-01 00:00:00-00', to_double('24.11', 0));
+SELECT sum(total_bytes) from pg_backend_memory_contexts where parent = 'TopTransactionContext';
+COMMIT;

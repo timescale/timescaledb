@@ -31,6 +31,7 @@ set(TEST_FILES
     compression_settings.sql
     compression_sorted_merge_distinct.sql
     compression_sorted_merge_columns.sql
+    chunk_column_stats.sql
     decompress_index.sql
     foreign_keys.sql
     move.sql

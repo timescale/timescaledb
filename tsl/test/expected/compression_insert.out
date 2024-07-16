@@ -2,6 +2,7 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 \set PREFIX 'EXPLAIN (costs off, summary off, timing off) '
+\set ANALYZE  'EXPLAIN (analyze, costs off, summary off, timing off) '
 CREATE TABLE test1 (timec timestamptz , i integer ,
       b bigint, t text);
 SELECT table_name from create_hypertable('test1', 'timec', chunk_time_interval=> INTERVAL '7 days');
@@ -1084,17 +1085,16 @@ SELECT count(compress_chunk(ch)) FROM show_chunks('test_limit') ch;
     11
 (1 row)
 
-SET timescaledb.max_tuples_decompressed_per_dml_transaction = 5000;
+SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set VERBOSITY default
 \set ON_ERROR_STOP 0
 -- Inserting in the same period should decompress tuples
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
-ERROR:  tuple decompression limit exceeded by operation
-DETAIL:  current limit: 5000, tuples decompressed: 6000
-HINT:  Consider increasing timescaledb.max_tuples_decompressed_per_dml_transaction or set to 0 (unlimited).
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
+ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
 -- Setting to 0 should remove the limit.
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
-INSERT INTO test_limit SELECT t, 11 FROM generate_series(1,6000,1000) t;
+INSERT INTO test_limit SELECT t, 2 FROM generate_series(1,6000,1000) t;
+ERROR:  duplicate key value violates unique constraint "_hyper_24_54_chunk_timestamp_id_idx"
 \set ON_ERROR_STOP 1
 DROP TABLE test_limit;
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
@@ -1128,3 +1128,79 @@ ERROR:  duplicate key value violates unique constraint "76_2_multi_unique_time_u
 DETAIL:  Key ("time", u2)=(Mon Jan 01 00:00:00 2024 PST, 0) already exists.
 \set ON_ERROR_STOP 1
 DROP TABLE multi_unique;
+-- test insert with unique constraints and NULLs
+CREATE TABLE unique_null(time timestamptz NOT NULL, u1 int, u2 int, value float, unique(time, u1, u2));
+SELECT table_name FROM create_hypertable('unique_null', 'time');
+ table_name  
+-------------
+ unique_null
+(1 row)
+
+ALTER TABLE unique_null SET (timescaledb.compress, timescaledb.compress_segmentby = 'u1, u2');
+NOTICE:  default order by for hypertable "unique_null" is set to ""time" DESC"
+INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0);
+SELECT count(compress_chunk(c)) FROM show_chunks('unique_null') c;
+ count 
+-------
+     1
+(1 row)
+
+\set ON_ERROR_STOP 0
+-- all INSERTS should fail with constraint violation
+BEGIN; INSERT INTO unique_null VALUES('2024-01-01', 0, 0, 1.0); ROLLBACK;
+ERROR:  duplicate key value violates unique constraint "78_3_unique_null_time_u1_u2_key"
+\set ON_ERROR_STOP 1
+-- neither of these should need to decompress
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, 1, 1.0);
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on unique_null (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(4 rows)
+
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     2
+(1 row)
+
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', 1, NULL, 1.0);
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on unique_null (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(4 rows)
+
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     3
+(1 row)
+
+:ANALYZE INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
+                           QUERY PLAN                            
+-----------------------------------------------------------------
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on unique_null (actual rows=0 loops=1)
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Result (actual rows=1 loops=1)
+(4 rows)
+
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     4
+(1 row)
+
+INSERT INTO unique_null VALUES('2024-01-01', NULL, NULL, 1.0);
+SELECT count(*) FROM unique_null;
+ count 
+-------
+     5
+(1 row)
+
+DROP TABLE unique_null;

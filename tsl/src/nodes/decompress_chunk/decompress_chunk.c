@@ -170,11 +170,8 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 		 * seen from the start, so that we arrive at the proper counts of seen
 		 * segmentby columns in the end.
 		 */
-		Bitmapset *segmentby_columns = bms_copy(info->chunk_const_segmentby);
 		ListCell *lc;
-		for (lc = list_head(chunk_pathkeys);
-			 lc != NULL && bms_num_members(segmentby_columns) < info->num_segmentby_columns;
-			 lc = lnext(chunk_pathkeys, lc))
+		for (lc = list_head(chunk_pathkeys); lc; lc = lnext(chunk_pathkeys, lc))
 		{
 			PathKey *pk = lfirst(lc);
 			EquivalenceMember *compressed_em = NULL;
@@ -195,21 +192,11 @@ build_compressed_scan_pathkeys(SortInfo *sort_info, PlannerInfo *root, List *chu
 			 * already refers a compressed column, it is a bug. See
 			 * build_sortinfo().
 			 */
-			Ensure(compressed_em, "corresponding equivalence member not found");
+			if (!compressed_em)
+				break;
 
 			required_compressed_pathkeys = lappend(required_compressed_pathkeys, pk);
-
-			segmentby_columns =
-				bms_add_member(segmentby_columns, castNode(Var, compressed_em->em_expr)->varattno);
 		}
-
-		/*
-		 * Either we sort by all segmentby columns, or by subset of them and
-		 * nothing else. We verified this condition in build_sortinfo(), so only
-		 * asserting here.
-		 */
-		Assert(bms_num_members(segmentby_columns) == info->num_segmentby_columns ||
-			   list_length(required_compressed_pathkeys) == list_length(chunk_pathkeys));
 	}
 
 	/*

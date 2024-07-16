@@ -29,6 +29,7 @@
 #include <nodes/makefuncs.h>
 #include <nodes/nodes.h>
 #include <nodes/parsenodes.h>
+#include <parser/parse_type.h>
 #include <parser/parse_utilcmd.h>
 #include <storage/lmgr.h>
 #include <tcop/utility.h>
@@ -68,6 +69,7 @@
 #include "trigger.h"
 #include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
+#include "ts_catalog/chunk_column_stats.h"
 #include "ts_catalog/compression_settings.h"
 #include "ts_catalog/continuous_agg.h"
 #include "ts_catalog/continuous_aggs_watermark.h"
@@ -721,9 +723,9 @@ ts_get_all_vacuum_rels(bool is_vacuumcmd)
 		relid = classform->oid;
 
 		/* check permissions of relation */
-		if (!vacuum_is_relation_owner(relid,
-									  classform,
-									  is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
+		if (!vacuum_is_permitted_for_relation_compat(relid,
+													 classform,
+													 is_vacuumcmd ? VACOPT_VACUUM : VACOPT_ANALYZE))
 			continue;
 
 		/*
@@ -1041,6 +1043,9 @@ process_truncate(ProcessUtilityArgs *args)
 								list_changed = true;
 							}
 						}
+
+						/* if the chunk has statistics enabled on it then reset them */
+						ts_chunk_column_stats_reset_by_chunk_id(chunk->fd.id);
 					}
 					break;
 				}
@@ -1939,9 +1944,14 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 					 errhint("Rename the column on the continuous aggregate instead.")));
 	}
 
-	/* If there were a hypertable or a continuous aggregate, we need to rename
+	/*
+	 * If there were a hypertable or a continuous aggregate, we need to rename
 	 * the dimension that we used as well as rebuilding the view. Otherwise,
-	 * we don't do anything. */
+	 * we don't do anything.
+	 *
+	 * If it's not a dimension then we also need to check if column statistics
+	 * have been enabled on this column.
+	 * */
 	if (ht)
 	{
 		ts_compression_settings_rename_column_hypertable(ht, stmt->subname, stmt->newname);
@@ -1952,6 +1962,24 @@ process_rename_column(ProcessUtilityArgs *args, Cache *hcache, Oid relid, Rename
 
 		if (dim)
 			ts_dimension_set_name(dim, stmt->newname);
+		else
+		{
+			Form_chunk_column_stats form =
+				ts_chunk_column_stats_lookup(ht->fd.id, INVALID_CHUNK_ID, stmt->subname);
+			if (form != NULL)
+			{
+				ts_chunk_column_stats_set_name(form, stmt->newname);
+
+				/* refresh the ht entry to accommodate this rename */
+				if (ht->range_space)
+					pfree(ht->range_space);
+				ht->range_space =
+					ts_chunk_column_stats_range_space_scan(ht->fd.id,
+														   ht->main_table_relid,
+														   ts_cache_memory_ctx(hcache));
+			}
+		}
+
 		if (ts_cm_functions->process_rename_cmd)
 			ts_cm_functions->process_rename_cmd(relid, hcache, stmt);
 	}
@@ -2234,6 +2262,7 @@ static void
 process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 {
 	int i;
+	bool dropped;
 
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
@@ -2246,6 +2275,9 @@ process_altertable_drop_column(Hypertable *ht, AlterTableCmd *cmd)
 					 errdetail("Cannot drop column that is a hypertable partitioning (space or "
 							   "time) dimension.")));
 	}
+
+	/* Delete dimension range entries on this column, if any.  */
+	ts_chunk_column_stats_drop(ht, cmd->name, &dropped);
 }
 
 /*
@@ -3049,10 +3081,11 @@ typename_get_unqual_name(TypeName *tn)
 }
 
 static void
-process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
+process_alter_column_type_start(ParseState *pstate, Hypertable *ht, AlterTableCmd *cmd)
 {
 	int i;
 
+	/* check if it's a partitioning column */
 	for (i = 0; i < ht->space->num_dimensions; i++)
 	{
 		Dimension *dim = &ht->space->dimensions[i];
@@ -3069,6 +3102,47 @@ process_alter_column_type_start(Hypertable *ht, AlterTableCmd *cmd)
 					(errcode(ERRCODE_TS_OPERATION_NOT_SUPPORTED),
 					 errmsg("cannot change the type of a column with a custom partitioning "
 							"function")));
+	}
+
+	/*
+	 * Check if column has statistics enabled on it, if yes we need to check that the
+	 * new type is a permissible type.
+	 */
+	Form_chunk_column_stats form =
+		ts_chunk_column_stats_lookup(ht->fd.id, INVALID_CHUNK_ID, cmd->name);
+
+	if (form != NULL)
+	{
+		ColumnDef *def = (ColumnDef *) cmd->def;
+		TypeName *typeName = def->typeName;
+		Oid newtypid = typenameTypeId(pstate, typeName);
+
+		/*
+		 * We only support a subset of types for ranges right now. If it's a
+		 * supported type and ranges have been calculated then we should
+		 * still be able to use them for chunk exclusion.
+		 *
+		 * So, we only do a basic check for compatible new data type. Nothing
+		 * else needs to be done.
+		 */
+		switch (newtypid)
+		{
+			case INT2OID:
+			case INT4OID:
+			case INT8OID:
+			case TIMESTAMPOID:
+			case TIMESTAMPTZOID:
+			case DATEOID:
+				break;
+			default:
+				ereport(ERROR,
+						(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+						 errmsg("data type \"%s\" unsupported for statistics calculation",
+								format_type_be(newtypid)),
+						 errhint("Integer-like, timestamp-like data types supported currently."
+								 " Disable the stats using disable_column_stats function"
+								 " before changing the type")));
+		}
 	}
 }
 
@@ -3370,7 +3444,7 @@ process_altertable_start_table(ProcessUtilityArgs *args)
 				Assert(IsA(cmd->def, ColumnDef));
 
 				if (ht)
-					process_alter_column_type_start(ht, cmd);
+					process_alter_column_type_start(args->parse_state, ht, cmd);
 				break;
 			case AT_AttachPartition:
 			{
@@ -3738,7 +3812,6 @@ process_altertable_end_subcmd(Hypertable *ht, Node *parsetree, ObjectAddress *ob
 		case AT_ColumnDefault:
 		case AT_CookedColumnDefault:
 		case AT_SetNotNull:
-		case AT_CheckNotNull:
 		case AT_DropNotNull:
 		case AT_AddOf:
 		case AT_DropOf:

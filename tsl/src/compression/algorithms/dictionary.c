@@ -19,14 +19,14 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include "compression/array.h"
+#include "array.h"
 #include "compression/arrow_c_data_interface.h"
 #include "compression/compression.h"
-#include "compression/datum_serialize.h"
-#include "compression/dictionary.h"
-#include "compression/dictionary_hash.h"
-#include "compression/simple8b_rle.h"
-#include "compression/simple8b_rle_bitmap.h"
+#include "datum_serialize.h"
+#include "dictionary.h"
+#include "dictionary_hash.h"
+#include "simple8b_rle.h"
+#include "simple8b_rle_bitmap.h"
 
 /*
  * A compression bitmap is stored as
