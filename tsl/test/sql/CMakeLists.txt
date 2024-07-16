@@ -148,8 +148,11 @@ set(TEST_TEMPLATES
 # This test runs only with PG version >= 14
 if((${PG_VERSION_MAJOR} GREATER_EQUAL "14"))
   set(TEST_FILES_ON_VERSION_GE_14 modify_exclusion.sql.in)
+endif()
+
+if((${PG_VERSION_MAJOR} GREATER "14"))
   # This is a test for a prototype feature that has different outputs on PG14,
-  # so we disable it not to have to work with multiple references.
+  # so we disable it on v14 not to have to work with multiple references.
   list(APPEND TEST_FILES vectorized_aggregation.sql)
 endif()
 
