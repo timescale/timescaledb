@@ -656,7 +656,7 @@ _guc_init(void)
 							 "Retain job run status in logging table",
 							 &ts_guc_enable_job_execution_logging,
 							 false,
-							 PGC_USERSET,
+							 PGC_SIGHUP,
 							 0,
 							 NULL,
 							 NULL,
