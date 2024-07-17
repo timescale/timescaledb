@@ -5,6 +5,20 @@
 accidentally triggering the load of a previous DB version.**
 
 
+## 2.15.4 (2024-07-17)
+
+This release contains performance improvements and bug fixes since
+the 2.15.3 release. Best practice is to upgrade at the next
+available opportunity.
+
+
+**Features**
+
+**Bugfixes**
+
+**Thanks**
+
+
 ## 2.15.3 (2024-07-02)
 
 This release contains bug fixes since the 2.15.2 release.
