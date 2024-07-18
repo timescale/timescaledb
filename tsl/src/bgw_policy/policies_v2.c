@@ -163,11 +163,12 @@ validate_and_create_policies(policies_info all_policies, bool if_exists)
 		 * add_policies/remove_policies APIs there's no need to spend a lot
 		 * of time on fixing it below.
 		 */
-		int64 refresh_window_size = (start_offset == ts_time_get_max(all_policies.partition_type) ||
-									 end_offset == ts_time_get_min(all_policies.partition_type)) ?
-										start_offset :
-									end_offset > start_offset ? start_offset :
-																start_offset - end_offset;
+		int64 refresh_window_size;
+		if (start_offset == ts_time_get_max(all_policies.partition_type) ||
+			end_offset == ts_time_get_min(all_policies.partition_type) ||
+			end_offset > start_offset ||
+			pg_sub_s64_overflow(start_offset, end_offset, &refresh_window_size))
+			refresh_window_size = start_offset;
 
 		/* if refresh_interval is greater than half of refresh_window_size, then there are gaps */
 		if (refresh_interval > (refresh_window_size / 2))
