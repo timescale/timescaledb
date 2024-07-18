@@ -569,3 +569,19 @@ TRUNCATE _timescaledb_catalog.continuous_aggs_invalidation_threshold;
 -- Issue #6722: constify cagg_watermark using window func when querying a cagg
 :EXPLAIN_ANALYZE
 SELECT time_bucket, lead(count) OVER (ORDER BY time_bucket) FROM small_integer_ht_cagg;
+
+-- SDC #1905: Using cagg on CTE should be constified
+:EXPLAIN_ANALYZE
+WITH cagg AS (
+    SELECT * FROM small_integer_ht_cagg
+)
+SELECT * FROM cagg WHERE time_bucket > 10;
+
+:EXPLAIN_ANALYZE
+WITH cagg AS (
+    SELECT * FROM small_integer_ht_cagg
+),
+other AS (
+    SELECT * FROM generate_series(1,10)
+)
+SELECT * FROM cagg, other WHERE time_bucket > 10;
