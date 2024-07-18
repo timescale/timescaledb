@@ -173,84 +173,6 @@ constify_cagg_watermark_walker(Node *node, ConstifyWatermarkContext *context)
 }
 
 /*
- * Check if the given query is a union query
- */
-static inline bool
-is_union_query(Query *query)
-{
-	return (query->setOperations != NULL &&
-			(((SetOperationStmt *) query->setOperations)->op == SETOP_UNION &&
-			 ((SetOperationStmt *) query->setOperations)->all));
-}
-
-/*
- * To avoid overhead by traversing the query tree, we perform a check before to determine if the
- * given query could be a real-time CAgg query. So, we search for a SELECT over two subqueries.
- */
-static bool pg_nodiscard
-could_be_realtime_cagg_query(Query *query)
-{
-	if (query->commandType != CMD_SELECT)
-		return false;
-
-	if (query->hasTargetSRFs)
-		return false;
-
-	/* One range table, could be a query direct on a CAgg or a CTE expression */
-	if (list_length(query->rtable) == 1)
-	{
-		if (((RangeTblEntry *) linitial(query->rtable))->rtekind == RTE_SUBQUERY)
-		{
-			Query *subquery = ((RangeTblEntry *) linitial(query->rtable))->subquery;
-
-			return could_be_realtime_cagg_query(subquery);
-		}
-		else if (((RangeTblEntry *) linitial(query->rtable))->rtekind == RTE_CTE)
-		{
-			if (list_length(query->cteList) != 1)
-			{
-				return false;
-			}
-
-			CommonTableExpr *cte = (CommonTableExpr *) linitial(query->cteList);
-			if (IsA(cte->ctequery, Query))
-			{
-				return could_be_realtime_cagg_query((Query *) cte->ctequery);
-			}
-		}
-
-		return false;
-	}
-	/* More then one range table, could be the direct execution of the CAgg query or a CAgg joined
-	 * with another table */
-	else if (list_length(query->rtable) > 1)
-	{
-		if (is_union_query(query))
-		{
-			return true;
-		}
-
-		/* Could be also a join of the CAgg with other tables. Check if we have a subquery that
-		 * looks like a CAgg */
-		ListCell *lc;
-		foreach (lc, query->rtable)
-		{
-			RangeTblEntry *rte = lfirst(lc);
-			if (rte->rtekind == RTE_SUBQUERY)
-			{
-				if (could_be_realtime_cagg_query(rte->subquery))
-				{
-					return true;
-				}
-			}
-		}
-	}
-
-	/* No range tables involved, not a CAgg query */
-	return false;
-}
-
-/*
  * The entry of the watermark HTAB.
  */
 typedef struct WatermarkConstEntry
@@ -392,7 +314,8 @@ constify_cagg_watermark(Query *parse)
 	if (parse == NULL)
 		return;
 
-	if (!could_be_realtime_cagg_query(parse))
+	/* process only SELECT queries */
+	if (parse->commandType != CMD_SELECT)
 		return;
 
 	Node *node = (Node *) parse;
