@@ -8,7 +8,7 @@ CREATE FUNCTION @extschema@.enable_column_stats(
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE
 ) RETURNS TABLE(column_stats_id INT, enabled BOOL)
-AS '@MODULE_PATHNAME@', 'ts_chunk_column_stats_enable' LANGUAGE C VOLATILE;
+AS 'SELECT NULL,NULL' LANGUAGE SQL VOLATILE SET search_path = pg_catalog, pg_temp;
 
 -- Disable tracking of statistics on a column of a hypertable.
 --
@@ -21,7 +21,7 @@ CREATE FUNCTION @extschema@.disable_column_stats(
     column_name             NAME,
     if_not_exists           BOOLEAN = FALSE
 ) RETURNS TABLE(hypertable_id INT, column_name NAME, disabled BOOL)
-AS '@MODULE_PATHNAME@', 'ts_chunk_column_stats_disable' LANGUAGE C VOLATILE;
+AS 'SELECT NULL,NULL,NULL' LANGUAGE SQL VOLATILE SET search_path = pg_catalog, pg_temp;
 
 -- Track statistics for columns of chunks from a hypertable.
 -- Currently, we track the min/max range for a given column across chunks.
