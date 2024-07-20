@@ -52,3 +52,18 @@ $$;
 \if :WITH_ROLES
 GRANT SELECT ON compress TO tsdbadmin;
 \endif
+
+-- test foreign key constraint handling with compression
+CREATE TABLE pk_table(time timestamptz PRIMARY KEY);
+INSERT INTO pk_table VALUES ('2024-01-01 00:00:00');
+
+CREATE TABLE fk_table ( time timestamptz, time_fk timestamptz REFERENCES pk_table(time));
+
+SELECT table_name FROM create_hypertable('fk_table', 'time');
+
+ALTER TABLE fk_table SET (timescaledb.compress, timescaledb.compress_segmentby='time_fk');
+INSERT INTO fk_table SELECT '2024-01-01 00:00:00', '2024-01-01 00:00:00';
+INSERT INTO fk_table SELECT '2024-02-01 00:00:00', '2024-01-01 00:00:00';
+
+SELECT compress_chunk(ch, true) FROM show_chunks('fk_table') ch;
+
