@@ -33,6 +33,7 @@
 #include "extension_constants.h"
 #include "guc.h"
 #include "hypertable.h"
+#include "ts_catalog/array_utils.h"
 #include "ts_catalog/catalog.h"
 #include "ts_catalog/compression_settings.h"
 #include "utils.h"
@@ -51,7 +52,6 @@
 
 static void set_toast_tuple_target_on_chunk(Oid compressed_table_id);
 static void set_statistics_on_compressed_chunk(Oid compressed_table_id);
-static void create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings);
 static void clone_constraints_to_chunk(Oid ht_reloid, const Chunk *compressed_chunk);
 static List *get_fk_constraints(Oid reloid);
 
@@ -275,7 +275,7 @@ modify_compressed_toast_table_storage(CompressionSettings *settings, List *colde
 	}
 }
 
-static void
+void
 create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 {
 	IndexStmt stmt = {
@@ -285,10 +285,7 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		.relation = makeRangeVar(NameStr(chunk->fd.schema_name), NameStr(chunk->fd.table_name), 0),
 		.tableSpace = get_tablespace_name(get_rel_tablespace(chunk->table_id)),
 	};
-	IndexElem sequence_num_elem = {
-		.type = T_IndexElem,
-		.name = COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME,
-	};
+
 	NameData index_name;
 	ObjectAddress index_addr;
 	HeapTuple index_tuple;
@@ -316,8 +313,62 @@ create_compressed_chunk_indexes(Chunk *chunk, CompressionSettings *settings)
 		return;
 	}
 
-	appendStringInfoString(buf, COMPRESSION_COLUMN_METADATA_SEQUENCE_NUM_NAME);
-	indexcols = lappend(indexcols, &sequence_num_elem);
+	SortByDir ordering;
+	SortByNulls nulls_ordering;
+	
+
+	StringInfo orderby_buf = makeStringInfo();
+	for (int i = 1; i <= ts_array_length(settings->fd.orderby); i++)
+	{
+
+		resetStringInfo(orderby_buf);
+		/* Add min metadata column */
+		IndexElem *orderby_min_elem = makeNode(IndexElem);
+		orderby_min_elem->name = column_segment_min_name(i);
+		if (ts_array_get_element_bool(settings->fd.orderby_desc, i))
+		{
+		    appendStringInfoString(orderby_buf, " DESC");
+			ordering = SORTBY_DESC;
+		} else {
+		    appendStringInfoString(orderby_buf, " ASC");
+			ordering = SORTBY_ASC;
+		}
+		orderby_min_elem->ordering = ordering;
+
+		if (ts_array_get_element_bool(settings->fd.orderby_nullsfirst, i))
+		{
+			if (orderby_min_elem->ordering != SORTBY_DESC)
+			{
+				appendStringInfoString(orderby_buf, " NULLS FIRST");
+				nulls_ordering = SORTBY_NULLS_FIRST;
+			} else {
+				nulls_ordering = SORTBY_NULLS_DEFAULT;
+			}
+		} else {
+			if (orderby_min_elem->ordering != SORTBY_DESC)
+			{
+				nulls_ordering = SORTBY_NULLS_DEFAULT;
+			} else {
+				appendStringInfoString(orderby_buf, " NULLS LAST");
+				nulls_ordering = SORTBY_NULLS_LAST;
+			}
+		}
+		orderby_min_elem->nulls_ordering = nulls_ordering;
+		appendStringInfoString(buf, orderby_min_elem->name);
+		appendStringInfoString(buf, orderby_buf->data);
+		appendStringInfoString(buf, ", ");
+		indexcols = lappend(indexcols, orderby_min_elem);
+
+		/* Add max metadata column */
+		IndexElem *orderby_max_elem = makeNode(IndexElem);
+		orderby_max_elem->name = column_segment_max_name(i);
+		orderby_max_elem->ordering = orderby_min_elem->ordering;
+		orderby_max_elem->nulls_ordering = orderby_min_elem->nulls_ordering;
+		appendStringInfoString(buf, orderby_max_elem->name);
+		appendStringInfoString(buf, orderby_buf->data);
+		appendStringInfoString(buf, ", ");
+		indexcols = lappend(indexcols, orderby_max_elem);
+	}
 
 	stmt.indexParams = indexcols;
 	index_addr = DefineIndexCompat(chunk->table_id,

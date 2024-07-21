@@ -32,6 +32,7 @@
 #include "cache.h"
 #include "chunk.h"
 #include "compression.h"
+#include "compression_storage.h"
 #include "create.h"
 #include "debug_point.h"
 #include "error_utils.h"
@@ -1212,7 +1213,6 @@ recompress_chunk_segmentwise_impl(Chunk *uncompressed_chunk)
 						compressed_chunk_rel,
 						compressed_rel_tupdesc->natts,
 						true /*need_bistate*/,
-						true /*reset_sequence*/,
 						0 /*insert options*/);
 
 	/* create an array of the segmentby column offsets in the compressed chunk */

@@ -33,8 +33,6 @@ typedef struct BulkInsertStateData *BulkInsertState;
 	uint8 compression_algorithm
 
 #define TARGET_COMPRESSED_BATCH_SIZE 1000
-/* gap in sequence id between rows, potential for adding rows in gap later */
-#define SEQUENCE_NUM_GAP 10
 
 typedef struct CompressedDataHeader
 {
@@ -259,8 +257,6 @@ typedef struct RowCompressor
 	bool *compressed_is_null;
 	int64 rowcnt_pre_compression;
 	int64 num_compressed_rows;
-	/* if recompressing segmentwise, we use this info to reset the sequence number */
-	bool reset_sequence;
 	/* flag for checking if we are working on the first tuple */
 	bool first_iteration;
 	/* the heap insert options */
@@ -357,7 +353,7 @@ extern void compress_chunk_populate_sort_info_for_column(CompressionSettings *se
 extern void row_compressor_init(CompressionSettings *settings, RowCompressor *row_compressor,
 								Relation uncompressed_table, Relation compressed_table,
 								int16 num_columns_in_compressed_table, bool need_bistate,
-								bool reset_sequence, int insert_options);
+								int insert_options);
 extern void row_compressor_reset(RowCompressor *row_compressor);
 extern void row_compressor_close(RowCompressor *row_compressor);
 extern void row_compressor_append_sorted_rows(RowCompressor *row_compressor,
