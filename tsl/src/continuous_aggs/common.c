@@ -683,7 +683,7 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				 detail->len > 0 ? errdetail("%s", detail->data) : 0));
 	}
 
-	int num_tables = 0, num_hypertables = 0;
+	int num_hypertables = 0;
 	ListCell *lc;
 	foreach (lc, query->rtable)
 	{
@@ -699,10 +699,6 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 				num_hypertables++;
 				if (rte == NULL)
 					rte = copyObject(inner_rte);
-			}
-			else
-			{
-				num_tables++;
 			}
 
 			if (is_hypertable && inner_rte->inh == false)
