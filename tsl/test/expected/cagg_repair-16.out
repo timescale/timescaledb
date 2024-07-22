@@ -76,7 +76,7 @@ View definition:
     min,
     max,
     sum
-   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2;
+   FROM _timescaledb_internal._materialized_hypertable_2;
 
 CALL refresh_continuous_aggregate('conditions_summary', NULL, '2021-06-22 00:00:00-00');
 SELECT * FROM conditions_summary ORDER BY bucket, device_name;
@@ -106,7 +106,7 @@ View definition:
     min,
     max,
     sum
-   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2;
+   FROM _timescaledb_internal._materialized_hypertable_2;
 
 SELECT * FROM conditions_summary ORDER BY bucket, device_name;
             bucket            | device_name | min | max | sum 
@@ -134,7 +134,7 @@ View definition:
     min,
     max,
     sum
-   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2;
+   FROM _timescaledb_internal._materialized_hypertable_2;
 
 SELECT * FROM conditions_summary ORDER BY bucket, device_name;
             bucket            | device_name | min | max | sum 
@@ -162,7 +162,7 @@ View definition:
     _materialized_hypertable_2.min,
     _materialized_hypertable_2.max,
     _materialized_hypertable_2.sum
-   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
+   FROM _timescaledb_internal._materialized_hypertable_2
   WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(2)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
@@ -205,7 +205,7 @@ View definition:
     _materialized_hypertable_2.min,
     _materialized_hypertable_2.max,
     _materialized_hypertable_2.sum
-   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
+   FROM _timescaledb_internal._materialized_hypertable_2
   WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(2)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
@@ -247,7 +247,7 @@ View definition:
     _materialized_hypertable_2.min,
     _materialized_hypertable_2.max,
     _materialized_hypertable_2.sum
-   FROM _timescaledb_internal._materialized_hypertable_2 _materialized_hypertable_2
+   FROM _timescaledb_internal._materialized_hypertable_2
   WHERE _materialized_hypertable_2.bucket < COALESCE(_timescaledb_functions.to_timestamp(_timescaledb_functions.cagg_watermark(2)), '-infinity'::timestamp with time zone)
 UNION ALL
  SELECT time_bucket('@ 7 days'::interval, conditions."time") AS bucket,
