@@ -69,6 +69,7 @@ caggtimebucketinfo_init(CAggTimebucketInfo *src, int32 hypertable_id, Oid hypert
 	src->htid = hypertable_id;
 	src->parent_mat_hypertable_id = parent_mat_hypertable_id;
 	src->htoid = hypertable_oid;
+	src->htoidparent = InvalidOid;
 	src->htpartcolno = hypertable_partition_colno;
 	src->htpartcoltype = hypertable_partition_coltype;
 	src->htpartcol_interval_len = hypertable_partition_col_interval;
@@ -1082,6 +1083,9 @@ cagg_validate_query(const Query *query, const bool finalized, const char *cagg_s
 		}
 	}
 
+	if (is_hierarchical)
+		bucket_info.htoidparent = cagg_parent->relid;
+
 	return bucket_info;
 }
 
@@ -1332,55 +1336,27 @@ build_union_query(CAggTimebucketInfo *tbinfo, int matpartcolno, Query *q1, Query
 	/*
 	 * If there is join in CAgg definition then adjust varno
 	 * to get time column from the hypertable in the join.
-	 *
-	 * In case of joins it is enough to check if the first node is not RangeTblRef,
-	 * because the jointree has RangeTblRef as leaves and JoinExpr above them.
-	 * So if JoinExpr is present, it is the first node.
-	 * Other cases of join i.e. without explicit JOIN clause is confirmed
-	 * by reading the length of rtable.
 	 */
-	if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS ||
-		!IsA(linitial(q2->jointree->fromlist), RangeTblRef))
-	{
-		Oid normal_table_id = InvalidOid;
-		RangeTblEntry *rte = NULL;
-		RangeTblEntry *rte_other = NULL;
+	varno = list_length(q2->rtable);
 
-		if (list_length(q2->rtable) == CONTINUOUS_AGG_MAX_JOIN_RELATIONS)
+	if (list_length(q2->rtable) > 1)
+	{
+		int nvarno = 1;
+		foreach (lc2, q2->rtable)
 		{
-			RangeTblRef *rtref = linitial_node(RangeTblRef, q2->jointree->fromlist);
-			rte = list_nth(q2->rtable, rtref->rtindex - 1);
-			RangeTblRef *rtref_other = lsecond_node(RangeTblRef, q2->jointree->fromlist);
-			rte_other = list_nth(q2->rtable, rtref_other->rtindex - 1);
-		}
-		else if (!IsA(linitial(q2->jointree->fromlist), RangeTblRef))
-		{
-			ListCell *l;
-			foreach (l, q2->jointree->fromlist)
+			RangeTblEntry *rte = lfirst_node(RangeTblEntry, lc2);
+			if (rte->rtekind == RTE_RELATION)
 			{
-				Node *jtnode = (Node *) lfirst(l);
-				JoinExpr *join = NULL;
-				if (IsA(jtnode, JoinExpr))
+				/* look for hypertable or parent hypertable in RangeTableEntry list */
+				if (rte->relid == tbinfo->htoid || rte->relid == tbinfo->htoidparent)
 				{
-					join = castNode(JoinExpr, jtnode);
-					rte = list_nth(q2->rtable, ((RangeTblRef *) join->larg)->rtindex - 1);
-					rte_other = list_nth(q2->rtable, ((RangeTblRef *) join->rarg)->rtindex - 1);
+					varno = nvarno;
+					break;
 				}
 			}
+			nvarno++;
 		}
-		if (rte->relkind == RELKIND_VIEW)
-			normal_table_id = rte_other->relid;
-		else if (rte_other->relkind == RELKIND_VIEW)
-			normal_table_id = rte->relid;
-		else
-			normal_table_id = ts_is_hypertable(rte->relid) ? rte_other->relid : rte->relid;
-		if (normal_table_id == rte->relid)
-			varno = 2;
-		else
-			varno = 1;
 	}
-	else
-		varno = list_length(q2->rtable);
 
 	q2_quals = build_union_query_quals(materialize_htid,
 									   tbinfo->htpartcoltype,
