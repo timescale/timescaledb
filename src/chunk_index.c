@@ -277,26 +277,28 @@ ts_chunk_index_create_post_adjustment(int32 hypertable_id, Relation template_ind
 	if (template_indexrel->rd_index->indisprimary)
 		flags |= INDEX_CREATE_IS_PRIMARY;
 
-	chunk_indexrelid = index_create(chunkrel,
-									indexname,
-									InvalidOid,
-									InvalidOid,
-									InvalidOid,
-									InvalidOid,
-									indexinfo,
-									colnames,
-									template_indexrel->rd_rel->relam,
-									tablespace,
-									template_indexrel->rd_indcollation,
-									indclassoid->values,
-									template_indexrel->rd_indoption,
-									reloptions,
-									flags,
-									0,	   /* constr_flags constant and 0
-											* for now */
-									false, /* allow system table mods */
-									false, /* is internal */
-									NULL); /* constraintId */
+	chunk_indexrelid = index_create_compat(chunkrel,
+										   indexname,
+										   InvalidOid,
+										   InvalidOid,
+										   InvalidOid,
+										   InvalidOid,
+										   indexinfo,
+										   colnames,
+										   template_indexrel->rd_rel->relam,
+										   tablespace,
+										   template_indexrel->rd_indcollation,
+										   indclassoid->values,
+										   NULL, /* opclassOptions */
+										   template_indexrel->rd_indoption,
+										   NULL, /* stattargets */
+										   reloptions,
+										   flags,
+										   0,	  /* constr_flags constant and 0
+												   * for now */
+										   false, /* allow system table mods */
+										   false, /* is internal */
+										   NULL); /* constraintId */
 
 	ReleaseSysCache(tuple);
 

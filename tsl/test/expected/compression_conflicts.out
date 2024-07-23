@@ -93,7 +93,7 @@ INSERT INTO comp_conflicts_1 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHI
 SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     1
+     0
 (1 row)
 
 -- test 2: multi-column unique without segmentby
@@ -169,7 +169,7 @@ INSERT INTO comp_conflicts_2 VALUES ('2020-01-01','d1',0.1) ON CONFLICT DO NOTHI
 SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     2
+     0
 (1 row)
 
 -- test 3: multi-column primary key with segmentby
@@ -288,7 +288,7 @@ BEGIN;
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     2
+     1
 (1 row)
 
 ROLLBACK;
@@ -301,7 +301,7 @@ BEGIN;
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     2
+     1
 (1 row)
 
 ROLLBACK;
@@ -388,7 +388,7 @@ INSERT INTO comp_conflicts_3 VALUES ('2020-01-01','d1', 'label', 0.1) ON CONFLIC
 SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-     1
+     0
 (1 row)
 
 -- test 4: multi-column primary key with multi-column orderby compression
@@ -422,7 +422,7 @@ BEGIN;
   SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-  1001
+     1
 (1 row)
 
 ROLLBACK;
@@ -488,7 +488,7 @@ INSERT INTO comp_conflicts_4 VALUES ('2020-01-01 0:30:00','d1',0.1) ON CONFLICT 
 SELECT count(*) FROM ONLY :CHUNK;
  count 
 -------
-  2000
+     0
 (1 row)
 
 CREATE OR REPLACE VIEW compressed_chunk_info_view AS

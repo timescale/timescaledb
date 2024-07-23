@@ -1144,10 +1144,9 @@ SELECT create_hypertable('table1','col1', chunk_time_interval => 10);
  (22,public,table1,t)
 (1 row)
 
--- Trying to list an incomplete set of fields of the compound key (should fail with a nice message)
+-- Trying to list an incomplete set of fields of the compound key
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1');
 NOTICE:  default order by for hypertable "table1" is set to ""
-ERROR:  column "col2" must be used for segmenting
 -- Listing all fields of the compound key should succeed:
 ALTER TABLE table1 SET (timescaledb.compress, timescaledb.compress_segmentby = 'col1,col2');
 NOTICE:  default order by for hypertable "table1" is set to ""
@@ -2844,7 +2843,6 @@ SELECT compress_chunk(i, if_not_compressed => true) FROM show_chunks('compressed
 SET timescaledb.max_tuples_decompressed_per_dml_transaction = 1;
 \set ON_ERROR_STOP 0
 COPY compressed_table (time,a,b,c) FROM stdin;
-ERROR:  tuple decompression limit exceeded by operation
 \set ON_ERROR_STOP 1
 RESET timescaledb.max_tuples_decompressed_per_dml_transaction;
 -- Test decompression with DML which compares int8 to int4
@@ -2875,3 +2873,58 @@ SELECT compress_chunk(ch) FROM show_chunks('hyper_84') ch;
 
 -- indexscan for decompression: DELETE
 DELETE FROM hyper_84 WHERE device = 1;
+-- Test using DELETE instead of TRUNCATE after compression
+CREATE TABLE hyper_delete (time timestamptz, device int, location int, temp float, t text);
+SELECT table_name FROM create_hypertable('hyper_delete', 'time');
+NOTICE:  adding not-null constraint to column "time"
+  table_name  
+--------------
+ hyper_delete
+(1 row)
+
+INSERT INTO hyper_delete VALUES ('2024-07-10', 1, 1, 1.0, repeat('X', 10000));
+ANALYZE hyper_delete;
+SELECT ch AS "CHUNK" FROM show_chunks('hyper_delete') ch \gset
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+ relpages | reltuples 
+----------+-----------
+        1 |         1
+(1 row)
+
+-- One uncompressed row
+SELECT count(*) FROM :CHUNK;
+ count 
+-------
+     1
+(1 row)
+
+ALTER TABLE hyper_delete SET (timescaledb.compress, timescaledb.compress_segmentby='device');
+NOTICE:  default order by for hypertable "hyper_delete" is set to ""time" DESC"
+SET timescaledb.enable_delete_after_compression TO true;
+SELECT FROM compress_chunk(:'CHUNK');
+--
+(1 row)
+
+-- still have more than one tuple
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+ relpages | reltuples 
+----------+-----------
+        1 |         1
+(1 row)
+
+ANALYZE hyper_delete;
+-- after ANALYZE we should have no tuples
+SELECT relpages, reltuples::int AS reltuples FROM pg_catalog.pg_class WHERE oid = :'CHUNK'::regclass;
+ relpages | reltuples 
+----------+-----------
+        1 |         0
+(1 row)
+
+-- One compressed row
+SELECT count(*) FROM :CHUNK;
+ count 
+-------
+     1
+(1 row)
+
+RESET timescaledb.enable_delete_after_compression;

@@ -1,6 +1,7 @@
 -- This file and its contents are licensed under the Timescale License.
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
+\set ANALYZE 'EXPLAIN (analyze, costs off, timing off, summary off)'
 -- test constraint exclusion with prepared statements and generic plans
 CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
 SELECT table_name FROM create_hypertable('i3719', 'time');
@@ -161,9 +162,9 @@ ON CONFLICT (source_id, label, time) DO UPDATE SET data = '{"update": true}';
 EXPLAIN (analyze,costs off, timing off, summary off) SELECT * FROM comp_seg_varchar;
 QUERY PLAN
  Append (actual rows=92 loops=1)
-   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=24 loops=1)
-         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=8 loops=1)
-   ->  Seq Scan on _hyper_X_X_chunk (actual rows=5 loops=1)
+   ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=27 loops=1)
+         ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
+   ->  Seq Scan on _hyper_X_X_chunk (actual rows=2 loops=1)
    ->  Custom Scan (DecompressChunk) on _hyper_X_X_chunk (actual rows=63 loops=1)
          ->  Seq Scan on compress_hyper_X_X_chunk (actual rows=9 loops=1)
 (6 rows)
@@ -202,3 +203,215 @@ SELECT FROM row_locks FOR KEY SHARE;
 ERROR:  locking compressed tuples is not supported
 \set ON_ERROR_STOP 1
 DROP TABLE row_locks;
+CREATE TABLE lazy_decompress(time timestamptz not null, device text, value float, primary key (device,time));
+SELECT table_name FROM create_hypertable('lazy_decompress', 'time');
+   table_name    
+ lazy_decompress
+(1 row)
+
+ALTER TABLE lazy_decompress SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+NOTICE:  default order by for hypertable "lazy_decompress" is set to ""time" DESC"
+INSERT INTO lazy_decompress SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', i FROM generate_series(1,6000) g(i);
+SELECT count(compress_chunk(c)) FROM show_chunks('lazy_decompress') c;
+ count 
+     1
+(1 row)
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on lazy_decompress (actual rows=0 loops=1)
+         Conflict Resolution: NOTHING
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(8 rows)
+
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT(time,device) DO UPDATE SET value=EXCLUDED.value; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on lazy_decompress (actual rows=0 loops=1)
+         Conflict Resolution: UPDATE
+         Conflict Arbiter Indexes: lazy_decompress_pkey
+         Tuples Inserted: 1
+         Conflicting Tuples: 0
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(9 rows)
+
+-- should decompress 1 batch cause there is match
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   ->  Insert on lazy_decompress (actual rows=0 loops=1)
+         Conflict Resolution: NOTHING
+         Tuples Inserted: 0
+         Conflicting Tuples: 1
+         ->  Custom Scan (ChunkDispatch) (actual rows=1 loops=1)
+               ->  Subquery Scan on "*SELECT*" (actual rows=1 loops=1)
+                     ->  Result (actual rows=1 loops=1)
+(8 rows)
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
+   ->  Update on lazy_decompress (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk lazy_decompress_1
+         ->  Result (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
+                     Filter: (value = '0'::double precision)
+(7 rows)
+
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
+   ->  Update on lazy_decompress (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk lazy_decompress_1
+         ->  Result (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
+                     Filter: ((value = '0'::double precision) AND (device = 'd1'::text))
+(7 rows)
+
+-- 1 batch decompression
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Update on lazy_decompress (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk lazy_decompress_1
+         ->  Result (actual rows=1 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=1 loops=1)
+                     Filter: (value = '2300'::double precision)
+                     Rows Removed by Filter: 999
+(10 rows)
+
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND value < 3200; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Update on lazy_decompress (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk lazy_decompress_1
+         ->  Result (actual rows=99 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=99 loops=1)
+                     Filter: ((value > '3100'::double precision) AND (value < '3200'::double precision))
+                     Rows Removed by Filter: 901
+(10 rows)
+
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Update on lazy_decompress (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk lazy_decompress_1
+         ->  Result (actual rows=101 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=101 loops=1)
+                     Filter: ((value >= '3100'::double precision) AND (value <= '3200'::double precision))
+                     Rows Removed by Filter: 899
+(10 rows)
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 6000
+   ->  Update on lazy_decompress (actual rows=0 loops=1)
+         Update on _hyper_X_X_chunk lazy_decompress_1
+         ->  Result (actual rows=0 loops=1)
+               ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
+                     Filter: ((value = '0'::double precision) AND (device = 'd1'::text))
+                     Rows Removed by Filter: 6000
+(9 rows)
+
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
+   ->  Delete on lazy_decompress (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk lazy_decompress_1
+         ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
+               Filter: (value = '0'::double precision)
+(6 rows)
+
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 6
+   ->  Delete on lazy_decompress (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk lazy_decompress_1
+         ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
+               Filter: ((value = '0'::double precision) AND (device = 'd1'::text))
+(6 rows)
+
+-- 1 batch decompression
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Delete on lazy_decompress (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk lazy_decompress_1
+         ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=1 loops=1)
+               Filter: (value = '2300'::double precision)
+               Rows Removed by Filter: 999
+(9 rows)
+
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Delete on lazy_decompress (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk lazy_decompress_1
+         ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=99 loops=1)
+               Filter: ((value > '3100'::double precision) AND (value < '3200'::double precision))
+               Rows Removed by Filter: 901
+(9 rows)
+
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches filtered: 5
+   Batches decompressed: 1
+   Tuples decompressed: 1000
+   ->  Delete on lazy_decompress (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk lazy_decompress_1
+         ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=101 loops=1)
+               Filter: ((value >= '3100'::double precision) AND (value <= '3200'::double precision))
+               Rows Removed by Filter: 899
+(9 rows)
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+QUERY PLAN
+ Custom Scan (HypertableModify) (actual rows=0 loops=1)
+   Batches decompressed: 6
+   Tuples decompressed: 6000
+   ->  Delete on lazy_decompress (actual rows=0 loops=1)
+         Delete on _hyper_X_X_chunk lazy_decompress_1
+         ->  Seq Scan on _hyper_X_X_chunk lazy_decompress_1 (actual rows=0 loops=1)
+               Filter: ((value = '0'::double precision) AND (device = 'd1'::text))
+               Rows Removed by Filter: 6000
+(8 rows)
+
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+DROP TABLE lazy_decompress;

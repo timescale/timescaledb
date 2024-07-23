@@ -1827,3 +1827,44 @@ SELECT time_bucket, lead(count) OVER (ORDER BY time_bucket) FROM small_integer_h
                            One-Time Filter: false
 (12 rows)
 
+-- SDC #1905: Using cagg on CTE should be constified
+:EXPLAIN_ANALYZE
+WITH cagg AS (
+    SELECT * FROM small_integer_ht_cagg
+)
+SELECT * FROM cagg WHERE time_bucket > 10;
+                                                             QUERY PLAN                                                              
+-------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual rows=3 loops=1)
+   ->  Index Scan using _hyper_15_64_chunk__materialized_hypertable_15_time_bucket_idx on _hyper_15_64_chunk (actual rows=3 loops=1)
+         Index Cond: ((time_bucket < '30'::bigint) AND (time_bucket > 10))
+   ->  HashAggregate (actual rows=0 loops=1)
+         Group Key: time_bucket('5'::bigint, "time")
+         Batches: 1 
+         ->  Result (actual rows=0 loops=1)
+               One-Time Filter: false
+(8 rows)
+
+:EXPLAIN_ANALYZE
+WITH cagg AS (
+    SELECT * FROM small_integer_ht_cagg
+),
+other AS (
+    SELECT * FROM generate_series(1,10)
+)
+SELECT * FROM cagg, other WHERE time_bucket > 10;
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual rows=30 loops=1)
+   ->  Function Scan on generate_series (actual rows=10 loops=1)
+   ->  Materialize (actual rows=3 loops=10)
+         ->  Append (actual rows=3 loops=1)
+               ->  Index Scan using _hyper_15_64_chunk__materialized_hypertable_15_time_bucket_idx on _hyper_15_64_chunk (actual rows=3 loops=1)
+                     Index Cond: ((time_bucket < '30'::bigint) AND (time_bucket > 10))
+               ->  HashAggregate (actual rows=0 loops=1)
+                     Group Key: time_bucket('5'::bigint, "time")
+                     Batches: 1 
+                     ->  Result (actual rows=0 loops=1)
+                           One-Time Filter: false
+(11 rows)
+

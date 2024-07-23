@@ -23,12 +23,12 @@
 #include "ts_catalog/catalog.h"
 #include <export.h>
 
-#include "compression/array.h"
+#include "compression/algorithms/array.h"
+#include "compression/algorithms/deltadelta.h"
+#include "compression/algorithms/dictionary.h"
+#include "compression/algorithms/float_utils.h"
+#include "compression/algorithms/gorilla.h"
 #include "compression/arrow_c_data_interface.h"
-#include "compression/deltadelta.h"
-#include "compression/dictionary.h"
-#include "compression/float_utils.h"
-#include "compression/gorilla.h"
 #include "compression/segment_meta.h"
 
 #define TEST_ELEMENTS 1015

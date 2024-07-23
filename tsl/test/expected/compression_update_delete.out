@@ -122,12 +122,13 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            9 | _hyper_1_1_chunk
+            1 | _hyper_1_1_chunk
             9 | _hyper_1_2_chunk
 (2 rows)
 
 -- recompress the partial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk
@@ -173,12 +174,13 @@ FROM compressed_chunk_info_view
 WHERE hypertable_name = 'sample_table' ORDER BY chunk_name;
  chunk_status |    CHUNK_NAME    
 --------------+------------------
-            9 | _hyper_1_1_chunk
+            1 | _hyper_1_1_chunk
             9 | _hyper_1_2_chunk
 (2 rows)
 
 -- recompress the paritial chunks
 SELECT compress_chunk('_timescaledb_internal._hyper_1_1_chunk');
+NOTICE:  chunk "_hyper_1_1_chunk" is already compressed
              compress_chunk             
 ----------------------------------------
  _timescaledb_internal._hyper_1_1_chunk

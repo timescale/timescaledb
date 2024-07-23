@@ -37,7 +37,8 @@ CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materi
 as
 select a, count(*) from mat_t1
 group by a WITH NO DATA;
-ERROR:  table "mat_t1" is not a hypertable
+ERROR:  invalid continuous aggregate view
+DETAIL:  At least one hypertable should be used in the view definition.
 -- no group by
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 as
@@ -119,6 +120,7 @@ from
 from conditions ) q
  group by time_bucket('1week', timec) , location  WITH NO DATA;
 ERROR:  invalid continuous aggregate view
+DETAIL:  Sub-queries are not supported in FROM clause.
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
 select * from
@@ -194,6 +196,7 @@ from conditions tablesample bernoulli(0.2)
  group by time_bucket('1week', timec) , location
  WITH NO DATA;
 ERROR:  invalid continuous aggregate view
+DETAIL:  TABLESAMPLE is not supported in continuous aggregate.
 -- ONLY in from clause
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
@@ -201,6 +204,7 @@ Select sum(humidity), avg(temperature::int4)
 from ONLY conditions
  group by time_bucket('1week', timec) , location  WITH NO DATA;
 ERROR:  invalid continuous aggregate view
+DETAIL:  FROM ONLY on hypertables is not allowed in continuous aggregate.
 --grouping sets and variants
 CREATE MATERIALIZED VIEW mat_m1 WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS
@@ -645,7 +649,7 @@ ERROR:  compression not enabled on "i2980"
 -- cagg on normal view should error out
 CREATE VIEW v1 AS SELECT now() AS time;
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',time) FROM v1 GROUP BY 1;
-ERROR:  invalid continuous aggregate query
+ERROR:  invalid continuous aggregate view
 -- cagg on normal view should error out
 CREATE MATERIALIZED VIEW matv1 AS SELECT now() AS time;
 CREATE MATERIALIZED VIEW cagg1 WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS SELECT time_bucket('1h',time) FROM matv1 GROUP BY 1;

@@ -7,6 +7,27 @@
 
 #include "hypertable.h"
 
+typedef struct DimensionRestrictInfo
+{
+	const Dimension *dimension;
+} DimensionRestrictInfo;
+
+typedef struct DimensionRestrictInfoOpen
+{
+	DimensionRestrictInfo base;
+	int64 lower_bound; /* internal time representation */
+	StrategyNumber lower_strategy;
+	int64 upper_bound; /* internal time representation */
+	StrategyNumber upper_strategy;
+} DimensionRestrictInfoOpen;
+
+typedef struct DimensionRestrictInfoClosed
+{
+	DimensionRestrictInfo base;
+	List *partitions;		 /* hash values */
+	StrategyNumber strategy; /* either Invalid or equal */
+} DimensionRestrictInfoClosed;
+
 /* HypertableRestrictInfo represents restrictions on a hypertable. It uses
  * range exclusion logic to figure out which chunks can match the description */
 typedef struct HypertableRestrictInfo HypertableRestrictInfo;

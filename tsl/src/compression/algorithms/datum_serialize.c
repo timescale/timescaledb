@@ -17,10 +17,9 @@
 #include <utils/syscache.h>
 #include <utils/typcache.h>
 
-#include "compat/compat.h"
+#include <compat/compat.h>
 #include "datum_serialize.h"
-
-#include "compression.h"
+#include <compression/compression.h>
 
 typedef struct DatumSerializer
 {

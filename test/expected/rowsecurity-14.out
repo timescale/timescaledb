@@ -4794,7 +4794,7 @@ ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
 UPDATE r1 SET a = a+5;
 ERROR:  new row for relation "_hyper_28_117_chunk" violates check constraint "constraint_117"
 DETAIL:  Failing row contains (15).
-CONTEXT:  SQL statement "UPDATE ONLY "_timescaledb_internal"."_hyper_28_117_chunk" SET "a" = $1 WHERE $2 OPERATOR(pg_catalog.=) "a""
+CONTEXT:  SQL statement "UPDATE ONLY "regress_rls_schema"."r2" SET "a" = $1 WHERE $2 OPERATOR(pg_catalog.=) "a""
 -- Remove FORCE from r2
 ALTER TABLE r2 NO FORCE ROW LEVEL SECURITY;
 -- As owner, we now bypass RLS

@@ -4,6 +4,12 @@ from pglast.visitors import Visitor
 from pglast import enums
 import sys
 import re
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("filename")
+parser.add_argument("--latest", action="store_true", help="process latest-dev.sql")
+args = parser.parse_args()
 
 
 class SQLVisitor(Visitor):
@@ -145,6 +151,17 @@ class SQLVisitor(Visitor):
     def visit_CreateFunctionStmt(
         self, ancestors, node
     ):  # pylint: disable=unused-argument
+        if args.latest:
+            # C functions should only appear in actual function definition but not
+            # in latest-dev.sql as that would introduce a dependency on the library.
+            lang = [elem for elem in node.options if elem.defname == "language"]
+            if lang and lang[0].arg.sval == "c":
+                self.errors += 1
+                functype = "procedure" if node.is_procedure else "function"
+                print(
+                    f"ERROR: Attempting to create {functype} {node.funcname[1].sval} with language 'c'"
+                )
+
         if len(node.funcname) == 2 and node.funcname[0].sval == "_timescaledb_internal":
             self.errors += 1
             functype = "procedure" if node.is_procedure else "function"
@@ -173,8 +190,9 @@ def visit_sql(sql):
     return visitor.errors
 
 
-def main():
-    file = sys.argv[1]
+def main(args):
+    file = args.filename
+
     with open(file, "r", encoding="utf-8") as f:
         sql = f.read()
         errors = visit_sql(sql)
@@ -186,5 +204,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(args)
     sys.exit(0)

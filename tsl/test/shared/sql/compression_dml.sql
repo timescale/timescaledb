@@ -2,6 +2,8 @@
 -- Please see the included NOTICE for copyright information and
 -- LICENSE-TIMESCALE for a copy of the license.
 
+\set ANALYZE 'EXPLAIN (analyze, costs off, timing off, summary off)'
+
 -- test constraint exclusion with prepared statements and generic plans
 CREATE TABLE i3719 (time timestamptz NOT NULL,data text);
 SELECT table_name FROM create_hypertable('i3719', 'time');
@@ -144,4 +146,45 @@ SELECT FROM row_locks FOR KEY SHARE;
 
 DROP TABLE row_locks;
 
+CREATE TABLE lazy_decompress(time timestamptz not null, device text, value float, primary key (device,time));
+SELECT table_name FROM create_hypertable('lazy_decompress', 'time');
+ALTER TABLE lazy_decompress SET (timescaledb.compress, timescaledb.compress_segmentby = 'device');
+
+INSERT INTO lazy_decompress SELECT '2024-01-01'::timestamptz + format('%s',i)::interval, 'd1', i FROM generate_series(1,6000) g(i);
+
+SELECT count(compress_chunk(c)) FROM show_chunks('lazy_decompress') c;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:00.5','d1',random() ON CONFLICT(time,device) DO UPDATE SET value=EXCLUDED.value; ROLLBACK;
+-- should decompress 1 batch cause there is match
+BEGIN; :ANALYZE INSERT INTO lazy_decompress SELECT '2024-01-01 0:00:01','d1',random() ON CONFLICT DO NOTHING; ROLLBACK;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+-- 1 batch decompression
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 2300; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value > 3100 AND value < 3200; ROLLBACK;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE UPDATE lazy_decompress SET value = 3.14 WHERE value = 0 AND device='d1'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+
+-- no decompression cause no match in batch
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+-- 1 batch decompression
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 2300; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value > 3100 AND value < 3200; ROLLBACK;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value BETWEEN 3100 AND 3200; ROLLBACK;
+
+-- check GUC is working, should be 6 batches and 6000 tuples decompresed
+SET timescaledb.enable_dml_decompression_tuple_filtering TO off;
+BEGIN; :ANALYZE DELETE FROM lazy_decompress WHERE value = 0 AND device='d1'; ROLLBACK;
+RESET timescaledb.enable_dml_decompression_tuple_filtering;
+
+DROP TABLE lazy_decompress;
 

@@ -4,10 +4,10 @@
  * LICENSE-APACHE for a copy of the license.
  */
 #include <postgres.h>
+#include <executor/spi.h>
+#include <utils/guc.h>
 
 #include "replication.h"
-
-#include <executor/spi.h>
 
 ReplicationInfo
 ts_telemetry_replication_info_gather(void)

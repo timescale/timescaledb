@@ -30,6 +30,7 @@
 #include "nodes/chunk_append/chunk_append.h"
 #include "planner/planner.h"
 #include "transform.h"
+#include "ts_catalog/chunk_column_stats.h"
 
 #define INVALID_SUBPLAN_INDEX (-1)
 #define NO_MATCHING_SUBPLANS (-2)
@@ -1114,6 +1115,12 @@ ca_get_relation_constraints(Oid relationObjectId, Index varno, bool include_notn
 				}
 			}
 		}
+
+		/* Add column range min/max ranges in 'CHECK CONSTRAINT' form */
+		result = list_concat(result,
+							 ts_chunk_column_stats_construct_check_constraints(relation,
+																			   relationObjectId,
+																			   varno));
 	}
 
 	table_close(relation, NoLock);

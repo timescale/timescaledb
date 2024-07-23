@@ -1,1 +1,1 @@
-Fixes: #7046 Prevent locking compressed tuples
+Fixes: #7046: Prevent locking for compressed tuples.
