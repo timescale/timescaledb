@@ -29,6 +29,13 @@ get_input_offset(DecompressChunkState *decompress_state, Var *var, int *input_of
 	CompressionColumnDescription *value_column_description = NULL;
 	for (int i = 0; i < dcontext->num_data_columns; i++)
 	{
+		/*
+		 * See the column lookup in compute_plain_qual() for the discussion of
+		 * which attribute numbers occur where. At the moment here it is
+		 * uncompressed_scan_attno, but it might be an oversight of not rewriting
+		 * the references into INDEX_VAR (or OUTER_VAR...?) when we create the
+		 * VectorAgg node.
+		 */
 		CompressionColumnDescription *current_column = &dcontext->compressed_chunk_columns[i];
 		if (current_column->uncompressed_chunk_attno == var->varattno)
 		{

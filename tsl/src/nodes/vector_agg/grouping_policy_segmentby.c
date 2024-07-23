@@ -11,8 +11,8 @@
 
 #include "grouping_policy.h"
 
-#include "nodes/vector_agg/exec.h"
 #include "nodes/decompress_chunk/compressed_batch.h"
+#include "nodes/vector_agg/exec.h"
 
 typedef struct
 {
